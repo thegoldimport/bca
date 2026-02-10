@@ -134,11 +134,11 @@ export function Hero() {
             <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70" />
             
             {/* Input Field - Auto expanding textarea */}
-            <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-start relative z-10 pt-3">
+            <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-center justify-center relative z-10 pt-3">
               <textarea 
                 ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest" 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[80px] leading-relaxed"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[80px] leading-relaxed text-center"
                 rows={1}
                 onInput={handleInput}
                 style={{ height: '80px' }}
@@ -165,8 +165,8 @@ export function Hero() {
               
               {/* Button Text */}
               <motion.span 
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                animate={{ scale: [1, 1.05, 1] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                 className="relative z-30 drop-shadow-sm text-cyan-950 inline-block"
               >
                 Build It!
