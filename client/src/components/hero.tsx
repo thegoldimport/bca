@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import heroBgV2 from "@/assets/hero-bg-v2.png";
@@ -16,6 +16,7 @@ const CYCLING_WORDS = [
 
 export function Hero() {
   const [index, setIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -23,6 +24,12 @@ export function Hero() {
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const target = e.currentTarget;
+    target.style.height = 'auto';
+    target.style.height = `${target.scrollHeight}px`;
+  };
 
   return (
     <div className="relative min-h-screen flex flex-col justify-center items-center overflow-hidden pt-24 pb-12">
@@ -81,35 +88,58 @@ export function Hero() {
           Transform your wildest dreams into reality.
         </motion.p>
 
-        {/* Input Box - Single Line Glass */}
+        {/* Input Box - Single Line Glass with Auto-Expansion */}
         <motion.div 
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
           className="w-full max-w-3xl relative group px-4"
         >
+          {/* Border Light Loop Animation */}
+          <div className="absolute -inset-[2px] rounded-2xl overflow-hidden pointer-events-none z-0">
+             <div className="absolute top-0 left-0 w-1/2 h-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-0 group-hover:opacity-100 blur-sm animate-border-travel" />
+          </div>
+          <style jsx global>{`
+            @keyframes border-travel {
+              0% { top: 0; left: -50%; width: 50%; height: 2px; }
+              25% { top: 0; left: 100%; width: 2px; height: 100%; }
+              50% { top: 100%; left: 100%; width: 50%; height: 2px; }
+              75% { top: 0; left: -2px; width: 2px; height: 100%; }
+              100% { top: 0; left: -50%; width: 50%; height: 2px; }
+            }
+          `}</style>
+          
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
+
+          {/* Moving Light Beam - using conic gradient mask technique for smooth loop */}
+          <div className="absolute -inset-[1px] rounded-[18px] z-0 overflow-hidden pointer-events-none opacity-60">
+             <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[conic-gradient(transparent_0deg,transparent_80deg,rgba(34,211,238,0.8)_100deg,transparent_110deg)] animate-[spin_4s_linear_infinite]" />
+          </div>
+
           
           {/* Glass Container with Depth */}
-          <div className="relative flex flex-col md:flex-row items-center p-2
+          <div className="relative flex flex-col md:flex-row items-end p-2
             bg-gradient-to-b from-white/10 to-white/5 
             backdrop-blur-2xl 
             border-t border-l border-r border-white/30 border-b border-white/10
             rounded-2xl
             shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_2px_0_0_rgba(255,255,255,0.3),inset_0_0_0_2px_rgba(255,255,255,0.05),inset_0_-4px_20px_0_rgba(0,0,0,0.2)]
-            h-auto md:h-20
+            h-auto min-h-[80px]
             transition-all hover:border-white/40 hover:bg-white/10"
           >
             {/* Top Bevel Highlight - Thicker */}
             <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70" />
             
-            {/* Input Field */}
-            <div className="flex-1 w-full h-full px-6 flex items-center relative z-10">
-              <input 
-                type="text" 
+            {/* Input Field - Auto expanding textarea */}
+            <div className="flex-1 w-full h-full px-4 md:px-6 py-4 flex items-center relative z-10">
+              <textarea 
+                ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can..." 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light h-full drop-shadow-md"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[40px] leading-relaxed"
+                rows={1}
+                onInput={handleInput}
+                style={{ height: '40px' }}
                 autoFocus
                 data-testid="input-hero-prompt"
               />
@@ -125,7 +155,7 @@ export function Hero() {
                 shadow-[0_0_30px_-5px_rgba(34,211,238,0.6),inset_0_2px_0_0_rgba(255,255,255,1),inset_0_-4px_2px_0_rgba(34,211,238,0.3)]
                 transition-all duration-300 
                 hover:scale-[1.02] hover:shadow-[0_0_50px_-5px_rgba(34,211,238,0.8),inset_0_2px_0_0_rgba(255,255,255,1)]
-                m-0.5 group/btn overflow-hidden"
+                m-0.5 mb-0.5 group/btn overflow-hidden shrink-0"
               data-testid="button-hero-generate"
             >
               {/* Shimmer Effect */}
