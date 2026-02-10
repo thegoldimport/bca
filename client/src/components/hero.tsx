@@ -10,6 +10,7 @@ const CYCLING_WORDS = [
   "Apps",
   "Software",
   "SaaS",
+  "Games",
   "Anything"
 ];
 
@@ -75,7 +76,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="max-w-2xl text-lg md:text-2xl text-white/80 mb-20 font-light tracking-wide drop-shadow-lg"
+          className="max-w-2xl text-base md:text-lg text-cyan-400 mb-20 font-light tracking-wide drop-shadow-lg"
         >
           Transform your wildest dreams into reality.
         </motion.p>
