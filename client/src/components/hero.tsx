@@ -119,19 +119,19 @@ export function Hero() {
                   rx="14" 
                   ry="14"
                   fill="none"
-                  stroke="rgba(34,211,238,0.8)" /* Cyan-400 equivalent */
-                  strokeWidth="2"
+                  stroke="rgba(0, 191, 255, 1)" /* Bright Deep Sky Blue */
+                  strokeWidth="3"
                   pathLength="100"
-                  strokeDasharray="30 70"
+                  strokeDasharray="25 75"
                   strokeLinecap="round"
                   initial={{ strokeDashoffset: 0 }}
                   animate={{ strokeDashoffset: -100 }}
                   transition={{ 
-                    duration: 3, 
+                    duration: 5, 
                     repeat: Infinity, 
                     ease: "linear" 
                   }}
-                  style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.5))" }}
+                  style={{ filter: "drop-shadow(0 0 6px rgba(0, 191, 255, 0.8))" }}
                 />
               </svg>
             </div>
