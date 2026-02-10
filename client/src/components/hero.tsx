@@ -137,7 +137,7 @@ export function Hero() {
             <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-start relative z-10 pt-3">
               <textarea 
                 ref={textareaRef}
-                placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest..." 
+                placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest" 
                 className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[80px] leading-relaxed"
                 rows={1}
                 onInput={handleInput}
@@ -164,9 +164,13 @@ export function Hero() {
               <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent z-20 pointer-events-none" />
               
               {/* Button Text */}
-              <span className="relative z-30 drop-shadow-sm text-cyan-950">
+              <motion.span 
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                className="relative z-30 drop-shadow-sm text-cyan-950 inline-block"
+              >
                 Build It!
-              </span>
+              </motion.span>
             </Button>
           </div>
         </motion.div>
