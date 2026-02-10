@@ -91,17 +91,17 @@ export function Hero() {
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
           
           {/* Glass Container with Depth */}
-          <div className="relative flex flex-col md:flex-row items-center p-2 
+          <div className="relative flex flex-col md:flex-row items-center p-3
             bg-gradient-to-b from-white/10 to-white/5 
             backdrop-blur-2xl 
-            border-t border-l border-r border-white/20 border-b border-white/10
-            rounded-2xl 
-            shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.2),inset_0_0_20px_0_rgba(255,255,255,0.05)]
-            h-auto md:h-24 
-            transition-all hover:border-white/30 hover:bg-white/10"
+            border-t border-l border-r border-white/30 border-b border-white/10
+            rounded-3xl
+            shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_2px_0_0_rgba(255,255,255,0.3),inset_0_0_0_2px_rgba(255,255,255,0.05),inset_0_-4px_20px_0_rgba(0,0,0,0.2)]
+            h-auto md:h-28 
+            transition-all hover:border-white/40 hover:bg-white/10"
           >
-            {/* Top Bevel Highlight */}
-            <div className="absolute top-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50" />
+            {/* Top Bevel Highlight - Thicker */}
+            <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70" />
             
             {/* Input Field */}
             <div className="flex-1 w-full h-full px-6 flex items-center relative z-10">
@@ -114,9 +114,17 @@ export function Hero() {
               />
             </div>
 
-            {/* Generate Button */}
+            {/* Icey Glass Button */}
             <Button 
-              className="relative z-10 w-full md:w-auto h-16 md:h-20 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-300 hover:from-white hover:to-cyan-200 text-black font-bold text-lg px-10 shadow-[0_4px_20px_rgba(34,211,238,0.4),inset_0_1px_0_rgba(255,255,255,0.5)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(34,211,238,0.5)] m-1 border-t border-white/40"
+              className="relative z-10 w-full md:w-auto h-16 md:h-20 rounded-2xl 
+                bg-cyan-400/20 hover:bg-cyan-400/30 
+                backdrop-blur-md 
+                text-cyan-50 font-bold text-lg px-10 
+                border border-cyan-200/30 border-t-cyan-200/60 border-b-cyan-600/30
+                shadow-[0_8px_32px_0_rgba(31,38,135,0.37),inset_0_1px_0_0_rgba(255,255,255,0.4),inset_0_-2px_0_0_rgba(0,0,0,0.1),0_0_20px_rgba(34,211,238,0.2)]
+                transition-all duration-300 
+                hover:scale-[1.02] hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.5),inset_0_1px_0_0_rgba(255,255,255,0.6),0_0_30px_rgba(34,211,238,0.4)]
+                m-1"
               data-testid="button-hero-generate"
             >
               Generate
