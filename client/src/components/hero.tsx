@@ -95,19 +95,8 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
           className="w-full max-w-3xl relative group px-4"
         >
-          {/* Border Light Loop Animation */}
-          <div className="absolute -inset-[2px] rounded-2xl overflow-hidden pointer-events-none z-0">
-             <div className="absolute top-0 left-0 w-1/2 h-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-0 group-hover:opacity-100 blur-sm animate-border-travel" />
-          </div>
-          
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
-
-          {/* Moving Light Beam - using conic gradient mask technique for smooth loop */}
-          <div className="absolute -inset-[1px] rounded-[18px] z-0 overflow-hidden pointer-events-none opacity-60">
-             <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[conic-gradient(transparent_0deg,transparent_80deg,rgba(34,211,238,0.8)_100deg,transparent_110deg)] animate-[spin_4s_linear_infinite]" />
-          </div>
-
           
           {/* Glass Container with Depth */}
           <div className="relative flex flex-col md:flex-row items-end p-2
@@ -119,6 +108,34 @@ export function Hero() {
             h-auto min-h-[80px]
             transition-all hover:border-white/40 hover:bg-white/10"
           >
+            {/* Inner Border Beam Loop - SVG Implementation */}
+            <div className="absolute inset-0 z-0 rounded-2xl overflow-hidden pointer-events-none">
+              <svg className="w-full h-full" width="100%" height="100%">
+                <motion.rect
+                  x="2" 
+                  y="2" 
+                  width="calc(100% - 4px)" 
+                  height="calc(100% - 4px)" 
+                  rx="14" 
+                  ry="14"
+                  fill="none"
+                  stroke="rgba(34,211,238,0.8)" /* Cyan-400 equivalent */
+                  strokeWidth="2"
+                  pathLength="100"
+                  strokeDasharray="30 70"
+                  strokeLinecap="round"
+                  initial={{ strokeDashoffset: 0 }}
+                  animate={{ strokeDashoffset: -100 }}
+                  transition={{ 
+                    duration: 3, 
+                    repeat: Infinity, 
+                    ease: "linear" 
+                  }}
+                  style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.5))" }}
+                />
+              </svg>
+            </div>
+
             {/* Top Bevel Highlight - Thicker */}
             <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70" />
             
