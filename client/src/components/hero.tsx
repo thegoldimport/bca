@@ -82,21 +82,12 @@ export function Hero() {
           </div>
         </h1>
 
-        <motion.p 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="max-w-2xl text-base md:text-lg text-cyan-400 mb-20 font-light tracking-wide drop-shadow-lg"
-        >
-          Transform your wildest dreams into reality
-        </motion.p>
-
         {/* Input Box - Single Line Glass with Auto-Expansion */}
         <motion.div 
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-          className="w-full max-w-3xl relative group px-4 -mt-10"
+          className="w-full max-w-xl relative group px-4 -mt-6"
         >
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
@@ -143,14 +134,14 @@ export function Hero() {
             <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70" />
             
             {/* Input Field - Auto expanding textarea */}
-            <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-start relative z-10 pt-4">
+            <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-start relative z-10 pt-5">
               <textarea 
                 ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest..." 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-3xl font-light drop-shadow-md resize-none overflow-hidden min-h-[80px] leading-tight -mt-1"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl font-light drop-shadow-md resize-none overflow-hidden min-h-[60px] leading-snug"
                 rows={1}
                 onInput={handleInput}
-                style={{ height: '80px' }}
+                style={{ height: '60px' }}
                 autoFocus
                 data-testid="input-hero-prompt"
               />
