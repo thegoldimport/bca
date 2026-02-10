@@ -99,15 +99,6 @@ export function Hero() {
           <div className="absolute -inset-[2px] rounded-2xl overflow-hidden pointer-events-none z-0">
              <div className="absolute top-0 left-0 w-1/2 h-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-0 group-hover:opacity-100 blur-sm animate-border-travel" />
           </div>
-          <style jsx global>{`
-            @keyframes border-travel {
-              0% { top: 0; left: -50%; width: 50%; height: 2px; }
-              25% { top: 0; left: 100%; width: 2px; height: 100%; }
-              50% { top: 100%; left: 100%; width: 50%; height: 2px; }
-              75% { top: 0; left: -2px; width: 2px; height: 100%; }
-              100% { top: 0; left: -50%; width: 50%; height: 2px; }
-            }
-          `}</style>
           
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
