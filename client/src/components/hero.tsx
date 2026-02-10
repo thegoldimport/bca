@@ -42,31 +42,8 @@ export function Hero() {
         <div className="absolute inset-0 bg-background/50" />
       </div>
 
-      {/* Floating Holographic Interface Panels */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden perspective-[2000px]">
-        {/* Left Panel - Analytics Hologram */}
-        <motion.div 
-          initial={{ x: -100, opacity: 0, rotateY: 20 }}
-          animate={{ x: 0, opacity: 0.8, rotateY: 15 }}
-          transition={{ duration: 1.5, delay: 0.2 }}
-          className="absolute top-[25%] left-[-5%] md:left-[5%] w-[400px] md:w-[500px] h-[300px] opacity-80 mix-blend-screen hidden md:block"
-          style={{ transform: "rotateY(15deg)" }}
-        >
-          <img src={uiPanelLeft} alt="" className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(34,211,238,0.3)]" />
-        </motion.div>
-
-        {/* Right Panel - Code Hologram */}
-        <motion.div 
-          initial={{ x: 100, opacity: 0, rotateY: -20 }}
-          animate={{ x: 0, opacity: 0.8, rotateY: -15 }}
-          transition={{ duration: 1.5, delay: 0.4 }}
-          className="absolute top-[20%] right-[-5%] md:right-[5%] w-[400px] md:w-[550px] h-[350px] opacity-80 mix-blend-screen hidden md:block"
-          style={{ transform: "rotateY(-15deg)" }}
-        >
-          <img src={uiPanelRight} alt="" className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(168,85,247,0.3)]" />
-        </motion.div>
-      </div>
-
+      {/* Floating Holographic Interface Panels - REMOVED */}
+      
       <div className="relative z-10 container mx-auto px-4 flex flex-col items-center text-center mt-10">
         {/* Main Heading */}
         <h1 className="text-6xl md:text-7xl lg:text-8xl font-display font-bold tracking-tight text-white mb-4 leading-tight drop-shadow-2xl">
