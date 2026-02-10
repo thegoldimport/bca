@@ -46,7 +46,7 @@ export function Hero() {
       
       <div className="relative z-10 container mx-auto px-4 flex flex-col items-center text-center mt-10">
         {/* Main Heading */}
-        <h1 className="text-6xl md:text-7xl lg:text-8xl font-display font-bold tracking-tight text-white mb-4 leading-tight drop-shadow-2xl">
+        <h1 className="text-6xl md:text-7xl lg:text-8xl font-display font-semibold tracking-tight text-white mb-4 leading-tight drop-shadow-2xl">
           <motion.span 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
