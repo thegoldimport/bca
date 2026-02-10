@@ -52,7 +52,7 @@ export function Hero() {
 
       {/* Floating Holographic Interface Panels - REMOVED */}
       
-      <div className="relative z-10 container mx-auto px-4 flex flex-col items-center text-center mt-10">
+      <div className="relative z-10 container mx-auto px-4 flex flex-col items-center text-center mt-4">
         {/* Main Heading */}
         <h1 className="text-6xl md:text-7xl lg:text-8xl font-display font-semibold tracking-tight text-white mb-4 leading-tight drop-shadow-[0_0_25px_rgba(255,255,255,0.3)]">
           <motion.span 
@@ -87,7 +87,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-          className="w-full max-w-xl relative group px-4 -mt-6"
+          className="w-full max-w-xl relative group px-4 mt-12"
         >
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
@@ -134,14 +134,14 @@ export function Hero() {
             <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70" />
             
             {/* Input Field - Auto expanding textarea */}
-            <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-start relative z-10 pt-5">
+            <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-start relative z-10 pt-3">
               <textarea 
                 ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest..." 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl font-light drop-shadow-md resize-none overflow-hidden min-h-[60px] leading-snug"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[80px] leading-relaxed"
                 rows={1}
                 onInput={handleInput}
-                style={{ height: '60px' }}
+                style={{ height: '80px' }}
                 autoFocus
                 data-testid="input-hero-prompt"
               />
