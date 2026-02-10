@@ -32,14 +32,14 @@ export function Hero() {
           loop
           muted
           playsInline
-          className="w-full h-full object-cover opacity-80"
+          className="w-full h-full object-cover opacity-100"
           poster={heroBgV2}
         >
           {/* User can upload a video named 'background-loop.mp4' to client/public/ to activate this */}
           <source src="/background-loop.mp4" type="video/mp4" />
         </video>
-        {/* Deep overlay for text readability */}
-        <div className="absolute inset-0 bg-background/50" />
+        {/* Deep overlay for text readability - Reduced opacity */}
+        <div className="absolute inset-0 bg-background/20" />
       </div>
 
       {/* Floating Holographic Interface Panels - REMOVED */}
