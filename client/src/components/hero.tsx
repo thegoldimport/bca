@@ -90,15 +90,25 @@ export function Hero() {
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
           
-          {/* Glass Container */}
-          <div className="relative flex flex-col md:flex-row items-center p-2 bg-white/5 backdrop-blur-xl border border-white/20 rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] h-auto md:h-24 transition-all hover:border-white/30 hover:bg-white/10">
+          {/* Glass Container with Depth */}
+          <div className="relative flex flex-col md:flex-row items-center p-2 
+            bg-gradient-to-b from-white/10 to-white/5 
+            backdrop-blur-2xl 
+            border-t border-l border-r border-white/20 border-b border-white/10
+            rounded-2xl 
+            shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.2),inset_0_0_20px_0_rgba(255,255,255,0.05)]
+            h-auto md:h-24 
+            transition-all hover:border-white/30 hover:bg-white/10"
+          >
+            {/* Top Bevel Highlight */}
+            <div className="absolute top-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50" />
             
             {/* Input Field */}
-            <div className="flex-1 w-full h-full px-6 flex items-center">
+            <div className="flex-1 w-full h-full px-6 flex items-center relative z-10">
               <input 
                 type="text" 
                 placeholder="[Describe your AI project (e.g., predictive maintenance SaaS)...]" 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl font-light h-full"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl font-light h-full drop-shadow-md"
                 autoFocus
                 data-testid="input-hero-prompt"
               />
@@ -106,7 +116,7 @@ export function Hero() {
 
             {/* Generate Button */}
             <Button 
-              className="w-full md:w-auto h-16 md:h-20 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-300 hover:from-white hover:to-cyan-200 text-black font-bold text-lg px-10 shadow-[0_0_20px_rgba(34,211,238,0.3)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(34,211,238,0.5)] m-1"
+              className="relative z-10 w-full md:w-auto h-16 md:h-20 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-300 hover:from-white hover:to-cyan-200 text-black font-bold text-lg px-10 shadow-[0_4px_20px_rgba(34,211,238,0.4),inset_0_1px_0_rgba(255,255,255,0.5)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(34,211,238,0.5)] m-1 border-t border-white/40"
               data-testid="button-hero-generate"
             >
               Generate
