@@ -63,7 +63,7 @@ export function Hero() {
                 animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
                 exit={{ y: -70, opacity: 0, filter: "blur(20px)" }}
                 transition={{ duration: 0.5, ease: "circOut" }}
-                className="absolute bg-gradient-to-r from-violet-200 via-cyan-100 to-emerald-200 bg-clip-text text-transparent pb-4 drop-shadow-[0_0_20px_rgba(167,243,208,0.5)]"
+                className="absolute bg-gradient-to-r from-purple-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent pb-4 drop-shadow-[0_0_25px_rgba(52,211,153,0.6)] brightness-125 contrast-125"
               >
                 {CYCLING_WORDS[index]}
               </motion.span>
@@ -114,20 +114,24 @@ export function Hero() {
               />
             </div>
 
-            {/* Icey Glass Button */}
+            {/* Icey Glass Button with Shimmer */}
             <Button 
               className="relative z-10 w-full md:w-auto h-16 md:h-20 rounded-2xl 
-                bg-gradient-to-b from-cyan-100/20 to-cyan-500/10 hover:from-cyan-100/30 hover:to-cyan-500/20
-                backdrop-blur-xl 
-                font-display font-bold text-xl px-10 tracking-wide
-                border border-white/40 border-t-white/60 border-b-cyan-300/20
-                shadow-[0_15px_30px_-5px_rgba(0,0,0,0.4),inset_0_2px_0_0_rgba(255,255,255,0.7),inset_0_-2px_5px_0_rgba(34,211,238,0.1),0_0_20px_rgba(165,243,252,0.3)]
+                bg-gradient-to-b from-cyan-200 to-cyan-400 
+                hover:from-cyan-100 hover:to-cyan-300
+                text-black font-display font-bold text-xl px-10 tracking-wide
+                border-t border-white/80 border-b border-cyan-600/30 border-x border-white/50
+                shadow-[0_0_30px_-5px_rgba(34,211,238,0.6),inset_0_2px_0_0_rgba(255,255,255,1),inset_0_-4px_2px_0_rgba(34,211,238,0.3)]
                 transition-all duration-300 
-                hover:scale-[1.02] hover:shadow-[0_20px_40px_-5px_rgba(0,0,0,0.5),inset_0_2px_0_0_rgba(255,255,255,0.9),0_0_40px_rgba(165,243,252,0.5)]
-                m-1 group/btn"
+                hover:scale-[1.02] hover:shadow-[0_0_50px_-5px_rgba(34,211,238,0.8),inset_0_2px_0_0_rgba(255,255,255,1)]
+                m-1 group/btn overflow-hidden"
               data-testid="button-hero-generate"
             >
-              <span className="bg-gradient-to-b from-white via-cyan-50 to-cyan-200 bg-clip-text text-transparent drop-shadow-sm group-hover/btn:from-white group-hover/btn:to-white transition-all">
+              {/* Shimmer Effect */}
+              <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent z-20 pointer-events-none" />
+              
+              {/* Button Text */}
+              <span className="relative z-30 drop-shadow-sm text-cyan-950">
                 Generate
               </span>
             </Button>
