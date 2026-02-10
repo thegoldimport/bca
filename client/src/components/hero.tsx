@@ -25,13 +25,19 @@ export function Hero() {
 
   return (
     <div className="relative min-h-screen flex flex-col justify-center items-center overflow-hidden pt-24 pb-12">
-      {/* Background Image Layer */}
+      {/* Background Layer - Supports Video Loop */}
       <div className="absolute inset-0 z-0">
-        <img 
-          src={heroBgV2} 
-          alt="" 
-          className="w-full h-full object-cover"
-        />
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="w-full h-full object-cover opacity-80"
+          poster={heroBgV2}
+        >
+          {/* User can upload a video named 'background-loop.mp4' to client/public/ to activate this */}
+          <source src="/background-loop.mp4" type="video/mp4" />
+        </video>
         {/* Deep overlay for text readability */}
         <div className="absolute inset-0 bg-background/50" />
       </div>
