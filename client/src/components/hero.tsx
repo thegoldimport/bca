@@ -63,7 +63,7 @@ export function Hero() {
                 animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
                 exit={{ y: -70, opacity: 0, filter: "blur(20px)" }}
                 transition={{ duration: 0.5, ease: "circOut" }}
-                className="absolute bg-gradient-to-b from-white via-cyan-100 to-cyan-400 bg-clip-text text-transparent pb-4"
+                className="absolute bg-gradient-to-r from-violet-300 via-purple-300 to-emerald-300 bg-clip-text text-transparent pb-4"
               >
                 {CYCLING_WORDS[index]}
               </motion.span>
