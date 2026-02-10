@@ -80,24 +80,24 @@ export function Hero() {
           Transform your wildest dreams into reality.
         </motion.p>
 
-        {/* Input Box - Rectangular Glass with Rounded Corners */}
+        {/* Input Box - Single Line Glass */}
         <motion.div 
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-          className="w-full max-w-4xl relative group px-4"
+          className="w-full max-w-3xl relative group px-4"
         >
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
           
           {/* Glass Container with Depth */}
-          <div className="relative flex flex-col md:flex-row items-center p-3
+          <div className="relative flex flex-col md:flex-row items-center p-2
             bg-gradient-to-b from-white/10 to-white/5 
             backdrop-blur-2xl 
             border-t border-l border-r border-white/30 border-b border-white/10
-            rounded-3xl
+            rounded-2xl
             shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_2px_0_0_rgba(255,255,255,0.3),inset_0_0_0_2px_rgba(255,255,255,0.05),inset_0_-4px_20px_0_rgba(0,0,0,0.2)]
-            h-auto md:h-28 
+            h-auto md:h-20
             transition-all hover:border-white/40 hover:bg-white/10"
           >
             {/* Top Bevel Highlight - Thicker */}
@@ -108,7 +108,7 @@ export function Hero() {
               <input 
                 type="text" 
                 placeholder="Describe your idea in as much detail as you can..." 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl font-light h-full drop-shadow-md"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light h-full drop-shadow-md"
                 autoFocus
                 data-testid="input-hero-prompt"
               />
@@ -116,15 +116,15 @@ export function Hero() {
 
             {/* Icey Glass Button with Shimmer */}
             <Button 
-              className="relative z-10 w-full md:w-auto h-16 md:h-20 rounded-2xl 
+              className="relative z-10 w-full md:w-auto h-12 md:h-16 rounded-xl 
                 bg-gradient-to-b from-cyan-200 to-cyan-400 
                 hover:from-cyan-100 hover:to-cyan-300
-                text-black font-display font-bold text-xl px-10 tracking-wide
+                text-black font-display font-bold text-lg px-8 tracking-wide
                 border-t border-white/80 border-b border-cyan-600/30 border-x border-white/50
                 shadow-[0_0_30px_-5px_rgba(34,211,238,0.6),inset_0_2px_0_0_rgba(255,255,255,1),inset_0_-4px_2px_0_rgba(34,211,238,0.3)]
                 transition-all duration-300 
                 hover:scale-[1.02] hover:shadow-[0_0_50px_-5px_rgba(34,211,238,0.8),inset_0_2px_0_0_rgba(255,255,255,1)]
-                m-1 group/btn overflow-hidden"
+                m-0.5 group/btn overflow-hidden"
               data-testid="button-hero-generate"
             >
               {/* Shimmer Effect */}
