@@ -71,7 +71,10 @@ export function Hero() {
                 animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
                 exit={{ y: -70, opacity: 0, filter: "blur(20px)" }}
                 transition={{ duration: 0.5, ease: "circOut" }}
-                className="absolute bg-gradient-to-r from-purple-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent pb-4 drop-shadow-[0_0_25px_rgba(52,211,153,0.6)] brightness-125 contrast-125"
+                className="absolute bg-gradient-to-r from-purple-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent pb-4 brightness-125 contrast-125"
+                style={{
+                  filter: "drop-shadow(0 0 10px rgba(52,211,153,0.8)) drop-shadow(0 0 20px rgba(167,139,250,0.6))"
+                }}
               >
                 {CYCLING_WORDS[index]}
               </motion.span>
@@ -93,7 +96,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-          className="w-full max-w-3xl relative group px-4"
+          className="w-full max-w-3xl relative group px-4 -mt-10"
         >
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
@@ -119,7 +122,7 @@ export function Hero() {
                   rx="14" 
                   ry="14"
                   fill="none"
-                  stroke="rgba(0, 191, 255, 1)" /* Bright Deep Sky Blue */
+                  stroke="rgba(0, 191, 255, 0.5)" /* Bright Deep Sky Blue with 0.5 opacity */
                   strokeWidth="3"
                   pathLength="100"
                   strokeDasharray="25 75"
@@ -131,7 +134,7 @@ export function Hero() {
                     repeat: Infinity, 
                     ease: "linear" 
                   }}
-                  style={{ filter: "drop-shadow(0 0 6px rgba(0, 191, 255, 0.8))" }}
+                  style={{ filter: "drop-shadow(0 0 6px rgba(0, 191, 255, 0.5))" }}
                 />
               </svg>
             </div>
@@ -140,14 +143,14 @@ export function Hero() {
             <div className="absolute top-0 left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70" />
             
             {/* Input Field - Auto expanding textarea */}
-            <div className="flex-1 w-full h-full px-4 md:px-6 py-4 flex items-center relative z-10">
+            <div className="flex-1 w-full h-full px-4 md:px-6 py-2 flex items-start relative z-10 pt-6">
               <textarea 
                 ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest" 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl font-light drop-shadow-md resize-none overflow-hidden min-h-[60px] leading-relaxed"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-2xl font-light drop-shadow-md resize-none overflow-hidden min-h-[72px] leading-snug"
                 rows={1}
                 onInput={handleInput}
-                style={{ height: '60px' }}
+                style={{ height: '72px' }}
                 autoFocus
                 data-testid="input-hero-prompt"
               />
