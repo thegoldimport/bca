@@ -6,11 +6,11 @@ import uiPanelLeft from "@/assets/ui-panel-left.png";
 import uiPanelRight from "@/assets/ui-panel-right.png";
 
 const CYCLING_WORDS = [
-  "websites",
-  "apps",
-  "software",
+  "Websites",
+  "Apps",
+  "Software",
   "SaaS",
-  "anything"
+  "Anything"
 ];
 
 export function Hero() {
@@ -46,12 +46,12 @@ export function Hero() {
       
       <div className="relative z-10 container mx-auto px-4 flex flex-col items-center text-center mt-10">
         {/* Main Heading */}
-        <h1 className="text-6xl md:text-7xl lg:text-8xl font-display font-semibold tracking-tight text-white mb-4 leading-tight drop-shadow-2xl">
+        <h1 className="text-6xl md:text-7xl lg:text-8xl font-display font-semibold tracking-tight text-white mb-4 leading-tight drop-shadow-[0_0_25px_rgba(255,255,255,0.3)]">
           <motion.span 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="block mb-2"
+            className="block mb-2 drop-shadow-lg"
           >
             Build Custom Ai:
           </motion.span>
@@ -63,7 +63,7 @@ export function Hero() {
                 animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
                 exit={{ y: -70, opacity: 0, filter: "blur(20px)" }}
                 transition={{ duration: 0.5, ease: "circOut" }}
-                className="absolute bg-gradient-to-r from-violet-300 via-purple-300 to-emerald-300 bg-clip-text text-transparent pb-4"
+                className="absolute bg-gradient-to-r from-violet-200 via-cyan-100 to-emerald-200 bg-clip-text text-transparent pb-4 drop-shadow-[0_0_20px_rgba(167,243,208,0.5)]"
               >
                 {CYCLING_WORDS[index]}
               </motion.span>
