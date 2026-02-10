@@ -85,7 +85,7 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="max-w-2xl text-base md:text-lg text-cyan-400 mb-20 font-light tracking-wide drop-shadow-lg"
         >
-          Transform your wildest dreams into reality.
+          Transform your wildest dreams into reality
         </motion.p>
 
         {/* Input Box - Single Line Glass with Auto-Expansion */}
@@ -99,13 +99,13 @@ export function Hero() {
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
           
           {/* Glass Container with Depth */}
-          <div className="relative flex flex-col md:flex-row items-end p-2
+          <div className="relative flex flex-col md:flex-row items-center p-3
             bg-gradient-to-b from-white/10 to-white/5 
             backdrop-blur-2xl 
             border-t border-l border-r border-white/30 border-b border-white/10
             rounded-2xl
             shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_2px_0_0_rgba(255,255,255,0.3),inset_0_0_0_2px_rgba(255,255,255,0.05),inset_0_-4px_20px_0_rgba(0,0,0,0.2)]
-            h-auto min-h-[80px]
+            h-auto min-h-[100px]
             transition-all hover:border-white/40 hover:bg-white/10"
           >
             {/* Inner Border Beam Loop - SVG Implementation */}
@@ -144,10 +144,10 @@ export function Hero() {
               <textarea 
                 ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest" 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-base font-light drop-shadow-md resize-none overflow-hidden min-h-[40px] leading-relaxed"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl font-light drop-shadow-md resize-none overflow-hidden min-h-[60px] leading-relaxed"
                 rows={1}
                 onInput={handleInput}
-                style={{ height: '40px' }}
+                style={{ height: '60px' }}
                 autoFocus
                 data-testid="input-hero-prompt"
               />
