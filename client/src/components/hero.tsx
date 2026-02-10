@@ -20,7 +20,7 @@ export function Hero() {
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % CYCLING_WORDS.length);
-    }, 2000);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
