@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import heroBgV2 from "@/assets/hero-bg-v2.png";
 import uiPanelLeft from "@/assets/ui-panel-left.png";
 import uiPanelRight from "@/assets/ui-panel-right.png";
 
@@ -41,7 +40,6 @@ export function Hero() {
           muted
           playsInline
           className="w-full h-full object-cover opacity-100"
-          poster={heroBgV2}
         >
           {/* User can upload a video named 'background-loop.mp4' to client/public/ to activate this */}
           <source src="/background-loop.mp4" type="video/mp4" />
