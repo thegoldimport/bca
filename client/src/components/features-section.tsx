@@ -1,6 +1,52 @@
+import { motion } from "framer-motion";
+import { 
+  MessageSquare, 
+  Database, 
+  Rocket, 
+  Code2, 
+  Smartphone,
+  Zap
+} from "lucide-react";
 import neonGeoBg from "@/assets/neon-geo-bg.png";
 
-// ... features data ...
+const FEATURES = [
+  {
+    title: "100% Chat-Native",
+    description: "Build full-stack apps just by chatting. No drag-and-drop, no complexity. Just describe it.",
+    icon: MessageSquare,
+    color: "from-blue-400 to-cyan-300"
+  },
+  {
+    title: "Database Included",
+    description: "Backend? Already done. We automatically provision and manage your database schema.",
+    icon: Database,
+    color: "from-purple-400 to-pink-300"
+  },
+  {
+    title: "One-Click Deploy",
+    description: "Go from idea to live URL in seconds. We handle the infrastructure, SSL, and scaling.",
+    icon: Rocket,
+    color: "from-emerald-400 to-green-300"
+  },
+  {
+    title: "Full Code Access",
+    description: "Not locked in. Eject anytime. Edit the generated code directly in our VS Code-like editor.",
+    icon: Code2,
+    color: "from-orange-400 to-red-300"
+  },
+  {
+    title: "Mobile Ready",
+    description: "Every app you build is responsive and mobile-optimized by default. Works on any device.",
+    icon: Smartphone,
+    color: "from-indigo-400 to-violet-300"
+  },
+  {
+    title: "Instant Iteration",
+    description: "Make changes in real-time. 'Make the button blue', 'Add a user profile', done instantly.",
+    icon: Zap,
+    color: "from-yellow-400 to-amber-300"
+  }
+];
 
 export function FeaturesSection() {
   return (
