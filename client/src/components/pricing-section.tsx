@@ -88,11 +88,14 @@ export function PricingSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
-              className={`relative group rounded-2xl p-8 h-full flex flex-col ${
-                plan.featured 
-                  ? "bg-white/10 border-white/20 shadow-2xl shadow-purple-500/10" 
-                  : "bg-white/5 border-white/10"
-              } border backdrop-blur-xl transition-all hover:bg-white/10 hover:border-white/20`}
+              className={`relative group rounded-2xl p-8 h-full flex flex-col
+                bg-gradient-to-b from-white/10 to-white/5 
+                backdrop-blur-2xl 
+                border-t border-l border-r border-white/20 border-b border-white/10
+                shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_2px_0_0_rgba(255,255,255,0.2),inset_0_0_0_2px_rgba(255,255,255,0.05)]
+                ${plan.featured ? "shadow-purple-500/20 border-purple-500/30" : ""}
+                transition-all hover:scale-[1.02] hover:shadow-[0_30px_60px_-12px_rgba(0,0,0,0.6),inset_0_2px_0_0_rgba(255,255,255,0.3)]
+              `}
             >
               {plan.featured && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-full text-xs font-bold text-white uppercase tracking-wider shadow-lg">

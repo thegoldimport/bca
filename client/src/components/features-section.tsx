@@ -81,21 +81,26 @@ export function FeaturesSection() {
               transition={{ delay: index * 0.1 }}
               className="group relative h-full"
             >
-              {/* Card Background with Glassmorphism */}
-              <div className="absolute inset-0 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 transition-all duration-300 group-hover:bg-white/10 group-hover:border-white/20" />
+              {/* Card Background with Thick Glassmorphism */}
+              <div className="absolute inset-0 rounded-2xl transition-all duration-300
+                bg-gradient-to-b from-white/10 to-white/5 
+                backdrop-blur-2xl 
+                border-t border-l border-r border-white/20 border-b border-white/10
+                shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5),inset_0_2px_0_0_rgba(255,255,255,0.2),inset_0_0_0_2px_rgba(255,255,255,0.05)]"
+              />
               
               {/* Hover Gradient Glow */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-5 rounded-2xl transition-opacity duration-500`} />
+              <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-10 rounded-2xl transition-opacity duration-500`} />
 
-              <div className="relative p-8 flex flex-col h-full">
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${feature.color} p-0.5 mb-6 inline-flex items-center justify-center`}>
-                  <div className="w-full h-full bg-black/50 backdrop-blur-sm rounded-[7px] flex items-center justify-center">
+              <div className="relative p-8 flex flex-col h-full z-10">
+                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${feature.color} p-0.5 mb-6 inline-flex items-center justify-center shadow-lg shadow-black/20`}>
+                  <div className="w-full h-full bg-black/40 backdrop-blur-md rounded-[7px] flex items-center justify-center">
                     <feature.icon className="w-6 h-6 text-white" />
                   </div>
                 </div>
 
-                <h3 className="text-xl font-bold text-white mb-3">{feature.title}</h3>
-                <p className="text-white/60 leading-relaxed">
+                <h3 className="text-xl font-bold text-white mb-3 drop-shadow-sm">{feature.title}</h3>
+                <p className="text-white/70 leading-relaxed font-light">
                   {feature.description}
                 </p>
               </div>
