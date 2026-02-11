@@ -41,7 +41,7 @@ export function ShowcaseSection() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-6xl md:text-8xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-300 mb-8 drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]"
+            className="text-6xl md:text-8xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-300 mb-8 pb-4 drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]"
           >
             Dream big. Build fast.
           </motion.h2>
