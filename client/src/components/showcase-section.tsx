@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import showcaseDashboard from "@/assets/showcase-dashboard.png";
 import showcaseMobile from "@/assets/showcase-mobile.png";
 import showcaseSaas from "@/assets/showcase-saas.png";
+import neonGeoBg from "@/assets/neon-geo-bg.png";
 
 const SHOWCASES = [
   {
@@ -27,13 +28,19 @@ const SHOWCASES = [
 export function ShowcaseSection() {
   return (
     <section className="py-24 relative overflow-hidden">
+      {/* Background Image Overlay */}
+      <div className="absolute inset-0 z-0 opacity-40">
+        <img src={neonGeoBg} alt="Background" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#05050a] via-transparent to-[#05050a]" />
+      </div>
+
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-24">
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-display font-bold text-white mb-6"
+            className="text-4xl md:text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-300 mb-6 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
           >
             Dream big. Build fast.
           </motion.h2>
@@ -48,7 +55,7 @@ export function ShowcaseSection() {
           </motion.p>
         </div>
 
-        <div className="space-y-32">
+        <div className="space-y-24">
           {SHOWCASES.map((showcase, index) => (
             <motion.div 
               key={showcase.title}
@@ -71,8 +78,8 @@ export function ShowcaseSection() {
                 </div>
               </div>
 
-              <div className="flex-1 w-full">
-                <div className="relative group">
+              <div className="flex-1 w-full flex justify-center">
+                <div className="relative group max-w-md w-full">
                   {/* Glow Effect */}
                   <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-2xl blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
                   

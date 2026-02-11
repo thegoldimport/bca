@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import glassGeoBg from "@/assets/glass-geo-bg.png";
 
 const PLANS = [
   {
@@ -59,13 +60,19 @@ const PLANS = [
 export function PricingSection() {
   return (
     <section className="py-24 relative overflow-hidden" id="pricing">
+      {/* Background - Glass Panel Theme */}
+      <div className="absolute inset-0 z-0">
+         <img src={glassGeoBg} alt="Background" className="w-full h-full object-cover opacity-20" />
+         <div className="absolute inset-0 bg-gradient-to-b from-[#05050a] via-cyan-900/5 to-[#05050a]" />
+      </div>
+
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16">
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-display font-bold text-white mb-6"
+            className="text-4xl md:text-5xl font-display font-bold text-white mb-6 drop-shadow-[0_0_15px_rgba(0,255,255,0.3)]"
           >
             Pick your vibe.
           </motion.h2>
