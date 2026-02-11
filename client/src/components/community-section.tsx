@@ -70,7 +70,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ y: [0, -20, 0] }}
                   transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute -top-4 -right-2 md:top-0 md:right-10 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
+                  className="absolute -top-8 -right-8 md:top-0 md:right-10 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
                 >
                   <Users className="w-6 h-6 md:w-8 md:h-8 text-cyan-400 mb-2" />
                   <div className="h-1.5 md:h-2 w-16 md:w-24 bg-white/20 rounded-full mb-2" />
@@ -81,7 +81,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ y: [0, 20, 0] }}
                   transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                  className="absolute -bottom-4 -left-2 md:bottom-10 md:left-0 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-20"
+                  className="absolute -bottom-8 -left-8 md:bottom-10 md:left-0 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-20"
                 >
                   <Bot className="w-6 h-6 md:w-8 md:h-8 text-purple-400 mb-2" />
                   <div className="h-1.5 md:h-2 w-16 md:w-24 bg-white/20 rounded-full mb-2" />
@@ -92,7 +92,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
                   transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                  className="absolute -top-4 -left-2 md:top-10 md:left-5 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
+                  className="absolute -top-8 -left-8 md:top-10 md:left-5 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
                 >
                   <Brain className="w-5 h-5 md:w-6 md:h-6 text-pink-400 mb-2" />
                   <div className="h-1.5 w-12 md:w-16 bg-white/20 rounded-full mb-1.5" />
@@ -103,7 +103,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ x: [0, -10, 0], y: [0, -10, 0] }}
                   transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-                  className="absolute -bottom-4 -right-2 md:bottom-20 md:right-0 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
+                  className="absolute -bottom-8 -right-8 md:bottom-20 md:right-0 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
                 >
                   <Zap className="w-5 h-5 md:w-6 md:h-6 text-yellow-400 mb-2" />
                   <div className="h-1.5 w-12 md:w-16 bg-white/20 rounded-full mb-1.5" />
