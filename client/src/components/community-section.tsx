@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Users, Globe, ArrowRight } from "lucide-react";
+import { Users, Bot, ArrowRight, Brain, Zap } from "lucide-react";
 import iconCube from "@/assets/icon-cube.png";
 
 export function CommunitySection() {
@@ -66,31 +66,55 @@ export function CommunitySection() {
              <div className="relative aspect-square max-w-md mx-auto">
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-purple-500/10 rounded-full blur-3xl" />
                 
-                {/* Floating Elements */}
+                {/* Users Card - Top Right */}
                 <motion.div 
                   animate={{ y: [0, -20, 0] }}
                   transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-0 right-10 p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl"
+                  className="absolute top-0 right-10 p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl z-10"
                 >
                   <Users className="w-8 h-8 text-cyan-400 mb-2" />
                   <div className="h-2 w-24 bg-white/20 rounded-full mb-2" />
                   <div className="h-2 w-16 bg-white/10 rounded-full" />
                 </motion.div>
 
+                {/* Robot Card - Bottom Left */}
                 <motion.div 
                   animate={{ y: [0, 20, 0] }}
                   transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                   className="absolute bottom-10 left-0 p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl z-20"
                 >
-                  <Globe className="w-8 h-8 text-purple-400 mb-2" />
+                  <Bot className="w-8 h-8 text-purple-400 mb-2" />
                   <div className="h-2 w-24 bg-white/20 rounded-full mb-2" />
                   <div className="h-2 w-16 bg-white/10 rounded-full" />
                 </motion.div>
 
+                {/* Brain Card - Top Left */}
+                <motion.div 
+                  animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+                  transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                  className="absolute top-10 left-5 p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl z-10"
+                >
+                  <Brain className="w-6 h-6 text-pink-400 mb-2" />
+                  <div className="h-1.5 w-16 bg-white/20 rounded-full mb-1.5" />
+                  <div className="h-1.5 w-10 bg-white/10 rounded-full" />
+                </motion.div>
+
+                {/* Lightning Card - Bottom Right */}
+                <motion.div 
+                  animate={{ x: [0, -10, 0], y: [0, -10, 0] }}
+                  transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
+                  className="absolute bottom-20 right-0 p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl z-10"
+                >
+                  <Zap className="w-6 h-6 text-yellow-400 mb-2" />
+                  <div className="h-1.5 w-16 bg-white/20 rounded-full mb-1.5" />
+                  <div className="h-1.5 w-10 bg-white/10 rounded-full" />
+                </motion.div>
+
+                {/* Center Cube Logo */}
                 <motion.div 
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 flex items-center justify-center"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 flex items-center justify-center z-30"
                 >
                    <img src={iconCube} alt="Cube Icon" className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]" />
                 </motion.div>
