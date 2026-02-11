@@ -32,7 +32,7 @@ export function CommunitySection() {
               transition={{ delay: 0.1 }}
               className="text-xl text-white/60 mb-10 leading-relaxed max-w-lg"
             >
-              Stop wrestling with syntax. Start building with pure imagination. 
+              Stop wrestling with code. Start building with pure imagination. 
               Join thousands of creators shipping apps at the speed of thought.
             </motion.p>
 
