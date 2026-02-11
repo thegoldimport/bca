@@ -3,6 +3,7 @@ import showcaseDashboard from "@/assets/showcase-dashboard.png";
 import showcaseMobile from "@/assets/showcase-mobile.png";
 import showcaseSaas from "@/assets/showcase-saas.png";
 import neonGeoBg from "@/assets/neon-geo-bg.png";
+import logo from "@/assets/logo.png";
 
 const SHOWCASES = [
   {
@@ -49,10 +50,20 @@ export function ShowcaseSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-xl text-white/60 max-w-2xl mx-auto"
+            className="text-xl text-white/60 max-w-2xl mx-auto mb-10"
           >
             From simple landing pages to complex SaaS applications, if you can describe it, you can build it.
           </motion.p>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2 }}
+            className="flex justify-center"
+          >
+            <img src={logo} alt="BuildCustom.Ai" className="h-16 w-auto object-contain" />
+          </motion.div>
         </div>
 
         <div className="space-y-24">
