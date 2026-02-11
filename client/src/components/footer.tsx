@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import logo from "@/assets/logo.png";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -14,7 +15,7 @@ export function Footer() {
       <div className="container mx-auto px-4 relative z-10">
         <div className="flex flex-col md:flex-row justify-between items-start mb-16">
           <div className="mb-10 md:mb-0 max-w-sm">
-            <h3 className="text-2xl font-display font-bold text-white mb-4">BuildCustom.ai</h3>
+            <img src={logo} alt="BuildCustom.ai" className="h-10 w-auto object-contain mb-4" />
             <p className="text-white/50 mb-6">
               The futuristic vibe coding platform that turns your ideas into reality. 
               Built on the shoulders of giants.
