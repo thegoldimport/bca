@@ -61,7 +61,7 @@ export function CommunitySection() {
             </motion.button>
           </div>
 
-          <div className="lg:w-1/2 relative mt-24 lg:mt-0">
+          <div className="lg:w-1/2 relative mt-32 mb-12 lg:mt-0 lg:mb-0">
              {/* Abstract Community Visual */}
              <div className="relative aspect-square w-full max-w-[340px] md:max-w-md mx-auto">
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-purple-500/10 rounded-full blur-3xl" />
@@ -70,7 +70,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ y: [0, -20, 0] }}
                   transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-0 -right-8 md:right-10 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
+                  className="absolute top-0 -right-4 md:right-10 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
                 >
                   <Users className="w-6 h-6 md:w-8 md:h-8 text-cyan-400 mb-2" />
                   <div className="h-1.5 md:h-2 w-16 md:w-24 bg-white/20 rounded-full mb-2" />
@@ -81,7 +81,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ y: [0, 20, 0] }}
                   transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                  className="absolute bottom-10 -left-8 md:left-0 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-20"
+                  className="absolute bottom-10 -left-4 md:left-0 p-3 md:p-6 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-20"
                 >
                   <Bot className="w-6 h-6 md:w-8 md:h-8 text-purple-400 mb-2" />
                   <div className="h-1.5 md:h-2 w-16 md:w-24 bg-white/20 rounded-full mb-2" />
@@ -92,7 +92,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
                   transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                  className="absolute top-10 -left-6 md:left-5 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
+                  className="absolute top-10 -left-2 md:left-5 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
                 >
                   <Brain className="w-5 h-5 md:w-6 md:h-6 text-pink-400 mb-2" />
                   <div className="h-1.5 w-12 md:w-16 bg-white/20 rounded-full mb-1.5" />
@@ -103,7 +103,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ x: [0, -10, 0], y: [0, -10, 0] }}
                   transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-                  className="absolute bottom-20 -right-6 md:right-0 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
+                  className="absolute bottom-20 -right-2 md:right-0 p-3 md:p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-xl z-10"
                 >
                   <Zap className="w-5 h-5 md:w-6 md:h-6 text-yellow-400 mb-2" />
                   <div className="h-1.5 w-12 md:w-16 bg-white/20 rounded-full mb-1.5" />
@@ -114,7 +114,7 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 md:w-64 md:h-64 flex items-center justify-center z-30"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 md:w-64 md:h-64 flex items-center justify-center z-30"
                 >
                    <img src={iconCube} alt="Cube Icon" className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]" />
                 </motion.div>
