@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { Users, Globe, Zap, ArrowRight } from "lucide-react";
+import { Users, Globe, ArrowRight } from "lucide-react";
+import iconCube from "@/assets/icon-cube.png";
 
 export function CommunitySection() {
   return (
@@ -89,9 +90,9 @@ export function CommunitySection() {
                 <motion.div 
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-white/10 rounded-full flex items-center justify-center bg-white/5 backdrop-blur-md"
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 flex items-center justify-center"
                 >
-                   <Zap className="w-24 h-24 text-white/80 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" />
+                   <img src={iconCube} alt="Cube Icon" className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]" />
                 </motion.div>
              </div>
           </div>
