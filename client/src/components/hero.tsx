@@ -136,10 +136,10 @@ export function Hero() {
               <textarea 
                 ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest" 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[40px] leading-relaxed pt-2"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[70px] leading-relaxed pt-2"
                 rows={1}
                 onInput={handleInput}
-                style={{ height: '40px' }}
+                style={{ height: '70px' }}
                 autoFocus
                 data-testid="input-hero-prompt"
               />
