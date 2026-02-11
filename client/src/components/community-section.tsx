@@ -61,7 +61,7 @@ export function CommunitySection() {
             </motion.button>
           </div>
 
-          <div className="lg:w-1/2 relative">
+          <div className="lg:w-1/2 relative mt-24 lg:mt-0">
              {/* Abstract Community Visual */}
              <div className="relative aspect-square max-w-md mx-auto">
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-purple-500/10 rounded-full blur-3xl" />
