@@ -5,6 +5,7 @@ import { ShowcaseSection } from "@/components/showcase-section";
 import { FeaturesSection } from "@/components/features-section";
 import { CommunitySection } from "@/components/community-section";
 import { PricingSection } from "@/components/pricing-section";
+import { PartnerSection } from "@/components/partner-section";
 import { Footer } from "@/components/footer";
 
 export default function Home() {
@@ -35,6 +36,9 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-t from-purple-900/20 to-transparent pointer-events-none" />
           <PricingSection />
         </div>
+        
+        {/* 8. Partner / Booking Section */}
+        <PartnerSection />
       </main>
       <Footer />
     </div>
