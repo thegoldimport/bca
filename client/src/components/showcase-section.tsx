@@ -41,7 +41,7 @@ export function ShowcaseSection() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-300 mb-6 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+            className="text-6xl md:text-8xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-300 mb-8 drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]"
           >
             Dream big. Build fast.
           </motion.h2>
@@ -50,9 +50,9 @@ export function ShowcaseSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="flex justify-center mb-6"
+            className="flex justify-center mb-8"
           >
-            <img src={logo} alt="BuildCustom.Ai" className="h-16 w-auto object-contain" />
+            <img src={logo} alt="BuildCustom.Ai" className="h-32 w-auto object-contain" />
           </motion.div>
 
           <motion.p 
