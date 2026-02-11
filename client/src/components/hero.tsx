@@ -85,7 +85,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-          className="w-full max-w-xl relative group px-4 mt-12"
+          className="w-full max-w-xl relative group px-4 mt-0 md:mt-12"
         >
           {/* Outer Glow */}
           <div className="absolute inset-4 bg-cyan-500/10 rounded-2xl blur-3xl group-hover:bg-cyan-500/20 transition-all duration-700" />
@@ -136,10 +136,9 @@ export function Hero() {
               <textarea 
                 ref={textareaRef}
                 placeholder="Describe your idea in as much detail as you can and let Ai take care of the rest" 
-                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[70px] leading-relaxed pt-2"
+                className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[120px] md:min-h-[70px] leading-relaxed pt-2"
                 rows={1}
                 onInput={handleInput}
-                style={{ height: '70px' }}
                 autoFocus
                 data-testid="input-hero-prompt"
               />
