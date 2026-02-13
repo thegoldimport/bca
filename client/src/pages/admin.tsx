@@ -3,32 +3,39 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, Search, Trash2, LogOut } from "lucide-react";
+import { Download, Search, Trash2, LogOut, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
-
-// Mock Data
-const MOCK_WAITLIST = [
-  { id: 1, name: "Alice Johnson", email: "alice@example.com", date: "2026-02-12", status: "Pending" },
-  { id: 2, name: "Bob Smith", email: "bob@techstart.io", date: "2026-02-12", status: "Approved" },
-  { id: 3, name: "Charlie Davis", email: "charlie@design.co", date: "2026-02-11", status: "Pending" },
-  { id: 4, name: "Diana Prince", email: "diana@amazon.com", date: "2026-02-11", status: "Pending" },
-  { id: 5, name: "Ethan Hunt", email: "ethan@imf.org", date: "2026-02-10", status: "Approved" },
-  { id: 6, name: "Fiona Gallagher", email: "fiona@chicago.net", date: "2026-02-10", status: "Rejected" },
-  { id: 7, name: "George Miller", email: "george@furyroad.com", date: "2026-02-09", status: "Pending" },
-];
+import type { WaitlistEntry } from "@shared/schema";
 
 export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [data, setData] = useState(MOCK_WAITLIST);
+  const [data, setData] = useState<WaitlistEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [, setLocation] = useLocation();
 
-  // Protect the route
+  const fetchEntries = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/admin/waitlist");
+      if (res.ok) {
+        const entries = await res.json();
+        setData(entries);
+      }
+    } catch (err) {
+      console.error("Failed to fetch waitlist:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const isAuthenticated = localStorage.getItem("isAuthenticated");
     if (!isAuthenticated) {
       setLocation("/login");
+      return;
     }
+    fetchEntries();
   }, [setLocation]);
 
   const handleLogout = () => {
@@ -45,8 +52,8 @@ export default function AdminDashboard() {
   const handleExport = () => {
     const csvContent =
       "data:text/csv;charset=utf-8," +
-      "ID,Name,Email,Date,Status\n" +
-      filteredData.map((row) => `${row.id},${row.name},${row.email},${row.date},${row.status}`).join("\n");
+      "ID,Name,Email,Source,Status,Date\n" +
+      filteredData.map((row) => `${row.id},"${row.name}","${row.email}","${row.source}","${row.status}","${new Date(row.createdAt).toLocaleDateString()}"`).join("\n");
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -57,9 +64,16 @@ export default function AdminDashboard() {
     document.body.removeChild(link);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     if (confirm("Are you sure you want to delete this entry?")) {
-      setData(data.filter((item) => item.id !== id));
+      try {
+        const res = await fetch(`/api/admin/waitlist/${id}`, { method: "DELETE" });
+        if (res.ok) {
+          setData(data.filter((item) => item.id !== id));
+        }
+      } catch (err) {
+        console.error("Failed to delete entry:", err);
+      }
     }
   };
 
@@ -70,13 +84,22 @@ export default function AdminDashboard() {
       <main className="flex-1 container mx-auto px-4 py-24">
         <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
-            <p className="text-white/60">Manage your waitlist entries.</p>
+            <h1 className="text-3xl font-bold text-white mb-2" data-testid="text-admin-title">Admin Dashboard</h1>
+            <p className="text-white/60">Manage your waitlist entries. <span className="text-cyan-400 font-medium">{data.length} total signups</span></p>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-3">
+            <Button 
+              onClick={fetchEntries}
+              variant="outline"
+              className="border-white/10 text-white hover:bg-white/10 hover:text-white"
+              data-testid="button-refresh"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+            </Button>
             <Button 
               onClick={handleExport}
               className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+              data-testid="button-export"
             >
               <Download className="mr-2 h-4 w-4" /> Export CSV
             </Button>
@@ -84,6 +107,7 @@ export default function AdminDashboard() {
               onClick={handleLogout}
               variant="outline"
               className="border-white/10 text-white hover:bg-white/10 hover:text-white"
+              data-testid="button-logout"
             >
               <LogOut className="mr-2 h-4 w-4" /> Logout
             </Button>
@@ -99,6 +123,7 @@ export default function AdminDashboard() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 bg-black/20 border-white/10 text-white placeholder:text-white/30 focus:ring-cyan-500/50"
+                data-testid="input-search"
               />
             </div>
           </div>
@@ -110,19 +135,31 @@ export default function AdminDashboard() {
                   <TableHead className="text-white/60">ID</TableHead>
                   <TableHead className="text-white/60">Name</TableHead>
                   <TableHead className="text-white/60">Email</TableHead>
-                  <TableHead className="text-white/60">Date</TableHead>
+                  <TableHead className="text-white/60">Source</TableHead>
                   <TableHead className="text-white/60">Status</TableHead>
+                  <TableHead className="text-white/60">Date</TableHead>
                   <TableHead className="text-white/60 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.length > 0 ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center text-white/40">
+                      Loading...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredData.length > 0 ? (
                   filteredData.map((item) => (
-                    <TableRow key={item.id} className="border-white/10 hover:bg-white/5">
+                    <TableRow key={item.id} className="border-white/10 hover:bg-white/5" data-testid={`row-entry-${item.id}`}>
                       <TableCell className="font-medium text-white/80">{item.id}</TableCell>
                       <TableCell className="text-white">{item.name}</TableCell>
                       <TableCell className="text-white/70">{item.email}</TableCell>
-                      <TableCell className="text-white/60">{item.date}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium 
+                          ${item.source === 'strategy_call' ? 'bg-purple-500/20 text-purple-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                          {item.source === 'strategy_call' ? 'Strategy Call' : 'Waitlist'}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium 
                           ${item.status === 'Approved' ? 'bg-green-500/20 text-green-400' : 
@@ -131,12 +168,14 @@ export default function AdminDashboard() {
                           {item.status}
                         </span>
                       </TableCell>
+                      <TableCell className="text-white/60">{new Date(item.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           onClick={() => handleDelete(item.id)}
                           className="text-white/40 hover:text-red-400 hover:bg-red-500/10"
+                          data-testid={`button-delete-${item.id}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -145,7 +184,7 @@ export default function AdminDashboard() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-white/40">
+                    <TableCell colSpan={7} className="h-24 text-center text-white/40">
                       No results found.
                     </TableCell>
                   </TableRow>
@@ -154,7 +193,7 @@ export default function AdminDashboard() {
             </Table>
           </div>
           <div className="p-4 border-t border-white/10 text-xs text-white/40 text-center">
-             Showing {filteredData.length} entries
+             Showing {filteredData.length} of {data.length} entries
           </div>
         </div>
       </main>

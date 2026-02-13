@@ -8,32 +8,46 @@ import { Label } from "@/components/ui/label";
 interface WaitlistModalProps {
   isOpen: boolean;
   onClose: () => void;
+  source?: string;
 }
 
-export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
+export function WaitlistModal({ isOpen, onClose, source = "waitlist" }: WaitlistModalProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock submission
-    console.log("Waitlist submission:", { name, email });
-    setIsSubmitted(true);
-    // Reset after a delay or keep success state? Let's keep success state for a moment.
-    setTimeout(() => {
-      setIsSubmitted(false);
-      setName("");
-      setEmail("");
-      onClose();
-    }, 2000);
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, source }),
+      });
+
+      if (!res.ok) throw new Error("Failed to submit");
+
+      setIsSubmitted(true);
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setName("");
+        setEmail("");
+        onClose();
+      }, 2000);
+    } catch (err) {
+      console.error("Waitlist signup failed:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -42,20 +56,19 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
           />
 
-          {/* Modal */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="relative w-full max-w-md bg-[#0a0a12] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
           >
-            {/* Gradient Glow */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-emerald-500" />
             <div className="absolute -inset-1 bg-gradient-to-r from-purple-500/20 via-cyan-500/20 to-emerald-500/20 blur-xl opacity-50 pointer-events-none" />
 
             <button
               onClick={onClose}
               className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors z-50"
+              data-testid="button-close-waitlist"
             >
               <X size={20} />
             </button>
@@ -73,35 +86,39 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
 
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="name" className="text-white/80">Name</Label>
+                      <Label htmlFor="waitlist-name" className="text-white/80">Name</Label>
                       <Input
-                        id="name"
+                        id="waitlist-name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="John Doe"
                         required
                         className="bg-white/5 border-white/10 text-white placeholder:text-white/20 focus:border-cyan-500/50"
+                        data-testid="input-waitlist-name"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="email" className="text-white/80">Email</Label>
+                      <Label htmlFor="waitlist-email" className="text-white/80">Email</Label>
                       <Input
-                        id="email"
+                        id="waitlist-email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="john@example.com"
                         required
                         className="bg-white/5 border-white/10 text-white placeholder:text-white/20 focus:border-cyan-500/50"
+                        data-testid="input-waitlist-email"
                       />
                     </div>
 
                     <Button
                       type="submit"
+                      disabled={isLoading}
                       className="w-full bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold py-6 mt-2"
+                      data-testid="button-submit-waitlist"
                     >
-                      Join Waitlist
+                      {isLoading ? "Signing up..." : "Join Waitlist"}
                     </Button>
                   </form>
                 </>

@@ -12,14 +12,20 @@ import { useState } from "react";
 
 export default function Home() {
   const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
+  const [waitlistSource, setWaitlistSource] = useState("waitlist");
+
+  const openWaitlist = (source: string = "waitlist") => {
+    setWaitlistSource(source);
+    setIsWaitlistOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-[#05050a] text-foreground overflow-x-hidden selection:bg-cyan-500/30">
       <Navbar />
-      <WaitlistModal isOpen={isWaitlistOpen} onClose={() => setIsWaitlistOpen(false)} />
+      <WaitlistModal isOpen={isWaitlistOpen} onClose={() => setIsWaitlistOpen(false)} source={waitlistSource} />
       <main>
         {/* 1. Hero (Locked) */}
-        <Hero onBuildClick={() => setIsWaitlistOpen(true)} />
+        <Hero onBuildClick={() => openWaitlist("waitlist")} />
         
         {/* 2. Logos (Glass Theme) */}
         <LogosSection />
@@ -43,11 +49,11 @@ export default function Home() {
         </div>
         
         {/* 8. Partner / Booking Section */}
-        <PartnerSection onBookClick={() => setIsWaitlistOpen(true)} />
+        <PartnerSection onBookClick={() => openWaitlist("strategy_call")} />
 
         {/* 9. Hero Duplicate (Final CTA) */}
         <div className="relative border-t border-white/10">
-           <Hero onBuildClick={() => setIsWaitlistOpen(true)} />
+           <Hero onBuildClick={() => openWaitlist("waitlist")} />
         </div>
       </main>
       <Footer />

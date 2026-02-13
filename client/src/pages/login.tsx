@@ -11,30 +11,44 @@ import { useToast } from "@/hooks/use-toast";
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Mock authentication check
-    if (username === "admin" && password === "Stayclassy99") {
-      // Set a simple mock session flag
-      localStorage.setItem("isAuthenticated", "true");
-      
-      toast({
-        title: "Login Successful",
-        description: "Welcome back, Admin.",
-        duration: 2000,
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
       });
-      
-      setLocation("/admin");
-    } else {
+
+      if (res.ok) {
+        localStorage.setItem("isAuthenticated", "true");
+        toast({
+          title: "Login Successful",
+          description: "Welcome back, Admin.",
+          duration: 2000,
+        });
+        setLocation("/admin");
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Access Denied",
+          description: "Invalid username or password.",
+        });
+      }
+    } catch (err) {
       toast({
         variant: "destructive",
-        title: "Access Denied",
-        description: "Invalid username or password.",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -43,7 +57,6 @@ export default function Login() {
       <Navbar />
       
       <main className="flex-1 flex items-center justify-center px-4 py-24 relative overflow-hidden">
-        {/* Background Effects */}
         <div className="absolute inset-0 z-0">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[100px]" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-purple-500/10 rounded-full blur-[80px]" />
@@ -70,6 +83,7 @@ export default function Login() {
                   placeholder="Enter username"
                   className="bg-black/20 border-white/10 text-white placeholder:text-white/20 focus:border-cyan-500/50 focus:ring-cyan-500/20"
                   required
+                  data-testid="input-username"
                 />
               </div>
               
@@ -83,14 +97,17 @@ export default function Login() {
                   placeholder="Enter password"
                   className="bg-black/20 border-white/10 text-white placeholder:text-white/20 focus:border-cyan-500/50 focus:ring-cyan-500/20"
                   required
+                  data-testid="input-password"
                 />
               </div>
 
               <Button
                 type="submit"
+                disabled={isLoading}
                 className="w-full h-12 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white font-bold rounded-xl mt-2 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+                data-testid="button-login"
               >
-                Login
+                {isLoading ? "Logging in..." : "Login"}
               </Button>
             </form>
           </div>
