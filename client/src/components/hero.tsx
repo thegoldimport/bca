@@ -13,7 +13,11 @@ const CYCLING_WORDS = [
   "Anything"
 ];
 
-export function Hero() {
+interface HeroProps {
+  onBuildClick?: () => void;
+}
+
+export function Hero({ onBuildClick }: HeroProps) {
   const [index, setIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -146,6 +150,7 @@ export function Hero() {
 
             {/* Icey Glass Button with Shimmer */}
             <Button 
+              onClick={onBuildClick}
               className="relative z-10 w-full md:w-auto h-12 md:h-16 rounded-xl 
                 bg-gradient-to-b from-cyan-200 to-cyan-400 
                 hover:from-cyan-100 hover:to-cyan-300

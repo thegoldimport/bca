@@ -7,14 +7,19 @@ import { CommunitySection } from "@/components/community-section";
 import { PricingSection } from "@/components/pricing-section";
 import { PartnerSection } from "@/components/partner-section";
 import { Footer } from "@/components/footer";
+import { WaitlistModal } from "@/components/waitlist-modal";
+import { useState } from "react";
 
 export default function Home() {
+  const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-[#05050a] text-foreground overflow-x-hidden selection:bg-cyan-500/30">
       <Navbar />
+      <WaitlistModal isOpen={isWaitlistOpen} onClose={() => setIsWaitlistOpen(false)} />
       <main>
         {/* 1. Hero (Locked) */}
-        <Hero />
+        <Hero onBuildClick={() => setIsWaitlistOpen(true)} />
         
         {/* 2. Logos (Glass Theme) */}
         <LogosSection />
@@ -39,6 +44,11 @@ export default function Home() {
         
         {/* 8. Partner / Booking Section */}
         <PartnerSection />
+
+        {/* 9. Hero Duplicate (Final CTA) */}
+        <div className="relative border-t border-white/10">
+           <Hero onBuildClick={() => setIsWaitlistOpen(true)} />
+        </div>
       </main>
       <Footer />
     </div>
