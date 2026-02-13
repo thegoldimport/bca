@@ -57,7 +57,11 @@ const PLANS = [
   }
 ];
 
-export function PricingSection() {
+interface PricingSectionProps {
+  onPlanClick?: () => void;
+}
+
+export function PricingSection({ onPlanClick }: PricingSectionProps) {
   return (
     <section className="py-24 relative overflow-hidden" id="pricing">
       {/* Background - Glass Panel Theme */}
@@ -131,6 +135,7 @@ export function PricingSection() {
               </div>
 
               <Button 
+                onClick={onPlanClick}
                 className={`w-full h-12 rounded-xl font-bold tracking-wide transition-all ${
                   plan.featured
                     ? "bg-white text-black hover:bg-white/90"

@@ -34,7 +34,7 @@ export default function Home() {
         <ShowcaseSection />
         
         {/* 4. Pricing (Glass Theme) */}
-        <PricingSection />
+        <PricingSection onPlanClick={() => openWaitlist("pricing")} />
         
         {/* 5. Features (Neon Dark Theme) - Moved here */}
         <FeaturesSection />
@@ -45,7 +45,7 @@ export default function Home() {
         {/* 7. Pricing Duplicate (Neon Dark Theme - varied) */}
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-t from-purple-900/20 to-transparent pointer-events-none" />
-          <PricingSection />
+          <PricingSection onPlanClick={() => openWaitlist("pricing")} />
         </div>
         
         {/* 8. Partner / Booking Section */}
