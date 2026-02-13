@@ -43,7 +43,7 @@ export default function Home() {
         </div>
         
         {/* 8. Partner / Booking Section */}
-        <PartnerSection />
+        <PartnerSection onBookClick={() => setIsWaitlistOpen(true)} />
 
         {/* 9. Hero Duplicate (Final CTA) */}
         <div className="relative border-t border-white/10">

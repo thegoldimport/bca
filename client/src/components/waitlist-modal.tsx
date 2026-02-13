@@ -55,7 +55,7 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
 
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors"
+              className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors z-50"
             >
               <X size={20} />
             </button>

@@ -5,7 +5,11 @@ import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import glassGeoBg from "@/assets/glass-geo-bg.png";
 
-export function PartnerSection() {
+interface PartnerSectionProps {
+  onBookClick?: () => void;
+}
+
+export function PartnerSection({ onBookClick }: PartnerSectionProps) {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
@@ -145,7 +149,9 @@ export function PartnerSection() {
                   </div>
                 </div>
 
-                <Button className="w-full h-12 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-bold rounded-xl mt-4 shadow-[0_0_20px_rgba(168,85,247,0.3)] border border-white/10">
+                <Button 
+                  onClick={onBookClick}
+                  className="w-full h-12 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-bold rounded-xl mt-4 shadow-[0_0_20px_rgba(168,85,247,0.3)] border border-white/10">
                   Book Strategy Call <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </div>
