@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getApiBase } from "@/lib/api";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -20,7 +21,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/admin/login", {
+      const res = await fetch(`${getApiBase()}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),

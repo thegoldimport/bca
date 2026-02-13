@@ -7,6 +7,7 @@ import { Download, Search, Trash2, LogOut, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
 import type { WaitlistEntry } from "@shared/schema";
+import { getApiBase } from "@/lib/api";
 
 export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -17,7 +18,7 @@ export default function AdminDashboard() {
   const fetchEntries = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/admin/waitlist");
+      const res = await fetch(`${getApiBase()}/api/admin/waitlist`);
       if (res.ok) {
         const entries = await res.json();
         setData(entries);
@@ -67,7 +68,7 @@ export default function AdminDashboard() {
   const handleDelete = async (id: number) => {
     if (confirm("Are you sure you want to delete this entry?")) {
       try {
-        const res = await fetch(`/api/admin/waitlist/${id}`, { method: "DELETE" });
+        const res = await fetch(`${getApiBase()}/api/admin/waitlist/${id}`, { method: "DELETE" });
         if (res.ok) {
           setData(data.filter((item) => item.id !== id));
         }
