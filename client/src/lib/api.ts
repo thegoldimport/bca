@@ -1,9 +1,10 @@
+const REPLIT_API_URL = "https://ai-build-studio.replit.app";
+
 export function getApiBase(): string {
-  if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+  if (typeof window === "undefined") return "";
+  const hostname = window.location.hostname;
+  if (hostname === "localhost" || hostname.includes("replit")) {
     return "";
   }
-  if (typeof window !== "undefined" && !window.location.hostname.includes("replit")) {
-    return import.meta.env.VITE_API_URL || "";
-  }
-  return "";
+  return REPLIT_API_URL;
 }
