@@ -42,3 +42,8 @@ waitForPort = 5000
 [agent]
 stack = "MOCKUP_JS"
 mockupState = "FULLSTACK"
+
+[userenv]
+
+[userenv.shared]
+VITE_API_URL = "https://ai-build-studio.replit.app"
