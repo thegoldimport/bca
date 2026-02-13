@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, Search, Trash2 } from "lucide-react";
+import { Download, Search, Trash2, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useLocation } from "wouter";
 
 // Mock Data
 const MOCK_WAITLIST = [
@@ -20,6 +21,20 @@ const MOCK_WAITLIST = [
 export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [data, setData] = useState(MOCK_WAITLIST);
+  const [, setLocation] = useLocation();
+
+  // Protect the route
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem("isAuthenticated");
+    if (!isAuthenticated) {
+      setLocation("/login");
+    }
+  }, [setLocation]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("isAuthenticated");
+    setLocation("/login");
+  };
 
   const filteredData = data.filter(
     (item) =>
@@ -58,12 +73,21 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
             <p className="text-white/60">Manage your waitlist entries.</p>
           </div>
-          <Button 
-            onClick={handleExport}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
-          >
-            <Download className="mr-2 h-4 w-4" /> Export CSV
-          </Button>
+          <div className="flex gap-4">
+            <Button 
+              onClick={handleExport}
+              className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+            >
+              <Download className="mr-2 h-4 w-4" /> Export CSV
+            </Button>
+            <Button 
+              onClick={handleLogout}
+              variant="outline"
+              className="border-white/10 text-white hover:bg-white/10 hover:text-white"
+            >
+              <LogOut className="mr-2 h-4 w-4" /> Logout
+            </Button>
+          </div>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-sm">
