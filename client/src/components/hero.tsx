@@ -143,7 +143,6 @@ export function Hero({ onBuildClick }: HeroProps) {
                 className="w-full bg-transparent border-none text-white placeholder-white/40 focus:outline-none focus:ring-0 text-xl md:text-lg font-light drop-shadow-md resize-none overflow-hidden min-h-[120px] md:min-h-[70px] leading-snug md:leading-relaxed pt-2"
                 rows={1}
                 onInput={handleInput}
-                autoFocus
                 data-testid="input-hero-prompt"
               />
             </div>
