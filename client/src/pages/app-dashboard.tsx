@@ -247,7 +247,8 @@ function ProjectsPage() {
           }`}>Build, manage, and deploy your creations</p>
         </div>
         <button
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#00c9b7] via-[#6366f1] to-[#a855f7] text-white font-semibold text-sm hover:opacity-90 transition-all shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
+          style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 35%, #a855f7 65%, #ec4899 100%)" }}
           data-testid="button-new-project"
         >
           <Plus size={18} />
