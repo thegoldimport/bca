@@ -25,8 +25,9 @@ Preferred communication style: Simple, everyday language.
 - `/` — Marketing landing page with hero, features, showcase, pricing, community sections, and waitlist modal
 - `/login` — Admin login page
 - `/admin` — Admin dashboard showing waitlist entries (protected by localStorage auth check)
-- `/app` — User-facing app dashboard (Projects grid, preview images)
-- `/app/editor` — AI Builder interface (chat + preview split pane)
+- `/app` — User-facing app dashboard (Projects grid with action buttons: Version History, Console, Files, Share, Export)
+- `/app/templates` — Template gallery with category filters (SaaS, E-Commerce, Portfolio, Landing Page, Blog, Business, Game, Mobile)
+- `/app/editor` — AI Builder interface (chat + responsive preview with Desktop/Tablet/Mobile toggle and realistic homepage mockup)
 - `/app/users` — (Super Admin) User management table with search/filter
 - `/app/analytics` — (Super Admin) Platform metrics, traffic chart, recent activity
 - `/app/billing` — (Super Admin) Revenue, subscriptions, transactions, plan distribution
