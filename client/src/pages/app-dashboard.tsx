@@ -135,18 +135,8 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
         {navItems.map((item, idx) => {
           const active = isActive(item.path);
-          const showDivider = CURRENT_USER_ROLE === "super_admin" && item.path === "/app/users";
           return (
             <div key={item.path}>
-              {showDivider && (
-                <div className={`my-3 mx-2 border-t ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-                  {!collapsed && (
-                    <span className={`block text-[10px] uppercase tracking-widest font-semibold mt-3 mb-1 px-1 ${
-                      theme === "dark" ? "text-white/25" : "text-gray-400"
-                    }`}>Admin</span>
-                  )}
-                </div>
-              )}
               <Link href={item.path}>
                 <div
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group ${
