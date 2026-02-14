@@ -142,9 +142,9 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
           }`}
           data-testid="button-theme-toggle"
         >
-          {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+          {theme === "dark" ? <Sun size={20} className="text-purple-400" /> : <Moon size={20} className="text-purple-400" />}
           {!collapsed && (
-            <span className="font-medium text-sm">
+            <span className="font-medium text-sm text-brand-gradient">
               {theme === "dark" ? "Light Mode" : "Dark Mode"}
             </span>
           )}
@@ -214,9 +214,7 @@ function AppTopBar() {
             U
           </div>
           <div className="hidden sm:block">
-            <p className={`text-sm font-medium ${
-              theme === "dark" ? "text-white" : "text-gray-900"
-            }`}>User</p>
+            <p className="text-sm font-medium text-brand-gradient">User</p>
             <p className={`text-xs ${
               theme === "dark" ? "text-white/50" : "text-gray-500"
             }`}>Pro Plan</p>
