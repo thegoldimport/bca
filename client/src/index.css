@@ -117,13 +117,13 @@
   .text-glow-accent {
     text-shadow: 0 0 20px hsl(var(--accent) / 0.5);
   }
+}
 
-  .text-brand-gradient {
-    background: linear-gradient(90deg, #00c9b7 0%, #22d3ee 15%, #6366f1 40%, #a855f7 65%, #ec4899 100%) !important;
-    background-size: 100% 100% !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
-    color: transparent !important;
-  }
+.text-brand-gradient {
+  background: linear-gradient(90deg, #00c9b7 0%, #22d3ee 15%, #6366f1 40%, #a855f7 65%, #ec4899 100%) !important;
+  background-size: 100% 100% !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  color: transparent !important;
 }
