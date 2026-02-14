@@ -34,6 +34,11 @@ import {
   PanelLeftClose,
   PanelLeft,
   Zap,
+  Users,
+  BarChart3,
+  Receipt,
+  LifeBuoy,
+  Cloud,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import previewPortfolio from "@/assets/preview-portfolio.jpg";
@@ -41,14 +46,31 @@ import previewFitness from "@/assets/preview-fitness.jpg";
 import previewGame from "@/assets/preview-game.jpg";
 import previewEcommerce from "@/assets/preview-ecommerce.jpg";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
+import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } from "@/pages/app-admin-pages";
+
+type UserRole = "super_admin" | "user";
+const CURRENT_USER_ROLE: UserRole = "super_admin";
 
 function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
 
-  const navItems = [
+  const baseItems = [
     { path: "/app", icon: LayoutGrid, label: "Projects" },
     { path: "/app/editor", icon: Code2, label: "Builder" },
+  ];
+
+  const adminItems = [
+    { path: "/app/users", icon: Users, label: "Users" },
+    { path: "/app/analytics", icon: BarChart3, label: "Analytics" },
+    { path: "/app/billing", icon: Receipt, label: "Billing" },
+    { path: "/app/support", icon: LifeBuoy, label: "Support" },
+    { path: "/app/deployments", icon: Cloud, label: "Deployments" },
+  ];
+
+  const navItems = [
+    ...baseItems,
+    ...(CURRENT_USER_ROLE === "super_admin" ? adminItems : []),
     { path: "/app/settings", icon: Settings, label: "Settings" },
   ];
 
@@ -100,32 +122,44 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
         </button>
       </div>
 
-      <nav className="flex-1 py-4 px-3 space-y-1">
-        {navItems.map((item) => {
+      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        {navItems.map((item, idx) => {
           const active = isActive(item.path);
+          const showDivider = CURRENT_USER_ROLE === "super_admin" && item.path === "/app/users";
           return (
-            <Link key={item.path} href={item.path}>
-              <div
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group ${
-                  active
-                    ? theme === "dark"
-                      ? "bg-white/10"
-                      : "bg-cyan-50"
-                    : theme === "dark"
-                    ? "text-white/60 hover:text-white hover:bg-white/5"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                }`}
-                data-testid={`nav-${item.label.toLowerCase()}`}
-              >
-                <item.icon size={20} className={active ? "text-purple-400" : ""} />
-                {!collapsed && (
-                  <span className={`font-medium text-sm ${active ? "text-brand-gradient" : ""}`}>{item.label}</span>
-                )}
-                {active && !collapsed && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500" />
-                )}
-              </div>
-            </Link>
+            <div key={item.path}>
+              {showDivider && (
+                <div className={`my-3 mx-2 border-t ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                  {!collapsed && (
+                    <span className={`block text-[10px] uppercase tracking-widest font-semibold mt-3 mb-1 px-1 ${
+                      theme === "dark" ? "text-white/25" : "text-gray-400"
+                    }`}>Admin</span>
+                  )}
+                </div>
+              )}
+              <Link href={item.path}>
+                <div
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group ${
+                    active
+                      ? theme === "dark"
+                        ? "bg-white/10"
+                        : "bg-cyan-50"
+                      : theme === "dark"
+                      ? "text-white/60 hover:text-white hover:bg-white/5"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  }`}
+                  data-testid={`nav-${item.label.toLowerCase()}`}
+                >
+                  <item.icon size={20} className={active ? "text-purple-400" : ""} />
+                  {!collapsed && (
+                    <span className={`font-medium text-sm ${active ? "text-brand-gradient" : ""}`}>{item.label}</span>
+                  )}
+                  {active && !collapsed && (
+                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500" />
+                  )}
+                </div>
+              </Link>
+            </div>
           );
         })}
       </nav>
@@ -214,10 +248,10 @@ function AppTopBar() {
             U
           </div>
           <div className="hidden sm:block">
-            <p className="text-sm font-medium text-brand-gradient">User</p>
+            <p className="text-sm font-medium text-brand-gradient">{CURRENT_USER_ROLE === "super_admin" ? "Admin" : "User"}</p>
             <p className={`text-xs ${
               theme === "dark" ? "text-white/50" : "text-gray-500"
-            }`}>Pro Plan</p>
+            }`}>{CURRENT_USER_ROLE === "super_admin" ? "Super Admin" : "Pro Plan"}</p>
           </div>
           <ChevronDown size={14} className={theme === "dark" ? "text-white/40" : "text-gray-400"} />
         </div>
@@ -807,6 +841,11 @@ function AppDashboardContent() {
             <Route path="/app" component={ProjectsPage} />
             <Route path="/app/editor" component={EditorPage} />
             <Route path="/app/editor/:id" component={EditorPage} />
+            <Route path="/app/users" component={UsersPage} />
+            <Route path="/app/analytics" component={AnalyticsPage} />
+            <Route path="/app/billing" component={BillingPage} />
+            <Route path="/app/support" component={SupportPage} />
+            <Route path="/app/deployments" component={DeploymentsPage} />
             <Route path="/app/settings" component={SettingsPage} />
             <Route>{() => <ProjectsPage />}</Route>
           </Switch>
