@@ -36,6 +36,10 @@ import {
   Zap,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
+import previewPortfolio from "@/assets/preview-portfolio.jpg";
+import previewFitness from "@/assets/preview-fitness.jpg";
+import previewGame from "@/assets/preview-game.jpg";
+import previewEcommerce from "@/assets/preview-ecommerce.jpg";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 
 function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
@@ -44,7 +48,7 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
 
   const navItems = [
     { path: "/app", icon: LayoutGrid, label: "Projects" },
-    { path: "/app/editor", icon: Code2, label: "Editor" },
+    { path: "/app/editor", icon: Code2, label: "Builder" },
     { path: "/app/settings", icon: Settings, label: "Settings" },
   ];
 
@@ -227,10 +231,10 @@ function AppTopBar() {
 }
 
 const DEMO_PROJECTS = [
-  { id: "1", name: "Portfolio Website", type: "website", icon: Globe, status: "live", lastEdited: "2 hours ago", url: "portfolio.buildcustom.ai" },
-  { id: "2", name: "Fitness Tracker", type: "app", icon: Smartphone, status: "draft", lastEdited: "1 day ago", url: null },
-  { id: "3", name: "Space Invaders", type: "game", icon: Gamepad2, status: "live", lastEdited: "3 days ago", url: "spacegame.buildcustom.ai" },
-  { id: "4", name: "E-Commerce Store", type: "saas", icon: ShoppingBag, status: "building", lastEdited: "5 hours ago", url: null },
+  { id: "1", name: "Portfolio Website", type: "website", icon: Globe, status: "live", lastEdited: "2 hours ago", url: "portfolio.buildcustom.ai", preview: previewPortfolio },
+  { id: "2", name: "Fitness Tracker", type: "app", icon: Smartphone, status: "draft", lastEdited: "1 day ago", url: null, preview: previewFitness },
+  { id: "3", name: "Space Invaders", type: "game", icon: Gamepad2, status: "live", lastEdited: "3 days ago", url: "spacegame.buildcustom.ai", preview: previewGame },
+  { id: "4", name: "E-Commerce Store", type: "saas", icon: ShoppingBag, status: "building", lastEdited: "5 hours ago", url: null, preview: previewEcommerce },
 ];
 
 function ProjectsPage() {
@@ -290,25 +294,54 @@ function ProjectsPage() {
             whileHover={{ scale: 1.02, y: -2 }}
             onMouseEnter={() => setHoveredProject(project.id)}
             onMouseLeave={() => setHoveredProject(null)}
-            className={`rounded-2xl border p-6 cursor-pointer transition-all relative overflow-hidden min-h-[240px] flex flex-col ${
+            className={`rounded-2xl border cursor-pointer transition-all relative overflow-hidden flex flex-col ${
               theme === "dark"
                 ? "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.06]"
                 : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-lg"
             }`}
             data-testid={`card-project-${project.id}`}
           >
-            {theme === "dark" && (
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-purple-500/5 opacity-0 hover:opacity-100 transition-opacity" />
-            )}
+            <div className="relative w-full h-40 overflow-hidden">
+              <img
+                src={project.preview}
+                alt={`${project.name} preview`}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+              <div className={`absolute inset-0 ${
+                theme === "dark"
+                  ? "bg-gradient-to-t from-[#0a0a12] via-transparent to-transparent"
+                  : "bg-gradient-to-t from-white via-transparent to-transparent"
+              }`} />
+              <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-medium backdrop-blur-md ${
+                project.status === "live"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+                  : project.status === "building"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-400/30"
+                  : "bg-white/10 text-white/70 border border-white/20"
+              }`}>
+                {project.status === "live" && "● "}
+                {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+              </span>
+            </div>
 
-            <div className="relative z-10 flex-1">
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                  theme === "dark"
-                    ? "bg-gradient-to-br from-cyan-500/20 to-purple-500/20"
-                    : "bg-gradient-to-br from-cyan-50 to-purple-50"
-                }`}>
-                  <project.icon size={22} className="text-cyan-400" />
+            <div className="relative z-10 p-5 flex-1 flex flex-col">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    theme === "dark"
+                      ? "bg-gradient-to-br from-cyan-500/20 to-purple-500/20"
+                      : "bg-gradient-to-br from-cyan-50 to-purple-50"
+                  }`}>
+                    <project.icon size={18} className="text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className={`font-semibold ${
+                      theme === "dark" ? "text-white" : "text-gray-900"
+                    }`}>{project.name}</h3>
+                    <p className={`text-xs capitalize ${
+                      theme === "dark" ? "text-white/40" : "text-gray-500"
+                    }`}>{project.type}</p>
+                  </div>
                 </div>
                 <button
                   className={`p-1.5 rounded-lg transition-colors ${
@@ -322,40 +355,21 @@ function ProjectsPage() {
                 </button>
               </div>
 
-              <h3 className={`font-semibold text-lg mb-1 ${
-                theme === "dark" ? "text-white" : "text-gray-900"
-              }`}>{project.name}</h3>
-              <p className={`text-sm capitalize ${
-                theme === "dark" ? "text-white/40" : "text-gray-500"
-              }`}>{project.type}</p>
-            </div>
-
-            <div className="relative z-10 mt-4 pt-4 border-t flex items-center justify-between ${
-              theme === 'dark' ? 'border-white/10' : 'border-gray-100'
-            }">
-              <div className="flex items-center gap-1.5">
+              <div className={`mt-auto pt-3 border-t flex items-center gap-1.5 ${
+                theme === "dark" ? "border-white/10" : "border-gray-100"
+              }`}>
                 <Clock size={13} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
                 <span className={`text-xs ${
                   theme === "dark" ? "text-white/40" : "text-gray-500"
                 }`}>{project.lastEdited}</span>
+                {project.url && (
+                  <>
+                    <span className={`mx-1.5 ${theme === "dark" ? "text-white/20" : "text-gray-300"}`}>·</span>
+                    <ExternalLink size={12} className="text-cyan-400/60" />
+                    <span className="text-xs text-cyan-400/80">{project.url}</span>
+                  </>
+                )}
               </div>
-
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                project.status === "live"
-                  ? theme === "dark"
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-emerald-50 text-emerald-600"
-                  : project.status === "building"
-                  ? theme === "dark"
-                    ? "bg-amber-500/15 text-amber-400"
-                    : "bg-amber-50 text-amber-600"
-                  : theme === "dark"
-                  ? "bg-white/10 text-white/50"
-                  : "bg-gray-100 text-gray-600"
-              }`}>
-                {project.status === "live" && "● "}
-                {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-              </span>
             </div>
           </motion.div>
         ))}
