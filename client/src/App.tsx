@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import Home from "@/pages/home";
 import AdminDashboard from "@/pages/admin";
 import Login from "@/pages/login";
+import AppDashboard from "@/pages/app-dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -13,6 +14,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/login" component={Login} />
+      <Route path="/app" component={AppDashboard} />
+      <Route path="/app/:rest*" component={AppDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
