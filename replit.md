@@ -28,6 +28,7 @@ Preferred communication style: Simple, everyday language.
 - `/app` — User-facing app dashboard (Projects grid with action buttons: Version History, Console, Files, Share, Export)
 - `/app/templates` — Template gallery with category filters (SaaS, E-Commerce, Portfolio, Landing Page, Blog, Business, Game, Mobile)
 - `/app/editor` — AI Builder interface (chat + responsive preview with Desktop/Tablet/Mobile toggle and realistic homepage mockup)
+- `/app/project/:id` — Project detail dashboard with universal tabs (Overview, Files, Console, Version History, Settings) plus website-only tabs (Pages, Blog, Auto-Blogger, SEO, Analytics, Domain). Project cards on /app navigate here on click.
 - `/app/users` — (Super Admin) User management table with search/filter
 - `/app/analytics` — (Super Admin) Platform metrics, traffic chart, recent activity
 - `/app/billing` — (Super Admin) Revenue, subscriptions, transactions, plan distribution

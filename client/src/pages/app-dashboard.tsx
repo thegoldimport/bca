@@ -63,6 +63,7 @@ import previewGame from "@/assets/preview-game.jpg";
 import previewEcommerce from "@/assets/preview-ecommerce.jpg";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } from "@/pages/app-admin-pages";
+import ProjectDetail from "@/pages/project-detail";
 
 type UserRole = "super_admin" | "user";
 const CURRENT_USER_ROLE: UserRole = "super_admin";
@@ -291,6 +292,7 @@ const DEMO_PROJECTS = [
 function ProjectsPage() {
   const { theme } = useTheme();
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -344,6 +346,7 @@ function ProjectsPage() {
             whileHover={{ scale: 1.02, y: -2 }}
             onMouseEnter={() => setHoveredProject(project.id)}
             onMouseLeave={() => setHoveredProject(null)}
+            onClick={() => navigate(`/app/project/${project.id}`)}
             className={`rounded-2xl border cursor-pointer transition-all relative overflow-hidden flex flex-col ${
               theme === "dark"
                 ? "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.06]"
@@ -425,6 +428,7 @@ function ProjectsPage() {
                     <button
                       key={action.testId}
                       title={action.label}
+                      onClick={(e) => e.stopPropagation()}
                       className={`p-1.5 rounded-lg transition-colors ${
                         theme === "dark"
                           ? "hover:bg-white/10 text-white/30 hover:text-white/70"
@@ -1292,6 +1296,7 @@ function AppDashboardContent() {
             <Route path="/app/support" component={SupportPage} />
             <Route path="/app/deployments" component={DeploymentsPage} />
             <Route path="/app/settings" component={SettingsPage} />
+            <Route path="/app/project/:id" component={ProjectDetail} />
             <Route>{() => <ProjectsPage />}</Route>
           </Switch>
         </main>
