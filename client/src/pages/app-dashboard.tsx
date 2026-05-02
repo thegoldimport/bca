@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Route, Switch, useLocation, Link } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getAppUser, clearAppUser, authHeaders } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutGrid,
@@ -185,6 +187,7 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
           )}
         </button>
         <button
+          onClick={() => { clearAppUser(); window.location.href = "/app/login"; }}
           className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-colors ${
             theme === "dark"
               ? "text-white/60 hover:text-red-400 hover:bg-red-500/10"
@@ -202,6 +205,8 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
 
 function AppTopBar() {
   const { theme } = useTheme();
+  const appUser = getAppUser();
+  const initials = appUser?.username ? appUser.username.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
   return (
     <header className={`h-16 flex items-center justify-between px-6 border-b shrink-0 ${
@@ -262,18 +267,14 @@ function AppTopBar() {
         </button>
 
         <div className={`flex items-center gap-3 px-3 py-1.5 rounded-xl cursor-pointer transition-colors ${
-          theme === "dark"
-            ? "hover:bg-white/5"
-            : "hover:bg-gray-100"
+          theme === "dark" ? "hover:bg-white/5" : "hover:bg-gray-100"
         }`}>
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center text-white font-semibold text-sm">
-            U
+            {initials}
           </div>
           <div className="hidden sm:block">
-            <p className="text-sm font-medium text-brand-gradient">{CURRENT_USER_ROLE === "super_admin" ? "Admin" : "User"}</p>
-            <p className={`text-xs ${
-              theme === "dark" ? "text-white/50" : "text-gray-500"
-            }`}>{CURRENT_USER_ROLE === "super_admin" ? "Super Admin" : "Pro Plan"}</p>
+            <p className="text-sm font-medium text-brand-gradient">{appUser?.username || "User"}</p>
+            <p className={`text-xs capitalize ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>{appUser?.plan || "Starter"} Plan</p>
           </div>
           <ChevronDown size={14} className={theme === "dark" ? "text-white/40" : "text-gray-400"} />
         </div>
@@ -282,28 +283,170 @@ function AppTopBar() {
   );
 }
 
-const DEMO_PROJECTS = [
-  { id: "1", name: "Portfolio Website", type: "website", icon: Globe, status: "live", lastEdited: "2 hours ago", url: "portfolio.buildcustom.ai", preview: previewPortfolio },
-  { id: "2", name: "Fitness Tracker", type: "app", icon: Smartphone, status: "draft", lastEdited: "1 day ago", url: null, preview: previewFitness },
-  { id: "3", name: "Space Invaders", type: "game", icon: Gamepad2, status: "live", lastEdited: "3 days ago", url: "spacegame.buildcustom.ai", preview: previewGame },
-  { id: "4", name: "E-Commerce Store", type: "saas", icon: ShoppingBag, status: "building", lastEdited: "5 hours ago", url: null, preview: previewEcommerce },
-];
+const PROJECT_TYPE_ICONS: Record<string, any> = {
+  website: Globe, app: Smartphone, game: Gamepad2, saas: ShoppingBag,
+};
+const PREVIEW_IMAGES: Record<string, any> = {
+  website: previewPortfolio, app: previewFitness, game: previewGame, saas: previewEcommerce,
+};
+
+function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { theme } = useTheme();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ name: "", type: "website", description: "" });
+  const [error, setError] = useState("");
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const types = [
+    { id: "website", label: "Website", icon: Globe },
+    { id: "app", label: "App", icon: Smartphone },
+    { id: "game", label: "Game", icon: Gamepad2 },
+    { id: "saas", label: "SaaS", icon: ShoppingBag },
+  ];
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to create project");
+      return data;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["projects"] }); onCreated(); },
+    onError: (err: any) => setError(err.message),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className={`relative w-full max-w-md rounded-2xl border p-6 z-10 ${
+          theme === "dark" ? "bg-[#0d0d1a] border-white/10" : "bg-white border-gray-200"
+        }`}
+      >
+        <h2 className={`text-xl font-display font-bold mb-1 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>New Project</h2>
+        <p className={`text-sm mb-6 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>What would you like to build?</p>
+
+        <div className="space-y-4">
+          <div>
+            <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Project Name</label>
+            <input
+              value={form.name}
+              onChange={e => set("name", e.target.value)}
+              placeholder="My Awesome Project"
+              className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none border transition-colors ${
+                theme === "dark"
+                  ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50"
+                  : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-cyan-400"
+              }`}
+              data-testid="input-project-name"
+            />
+          </div>
+
+          <div>
+            <label className={`block text-xs font-medium mb-2 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Project Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              {types.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => set("type", t.id)}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                    form.type === t.id
+                      ? "border-cyan-400/60 bg-cyan-500/10 text-cyan-400"
+                      : theme === "dark"
+                        ? "border-white/10 text-white/50 hover:border-white/20 hover:text-white/80"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                  }`}
+                  data-testid={`button-type-${t.id}`}
+                >
+                  <t.icon size={15} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Description <span className="opacity-50">(optional)</span></label>
+            <textarea
+              value={form.description}
+              onChange={e => set("description", e.target.value)}
+              placeholder="Briefly describe your project..."
+              rows={2}
+              className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none border transition-colors resize-none ${
+                theme === "dark"
+                  ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50"
+                  : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-cyan-400"
+              }`}
+              data-testid="input-project-description"
+            />
+          </div>
+
+          {error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button onClick={onClose} className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+              theme === "dark" ? "border-white/10 text-white/50 hover:text-white/80" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+            }`}>Cancel</button>
+            <button
+              onClick={() => { if (!form.name.trim()) { setError("Project name is required"); return; } mutation.mutate(); }}
+              disabled={mutation.isPending}
+              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
+              style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
+              data-testid="button-create-project"
+            >
+              {mutation.isPending ? "Creating..." : "Create Project"}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 function ProjectsPage() {
   const { theme } = useTheme();
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
+  const [showNewProject, setShowNewProject] = useState(false);
   const [, navigate] = useLocation();
+
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ["projects"],
+    queryFn: async () => {
+      const res = await fetch("/api/projects", { headers: authHeaders() });
+      if (!res.ok) throw new Error("Failed to load projects");
+      return res.json();
+    },
+  });
+
+  const typeColors: Record<string, string> = {
+    website: "text-cyan-400", app: "text-purple-400", game: "text-pink-400", saas: "text-amber-400",
+  };
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
+      {showNewProject && (
+        <AnimatePresence>
+          <NewProjectModal
+            onClose={() => setShowNewProject(false)}
+            onCreated={() => setShowNewProject(false)}
+          />
+        </AnimatePresence>
+      )}
+
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-brand-gradient">Projects</h1>
-          <p className={`mt-1 ${
-            theme === "dark" ? "text-white/50" : "text-gray-500"
-          }`}>Build, manage, and deploy your creations</p>
+          <p className={`mt-1 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
+            Build, manage, and deploy your creations
+          </p>
         </div>
         <button
+          onClick={() => setShowNewProject(true)}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
           style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 35%, #a855f7 65%, #ec4899 100%)" }}
           data-testid="button-new-project"
@@ -316,6 +459,7 @@ function ProjectsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         <motion.div
           whileHover={{ scale: 1.02 }}
+          onClick={() => setShowNewProject(true)}
           className={`rounded-2xl border-2 border-dashed p-8 flex flex-col items-center justify-center gap-4 cursor-pointer transition-colors min-h-[240px] ${
             theme === "dark"
               ? "border-white/20 hover:border-cyan-400/50 hover:bg-cyan-500/5"
@@ -323,133 +467,124 @@ function ProjectsPage() {
           }`}
           data-testid="card-create-project"
         >
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
-            theme === "dark"
-              ? "bg-white/10"
-              : "bg-gray-100"
-          }`}>
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${theme === "dark" ? "bg-white/10" : "bg-gray-100"}`}>
             <Sparkles size={24} className="text-cyan-400" />
           </div>
           <div className="text-center">
-            <p className={`font-semibold ${
-              theme === "dark" ? "text-white" : "text-gray-900"
-            }`}>Start from Scratch</p>
-            <p className={`text-sm mt-1 ${
-              theme === "dark" ? "text-white/50" : "text-gray-500"
-            }`}>Describe your idea and let AI build it</p>
+            <p className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Start from Scratch</p>
+            <p className={`text-sm mt-1 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Describe your idea and let AI build it</p>
           </div>
         </motion.div>
 
-        {DEMO_PROJECTS.map((project) => (
-          <motion.div
-            key={project.id}
-            whileHover={{ scale: 1.02, y: -2 }}
-            onMouseEnter={() => setHoveredProject(project.id)}
-            onMouseLeave={() => setHoveredProject(null)}
-            onClick={() => navigate(`/app/project/${project.id}`)}
-            className={`rounded-2xl border cursor-pointer transition-all relative overflow-hidden flex flex-col ${
-              theme === "dark"
-                ? "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.06]"
-                : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-lg"
-            }`}
-            data-testid={`card-project-${project.id}`}
-          >
-            <div className="relative w-full h-40 overflow-hidden">
-              <img
-                src={project.preview}
-                alt={`${project.name} preview`}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-              <div className={`absolute inset-0 ${
+        {isLoading && (
+          [1, 2, 3].map(i => (
+            <div key={i} className={`rounded-2xl border h-64 animate-pulse ${theme === "dark" ? "bg-white/[0.03] border-white/10" : "bg-gray-100 border-gray-200"}`} />
+          ))
+        )}
+
+        {projects.map((project: any) => {
+          const IconComponent = PROJECT_TYPE_ICONS[project.type] || Globe;
+          const previewImg = PREVIEW_IMAGES[project.type] || previewPortfolio;
+          const iconColor = typeColors[project.type] || "text-cyan-400";
+          const updatedAgo = (() => {
+            const diff = Date.now() - new Date(project.updatedAt).getTime();
+            const mins = Math.floor(diff / 60000);
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+            return `${Math.floor(hrs / 24)}d ago`;
+          })();
+
+          return (
+            <motion.div
+              key={project.id}
+              whileHover={{ scale: 1.02, y: -2 }}
+              onMouseEnter={() => setHoveredProject(String(project.id))}
+              onMouseLeave={() => setHoveredProject(null)}
+              onClick={() => navigate(`/app/project/${project.id}`)}
+              className={`rounded-2xl border cursor-pointer transition-all relative overflow-hidden flex flex-col ${
                 theme === "dark"
-                  ? "bg-gradient-to-t from-[#0a0a12] via-transparent to-transparent"
-                  : "bg-gradient-to-t from-white via-transparent to-transparent"
-              }`} />
-              <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-medium backdrop-blur-md ${
-                project.status === "live"
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
-                  : project.status === "building"
-                  ? "bg-amber-500/20 text-amber-300 border border-amber-400/30"
-                  : "bg-white/10 text-white/70 border border-white/20"
-              }`}>
-                {project.status === "live" && "● "}
-                {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-              </span>
-            </div>
-
-            <div className="relative z-10 p-5 flex-1 flex flex-col">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                    theme === "dark"
-                      ? "bg-gradient-to-br from-cyan-500/20 to-purple-500/20"
-                      : "bg-gradient-to-br from-cyan-50 to-purple-50"
-                  }`}>
-                    <project.icon size={18} className="text-cyan-400" />
-                  </div>
-                  <div>
-                    <h3 className={`font-semibold ${
-                      theme === "dark" ? "text-white" : "text-gray-900"
-                    }`}>{project.name}</h3>
-                    <p className={`text-xs capitalize ${
-                      theme === "dark" ? "text-white/40" : "text-gray-500"
-                    }`}>{project.type}</p>
-                  </div>
-                </div>
-                <button
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    theme === "dark"
-                      ? "hover:bg-white/10 text-white/40"
-                      : "hover:bg-gray-100 text-gray-400"
-                  }`}
-                  data-testid={`button-project-menu-${project.id}`}
-                >
-                  <MoreHorizontal size={16} />
-                </button>
+                  ? "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.06]"
+                  : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-lg"
+              }`}
+              data-testid={`card-project-${project.id}`}
+            >
+              <div className="relative w-full h-40 overflow-hidden">
+                <img src={previewImg} alt={project.name} className="w-full h-full object-cover" />
+                <div className={`absolute inset-0 ${theme === "dark" ? "bg-gradient-to-t from-[#0a0a12] via-transparent to-transparent" : "bg-gradient-to-t from-white via-transparent to-transparent"}`} />
+                <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-medium backdrop-blur-md ${
+                  project.status === "live"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+                    : project.status === "building"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-400/30"
+                    : "bg-white/10 text-white/70 border border-white/20"
+                }`}>
+                  {project.status === "live" && "● "}
+                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                </span>
               </div>
 
-              <div className={`mt-3 pt-3 border-t flex items-center justify-between ${
-                theme === "dark" ? "border-white/10" : "border-gray-100"
-              }`}>
-                <div className="flex items-center gap-1.5">
-                  <Clock size={13} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
-                  <span className={`text-xs ${
-                    theme === "dark" ? "text-white/40" : "text-gray-500"
-                  }`}>{project.lastEdited}</span>
+              <div className="relative z-10 p-5 flex-1 flex flex-col">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                      theme === "dark" ? "bg-gradient-to-br from-cyan-500/20 to-purple-500/20" : "bg-gradient-to-br from-cyan-50 to-purple-50"
+                    }`}>
+                      <IconComponent size={18} className={iconColor} />
+                    </div>
+                    <div>
+                      <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{project.name}</h3>
+                      <p className={`text-xs capitalize ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{project.type}</p>
+                    </div>
+                  </div>
+                  <button
+                    className={`p-1.5 rounded-lg transition-colors ${theme === "dark" ? "hover:bg-white/10 text-white/40" : "hover:bg-gray-100 text-gray-400"}`}
+                    onClick={e => e.stopPropagation()}
+                    data-testid={`button-project-menu-${project.id}`}
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
                 </div>
-                <div className="flex items-center gap-0.5">
-                  {[
-                    { icon: History, label: "Version History", testId: `btn-history-${project.id}` },
-                    { icon: Terminal, label: "Console", testId: `btn-console-${project.id}` },
-                    { icon: FolderTree, label: "Files", testId: `btn-files-${project.id}` },
-                    { icon: Share2, label: "Share", testId: `btn-share-${project.id}` },
-                    { icon: Download, label: "Export", testId: `btn-export-${project.id}` },
-                  ].map((action) => (
-                    <button
-                      key={action.testId}
-                      title={action.label}
-                      onClick={(e) => e.stopPropagation()}
-                      className={`p-1.5 rounded-lg transition-colors ${
-                        theme === "dark"
-                          ? "hover:bg-white/10 text-white/30 hover:text-white/70"
-                          : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                      }`}
-                      data-testid={action.testId}
-                    >
-                      <action.icon size={14} />
-                    </button>
-                  ))}
+
+                <div className={`mt-3 pt-3 border-t flex items-center justify-between ${theme === "dark" ? "border-white/10" : "border-gray-100"}`}>
+                  <div className="flex items-center gap-1.5">
+                    <Clock size={13} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
+                    <span className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{updatedAgo}</span>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    {[
+                      { icon: History, label: "Version History", testId: `btn-history-${project.id}` },
+                      { icon: Terminal, label: "Console", testId: `btn-console-${project.id}` },
+                      { icon: FolderTree, label: "Files", testId: `btn-files-${project.id}` },
+                      { icon: Share2, label: "Share", testId: `btn-share-${project.id}` },
+                      { icon: Download, label: "Export", testId: `btn-export-${project.id}` },
+                    ].map((action) => (
+                      <button
+                        key={action.testId}
+                        title={action.label}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          theme === "dark"
+                            ? "hover:bg-white/10 text-white/30 hover:text-white/70"
+                            : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                        }`}
+                        data-testid={action.testId}
+                      >
+                        <action.icon size={14} />
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {project.url && (
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <ExternalLink size={12} className="text-cyan-400/60" />
+                    <span className="text-xs text-cyan-400/80">{project.url}</span>
+                  </div>
+                )}
               </div>
-              {project.url && (
-                <div className="flex items-center gap-1.5 mt-2">
-                  <ExternalLink size={12} className="text-cyan-400/60" />
-                  <span className="text-xs text-cyan-400/80">{project.url}</span>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1306,6 +1441,14 @@ function AppDashboardContent() {
 }
 
 export default function AppDashboard() {
+  const appUser = getAppUser();
+  const [, navigate] = useLocation();
+
+  if (!appUser) {
+    navigate("/app/login");
+    return null;
+  }
+
   return (
     <ThemeProvider>
       <AppDashboardContent />

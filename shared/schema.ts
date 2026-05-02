@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -7,6 +7,9 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email").notNull().unique().default(""),
+  plan: text("plan").notNull().default("starter"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const waitlistEntries = pgTable("waitlist_entries", {
@@ -18,18 +21,80 @@ export const waitlistEntries = pgTable("waitlist_entries", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("website"),
+  status: text("status").notNull().default("draft"),
+  description: text("description").notNull().default(""),
+  framework: text("framework").notNull().default("React + TailwindCSS"),
+  url: text("url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertWaitlistSchema = createInsertSchema(waitlistEntries).pick({
-  name: true,
-  email: true,
-  source: true,
+export const blogPosts = pgTable("blog_posts", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  slug: text("slug").notNull(),
+  content: text("content").notNull().default(""),
+  status: text("status").notNull().default("draft"),
+  keyword: text("keyword").notNull().default(""),
+  wordCount: integer("word_count").notNull().default(0),
+  scheduledAt: timestamp("scheduled_at"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const autobloggerSettings = pgTable("autoblogger_settings", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().unique().references(() => projects.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  postsPerDay: integer("posts_per_day").notNull().default(3),
+  writingStyle: text("writing_style").notNull().default("neil-patel"),
+  minWordCount: integer("min_word_count").notNull().default(2000),
+  keywords: text("keywords").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const seoSettings = pgTable("seo_settings", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().unique().references(() => projects.id, { onDelete: "cascade" }),
+  metaTitle: text("meta_title").notNull().default(""),
+  metaDescription: text("meta_description").notNull().default(""),
+  focusKeyword: text("focus_keyword").notNull().default(""),
+  schemaJson: text("schema_json").notNull().default("{}"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const sitePages = pgTable("site_pages", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  slug: text("slug").notNull(),
+  status: text("status").notNull().default("draft"),
+  pageType: text("page_type").notNull().default("standard"),
+  content: text("content").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).pick({ username: true, password: true, email: true });
+export const insertWaitlistSchema = createInsertSchema(waitlistEntries).pick({ name: true, email: true, source: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({ id: true, createdAt: true });
+export const insertSitePageSchema = createInsertSchema(sitePages).omit({ id: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertWaitlistEntry = z.infer<typeof insertWaitlistSchema>;
 export type WaitlistEntry = typeof waitlistEntries.$inferSelect;
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type Project = typeof projects.$inferSelect;
+export type InsertBlogPost = z.infer<typeof insertBlogPostSchema>;
+export type BlogPost = typeof blogPosts.$inferSelect;
+export type AutobloggerSettings = typeof autobloggerSettings.$inferSelect;
+export type SeoSettings = typeof seoSettings.$inferSelect;
+export type SitePage = typeof sitePages.$inferSelect;
+export type InsertSitePage = z.infer<typeof insertSitePageSchema>;

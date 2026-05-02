@@ -6,6 +6,7 @@ import Home from "@/pages/home";
 import AdminDashboard from "@/pages/admin";
 import Login from "@/pages/login";
 import AppDashboard from "@/pages/app-dashboard";
+import AppAuth from "@/pages/app-auth";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -14,6 +15,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/login" component={Login} />
+      <Route path="/app/login" component={AppAuth} />
+      <Route path="/app/signup" component={AppAuth} />
       <Route path="/app" component={AppDashboard} />
       <Route path="/app/project/:id" component={AppDashboard} />
       <Route path="/app/:rest*" component={AppDashboard} />
