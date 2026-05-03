@@ -32,6 +32,7 @@ export default function AppAuth() {
       const data = await res.json();
       if (!res.ok) { setError(data.message || "Something went wrong"); return; }
       setAppUser(data);
+      if (mode === "signup") localStorage.setItem("bc_new_user", "1");
       navigate("/app");
     } catch {
       setError("Network error — please try again");

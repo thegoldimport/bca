@@ -18,6 +18,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<{ username: string; email: string; password: string }>): Promise<User | undefined>;
   // Waitlist
   createWaitlistEntry(entry: InsertWaitlistEntry): Promise<WaitlistEntry>;
   getAllWaitlistEntries(): Promise<WaitlistEntry[]>;
@@ -69,6 +70,10 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser) {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
+  }
+  async updateUser(id: string, data: Partial<{ username: string; email: string; password: string }>) {
+    const [result] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return result;
   }
 
   async createWaitlistEntry(entry: InsertWaitlistEntry) {

@@ -65,6 +65,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.put("/api/auth/profile", async (req, res) => {
+    try {
+      const userId = await requireAuth(req, res);
+      if (!userId) return;
+      const { name, email } = req.body;
+      if (!name && !email) return res.status(400).json({ message: "Nothing to update" });
+      if (email) {
+        const existing = await storage.getUserByEmail(email);
+        if (existing && existing.id !== userId) return res.status(409).json({ message: "Email already in use" });
+      }
+      const updated = await storage.updateUser(userId, {
+        ...(name ? { username: name } : {}),
+        ...(email ? { email } : {}),
+      });
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safe } = updated;
+      return res.json(safe);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/auth/password", async (req, res) => {
+    try {
+      const userId = await requireAuth(req, res);
+      if (!userId) return;
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) return res.status(400).json({ message: "Current and new passwords are required" });
+      if (newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const valid = await bcrypt.compare(currentPassword, user.password);
+      if (!valid) return res.status(401).json({ message: "Current password is incorrect" });
+      const hashed = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(userId, { password: hashed });
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── ADMIN AUTH ─────────────────────────────────────────────────────────────
   app.post("/api/admin/login", async (req, res) => {
     const { username, password } = req.body;

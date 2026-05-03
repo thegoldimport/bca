@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Route, Switch, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAppUser, clearAppUser, authHeaders } from "@/lib/auth";
+import { getAppUser, setAppUser, clearAppUser, authHeaders } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutGrid,
@@ -60,6 +60,10 @@ import {
   ChevronLeft,
   RefreshCw,
   Maximize2,
+  Check,
+  Save,
+  FileCode,
+  Wand2,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import cubeLogo from "@/assets/cube-logo.png";
@@ -1379,23 +1383,68 @@ function SettingsInput({ label, value, type = "text" }: { label: string; value: 
 
 function AccountSettings() {
   const { theme } = useTheme();
+  const storedUser = getAppUser();
+  const [form, setForm] = useState({ name: storedUser?.username || "", email: storedUser?.email || "" });
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/auth/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ name: form.name.trim(), email: form.email.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to save");
+      return data;
+    },
+    onSuccess: (data) => {
+      if (storedUser) setAppUser({ ...storedUser, username: data.username, email: data.email });
+      setSaved(true);
+      setError("");
+      setTimeout(() => setSaved(false), 2500);
+    },
+    onError: (err: any) => setError(err.message),
+  });
+
+  const initials = (form.name || "U").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+
   return (
     <>
       <SettingsCard title="Profile" description="Manage your account details">
         <div className="flex items-center gap-5 mb-6">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center text-white font-bold text-xl">
-            U
+            {initials}
           </div>
-          <button className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-            theme === "dark"
-              ? "bg-white/10 text-white hover:bg-white/15"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}>Change Avatar</button>
         </div>
-        <SettingsInput label="Full Name" value="User" />
-        <SettingsInput label="Email" value="user@example.com" type="email" />
-        <button className="px-5 py-2.5 rounded-xl bg-cyan-400 text-black font-semibold text-sm hover:bg-cyan-300 transition-colors mt-2" data-testid="button-save-profile">
-          Save Changes
+        <div className="mb-4">
+          <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>Full Name</label>
+          <input
+            value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+            data-testid="input-full-name"
+          />
+        </div>
+        <div className="mb-4">
+          <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>Email Address</label>
+          <input
+            type="email"
+            value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+            data-testid="input-email"
+          />
+        </div>
+        {error && <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-3">{error}</p>}
+        <button
+          onClick={() => { setError(""); save.mutate(); }}
+          disabled={save.isPending}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50 ${saved ? "bg-emerald-400 text-black" : "bg-cyan-400 text-black"}`}
+          data-testid="button-save-profile"
+        >
+          {saved ? <><Check size={15} /> Saved!</> : save.isPending ? "Saving..." : "Save Changes"}
         </button>
       </SettingsCard>
     </>
@@ -1543,21 +1592,65 @@ function ApiKeySettings() {
 
 function SecuritySettings() {
   const { theme } = useTheme();
+  const [form, setForm] = useState({ current: "", next: "", confirm: "" });
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!form.current) throw new Error("Current password is required");
+      if (form.next !== form.confirm) throw new Error("Passwords do not match");
+      if (form.next.length < 6) throw new Error("New password must be at least 6 characters");
+      const res = await fetch("/api/auth/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ currentPassword: form.current, newPassword: form.next }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to update password");
+      return data;
+    },
+    onSuccess: () => {
+      setForm({ current: "", next: "", confirm: "" });
+      setSaved(true);
+      setError("");
+      setTimeout(() => setSaved(false), 2500);
+    },
+    onError: (err: any) => setError(err.message),
+  });
+
+  const pwField = (label: string, key: "current" | "next" | "confirm", testId: string) => (
+    <div className="mb-4">
+      <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>{label}</label>
+      <input
+        type="password"
+        value={form[key]}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+        className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+        data-testid={testId}
+      />
+    </div>
+  );
+
   return (
     <>
-      <SettingsCard title="Password" description="Update your password">
-        <SettingsInput label="Current Password" value="" type="password" />
-        <SettingsInput label="New Password" value="" type="password" />
-        <SettingsInput label="Confirm Password" value="" type="password" />
-        <button className="px-5 py-2.5 rounded-xl bg-cyan-400 text-black font-semibold text-sm hover:bg-cyan-300 transition-colors mt-2" data-testid="button-update-password">
-          Update Password
+      <SettingsCard title="Change Password" description="Update your account password">
+        {pwField("Current Password", "current", "input-current-password")}
+        {pwField("New Password", "next", "input-new-password")}
+        {pwField("Confirm New Password", "confirm", "input-confirm-password")}
+        {error && <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-3">{error}</p>}
+        <button
+          onClick={() => { setError(""); save.mutate(); }}
+          disabled={save.isPending}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50 ${saved ? "bg-emerald-400 text-black" : "bg-cyan-400 text-black"}`}
+          data-testid="button-update-password"
+        >
+          {saved ? <><Check size={15} /> Updated!</> : save.isPending ? "Updating..." : "Update Password"}
         </button>
       </SettingsCard>
       <SettingsCard title="Two-Factor Authentication" description="Add an extra layer of security">
         <button className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-          theme === "dark"
-            ? "bg-white/10 text-white hover:bg-white/15"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          theme === "dark" ? "bg-white/10 text-white hover:bg-white/15" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
         }`} data-testid="button-enable-2fa">
           Enable 2FA
         </button>
@@ -1566,38 +1659,38 @@ function SecuritySettings() {
   );
 }
 
-function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
+function OnboardingWizard({ onComplete }: { onComplete: (destination?: string) => void }) {
   const { theme } = useTheme();
+  const user = getAppUser();
+  const firstName = (user?.username || "there").split(" ")[0];
   const [step, setStep] = useState(0);
+  const [buildType, setBuildType] = useState("");
+  const [startMethod, setStartMethod] = useState("");
 
-  const steps = [
-    {
-      icon: Sparkles,
-      title: "Welcome to BuildCustom.Ai",
-      description: "You're about to experience the fastest way to build production-ready apps. Let's walk you through the key features.",
-      gradient: "from-cyan-500 to-blue-600",
-    },
-    {
-      icon: Layers,
-      title: "Start with Templates",
-      description: "Browse our template gallery to kickstart your project with professionally designed starting points — SaaS, e-commerce, portfolios, and more.",
-      gradient: "from-purple-500 to-pink-600",
-    },
-    {
-      icon: Zap,
-      title: "Meet the AI Builder",
-      description: "Describe what you want in plain English, and watch your app come alive in the preview pane. Test on desktop, tablet, and mobile views instantly.",
-      gradient: "from-emerald-500 to-teal-600",
-    },
-    {
-      icon: Rocket,
-      title: "Deploy in One Click",
-      description: "When you're happy with your creation, publish it to a live URL with a single click. Share it with the world!",
-      gradient: "from-orange-500 to-red-600",
-    },
+  const buildOptions = [
+    { id: "website", label: "Website", icon: Globe, desc: "Landing pages, portfolios, blogs", color: "from-cyan-500 to-blue-500" },
+    { id: "app", label: "Web App", icon: Zap, desc: "SaaS, dashboards, tools", color: "from-purple-500 to-indigo-500" },
+    { id: "game", label: "Game", icon: Gamepad2, desc: "Browser & casual games", color: "from-pink-500 to-rose-500" },
+    { id: "saas", label: "SaaS", icon: Briefcase, desc: "Full-stack products", color: "from-amber-500 to-orange-500" },
   ];
 
-  const current = steps[step];
+  const startOptions = [
+    { id: "template", label: "Browse Templates", icon: Layers, desc: "Start from a professionally built foundation", dest: "/app/templates" },
+    { id: "blank", label: "Blank Canvas", icon: FileCode, desc: "Start fresh and build from scratch", dest: "/app" },
+    { id: "ai", label: "Describe to AI", icon: Wand2, desc: "Tell the AI what you want and watch it build", dest: "/app/editor" },
+  ];
+
+  const totalSteps = 3;
+
+  const goNext = () => {
+    if (step < totalSteps - 1) setStep(s => s + 1);
+    else {
+      const chosen = startOptions.find(o => o.id === startMethod);
+      onComplete(chosen?.dest);
+    }
+  };
+
+  const canProceed = step === 0 || (step === 1 && buildType) || (step === 2 && startMethod);
 
   return (
     <AnimatePresence>
@@ -1605,100 +1698,147 @@ function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
       >
         <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          className={`w-full max-w-lg mx-4 rounded-2xl border overflow-hidden ${
-            theme === "dark"
-              ? "bg-[#0e0e1a] border-white/10"
-              : "bg-white border-gray-200"
+          initial={{ scale: 0.92, opacity: 0, y: 16 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.92, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 28 }}
+          className={`w-full max-w-lg mx-4 rounded-2xl border overflow-hidden shadow-2xl ${
+            theme === "dark" ? "bg-[#0e0e1a] border-white/10" : "bg-white border-gray-200"
           }`}
           data-testid="onboarding-wizard"
         >
-          <div className={`h-48 bg-gradient-to-br ${current.gradient} relative flex items-center justify-center`}>
-            <div className="absolute inset-0 bg-black/10" />
+          <div className="h-1.5 bg-white/5">
             <motion.div
-              key={step}
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", duration: 0.5 }}
-              className="relative z-10"
-            >
-              <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <current.icon size={40} className="text-white" />
-              </div>
-            </motion.div>
+              className="h-full rounded-full"
+              style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1, #ec4899)" }}
+              animate={{ width: `${((step + 1) / totalSteps) * 100}%` }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            />
           </div>
 
-          <div className="p-8 text-center">
-            <motion.h2
-              key={`title-${step}`}
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              className={`text-2xl font-display font-bold mb-3 ${
-                theme === "dark" ? "text-white" : "text-gray-900"
-              }`}
-            >
-              {current.title}
-            </motion.h2>
-            <motion.p
-              key={`desc-${step}`}
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.1 }}
-              className={`text-sm leading-relaxed max-w-sm mx-auto ${
-                theme === "dark" ? "text-white/50" : "text-gray-500"
-              }`}
-            >
-              {current.description}
-            </motion.p>
+          <div className="p-8">
+            <AnimatePresence mode="wait">
+              {step === 0 && (
+                <motion.div key="step0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }} className="text-center">
+                  <div className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center"
+                    style={{ background: "linear-gradient(135deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}>
+                    <Sparkles size={36} className="text-white" />
+                  </div>
+                  <h2 className={`text-2xl font-display font-bold mb-3 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                    Welcome, {firstName}!
+                  </h2>
+                  <p className={`text-sm leading-relaxed max-w-sm mx-auto ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
+                    You're about to experience the fastest way to build production-ready apps and websites. Let's get you set up in 30 seconds.
+                  </p>
+                </motion.div>
+              )}
 
-            <div className="flex items-center justify-center gap-2 mt-6 mb-6">
-              {steps.map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    i === step
-                      ? "w-8 bg-gradient-to-r from-cyan-400 to-purple-500"
-                      : i < step
-                      ? "w-3 bg-cyan-400/50"
-                      : theme === "dark"
-                      ? "w-3 bg-white/10"
-                      : "w-3 bg-gray-200"
-                  }`}
-                />
-              ))}
-            </div>
+              {step === 1 && (
+                <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }}>
+                  <h2 className={`text-xl font-display font-bold mb-1 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>What do you want to build?</h2>
+                  <p className={`text-sm mb-5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Pick the type of project you're most excited about.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {buildOptions.map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setBuildType(opt.id)}
+                        className={`flex flex-col items-start gap-2 p-4 rounded-xl border text-left transition-all ${
+                          buildType === opt.id
+                            ? theme === "dark"
+                              ? "border-cyan-400/60 bg-cyan-500/10"
+                              : "border-cyan-400 bg-cyan-50"
+                            : theme === "dark"
+                            ? "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                            : "border-gray-200 bg-white hover:bg-gray-50"
+                        }`}
+                        data-testid={`option-build-${opt.id}`}
+                      >
+                        <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${opt.color} flex items-center justify-center`}>
+                          <opt.icon size={18} className="text-white" />
+                        </div>
+                        <div>
+                          <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{opt.label}</p>
+                          <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{opt.desc}</p>
+                        </div>
+                        {buildType === opt.id && <Check size={14} className="absolute top-3 right-3 text-cyan-400" />}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
 
-            <div className="flex items-center gap-3 justify-center">
+              {step === 2 && (
+                <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }}>
+                  <h2 className={`text-xl font-display font-bold mb-1 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>How do you want to start?</h2>
+                  <p className={`text-sm mb-5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>You can always change this later.</p>
+                  <div className="space-y-3">
+                    {startOptions.map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setStartMethod(opt.id)}
+                        className={`flex items-center gap-4 w-full p-4 rounded-xl border text-left transition-all ${
+                          startMethod === opt.id
+                            ? theme === "dark"
+                              ? "border-cyan-400/60 bg-cyan-500/10"
+                              : "border-cyan-400 bg-cyan-50"
+                            : theme === "dark"
+                            ? "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                            : "border-gray-200 bg-white hover:bg-gray-50"
+                        }`}
+                        data-testid={`option-start-${opt.id}`}
+                      >
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          theme === "dark" ? "bg-white/10" : "bg-gray-100"
+                        }`}>
+                          <opt.icon size={20} className={startMethod === opt.id ? "text-cyan-400" : theme === "dark" ? "text-white/60" : "text-gray-500"} />
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{opt.label}</p>
+                          <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{opt.desc}</p>
+                        </div>
+                        {startMethod === opt.id && <Check size={15} className="text-cyan-400 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="flex items-center justify-between mt-8">
               <button
-                onClick={onComplete}
+                onClick={() => onComplete()}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  theme === "dark"
-                    ? "text-white/40 hover:text-white/70"
-                    : "text-gray-400 hover:text-gray-600"
+                  theme === "dark" ? "text-white/30 hover:text-white/60" : "text-gray-400 hover:text-gray-600"
                 }`}
                 data-testid="button-skip-onboarding"
               >
-                Skip
+                Skip for now
               </button>
-              <button
-                onClick={() => {
-                  if (step < steps.length - 1) {
-                    setStep(step + 1);
-                  } else {
-                    onComplete();
-                  }
-                }}
-                className="px-6 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all"
-                style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
-                data-testid="button-next-onboarding"
-              >
-                {step < steps.length - 1 ? "Next" : "Get Started"}
-              </button>
+
+              <div className="flex items-center gap-3">
+                {step > 0 && (
+                  <button
+                    onClick={() => setStep(s => s - 1)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                      theme === "dark" ? "border-white/10 text-white/50 hover:text-white/80" : "border-gray-200 text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Back
+                  </button>
+                )}
+                <button
+                  onClick={goNext}
+                  disabled={!canProceed}
+                  className="px-6 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
+                  data-testid="button-next-onboarding"
+                >
+                  {step === totalSteps - 1 ? "Let's Build!" : "Continue"}
+                </button>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -1710,13 +1850,16 @@ function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 function AppDashboardContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
-    return !localStorage.getItem("buildcustom_onboarded");
+    return !!localStorage.getItem("bc_new_user");
   });
   const { theme } = useTheme();
+  const [, navigate] = useLocation();
 
-  const handleOnboardingComplete = () => {
-    localStorage.setItem("buildcustom_onboarded", "true");
+  const handleOnboardingComplete = (destination?: string) => {
+    localStorage.removeItem("bc_new_user");
+    localStorage.setItem("buildcustom_onboarded", "1");
     setShowOnboarding(false);
+    if (destination && destination !== "/app") navigate(destination);
   };
 
   return (

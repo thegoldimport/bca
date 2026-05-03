@@ -54,6 +54,8 @@ Preferred communication style: Simple, everyday language.
 | POST | `/api/auth/register` | Register new app user (name, email, password) |
 | POST | `/api/auth/login` | Login app user (email, password) |
 | GET | `/api/auth/me` | Get current user (x-user-id header) |
+| PUT | `/api/auth/profile` | Update name and/or email (x-user-id header) |
+| PUT | `/api/auth/password` | Change password — requires currentPassword + newPassword |
 | POST | `/api/admin/login` | Admin login (env var credentials) |
 | GET | `/api/admin/waitlist` | Get all waitlist entries |
 | POST | `/api/waitlist` | Submit a waitlist entry |
@@ -84,6 +86,9 @@ Preferred communication style: Simple, everyday language.
 - **App users**: Register/login via `/api/auth/register` and `/api/auth/login`; passwords hashed with bcryptjs; user object stored in localStorage as `bc_app_user`; `x-user-id` header sent with every protected API request
 - **Admin**: Simple credential check against `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars (defaults: `admin`/`Stayclassy99`); no session management
 - **Auth redirect**: AppDashboard checks localStorage on mount; redirects to `/app/login` if no user found
+- **Onboarding**: After signup, `bc_new_user` is set in localStorage. AppDashboardContent shows `OnboardingWizard` (3-step: welcome, build type picker, starting point picker). Wizard is cleared and `buildcustom_onboarded` is set on completion. Not shown on login, only after first signup.
+- **Settings — Account tab**: Loads real user from localStorage, edits name/email, saves to `PUT /api/auth/profile`, updates localStorage on success
+- **Settings — Security tab**: Real password change form — verifies current password via bcrypt on server before updating
 
 ### Database
 
