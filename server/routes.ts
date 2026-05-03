@@ -336,5 +336,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ── TEMPLATES ──────────────────────────────────────────────────────────────
+  app.get("/api/templates", async (req, res) => {
+    try {
+      const allTemplates = await storage.getAllTemplates();
+      if (allTemplates.length === 0) {
+        await storage.seedTemplates();
+        return res.json(await storage.getAllTemplates());
+      }
+      return res.json(allTemplates);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/templates/:slug", async (req, res) => {
+    try {
+      const template = await storage.getTemplateBySlug(req.params.slug);
+      if (!template) return res.status(404).json({ message: "Template not found" });
+      return res.json(template);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }

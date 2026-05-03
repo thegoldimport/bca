@@ -841,29 +841,70 @@ const TEMPLATE_CATEGORIES = [
   { id: "mobile", label: "Mobile App", icon: Smartphone },
 ];
 
-const DEMO_TEMPLATES = [
-  { id: "t1", name: "SaaS Dashboard", category: "saas", description: "Analytics dashboard with charts, user management, and billing integration", tags: ["React", "Charts", "Auth"], color: "from-cyan-500 to-blue-600" },
-  { id: "t2", name: "E-Commerce Store", category: "ecommerce", description: "Full-featured online store with cart, checkout, and product management", tags: ["Payments", "Cart", "CMS"], color: "from-emerald-500 to-teal-600" },
-  { id: "t3", name: "Portfolio Pro", category: "portfolio", description: "Creative portfolio with project galleries, about section, and contact form", tags: ["Gallery", "Animation", "Contact"], color: "from-purple-500 to-pink-600" },
-  { id: "t4", name: "Startup Landing", category: "landing", description: "High-converting landing page with hero, features, pricing, and waitlist", tags: ["CTA", "Pricing", "Responsive"], color: "from-orange-500 to-red-600" },
-  { id: "t5", name: "Dev Blog", category: "blog", description: "Markdown-powered blog with syntax highlighting, tags, and search", tags: ["Markdown", "SEO", "RSS"], color: "from-blue-500 to-indigo-600" },
-  { id: "t6", name: "Agency Site", category: "business", description: "Professional agency website with case studies, team, and services", tags: ["Services", "Team", "CMS"], color: "from-slate-500 to-gray-700" },
-  { id: "t7", name: "2D Platformer", category: "game", description: "Side-scrolling platformer game with levels, sprites, and scoring", tags: ["Canvas", "Physics", "Sprites"], color: "from-yellow-500 to-orange-600" },
-  { id: "t8", name: "Fitness Tracker", category: "mobile", description: "Mobile-first fitness app with workout tracking and progress charts", tags: ["PWA", "Charts", "Health"], color: "from-pink-500 to-rose-600" },
-  { id: "t9", name: "AI Chat App", category: "saas", description: "AI-powered chat application with conversation history and streaming", tags: ["AI", "Streaming", "Auth"], color: "from-violet-500 to-purple-600" },
-  { id: "t10", name: "Restaurant Site", category: "landing", description: "Restaurant website with menu, reservations, and location map", tags: ["Menu", "Booking", "Maps"], color: "from-amber-500 to-yellow-600" },
-  { id: "t11", name: "Social Platform", category: "saas", description: "Social media platform with profiles, feeds, and real-time messaging", tags: ["Social", "Real-time", "Auth"], color: "from-sky-500 to-cyan-600" },
-  { id: "t12", name: "NFT Marketplace", category: "ecommerce", description: "Digital marketplace for NFTs with wallet integration and galleries", tags: ["Web3", "Gallery", "Wallet"], color: "from-fuchsia-500 to-purple-600" },
-];
+function formatStars(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return String(n);
+}
+
+function TemplateCardSkeleton({ theme }: { theme: string }) {
+  return (
+    <div className={`rounded-2xl border overflow-hidden ${theme === "dark" ? "bg-white/[0.03] border-white/10" : "bg-white border-gray-200"}`}>
+      <div className="h-40 bg-white/5 animate-pulse" />
+      <div className="p-5 flex flex-col gap-3">
+        <div className={`h-5 w-1/2 rounded animate-pulse ${theme === "dark" ? "bg-white/10" : "bg-gray-200"}`} />
+        <div className={`h-3 w-full rounded animate-pulse ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />
+        <div className={`h-3 w-4/5 rounded animate-pulse ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />
+        <div className="flex gap-1.5 mt-1">
+          {[1,2,3].map(i => <div key={i} className={`h-4 w-14 rounded animate-pulse ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TemplatesPage() {
   const { theme } = useTheme();
   const [activeCategory, setActiveCategory] = useState("all");
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const user = getAppUser();
+
+  const { data: allTemplates = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/templates"],
+    queryFn: async () => {
+      const res = await fetch("/api/templates");
+      if (!res.ok) throw new Error("Failed to load templates");
+      return res.json();
+    },
+  });
+
+  const createProjectMutation = useMutation({
+    mutationFn: async (template: any) => {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          userId: user?.id,
+          name: template.name,
+          type: template.projectType,
+          status: "draft",
+          description: template.description,
+          framework: template.framework,
+          url: template.forkUrl,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to create project");
+      return res.json();
+    },
+    onSuccess: (project: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      navigate(`/app/project/${project.id}`);
+    },
+  });
 
   const filteredTemplates = activeCategory === "all"
-    ? DEMO_TEMPLATES
-    : DEMO_TEMPLATES.filter((t) => t.category === activeCategory);
+    ? allTemplates
+    : allTemplates.filter((t: any) => t.category === activeCategory);
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -871,7 +912,9 @@ function TemplatesPage() {
         <div>
           <h1 className="text-3xl font-display font-bold text-brand-gradient">Templates</h1>
           <p className={`mt-1 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
-            Start from a professionally designed template
+            {allTemplates.length > 0
+              ? `${allTemplates.length} real open-source templates — forked to your GitHub, ready to build on`
+              : "Start from a professionally designed template"}
           </p>
         </div>
       </div>
@@ -898,7 +941,9 @@ function TemplatesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {filteredTemplates.map((template) => (
+        {isLoading
+          ? Array.from({ length: 6 }).map((_, i) => <TemplateCardSkeleton key={i} theme={theme} />)
+          : filteredTemplates.map((template: any) => (
           <motion.div
             key={template.id}
             initial={{ opacity: 0, y: 12 }}
@@ -931,30 +976,47 @@ function TemplatesPage() {
                   </div>
                 </div>
               </div>
+              {template.featured && (
+                <div className="absolute top-3 left-3">
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/20 backdrop-blur-sm text-white text-[10px] font-semibold border border-white/30">
+                    <Sparkles size={9} /> Featured
+                  </span>
+                </div>
+              )}
               <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigate("/app/editor");
+                    createProjectMutation.mutate(template);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/90 text-black text-xs font-semibold hover:bg-white transition-colors shadow-lg"
+                  disabled={createProjectMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/90 text-black text-xs font-semibold hover:bg-white transition-colors shadow-lg disabled:opacity-60"
                   data-testid={`button-use-template-${template.id}`}
                 >
-                  Use Template
+                  {createProjectMutation.isPending ? "Creating..." : "Use Template"}
                   <ArrowRight size={12} />
                 </button>
               </div>
             </div>
 
             <div className="p-5">
-              <h3 className={`font-display font-semibold text-lg mb-1 ${
-                theme === "dark" ? "text-white" : "text-gray-900"
-              }`}>{template.name}</h3>
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h3 className={`font-display font-semibold text-lg ${
+                  theme === "dark" ? "text-white" : "text-gray-900"
+                }`}>{template.name}</h3>
+                {template.stars > 0 && (
+                  <span className={`flex items-center gap-1 text-[11px] font-medium shrink-0 mt-1 ${
+                    theme === "dark" ? "text-white/40" : "text-gray-400"
+                  }`}>
+                    ★ {formatStars(template.stars)}
+                  </span>
+                )}
+              </div>
               <p className={`text-sm mb-3 leading-relaxed ${
                 theme === "dark" ? "text-white/50" : "text-gray-500"
               }`}>{template.description}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {template.tags.map((tag) => (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(template.tags || []).map((tag: string) => (
                   <span
                     key={tag}
                     className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${
@@ -966,6 +1028,23 @@ function TemplatesPage() {
                     {tag}
                   </span>
                 ))}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={`text-[11px] font-mono ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>
+                  {template.framework}
+                </span>
+                <a
+                  href={template.forkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`flex items-center gap-1 text-[11px] hover:underline ${
+                    theme === "dark" ? "text-white/30 hover:text-white/60" : "text-gray-400 hover:text-gray-600"
+                  }`}
+                  data-testid={`link-github-template-${template.id}`}
+                >
+                  <ExternalLink size={10} /> GitHub
+                </a>
               </div>
             </div>
           </motion.div>

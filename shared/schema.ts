@@ -80,11 +80,30 @@ export const sitePages = pgTable("site_pages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const templates = pgTable("templates", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  category: text("category").notNull(),
+  description: text("description").notNull().default(""),
+  framework: text("framework").notNull().default(""),
+  projectType: text("project_type").notNull().default("website"),
+  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+  color: text("color").notNull().default("from-cyan-500 to-blue-600"),
+  githubUrl: text("github_url").notNull().default(""),
+  forkUrl: text("fork_url").notNull().default(""),
+  featured: boolean("featured").notNull().default(false),
+  stars: integer("stars").notNull().default(0),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({ username: true, password: true, email: true });
 export const insertWaitlistSchema = createInsertSchema(waitlistEntries).pick({ name: true, email: true, source: true });
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({ id: true, createdAt: true });
 export const insertSitePageSchema = createInsertSchema(sitePages).omit({ id: true, createdAt: true });
+export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true });
+export type Template = typeof templates.$inferSelect;
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;

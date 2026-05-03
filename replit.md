@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 - `/app/login` — App user login page (AppAuth component)
 - `/app/signup` — App user signup page (AppAuth component, same page, mode toggled by URL)
 - `/app` — User-facing app dashboard (Projects grid, requires auth — redirects to /app/login if not logged in)
-- `/app/templates` — Template gallery with category filters
+- `/app/templates` — Template gallery (15 real open-source templates, loaded from DB, forked to thegoldimport GitHub, "Use Template" creates a real project pre-filled with template metadata)
 - `/app/editor` — AI Builder interface (chat + responsive preview)
 - `/app/project/:id` — Project detail dashboard with universal tabs (Overview, Files, Console, Version History, Settings) plus website-only tabs (Pages, Blog, Auto-Blogger, SEO, Analytics, Domain)
 - `/app/users` — (Super Admin) User management table
@@ -72,6 +72,8 @@ Preferred communication style: Simple, everyday language.
 | PUT | `/api/projects/:id/autoblogger` | Upsert autoblogger settings |
 | GET | `/api/projects/:id/seo` | Get SEO settings |
 | PUT | `/api/projects/:id/seo` | Upsert SEO settings |
+| GET | `/api/templates` | Get all templates (auto-seeds on first call) |
+| GET | `/api/templates/:slug` | Get a specific template by slug |
 | GET | `/api/projects/:id/pages` | Get site pages |
 | POST | `/api/projects/:id/pages` | Create a site page |
 | PUT | `/api/projects/:id/pages/:pageId` | Update a site page |
@@ -129,6 +131,16 @@ Preferred communication style: Simple, everyday language.
 - `id` — serial, primary key
 - `project_id` — FK to projects
 - `title`, `slug`, `status`, `page_type`, `content`, `created_at`
+
+**templates** table:
+- `id` — serial, primary key
+- `name`, `slug` (unique), `category`, `description`, `framework`, `project_type`
+- `tags` — text array
+- `color` — Tailwind gradient class string
+- `github_url` — original upstream repo URL
+- `fork_url` — forked repo under thegoldimport GitHub account
+- `featured` — boolean
+- `stars` — integer (approximate star count)
 
 ### Storage Layer
 
