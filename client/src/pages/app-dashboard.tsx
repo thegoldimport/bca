@@ -992,7 +992,7 @@ function TemplateBrowserModal({
           {/* ── Scrollable screenshot area ── */}
           <div
             className="flex-1 overflow-y-auto overflow-x-hidden relative"
-            style={{ background: "#fff" }}
+            style={{ background: "#fff", minHeight: 0 }}
             data-testid="preview-scroll-area"
           >
             {imgUrl && !imgError ? (
