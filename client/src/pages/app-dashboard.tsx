@@ -834,39 +834,74 @@ function EditorPage() {
 }
 
 const TEMPLATE_CATEGORIES = [
-  { id: "all", label: "All Templates", icon: Layers },
-  { id: "saas", label: "SaaS", icon: Rocket },
-  { id: "ecommerce", label: "E-Commerce", icon: Store },
-  { id: "portfolio", label: "Portfolio", icon: Image },
-  { id: "landing", label: "Landing Page", icon: FileText },
-  { id: "blog", label: "Blog", icon: BookOpen },
-  { id: "business", label: "Business", icon: Briefcase },
-  { id: "game", label: "Game", icon: Gamepad2 },
-  { id: "mobile", label: "Mobile App", icon: Smartphone },
+  { id: "all",       label: "All",          icon: Layers },
+  { id: "saas",      label: "SaaS",         icon: Rocket },
+  { id: "ai",        label: "AI Apps",      icon: Sparkles },
+  { id: "app",       label: "Apps",         icon: Monitor },
+  { id: "ecommerce", label: "E-Commerce",   icon: Store },
+  { id: "mobile",    label: "Mobile",       icon: Smartphone },
+  { id: "desktop",   label: "Desktop",      icon: Tablet },
+  { id: "devtools",  label: "Dev Tools",    icon: Code2 },
 ];
 
 const TEMPLATE_DEMO_URLS: Record<string, string> = {
-  "simplefolio":                 "https://simplefolio.netlify.app/",
-  "dopefolio":                   "https://dopefolio.netlify.app/",
-  "free-nextjs-admin-dashboard": "https://free-nextjs-admin-dashboard.vercel.app/",
-  "saas-starter-kit":            "https://saas-starter-kit.vercel.app/",
-  "chatbot-ui":                  "https://chatbotui.com/",
-  "commerce":                    "https://demo.vercel.store/",
-  "tailwind-landing-page-template": "https://preview.cruip.com/stellar/",
-  "open-react-template":         "https://preview.cruip.com/open-pro/",
-  "tailwind-nextjs-starter-blog":"https://tailwind-nextjs-starter-blog.vercel.app/",
-  "astro-starter":               "https://astro.build/",
-  "nextjs-job-board":            "https://nextjs-job-board.vercel.app/",
-  "phaser-template-webpack":     "https://phaser.io/",
-  "precedent":                   "https://precedent.dev/",
+  "saas-boilerplate":            "https://nextjs-boilerplate.ixartz.com/",
+  "create-t3-app":               "https://create.t3.gg/",
+  "platforms":                   "https://app.vercel.pub/",
   "taxonomy":                    "https://tx.shadcn.com/",
-  "brainwave":                   "https://brainwave-jsm.vercel.app/",
+  "nextchat":                    "https://app.nextchat.dev/",
+  "novel":                       "https://novel.sh/",
+  "chatbot-ui":                  "https://www.chatbotui.com/",
+  "chatwoot":                    "https://app.chatwoot.com/",
+  "infisical":                   "https://app.infisical.com/",
+  "ignite":                      "https://ignitecli.com/",
+  "electron-react-boilerplate":  "https://electron-react-boilerplate.js.org/",
+  "medusa":                      "https://demo.medusajs.com/",
+  "hoppscotch":                  "https://hoppscotch.io/",
+  "excalidraw":                  "https://excalidraw.com/",
+  "actual":                      "https://actualbudget.org/",
 };
+
+function getThumbnailUrl(slug: string) {
+  const demo = TEMPLATE_DEMO_URLS[slug];
+  if (!demo) return null;
+  return `https://image.thum.io/get/width/1200/crop/750/${demo}`;
+}
 
 function getPreviewImageUrl(slug: string) {
   const demo = TEMPLATE_DEMO_URLS[slug];
   if (!demo) return null;
   return `https://image.thum.io/get/fullpage/width/1440/${demo}`;
+}
+
+function TemplateThumbnail({ slug, color }: { slug: string; color: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
+  const src = getThumbnailUrl(slug);
+  return (
+    <div className={`h-44 relative overflow-hidden ${errored || !src ? `bg-gradient-to-br ${color}` : "bg-gray-200"}`}>
+      {src && !errored && (
+        <img
+          src={src}
+          alt=""
+          className="w-full h-full object-cover object-top"
+          style={{ opacity: loaded ? 1 : 0, transition: "opacity 0.3s" }}
+          onLoad={() => setLoaded(true)}
+          onError={() => setErrored(true)}
+        />
+      )}
+      {/* skeleton shimmer while loading */}
+      {src && !errored && !loaded && (
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse" />
+      )}
+      {/* gradient fallback icon */}
+      {(errored || !src) && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Globe size={32} className="text-white/30" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function formatStars(n: number) {
@@ -1157,40 +1192,22 @@ function TemplatesPage() {
             }`}
             data-testid={`card-template-${template.id}`}
           >
-            <div className={`h-40 bg-gradient-to-br ${template.color} relative overflow-hidden`}>
-              <div className="absolute inset-0 bg-black/10" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-3/4 h-3/4 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20 p-3 flex flex-col gap-2">
-                  <div className="flex gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-white/40" />
-                    <div className="w-2 h-2 rounded-full bg-white/40" />
-                    <div className="w-2 h-2 rounded-full bg-white/40" />
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <div className="w-2/3 h-2 rounded bg-white/25" />
-                    <div className="w-full h-2 rounded bg-white/15" />
-                    <div className="w-4/5 h-2 rounded bg-white/15" />
-                    <div className="mt-auto flex gap-1.5">
-                      <div className="w-8 h-3 rounded bg-white/30" />
-                      <div className="w-8 h-3 rounded bg-white/20" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="relative group-hover:[&_.preview-overlay]:opacity-100 group-hover:[&_.use-btn]:opacity-100">
+              <TemplateThumbnail slug={template.slug} color={template.color} />
               {template.featured && (
-                <div className="absolute top-3 left-3">
-                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/20 backdrop-blur-sm text-white text-[10px] font-semibold border border-white/30">
+                <div className="absolute top-3 left-3 z-10">
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold border border-white/20">
                     <Sparkles size={9} /> Featured
                   </span>
                 </div>
               )}
               {/* Preview hint on hover */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+              <div className="preview-overlay absolute inset-0 flex items-center justify-center opacity-0 transition-opacity bg-black/40 pointer-events-none">
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 backdrop-blur-sm border border-white/25 text-white text-xs font-semibold">
                   <Monitor size={13} /> Preview
                 </div>
               </div>
-              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="use-btn absolute top-3 right-3 opacity-0 transition-opacity z-10">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

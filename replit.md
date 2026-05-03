@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 - `/app/login` — App user login page (AppAuth component)
 - `/app/signup` — App user signup page (AppAuth component, same page, mode toggled by URL)
 - `/app` — User-facing app dashboard (Projects grid, requires auth — redirects to /app/login if not logged in)
-- `/app/templates` — Template gallery (15 real open-source templates, loaded from DB, forked to thegoldimport GitHub, "Use Template" creates a real project pre-filled with template metadata)
+- `/app/templates` — Template gallery (15 MIT/Apache open-source templates, loaded from DB, forked to thegoldimport GitHub, "Use Template" creates a real project pre-filled with template metadata; card thumbnails and full-page previews use thum.io live screenshots)
 - `/app/editor` — AI Builder interface (chat + responsive preview)
 - `/app/project/:id` — Project detail dashboard with universal tabs (Overview, Files, Console, Version History, Settings) plus website-only tabs (Pages, Blog, Auto-Blogger, SEO, Analytics, Domain)
 - `/app/users` — (Super Admin) User management table
