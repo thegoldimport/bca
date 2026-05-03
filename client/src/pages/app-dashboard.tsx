@@ -56,6 +56,10 @@ import {
   Rocket,
   Image,
   BookOpen,
+  X,
+  ChevronLeft,
+  RefreshCw,
+  Maximize2,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import cubeLogo from "@/assets/cube-logo.png";
@@ -841,9 +845,204 @@ const TEMPLATE_CATEGORIES = [
   { id: "mobile", label: "Mobile App", icon: Smartphone },
 ];
 
+const TEMPLATE_DEMO_URLS: Record<string, string> = {
+  "simplefolio":                 "https://simplefolio.netlify.app/",
+  "dopefolio":                   "https://dopefolio.netlify.app/",
+  "free-nextjs-admin-dashboard": "https://free-nextjs-admin-dashboard.vercel.app/",
+  "saas-starter-kit":            "https://saas-starter-kit.vercel.app/",
+  "chatbot-ui":                  "https://chatbotui.com/",
+  "commerce":                    "https://demo.vercel.store/",
+  "tailwind-landing-page-template": "https://preview.cruip.com/stellar/",
+  "open-react-template":         "https://preview.cruip.com/open-pro/",
+  "tailwind-nextjs-starter-blog":"https://tailwind-nextjs-starter-blog.vercel.app/",
+  "astro-starter":               "https://astro.build/",
+  "nextjs-job-board":            "https://nextjs-job-board.vercel.app/",
+  "phaser-template-webpack":     "https://phaser.io/",
+  "precedent":                   "https://precedent.dev/",
+  "taxonomy":                    "https://tx.shadcn.com/",
+  "brainwave":                   "https://brainwave-jsm.vercel.app/",
+};
+
+function getPreviewImageUrl(slug: string) {
+  const demo = TEMPLATE_DEMO_URLS[slug];
+  if (!demo) return null;
+  return `https://image.thum.io/get/fullpage/width/1440/${demo}`;
+}
+
 function formatStars(n: number) {
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
   return String(n);
+}
+
+function TemplateBrowserModal({
+  template,
+  onClose,
+  onUse,
+  isUsing,
+}: {
+  template: any;
+  onClose: () => void;
+  onUse: () => void;
+  isUsing: boolean;
+}) {
+  const { theme } = useTheme();
+  const demoUrl = TEMPLATE_DEMO_URLS[template.slug] || template.forkUrl;
+  const imgUrl = getPreviewImageUrl(template.slug);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }}
+        onClick={onClose}
+        data-testid="modal-template-preview-backdrop"
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 16 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 16 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="w-full max-w-5xl flex flex-col rounded-2xl overflow-hidden shadow-2xl"
+          style={{ height: "85vh", maxHeight: "800px" }}
+          onClick={(e) => e.stopPropagation()}
+          data-testid="modal-template-preview"
+        >
+          {/* ── Modal header bar (outside browser) ── */}
+          <div
+            className="flex items-center justify-between px-4 py-3 shrink-0"
+            style={{ background: theme === "dark" ? "#0f0f1a" : "#1a1a2e" }}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${template.color} flex items-center justify-center shrink-0`}>
+                <Sparkles size={14} className="text-white" />
+              </div>
+              <div>
+                <p className="text-white font-display font-semibold text-sm leading-tight">{template.name}</p>
+                <p className="text-white/40 text-[11px]">{template.framework}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={demoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white/70 text-xs font-medium hover:bg-white/20 transition-colors"
+                data-testid="button-open-live-demo"
+              >
+                <ExternalLink size={12} /> Live Demo
+              </a>
+              <button
+                onClick={onUse}
+                disabled={isUsing}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-white text-xs font-semibold transition-all disabled:opacity-60"
+                style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 60%, #ec4899 100%)" }}
+                data-testid="button-use-template-modal"
+              >
+                {isUsing ? "Creating project…" : "Use Template"}
+                <ArrowRight size={12} />
+              </button>
+              <button
+                onClick={onClose}
+                className="ml-1 p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                data-testid="button-close-preview"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Fake browser chrome ── */}
+          <div
+            className="flex items-center gap-3 px-4 py-2.5 shrink-0"
+            style={{ background: theme === "dark" ? "#18182a" : "#242436" }}
+          >
+            {/* Traffic lights */}
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/80" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+              <div className="w-3 h-3 rounded-full bg-green-500/80" />
+            </div>
+            {/* Nav buttons */}
+            <div className="flex items-center gap-1">
+              <button className="p-1 rounded text-white/30 cursor-default">
+                <ChevronLeft size={14} />
+              </button>
+              <button className="p-1 rounded text-white/30 cursor-default">
+                <RefreshCw size={13} />
+              </button>
+            </div>
+            {/* URL bar */}
+            <div
+              className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono truncate"
+              style={{ background: "rgba(255,255,255,0.06)" }}
+            >
+              <div className="w-2.5 h-2.5 rounded-full bg-green-400/60 shrink-0" />
+              <span className="text-white/50 truncate">{demoUrl}</span>
+            </div>
+            <button className="p-1 rounded text-white/30 cursor-default">
+              <Maximize2 size={13} />
+            </button>
+          </div>
+
+          {/* ── Scrollable screenshot area ── */}
+          <div
+            className="flex-1 overflow-y-auto overflow-x-hidden relative"
+            style={{ background: "#fff" }}
+            data-testid="preview-scroll-area"
+          >
+            {imgUrl && !imgError ? (
+              <>
+                {!imgLoaded && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4" style={{ background: "#f5f5f5" }}>
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-2 border-indigo-500/40 border-t-indigo-500 rounded-full animate-spin" />
+                      <p className="text-xs text-gray-400 font-medium">Loading preview…</p>
+                      <p className="text-[11px] text-gray-300">Rendering {template.name}</p>
+                    </div>
+                  </div>
+                )}
+                <img
+                  src={imgUrl}
+                  alt={`${template.name} preview`}
+                  className="w-full block"
+                  style={{ display: imgLoaded ? "block" : "none" }}
+                  onLoad={() => setImgLoaded(true)}
+                  onError={() => setImgError(true)}
+                  data-testid="img-template-preview"
+                />
+              </>
+            ) : (
+              /* Fallback if no screenshot service or error */
+              <div
+                className={`h-full min-h-[400px] bg-gradient-to-br ${template.color} flex flex-col items-center justify-center gap-6 p-8`}
+              >
+                <div className="w-24 h-24 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center">
+                  <Sparkles size={40} className="text-white/70" />
+                </div>
+                <div className="text-center">
+                  <p className="text-white font-display font-bold text-2xl mb-2">{template.name}</p>
+                  <p className="text-white/70 text-sm max-w-sm">{template.description}</p>
+                </div>
+                <a
+                  href={demoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold hover:bg-white/30 transition-colors border border-white/30"
+                >
+                  <ExternalLink size={14} /> Open Live Demo
+                </a>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
 }
 
 function TemplateCardSkeleton({ theme }: { theme: string }) {
@@ -865,6 +1064,7 @@ function TemplateCardSkeleton({ theme }: { theme: string }) {
 function TemplatesPage() {
   const { theme } = useTheme();
   const [activeCategory, setActiveCategory] = useState("all");
+  const [previewTemplate, setPreviewTemplate] = useState<any>(null);
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const user = getAppUser();
@@ -949,6 +1149,7 @@ function TemplatesPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             layout
+            onClick={() => setPreviewTemplate(template)}
             className={`group rounded-2xl border overflow-hidden cursor-pointer transition-all hover:shadow-xl ${
               theme === "dark"
                 ? "bg-white/[0.03] border-white/10 hover:border-white/20 hover:shadow-purple-500/10"
@@ -983,6 +1184,12 @@ function TemplatesPage() {
                   </span>
                 </div>
               )}
+              {/* Preview hint on hover */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 backdrop-blur-sm border border-white/25 text-white text-xs font-semibold">
+                  <Monitor size={13} /> Preview
+                </div>
+              </div>
               <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={(e) => {
@@ -1050,6 +1257,16 @@ function TemplatesPage() {
           </motion.div>
         ))}
       </div>
+
+      {/* Browser preview modal */}
+      {previewTemplate && (
+        <TemplateBrowserModal
+          template={previewTemplate}
+          onClose={() => setPreviewTemplate(null)}
+          onUse={() => createProjectMutation.mutate(previewTemplate)}
+          isUsing={createProjectMutation.isPending}
+        />
+      )}
     </div>
   );
 }
