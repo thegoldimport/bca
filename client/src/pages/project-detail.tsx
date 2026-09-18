@@ -135,7 +135,19 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
           <GlassCard>
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Preview</h3>
             <div className="rounded-xl overflow-hidden aspect-video">
-              {displayedPreviewUrl ? <iframe src={displayedPreviewUrl} title={`${project.name} runtime preview`} className="w-full h-full border-0 bg-white" /> : (
+              {displayedPreviewUrl ? (
+                <div className="relative h-full w-full overflow-hidden">
+                  <iframe
+                    src={displayedPreviewUrl}
+                    title={`${project.name} live page snapshot`}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    sandbox="allow-scripts allow-same-origin"
+                    className="pointer-events-none h-full w-full select-none border-0 bg-white"
+                  />
+                  <div className="absolute inset-0" aria-hidden="true" />
+                </div>
+              ) : (
                 <div className={`w-full h-full flex flex-col items-center justify-center gap-3 ${theme === "dark" ? "bg-[#0d0d1a] text-white/50" : "bg-gray-100 text-gray-500"}`}>
                   <p className="text-sm">{previewError || "No runtime preview is active."}</p>
                   <button onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending} className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold disabled:opacity-50">
