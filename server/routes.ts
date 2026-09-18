@@ -6,6 +6,12 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { isRuntimeConfigured, runtimeAdapter, RuntimeAdapterError, type RuntimeImageAttachment } from "./runtime-adapter";
 import { getPlanEntitlement } from "@shared/plans";
+import {
+  deploymentScriptName,
+  publishedProjectUrl,
+  removePublishedProjectRoute,
+  setPublishedProjectRoute,
+} from "./published-routes";
 
 const RESERVED_SUBDOMAINS = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers"]);
 
@@ -441,17 +447,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
       }
+      const subdomainSlug = settings?.subdomainSlug || await availableProjectSubdomain(project.id, project.name);
       if (!settings?.subdomainSlug) {
         await storage.upsertRuntimeProjectLink(project.id, {
-          subdomainSlug: await availableProjectSubdomain(project.id, project.name),
+          subdomainSlug,
         });
       }
       const result = await runtimeAdapter.deploy(await runtimeProject(project));
-      await storage.upsertRuntimeProjectLink(project.id, { deploymentUrl: result.url });
+      const scriptName = deploymentScriptName(result.workersUrl, result.url);
+      const publicUrl = publishedProjectUrl(subdomainSlug);
+      await setPublishedProjectRoute(subdomainSlug, scriptName);
+      await storage.upsertRuntimeProjectLink(project.id, {
+        deploymentUrl: publicUrl,
+        deploymentOriginUrl: result.url,
+        deploymentScriptName: scriptName,
+      });
       const release = result.commitHash
-        ? await storage.createRuntimeRelease(project.id, result.commitHash, result.url)
+        ? await storage.createRuntimeRelease(project.id, result.commitHash, publicUrl)
         : null;
-      return res.status(201).json({ ...result, release });
+      return res.status(201).json({ ...result, url: publicUrl, originUrl: result.url, release });
     } catch (err) { return runtimeError(err, res); }
   });
 
@@ -508,12 +522,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
     }
-    const link = await storage.upsertRuntimeProjectLink(project.id, {
-      subdomainSlug,
-      hostingProvider,
-      customDomain: customDomain || null,
-      customOrigin: customOrigin || null,
-    });
+    const currentLink = await storage.getRuntimeProjectLink(project.id);
+    const previousSlug = currentLink?.subdomainSlug;
+    const movingPublishedRoute = Boolean(
+      currentLink?.deploymentScriptName
+      && previousSlug
+      && previousSlug !== subdomainSlug,
+    );
+    if (movingPublishedRoute) {
+      await setPublishedProjectRoute(subdomainSlug, currentLink!.deploymentScriptName!);
+    }
+    let link;
+    try {
+      link = await storage.upsertRuntimeProjectLink(project.id, {
+        subdomainSlug,
+        hostingProvider,
+        customDomain: customDomain || null,
+        customOrigin: customOrigin || null,
+        ...(movingPublishedRoute ? { deploymentUrl: publishedProjectUrl(subdomainSlug) } : {}),
+      });
+    } catch (error) {
+      if (movingPublishedRoute) await removePublishedProjectRoute(subdomainSlug).catch(() => undefined);
+      throw error;
+    }
+    if (movingPublishedRoute) {
+      await removePublishedProjectRoute(previousSlug!);
+    }
     return res.json({
       subdomainSlug: link.subdomainSlug,
       hostingProvider: link.hostingProvider,

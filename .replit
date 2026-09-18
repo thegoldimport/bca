@@ -48,3 +48,6 @@ mockupState = "FULLSTACK"
 [userenv.shared]
 VITE_API_URL = "https://ai-build-studio.replit.app"
 VIBESDK_RUNTIME_URL = "https://buildcustom-vibesdk-staging.thegoldimport.workers.dev"
+BUILDCUSTOM_APPS_DOMAIN = "apps.buildcustom.ai"
+CLOUDFLARE_ACCOUNT_ID = "4cf6aaae9d5053aac6776b708e2ec549"
+CLOUDFLARE_ROUTES_KV_NAMESPACE_ID = "d6e19823343e46d3965ad167775afb30"

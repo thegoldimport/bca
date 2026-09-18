@@ -9,6 +9,8 @@ export async function ensureRuntimeSchema() {
       agent_id text NOT NULL UNIQUE,
       preview_url text,
       deployment_url text,
+      deployment_origin_url text,
+      deployment_script_name text,
       subdomain_slug text UNIQUE,
       hosting_provider text NOT NULL DEFAULT 'buildcustom',
       custom_domain text,
@@ -17,6 +19,8 @@ export async function ensureRuntimeSchema() {
       updated_at timestamp NOT NULL DEFAULT now()
     )
   `);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS deployment_origin_url text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS deployment_script_name text`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS subdomain_slug text`);
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS runtime_project_links_subdomain_slug_unique ON runtime_project_links (subdomain_slug) WHERE subdomain_slug IS NOT NULL`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS hosting_provider text NOT NULL DEFAULT 'buildcustom'`);
