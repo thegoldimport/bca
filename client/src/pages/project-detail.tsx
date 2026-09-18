@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -82,12 +82,21 @@ function fmtDate(dateStr: string) {
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
-function OverviewTab({ project, blogCount, projectId }: { project: any; blogCount: number; projectId: number }) {
+function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project: any; blogCount: number; projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
   const isWebsite = project.type === "website";
   const preview = PREVIEW_IMAGES[project.type] || previewPortfolio;
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewError, setPreviewError] = useState("");
+  const publishingQuery = useQuery({
+    queryKey: ["publishing-settings", projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load publishing settings.");
+      return body;
+    },
+  });
   const previewMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/runtime/previews`, {
@@ -100,11 +109,20 @@ function OverviewTab({ project, blogCount, projectId }: { project: any; blogCoun
     onSuccess: (body) => { setPreviewUrl(body.url || body.previewUrl || ""); setPreviewError(body.url || body.previewUrl ? "" : "Runtime did not return a preview URL."); },
     onError: (error: any) => setPreviewError(error.message),
   });
+  const deploymentUrl = runtimeStatus?.deploymentUrl || "";
+  const displayedPreviewUrl = deploymentUrl || previewUrl;
+  const published = Boolean(deploymentUrl);
+  const publishingSettings = publishingQuery.data;
+
+  useEffect(() => {
+    if (!runtimeStatus || published || previewMutation.isPending || previewUrl) return;
+    previewMutation.mutate();
+  }, [runtimeStatus, published, projectId]);
 
   return (
     <div className="space-y-6">
       <div className={`grid gap-4 ${isWebsite ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-3"}`}>
-        <StatCard label="Status" value={project.status.charAt(0).toUpperCase() + project.status.slice(1)} sub={project.url ? "Deployed" : "Not deployed"} trend="neutral" />
+        <StatCard label="Status" value={published ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)} sub={published ? new URL(deploymentUrl).hostname : "Not deployed"} trend={published ? "up" : "neutral"} />
         {isWebsite && <StatCard label="Monthly Visitors" value="—" sub="Analytics not connected" trend="neutral" />}
         {isWebsite && <StatCard label="Blog Posts" value={String(blogCount)} sub="total posts" trend="neutral" />}
         {isWebsite && <StatCard label="SEO Score" value="—" sub="Configure SEO tab" trend="neutral" />}
@@ -117,7 +135,7 @@ function OverviewTab({ project, blogCount, projectId }: { project: any; blogCoun
           <GlassCard>
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Preview</h3>
             <div className="rounded-xl overflow-hidden aspect-video">
-              {previewUrl ? <iframe src={previewUrl} title={`${project.name} runtime preview`} className="w-full h-full border-0 bg-white" /> : (
+              {displayedPreviewUrl ? <iframe src={displayedPreviewUrl} title={`${project.name} runtime preview`} className="w-full h-full border-0 bg-white" /> : (
                 <div className={`w-full h-full flex flex-col items-center justify-center gap-3 ${theme === "dark" ? "bg-[#0d0d1a] text-white/50" : "bg-gray-100 text-gray-500"}`}>
                   <p className="text-sm">{previewError || "No runtime preview is active."}</p>
                   <button onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending} className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold disabled:opacity-50">
@@ -134,8 +152,8 @@ function OverviewTab({ project, blogCount, projectId }: { project: any; blogCoun
                   <Code2 size={15} /> Open in Builder
                 </button>
               </Link>
-              {project.url && (
-                <a href={`https://${project.url}`} target="_blank" rel="noopener noreferrer">
+              {deploymentUrl && (
+                <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
                   <button className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${theme === "dark" ? "bg-white/10 text-white hover:bg-white/15" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                     data-testid="button-view-live"><ExternalLink size={15} /> View Live</button>
                 </a>
@@ -162,6 +180,28 @@ function OverviewTab({ project, blogCount, projectId }: { project: any; blogCoun
                   <span className={`text-xs font-medium font-mono ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>{value}</span>
                 </div>
               ))}
+            </div>
+          </GlassCard>
+
+          <GlassCard>
+            <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Publishing</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Status</span>
+                <span className={`text-xs font-semibold ${published ? "text-emerald-400" : theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{published ? "Live" : "Draft"}</span>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <span className={`shrink-0 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Included address</span>
+                <span className={`break-all text-right text-xs font-medium ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>
+                  {publishingSettings?.subdomainSlug ? `${publishingSettings.subdomainSlug}.apps.buildcustom.ai` : "Not assigned"}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <span className={`shrink-0 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Custom domain</span>
+                <span className={`break-all text-right text-xs font-medium ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>
+                  {publishingSettings?.customDomain || "Not connected"}
+                </span>
+              </div>
             </div>
           </GlassCard>
 
@@ -1237,6 +1277,7 @@ export default function ProjectDetail() {
   }
 
   const isWebsite = project.type === "website";
+  const isPublished = Boolean(runtimeStatus?.deploymentUrl);
   const allTabs = isWebsite ? [...UNIVERSAL_TABS, ...WEBSITE_TABS] : UNIVERSAL_TABS;
   const IconComponent = TYPE_ICONS[project.type] || Globe;
 
@@ -1257,8 +1298,8 @@ export default function ProjectDetail() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className={`text-2xl font-display font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{project.name}</h1>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${project.status === "live" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" : project.status === "building" ? "bg-amber-500/15 text-amber-400 border border-amber-500/20" : theme === "dark" ? "bg-white/10 text-white/50 border border-white/10" : "bg-gray-100 text-gray-500 border border-gray-200"}`}>
-                  {project.status === "live" && "● "}{project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isPublished ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" : project.status === "building" ? "bg-amber-500/15 text-amber-400 border border-amber-500/20" : theme === "dark" ? "bg-white/10 text-white/50 border border-white/10" : "bg-gray-100 text-gray-500 border border-gray-200"}`}>
+                  {isPublished && "● "}{isPublished ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)}
                 </span>
               </div>
               <p className={`text-sm mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{project.description || "No description"}</p>
@@ -1298,7 +1339,7 @@ export default function ProjectDetail() {
         )}
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15 }}>
-            {activeTab === "overview" && <OverviewTab project={project} blogCount={blogPosts.length} projectId={projectId} />}
+            {activeTab === "overview" && <OverviewTab project={project} blogCount={blogPosts.length} projectId={projectId} runtimeStatus={runtimeStatus} />}
             {activeTab === "files" && <FilesTab />}
             {activeTab === "console" && <ConsoleTab />}
             {activeTab === "history" && <HistoryTab />}

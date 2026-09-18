@@ -1122,17 +1122,27 @@ function EditorPage() {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
-    fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() })
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}));
-        if (!cancelled && response.ok) {
-          if (body.previewUrl || body.state?.previewUrl) {
-            setPreviewUrl(body.previewUrl || body.state.previewUrl);
-          }
-          if (body.deploymentUrl) setProductionUrl(body.deploymentUrl);
+    const loadRuntime = async () => {
+      try {
+        const statusResponse = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
+        const status = await statusResponse.json().catch(() => ({}));
+        if (cancelled || !statusResponse.ok) return;
+        if (status.deploymentUrl) setProductionUrl(status.deploymentUrl);
+        const previewResponse = await fetch(`/api/projects/${projectId}/runtime/previews`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({}),
+        });
+        const preview = await previewResponse.json().catch(() => ({}));
+        if (!cancelled && previewResponse.ok) {
+          setPreviewUrl(preview.url || preview.previewUrl || "");
+          setPreviewRevision((revision) => revision + 1);
         }
-      })
-      .catch(() => undefined);
+      } catch {
+        // The user can retry with the preview refresh control.
+      }
+    };
+    loadRuntime();
     return () => { cancelled = true; };
   }, [projectId]);
 
@@ -1453,6 +1463,15 @@ function EditorPage() {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.message || "The production URL could not be refreshed.");
         setProductionUrl(data.deploymentUrl || "");
+      } else {
+        const response = await fetch(`/api/projects/${projectId}/runtime/previews`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({}),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || "The development preview could not be refreshed.");
+        setPreviewUrl(data.url || data.previewUrl || "");
       }
       setPreviewRevision((revision) => revision + 1);
     } catch (error: any) {
