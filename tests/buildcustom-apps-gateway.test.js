@@ -4,7 +4,7 @@ import gateway, { metadataTags, routeConfig } from "../infrastructure/buildcusto
 
 test("empty SEO preserves generated metadata and adds the BuildCustom favicon", () => {
   const tags = metadataTags({});
-  assert.equal(tags, '<link rel="icon" href="https://buildcustom.ai/favicon.png">');
+  assert.equal(tags, '<link rel="icon" href="https://buildcustom.ai/favicon.png"><meta property="og:image" content="https://buildcustom.ai/opengraph.jpg">');
   assert.doesNotMatch(tags, /<title>|name="description"/);
 });
 

@@ -100,6 +100,8 @@ export const seoSettings = pgTable("seo_settings", {
   metaTitle: text("meta_title").notNull().default(""),
   metaDescription: text("meta_description").notNull().default(""),
   focusKeyword: text("focus_keyword").notNull().default(""),
+  seoKeywords: text("seo_keywords").notNull().default(""),
+  longTailKeywords: text("long_tail_keywords").notNull().default(""),
   schemaJson: text("schema_json").notNull().default("{}"),
   faviconData: text("favicon_data").notNull().default(""),
   canonicalUrl: text("canonical_url").notNull().default(""),

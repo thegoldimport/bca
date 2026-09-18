@@ -1182,6 +1182,8 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
       metaTitle: settings.metaTitle,
       metaDescription: settings.metaDescription,
       focusKeyword: settings.focusKeyword,
+      seoKeywords: settings.seoKeywords || "",
+      longTailKeywords: settings.longTailKeywords || "",
       faviconData: settings.faviconData || "",
       canonicalUrl: settings.canonicalUrl || "",
       ogTitle: settings.ogTitle || "",
@@ -1194,7 +1196,7 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
   if (settings && !schemaForm) { setSchemaForm(settings.schemaJson || "{}"); }
 
   const meta = metaForm || {
-    metaTitle: "", metaDescription: "", focusKeyword: "", faviconData: "", canonicalUrl: "",
+    metaTitle: "", metaDescription: "", focusKeyword: "", seoKeywords: "", longTailKeywords: "", faviconData: "", canonicalUrl: "",
     ogTitle: "", ogDescription: "", ogImageUrl: "", hasSocialImage: false, allowIndexing: true,
   };
   const schema = schemaForm ?? "{}";
@@ -1203,6 +1205,27 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
   const titleSuggestions = suggestionQuery.data?.metaTitle || [];
   const descriptionSuggestions = suggestionQuery.data?.metaDescription || [];
   const keywordSuggestions = suggestionQuery.data?.focusKeyword || [];
+
+  useEffect(() => {
+    const suggestions = suggestionQuery.data;
+    if (!suggestions || !metaForm) return;
+    setMetaForm((current: any) => {
+      const next = {
+        ...current,
+        metaTitle: current.metaTitle || suggestions.metaTitle?.[0] || "",
+        metaDescription: current.metaDescription || suggestions.metaDescription?.[0] || "",
+        focusKeyword: current.focusKeyword || suggestions.focusKeyword?.[0] || "",
+        seoKeywords: current.seoKeywords || suggestions.keywords?.join("\n") || "",
+        longTailKeywords: current.longTailKeywords || suggestions.longTailKeywords?.join("\n") || "",
+        canonicalUrl: current.canonicalUrl || canonicalSuggestion,
+        ogTitle: current.ogTitle || suggestions.ogTitle?.[0] || suggestions.metaTitle?.[0] || "",
+        ogDescription: current.ogDescription || suggestions.ogDescription?.[0] || suggestions.metaDescription?.[0] || "",
+        ogImageUrl: current.ogImageUrl || "https://buildcustom.ai/opengraph.jpg",
+      };
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    });
+    setSchemaForm((current: string | null) => !current || current === "{}" ? suggestions.schemaJson || "{}" : current);
+  }, [suggestionQuery.data, metaForm, canonicalSuggestion]);
 
   const socialImageUpload = useMutation({
     mutationFn: async (data: string) => {
@@ -1287,9 +1310,9 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
     { label: "Structured data (JSON-LD)", status: schema && schema !== "{}" ? "pass" : "warn" },
     { label: "Sitemap.xml", status: "pass" },
     { label: "Robots.txt configured", status: "pass" },
-    { label: "Open Graph tags", status: "warn" },
-    { label: "Image alt text", status: "warn" },
-    { label: "Page speed < 2s", status: "fail" },
+    { label: "Open Graph tags", status: meta.ogTitle && meta.ogDescription && meta.ogImageUrl ? "pass" : "warn" },
+    { label: "Image alt text review", status: "warn" },
+    { label: "Page speed measurement", status: "warn" },
   ];
   const passing = SEO_SCORE_ITEMS.filter(i => i.status === "pass").length;
   const score = Math.round((passing / SEO_SCORE_ITEMS.length) * 100);
@@ -1421,6 +1444,22 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
                 suggestions={keywordSuggestions} maxLength={120}
                 className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
                 testId="input-focus-keyword" />
+            </div>
+            <div>
+              <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Recommended Keywords</label>
+              <textarea value={meta.seoKeywords} onChange={(event) => setMetaForm((current: any) => ({ ...current, seoKeywords: event.target.value }))}
+                rows={5} maxLength={2000}
+                className={`w-full resize-none rounded-xl border px-4 py-3 text-sm outline-none transition-colors ${theme === "dark" ? "border-white/10 bg-white/5 text-white focus:border-cyan-400/50" : "border-gray-200 bg-gray-50 text-gray-900 focus:border-cyan-400"}`}
+                data-testid="input-seo-keywords" />
+              <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>One primary or secondary search phrase per line. Edit or remove any suggestion.</p>
+            </div>
+            <div>
+              <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Long-Tail Keywords</label>
+              <textarea value={meta.longTailKeywords} onChange={(event) => setMetaForm((current: any) => ({ ...current, longTailKeywords: event.target.value }))}
+                rows={6} maxLength={4000}
+                className={`w-full resize-none rounded-xl border px-4 py-3 text-sm outline-none transition-colors ${theme === "dark" ? "border-white/10 bg-white/5 text-white focus:border-cyan-400/50" : "border-gray-200 bg-gray-50 text-gray-900 focus:border-cyan-400"}`}
+                data-testid="input-long-tail-keywords" />
+              <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>Specific phrases that match what potential customers are likely to search.</p>
             </div>
             <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Canonical URL</label>

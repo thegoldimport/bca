@@ -13,6 +13,8 @@ export type SeoSuggestionSet = {
   focusKeyword: string[];
   ogTitle: string[];
   ogDescription: string[];
+  keywords: string[];
+  longTailKeywords: string[];
   schemaJson: string;
 };
 
@@ -22,6 +24,16 @@ function completeValue(value: unknown) {
   if (typeof value === "string") return value.trim();
   if (Array.isArray(value)) return [...value].reverse().find((item) => typeof item === "string")?.trim() || "";
   return "";
+}
+
+function stringList(value: unknown, maxItems: number) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item, index, all) => all.indexOf(item) === index)
+    .slice(0, maxItems);
 }
 
 function completeMetaDescription(candidate: string, summary: string) {
@@ -60,26 +72,40 @@ function fallbackSeoSuggestions(project: ProjectContext, deploymentUrl: string |
   let keyword = "online software";
   let summary = `${project.name} helps users access and manage the core tools and features available throughout the application.`;
   let description = "";
+  let keywords = ["online software", `${project.name} app`, "online productivity tools"];
+  let longTailKeywords = [`best ${project.name} software`, `${project.name} online application`, `easy-to-use software for everyday work`];
 
   if (/\b(task|tasks|subtask|priority|priorities|due date|to-do|kanban)\b/.test(source)) {
     keyword = "task management software";
     summary = `${project.name} is a task management app for organizing projects, priorities, due dates, subtasks, categories, and daily work.`;
     description = `${project.name} helps you manage tasks, priorities, due dates, and subtasks. Organize projects with clear categories and flexible views to stay focused every day.`;
+    keywords = ["task management software", "task planner", "to-do list app", "project task tracker", "productivity app"];
+    longTailKeywords = ["task management software for daily planning", "app for organizing tasks and due dates", "task planner with subtasks and priorities", "project task tracker with categories", "online to-do list with flexible views"];
   } else if (/\b(cart|checkout|products?|inventory|shop|storefront)\b/.test(source)) {
     keyword = "online shopping platform";
     summary = `${project.name} is an online shopping experience for browsing products, comparing options, managing a cart, and completing purchases.`;
+    keywords = ["online store", "shop online", "product catalog", "ecommerce website", "online shopping"];
+    longTailKeywords = ["online store with easy checkout", "browse and compare products online", "shop products from an online catalog", "easy online shopping experience"];
   } else if (/\b(workout|fitness|exercise|training|calorie)\b/.test(source)) {
     keyword = "fitness tracking app";
     summary = `${project.name} is a fitness app for planning workouts, tracking activity, monitoring progress, and supporting healthier daily routines.`;
+    keywords = ["fitness tracking app", "workout planner", "exercise tracker", "fitness progress", "training app"];
+    longTailKeywords = ["fitness app for planning daily workouts", "track workouts and fitness progress online", "personal exercise planner and activity tracker", "workout tracking app for healthier routines"];
   } else if (/\b(appointment|booking|reservation|availability|schedule)\b/.test(source)) {
     keyword = "online booking software";
     summary = `${project.name} is a booking app for checking availability, scheduling appointments, managing reservations, and keeping plans organized.`;
+    keywords = ["online booking software", "appointment scheduler", "reservation system", "booking app", "availability calendar"];
+    longTailKeywords = ["online booking software for appointments", "schedule appointments and manage availability", "online reservation system with calendar", "easy appointment scheduling application"];
   } else if (/\b(invoice|budget|expense|transaction|finance|payment)\b/.test(source)) {
     keyword = "financial management software";
     summary = `${project.name} is a financial management app for tracking money, reviewing activity, organizing records, and making informed decisions.`;
+    keywords = ["financial management software", "expense tracker", "budgeting app", "finance dashboard", "money management"];
+    longTailKeywords = ["financial management software for tracking expenses", "online budget and expense tracking app", "finance dashboard for managing money", "app for reviewing financial activity"];
   } else if (/\b(portfolio|case studies|experience|skills|resume)\b/.test(source)) {
     keyword = "professional portfolio";
     summary = `${project.name} is a professional portfolio showcasing selected work, practical skills, project experience, and ways to get in touch.`;
+    keywords = ["professional portfolio", "project portfolio", "creative work", "professional experience", "online portfolio"];
+    longTailKeywords = ["professional portfolio showcasing selected work", "online portfolio for projects and experience", "creative portfolio with skills and case studies", "view professional work and project experience"];
   }
 
   description ||= completeMetaDescription(summary, summary);
@@ -103,6 +129,8 @@ function fallbackSeoSuggestions(project: ProjectContext, deploymentUrl: string |
     focusKeyword: [keyword],
     ogTitle: [title],
     ogDescription: [description],
+    keywords,
+    longTailKeywords,
     schemaJson,
   };
 }
@@ -159,6 +187,8 @@ Return JSON only with:
 - focusKeyword: one specific primary search phrase, maximum 120 characters
 - ogTitle: one complete social title, 35-80 characters
 - ogDescription: one complete social description, 120-200 characters
+- keywords: an array of 5 specific, high-intent primary and secondary keyword phrases
+- longTailKeywords: an array of 5-8 detailed search phrases that match likely customer searches for this exact product
 - schemaJson: a valid JSON-LD object encoded as a JSON string, describing the actual product
 
 Project name: ${project.name}
@@ -229,6 +259,8 @@ ${context}`;
     focusKeyword: focusKeyword ? [focusKeyword.slice(0, 120)] : [],
     ogTitle: ogTitle ? [ogTitle.slice(0, 120)] : [],
     ogDescription: ogDescription ? [ogDescription.slice(0, 500)] : [],
+    keywords: stringList(parsed.keywords, 8),
+    longTailKeywords: stringList(parsed.longTailKeywords, 10),
     schemaJson: schema.slice(0, 50_000),
   };
   if (!value.projectSummary || !value.metaTitle.length || !value.metaDescription.length) {

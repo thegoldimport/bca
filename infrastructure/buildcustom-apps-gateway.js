@@ -2,6 +2,7 @@ const SUFFIX = ".apps.buildcustom.ai";
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SCRIPT = /^[a-z0-9_][a-z0-9-_]*$/;
 const DEFAULT_FAVICON_URL = "https://buildcustom.ai/favicon.png";
+const DEFAULT_SOCIAL_IMAGE_URL = "https://buildcustom.ai/opengraph.jpg";
 
 function escapeHtml(value) {
   return String(value || "")
@@ -35,7 +36,7 @@ export function metadataTags(metadata) {
   tags.push(`<link rel="icon" href="${escapeHtml(metadata.faviconData || DEFAULT_FAVICON_URL)}">`);
   if (metadata.ogTitle || metadata.title) tags.push(`<meta property="og:title" content="${escapeHtml(metadata.ogTitle || metadata.title)}">`);
   if (metadata.ogDescription || metadata.description) tags.push(`<meta property="og:description" content="${escapeHtml(metadata.ogDescription || metadata.description)}">`);
-  if (metadata.ogImageUrl) tags.push(`<meta property="og:image" content="${escapeHtml(metadata.ogImageUrl)}">`);
+  tags.push(`<meta property="og:image" content="${escapeHtml(metadata.ogImageUrl || DEFAULT_SOCIAL_IMAGE_URL)}">`);
   if (metadata.ogTitle || metadata.ogDescription || metadata.ogImageUrl) {
     tags.push('<meta property="og:type" content="website">');
     tags.push('<meta name="twitter:card" content="summary_large_image">');
@@ -62,6 +63,22 @@ export default {
     const { scriptName, metadata } = routeConfig(raw);
     if (!SCRIPT.test(scriptName || "")) return new Response("Project not found", { status: 404 });
 
+    if (url.pathname === "/robots.txt") {
+      const body = metadata.allowIndexing === false
+        ? "User-agent: *\nDisallow: /\n"
+        : `User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`;
+      return new Response(body, {
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+      });
+    }
+    if (url.pathname === "/sitemap.xml") {
+      const canonical = escapeHtml(metadata.canonicalUrl || url.origin);
+      const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${canonical}</loc></url></urlset>`;
+      return new Response(body, {
+        headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+      });
+    }
+
     const response = await env.DISPATCHER.get(scriptName).fetch(request);
     if (!response.headers.get("content-type")?.includes("text/html")) return response;
 
@@ -73,7 +90,7 @@ export default {
     if (typeof metadata.allowIndexing === "boolean") rewriter = rewriter.on('meta[name="robots"]', removeElement());
     if (metadata.ogTitle || metadata.title) rewriter = rewriter.on('meta[property="og:title"]', removeElement());
     if (metadata.ogDescription || metadata.description) rewriter = rewriter.on('meta[property="og:description"]', removeElement());
-    if (metadata.ogImageUrl) rewriter = rewriter.on('meta[property="og:image"]', removeElement());
+    rewriter = rewriter.on('meta[property="og:image"]', removeElement());
     if (metadata.ogTitle || metadata.ogDescription || metadata.ogImageUrl) {
       rewriter = rewriter.on('meta[property="og:type"]', removeElement()).on('meta[name^="twitter:"]', removeElement());
     }

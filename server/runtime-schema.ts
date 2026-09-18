@@ -28,6 +28,8 @@ export async function ensureRuntimeSchema() {
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain text`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_origin text`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS favicon_data text NOT NULL DEFAULT ''`);
+  await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS seo_keywords text NOT NULL DEFAULT ''`);
+  await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS long_tail_keywords text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS canonical_url text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS og_title text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS og_description text NOT NULL DEFAULT ''`);

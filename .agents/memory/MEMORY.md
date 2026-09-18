@@ -8,3 +8,4 @@
 - [Cloudflare account token scoping](cloudflare-account-token-scoping.md) — derive the account ID from the owned zone before judging an account-scoped API token invalid.
 - [Published metadata injection](published-metadata-injection.md) — apply per-project SEO and favicon settings at the gateway because runtime workspace files are read-only.
 - [Iterative task rebases](iterative-task-rebases.md) — later fix commits can conflict again and regress nearby lines already resolved in earlier rebase rounds.
+- [Cloudflare module uploads](cloudflare-module-uploads.md) — multipart Worker uploads must name the file exactly as main_module and preserve existing bindings.
