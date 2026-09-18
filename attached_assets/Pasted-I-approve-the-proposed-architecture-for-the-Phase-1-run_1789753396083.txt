@@ -1,0 +1,127 @@
+I approve the proposed architecture for the Phase 1 runtime proof, with the following clarification of scope.
+
+Phase 1 Scope
+
+Phase 1 is ONLY about establishing and proving the new modern VibeSDK/Cloudflare runtime behind BuildCustom.
+
+For this phase, put the migration of the BuildCustom application itself off Replit on hold.
+
+Do not migrate the existing BuildCustom dashboard, main API, marketing site, existing PostgreSQL control-plane database, or the rest of the current Replit-hosted application during Phase 1 unless a very small change is required to connect the existing BuildCustom UI to the new runtime.
+
+Replit is allowed to remain the temporary host/development environment for the existing BuildCustom product during this phase.
+
+However, nothing we build in Phase 1 should create a new permanent dependency on Replit.
+
+The new runtime architecture created in Phase 1 must be Cloudflare-native and designed so it can remain unchanged when the BuildCustom product itself is moved off Replit later.
+
+Phase 1 Goal
+
+Prove this complete real-world loop:
+
+BuildCustom user
+→ talks to the native VibeSDK/ThinkAgent-powered coding agent
+→ agent creates a real project/workspace
+→ real source files are created
+→ BuildCustom displays those real files
+→ the application actually runs
+→ a real preview appears inside BuildCustom
+→ the user requests a conversational change
+→ ThinkAgent modifies the same real project
+→ a new revision is created
+→ the preview updates
+→ the selected revision is deployed through Cloudflare
+→ the deployed application receives a real hosted URL
+→ that deployed application continues working if Replit is stopped.
+
+Native Agent Clarification
+
+Do not create another BuildCustom coding agent in front of VibeSDK/ThinkAgent.
+
+ThinkAgent/VibeSDK is the native internal coding agent powering BuildCustom.
+
+To the customer it is simply the BuildCustom agent because it is presented through our product and branding.
+
+The architecture should effectively be:
+
+BuildCustom UI → VibeSDK/ThinkAgent → workspace/runtime → preview → deployment
+
+Not:
+
+BuildCustom UI → custom BuildCustom agent → ThinkAgent → runtime
+
+Cloudflare Environment
+
+Use clean staging resources for the current VibeSDK architecture.
+
+Do not repair, upgrade in place, delete, rename, or repurpose the legacy VibeSDK resources during Phase 1.
+
+Do not change production DNS.
+
+Do not fix the existing app.buildcustom.ai error by creating a Worker named app.
+
+Keep the existing legacy Cloudflare infrastructure untouched while the modern staging runtime is built beside it.
+
+Phase 1 Should Reuse Current VibeSDK Wherever Appropriate
+
+Reuse the current VibeSDK capabilities identified in the architecture research rather than rebuilding them unnecessarily, including where applicable:
+
+ThinkAgent, SpaceDO, workspace filesystem operations, revisions/restore points, Cloudflare Artifacts, Worker Loader, Dynamic Workers, preview authorization, Generated App Facets, Workers for Platforms deployment, VibeSDK ownership/authentication mechanisms, AI Gateway and provider integration.
+
+Full-Stack Capability
+
+Phase 1's primary implementation proof can remain the smallest application necessary to prove the complete agent → preview → edit → deploy loop.
+
+But do not make architectural decisions that limit BuildCustom to static websites or landing pages.
+
+The runtime we establish must be capable of supporting the full-stack application proof already defined in the architecture plan afterward, including authentication, server-side functionality and persistent application data.
+
+BuildCustom is being designed as an AI application builder, not merely an AI website builder.
+
+External Agents
+
+MCP, CLI, API access for Claude Code, Codex, Hermes, OpenClaw and other external agents is not part of Phase 1 implementation.
+
+Preserve the architectural boundary that will allow this later, but do not spend Phase 1 building those integrations.
+
+Also Put On Hold
+
+Unless strictly required for the runtime proof, do not spend Phase 1 implementing:
+
+migration of BuildCustom itself off Replit
+customer custom domains
+production billing/usage metering
+external-agent MCP
+CLI
+public developer API
+large template libraries
+specialized landing-page modes
+extensive direct browser code editing
+production migration of legacy VibeSDK data
+deletion or cleanup of legacy Cloudflare resources
+broad redesigns of unrelated BuildCustom pages
+
+Keep Phase 1 tightly focused.
+
+Phase 1 Acceptance Gate
+
+Phase 1 is complete when:
+
+A BuildCustom user creates a real runtime-backed project.
+The native coding experience is powered directly by current VibeSDK/ThinkAgent.
+ThinkAgent creates real source files.
+BuildCustom displays the actual project files.
+The generated application executes.
+A real preview appears inside BuildCustom.
+A conversational follow-up modifies the same project.
+The modification produces a new revision.
+The preview reflects the new revision.
+The selected revision deploys through Workers for Platforms using the clean staging architecture.
+The deployed application has a real Cloudflare-hosted URL.
+The deployed application continues functioning when the Replit application is stopped.
+Project/user isolation and the security requirements from the architecture plan pass.
+No legacy or production Cloudflare resources were required or modified to make the proof work.
+Nothing introduced creates a new permanent Replit infrastructure dependency.
+
+Do not implement yet while we are in Plan Mode.
+
+Update the implementation task to reflect this exact Phase 1 scope and show me the revised task. Once I approve that task, I will assign it and allow implementation to begin.
