@@ -6,7 +6,7 @@ const SCRIPT_NAME_PATTERN = /^[a-z0-9_][a-z0-9-_]*$/;
 function routeConfig() {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
   const namespaceId = process.env.CLOUDFLARE_ROUTES_KV_NAMESPACE_ID?.trim();
-  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const apiToken = process.env.WORKERSKV;
   if (!accountId || !namespaceId || !apiToken) {
     throw new RuntimeAdapterError(
       "Managed publishing routes are not configured.",
