@@ -10,7 +10,7 @@ import {
   autobloggerSettings, seoSettings, sitePages, templates, runtimeProjectLinks, runtimeReleases, runtimeBuilderTurns,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, count, isNotNull, and } from "drizzle-orm";
+import { eq, desc, count, isNull, isNotNull, and } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -32,7 +32,7 @@ export interface IStorage {
   deleteProject(id: number): Promise<void>;
   getRuntimeProjectLink(projectId: number): Promise<RuntimeProjectLink | undefined>;
   getRuntimeProjectLinkBySubdomainSlug(subdomainSlug: string): Promise<RuntimeProjectLink | undefined>;
-  claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink>;
+  claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink & { agentId: string }>;
   upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin">>): Promise<RuntimeProjectLink>;
   countLiveRuntimeProjects(userId: string): Promise<number>;
   getRuntimeReleases(projectId: number): Promise<RuntimeRelease[]>;
@@ -134,14 +134,33 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
   async claimRuntimeProjectLink(projectId: number, agentId: string) {
+    const existing = await this.getRuntimeProjectLink(projectId);
+    if (existing?.agentId) return existing as RuntimeProjectLink & { agentId: string };
+    if (existing) {
+      const [claimed] = await db.update(runtimeProjectLinks)
+        .set({ agentId, updatedAt: new Date() })
+        .where(and(eq(runtimeProjectLinks.projectId, projectId), isNull(runtimeProjectLinks.agentId)))
+        .returning();
+      if (claimed?.agentId) return claimed as RuntimeProjectLink & { agentId: string };
+      const concurrent = await this.getRuntimeProjectLink(projectId);
+      if (concurrent?.agentId) return concurrent as RuntimeProjectLink & { agentId: string };
+      throw new Error("Unable to claim runtime project link");
+    }
     const [inserted] = await db.insert(runtimeProjectLinks)
       .values({ projectId, agentId })
       .onConflictDoNothing({ target: runtimeProjectLinks.projectId })
       .returning();
-    if (inserted) return inserted;
-    const existing = await this.getRuntimeProjectLink(projectId);
-    if (!existing) throw new Error("Unable to claim runtime project link");
-    return existing;
+    if (inserted?.agentId) return inserted as RuntimeProjectLink & { agentId: string };
+    const concurrent = await this.getRuntimeProjectLink(projectId);
+    if (concurrent?.agentId) return concurrent as RuntimeProjectLink & { agentId: string };
+    if (concurrent) {
+      const [claimed] = await db.update(runtimeProjectLinks)
+        .set({ agentId, updatedAt: new Date() })
+        .where(and(eq(runtimeProjectLinks.projectId, projectId), isNull(runtimeProjectLinks.agentId)))
+        .returning();
+      if (claimed?.agentId) return claimed as RuntimeProjectLink & { agentId: string };
+    }
+    throw new Error("Unable to claim runtime project link");
   }
   async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin">>) {
     const existing = await this.getRuntimeProjectLink(projectId);
@@ -152,8 +171,7 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result;
     }
-    if (!data.agentId) throw new Error("agentId is required for a new runtime project link");
-    const [result] = await db.insert(runtimeProjectLinks).values({ projectId, agentId: data.agentId }).returning();
+    const [result] = await db.insert(runtimeProjectLinks).values({ projectId, ...data }).returning();
     return result;
   }
   async countLiveRuntimeProjects(userId: string) {

@@ -36,7 +36,7 @@ export const projects = pgTable("projects", {
 
 export const runtimeProjectLinks = pgTable("runtime_project_links", {
   projectId: integer("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
-  agentId: text("agent_id").notNull().unique(),
+  agentId: text("agent_id").unique(),
   previewUrl: text("preview_url"),
   deploymentUrl: text("deployment_url"),
   deploymentOriginUrl: text("deployment_origin_url"),

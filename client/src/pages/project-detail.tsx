@@ -1202,7 +1202,7 @@ function SEOTab({ projectId }: { projectId: number }) {
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Favicon</label>
               <div className="flex items-center gap-3">
                 <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-50"}`}>
-                  {meta.faviconData ? <img src={meta.faviconData} alt="Favicon preview" className="h-8 w-8 object-contain" /> : <Globe size={20} className="opacity-35" />}
+                  <img src={meta.faviconData || "/favicon.png"} alt={meta.faviconData ? "Custom favicon preview" : "BuildCustom default favicon"} className="h-8 w-8 object-contain" />
                 </div>
                 <label className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium ${theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
                   <Upload size={15} /> Upload favicon
@@ -1226,7 +1226,7 @@ function SEOTab({ projectId }: { projectId: number }) {
                 </label>
                 {meta.faviconData && <button onClick={() => setMetaForm((current: any) => ({ ...current, faviconData: "" }))} className="text-xs text-red-400">Remove</button>}
               </div>
-              <p className={`mt-1.5 text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>PNG, ICO, SVG, or WebP. Maximum 250 KB.</p>
+              <p className={`mt-1.5 text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>PNG, ICO, SVG, or WebP. Maximum 250 KB. The BuildCustom logo is used until a custom favicon is uploaded.</p>
             </div>
             <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Site Title <span className="opacity-50">(50–60 chars)</span></label>

@@ -8,8 +8,10 @@ import { isRuntimeConfigured, runtimeAdapter, RuntimeAdapterError, type RuntimeI
 import { getPlanEntitlement } from "@shared/plans";
 import {
   deploymentScriptName,
+  getPublishedProjectRouteValue,
   publishedProjectUrl,
   removePublishedProjectRoute,
+  restorePublishedProjectRouteValue,
   setPublishedProjectRoute,
 } from "./published-routes";
 
@@ -260,7 +262,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!userId) return;
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
-      await storage.deleteProject(project.id);
+      const link = await storage.getRuntimeProjectLink(project.id);
+      const routeValue = link?.subdomainSlug && link.deploymentUrl
+        ? await getPublishedProjectRouteValue(link.subdomainSlug)
+        : null;
+      if (link?.subdomainSlug && link.deploymentUrl) await removePublishedProjectRoute(link.subdomainSlug);
+      try {
+        await storage.deleteProject(project.id);
+      } catch (error) {
+        if (link?.subdomainSlug && routeValue !== null) {
+          try {
+            await restorePublishedProjectRouteValue(link.subdomainSlug, routeValue);
+          } catch (restoreError) {
+            console.error("Project deletion and published-route restoration both failed", {
+              projectId: project.id,
+              subdomainSlug: link.subdomainSlug,
+              deleteError: error,
+              restoreError,
+            });
+            throw new RuntimeAdapterError(
+              "Project deletion failed and its public route could not be restored. Support has been alerted.",
+              "RUNTIME_UPSTREAM_ERROR",
+            );
+          }
+        }
+        throw error;
+      }
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -270,7 +297,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── VIBESDK RUNTIME ─────────────────────────────────────────────────────────
   async function runtimeProject(project: any) {
     const link = await storage.getRuntimeProjectLink(project.id);
-    return { id: project.id, name: project.name, type: project.type, description: project.description, agentId: link?.agentId };
+    return { id: project.id, name: project.name, type: project.type, description: project.description, agentId: link?.agentId || undefined };
   }
 
   app.get("/api/projects/:id/runtime/status", async (req, res) => {
@@ -367,7 +394,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const result = await runtimeAdapter.plan(
           ref,
           message,
-          async () => (await storage.getRuntimeProjectLink(project.id))?.agentId,
+          async () => (await storage.getRuntimeProjectLink(project.id))?.agentId || undefined,
           async (agentId) => (await storage.claimRuntimeProjectLink(project.id, agentId)).agentId,
           images,
         );
@@ -382,7 +409,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const result = await runtimeAdapter.generate(
         ref,
         message,
-        async () => (await storage.getRuntimeProjectLink(project.id))?.agentId,
+        async () => (await storage.getRuntimeProjectLink(project.id))?.agentId || undefined,
         async (agentId) => (await storage.claimRuntimeProjectLink(project.id, agentId)).agentId,
         images,
       );

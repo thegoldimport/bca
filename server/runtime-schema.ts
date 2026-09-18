@@ -20,6 +20,7 @@ export async function ensureRuntimeSchema() {
     )
   `);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS deployment_origin_url text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ALTER COLUMN agent_id DROP NOT NULL`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS deployment_script_name text`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS subdomain_slug text`);
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS runtime_project_links_subdomain_slug_unique ON runtime_project_links (subdomain_slug) WHERE subdomain_slug IS NOT NULL`);

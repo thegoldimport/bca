@@ -49,6 +49,26 @@ async function writeRoute(slug: string, method: "PUT" | "DELETE", scriptName?: s
   }
 }
 
+export async function getPublishedProjectRouteValue(slug: string) {
+  const { accountId, namespaceId, apiToken } = routeConfig();
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/storage/kv/namespaces/${encodeURIComponent(namespaceId)}/values/${encodeURIComponent(slug)}`,
+    { headers: { Authorization: `Bearer ${apiToken}` } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new RuntimeAdapterError(
+      "The managed project address could not be read. Try again.",
+      "RUNTIME_UPSTREAM_ERROR",
+    );
+  }
+  return response.text();
+}
+
+export async function restorePublishedProjectRouteValue(slug: string, value: string) {
+  await writeRoute(slug, "PUT", value);
+}
+
 export function publishedProjectUrl(slug: string) {
   const domain = process.env.BUILDCUSTOM_APPS_DOMAIN?.trim() || DEFAULT_APPS_DOMAIN;
   return `https://${slug}.${domain}`;
