@@ -13,13 +13,11 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders } from "@/lib/auth";
-import previewPortfolio from "@/assets/preview-portfolio.jpg";
-import previewFitness from "@/assets/preview-fitness.jpg";
-import previewGame from "@/assets/preview-game.jpg";
-import previewEcommerce from "@/assets/preview-ecommerce.jpg";
-
 const PREVIEW_IMAGES: Record<string, string> = {
-  website: previewPortfolio, app: previewFitness, game: previewGame, saas: previewEcommerce,
+  website: new URL("../assets/preview-portfolio.jpg", import.meta.url).href,
+  app: new URL("../assets/preview-fitness.jpg", import.meta.url).href,
+  game: new URL("../assets/preview-game.jpg", import.meta.url).href,
+  saas: new URL("../assets/preview-ecommerce.jpg", import.meta.url).href,
 };
 const TYPE_ICONS: Record<string, React.ElementType> = {
   website: Globe, app: Smartphone, game: Gamepad2, saas: ShoppingBag,
@@ -85,7 +83,7 @@ function fmtDate(dateStr: string) {
 function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project: any; blogCount: number; projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
   const isWebsite = project.type === "website";
-  const preview = PREVIEW_IMAGES[project.type] || previewPortfolio;
+  const preview = PREVIEW_IMAGES[project.type] || PREVIEW_IMAGES.website;
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewError, setPreviewError] = useState("");
   const publishingQuery = useQuery({
@@ -410,7 +408,7 @@ function HistoryTab() {
 }
 
 // ── PROJECT SETTINGS (real) ───────────────────────────────────────────────────
-function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId: number; deploymentUrl?: string }) {
+export function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId: number; deploymentUrl?: string }) {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [form, setForm] = useState({ subdomainSlug: "", hostingProvider: "buildcustom", customDomain: "", customOrigin: "" });
@@ -1150,12 +1148,15 @@ function GuidedSeoField({
   );
 }
 
-function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; project: any; deploymentUrl?: string }) {
+export function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; project?: any; deploymentUrl?: string }) {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [activeSection, setActiveSection] = useState("meta");
   const [metaSaved, setMetaSaved] = useState(false);
   const [schemaSaved, setSchemaSaved] = useState(false);
+  const [metaError, setMetaError] = useState("");
+  const [schemaError, setSchemaError] = useState("");
+  const [faviconError, setFaviconError] = useState("");
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["seo", projectId],
@@ -1203,21 +1204,44 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
 
   const saveMeta = useMutation({
     mutationFn: async () => {
+      setMetaError("");
+      for (const [value, message] of [
+        [meta.canonicalUrl, "Enter a valid canonical URL."],
+        [meta.ogImageUrl, "Enter a valid social image URL."],
+      ] as const) {
+        if (!value) continue;
+        try {
+          const url = new URL(value);
+          if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+        } catch {
+          throw new Error(message);
+        }
+      }
       const res = await fetch(`/api/projects/${projectId}/seo`, { method: "PUT", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(meta) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Failed to save");
       return body;
     },
     onSuccess: (data) => { qc.setQueryData(["seo", projectId], data); setMetaSaved(true); setTimeout(() => setMetaSaved(false), 2000); },
+    onError: (error: Error) => setMetaError(error.message),
   });
 
   const saveSchema = useMutation({
     mutationFn: async () => {
+      setSchemaError("");
+      try {
+        const parsed = JSON.parse(schema);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      } catch {
+        throw new Error("Enter valid structured data as a JSON object.");
+      }
       const res = await fetch(`/api/projects/${projectId}/seo`, { method: "PUT", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ schemaJson: schema }) });
-      if (!res.ok) throw new Error("Failed to save");
-      return res.json();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Failed to save");
+      return body;
     },
     onSuccess: (data) => { qc.setQueryData(["seo", projectId], data); setSchemaSaved(true); setTimeout(() => setSchemaSaved(false), 2000); },
+    onError: (error: Error) => setSchemaError(error.message),
   });
 
   const SEO_SCORE_ITEMS = [
@@ -1318,8 +1342,14 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
                       const file = event.target.files?.[0];
                       event.target.value = "";
                       if (!file) return;
+                      setFaviconError("");
+                      const supportedTypes = ["image/png", "image/x-icon", "image/vnd.microsoft.icon", "image/svg+xml", "image/webp"];
+                      if (!supportedTypes.includes(file.type)) {
+                        setFaviconError("Upload a PNG, ICO, SVG, or WebP favicon.");
+                        return;
+                      }
                       if (file.size > 250_000) {
-                        alert("Favicon files must be 250 KB or less.");
+                        setFaviconError("Favicon files must be 250 KB or less.");
                         return;
                       }
                       const reader = new FileReader();
@@ -1330,6 +1360,7 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
                 </label>
                 {meta.faviconData && <button onClick={() => setMetaForm((current: any) => ({ ...current, faviconData: "" }))} className="text-xs text-red-400">Remove</button>}
               </div>
+              {faviconError && <p role="alert" className="mt-1.5 text-xs text-red-400">{faviconError}</p>}
               <p className={`mt-1.5 text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>PNG, ICO, SVG, or WebP. Maximum 250 KB. The BuildCustom logo is used until a custom favicon is uploaded.</p>
             </div>
             <div>
@@ -1359,7 +1390,8 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Canonical URL</label>
               <GuidedSeoField value={meta.canonicalUrl} onChange={(value) => setMetaForm((f: any) => ({ ...f, canonicalUrl: value }))}
                 suggestions={[canonicalSuggestion]} maxLength={2000}
-                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`} />
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+                testId="input-canonical-url" />
             </div>
             <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-gray-50"}`}>
               <label className="flex items-center justify-between gap-4">
@@ -1381,10 +1413,12 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
                   className={`w-full resize-none px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
                 <GuidedSeoField value={meta.ogImageUrl} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogImageUrl: value }))}
                   suggestions={[`${canonicalSuggestion.replace(/\/$/, "")}/opengraph.jpg`]} maxLength={2000}
-                  className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+                  className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
+                  testId="input-social-image-url" />
               </div>
             </div>
             <p className={`text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>For published projects, saved metadata is applied to the live domain immediately.</p>
+            {metaError && <p role="alert" className="text-xs text-red-400">{metaError}</p>}
             <button onClick={() => saveMeta.mutate()} disabled={saveMeta.isPending}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50 ${metaSaved ? "bg-emerald-400 text-black" : "bg-cyan-400 text-black"}`}
               data-testid="button-save-meta">
@@ -1399,6 +1433,7 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
               suggestions={suggestionQuery.data?.schemaJson ? [suggestionQuery.data.schemaJson] : []} maxLength={50_000} multiline rows={12}
               className={`w-full px-4 py-3 rounded-xl border text-xs outline-none transition-colors resize-none font-mono ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
               testId="input-schema" />
+            {schemaError && <p role="alert" className="mt-2 text-xs text-red-400">{schemaError}</p>}
             <button onClick={() => saveSchema.mutate()} disabled={saveSchema.isPending}
               className={`mt-3 flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50 ${schemaSaved ? "bg-emerald-400 text-black" : "bg-cyan-400 text-black"}`}
               data-testid="button-save-schema">
@@ -1568,7 +1603,7 @@ export default function ProjectDetail() {
   const isWebsite = project.type === "website";
   const isPublished = Boolean(runtimeStatus?.deploymentUrl);
   const allTabs = isWebsite ? [...UNIVERSAL_TABS, ...WEBSITE_TABS] : UNIVERSAL_TABS;
-  const headerPreview = PREVIEW_IMAGES[project.type] || previewPortfolio;
+  const headerPreview = PREVIEW_IMAGES[project.type] || PREVIEW_IMAGES.website;
 
   return (
     <div className={`min-h-full ${theme === "dark" ? "bg-[#060610]" : "bg-gray-50"}`}>
