@@ -1458,7 +1458,7 @@ export default function ProjectDetail() {
   const isWebsite = project.type === "website";
   const isPublished = Boolean(runtimeStatus?.deploymentUrl);
   const allTabs = isWebsite ? [...UNIVERSAL_TABS, ...WEBSITE_TABS] : UNIVERSAL_TABS;
-  const IconComponent = TYPE_ICONS[project.type] || Globe;
+  const headerPreview = PREVIEW_IMAGES[project.type] || previewPortfolio;
 
   return (
     <div className={`min-h-full ${theme === "dark" ? "bg-[#060610]" : "bg-gray-50"}`}>
@@ -1471,8 +1471,23 @@ export default function ProjectDetail() {
 
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${theme === "dark" ? "bg-gradient-to-br from-cyan-500/20 to-purple-500/20" : "bg-gradient-to-br from-cyan-50 to-purple-50"}`}>
-              <IconComponent size={22} className="text-cyan-400" />
+            <div className={`relative h-[104px] w-[144px] shrink-0 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-100"}`}>
+              {runtimeStatus?.deploymentUrl ? (
+                <>
+                  <iframe
+                    src={runtimeStatus.deploymentUrl}
+                    title={`${project.name} live page thumbnail`}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    sandbox="allow-scripts allow-same-origin"
+                    loading="lazy"
+                    className="pointer-events-none absolute left-0 top-0 h-[700px] w-[960px] origin-top-left scale-[0.15] select-none border-0 bg-white"
+                  />
+                  <div className="absolute inset-0" aria-hidden="true" />
+                </>
+              ) : (
+                <img src={headerPreview} alt={`${project.name} preview`} className="h-full w-full object-cover" />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-3">
