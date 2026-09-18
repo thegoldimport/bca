@@ -414,6 +414,7 @@ function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId: numbe
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [form, setForm] = useState({ subdomainSlug: "", hostingProvider: "buildcustom", customDomain: "", customOrigin: "" });
+  const [customDomainEnabled, setCustomDomainEnabled] = useState(false);
   const [message, setMessage] = useState("");
   const { data: settings, isLoading } = useQuery({
     queryKey: ["publishing-settings", projectId],
@@ -432,13 +433,19 @@ function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId: numbe
       customDomain: settings.customDomain || "",
       customOrigin: settings.customOrigin || "",
     });
+    setCustomDomainEnabled(Boolean(settings.customDomain) || settings.hostingProvider === "custom");
   }, [settings]);
   const save = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(form),
+        body: JSON.stringify(customDomainEnabled ? form : {
+          ...form,
+          hostingProvider: "buildcustom",
+          customDomain: "",
+          customOrigin: "",
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Unable to save publishing settings.");
@@ -457,7 +464,7 @@ function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId: numbe
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Publishing</h3>
-          <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Manage the included address, hosting, and custom domain.</p>
+          <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Manage the included project address and optional custom domain.</p>
         </div>
         {deploymentUrl && <a href={deploymentUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><ExternalLink size={13} /> View live</a>}
       </div>
@@ -476,22 +483,36 @@ function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId: numbe
             <span className={`flex items-center rounded-r-xl border border-l-0 px-3 text-sm ${theme === "dark" ? "border-white/10 bg-white/5 text-white/40" : "border-gray-200 bg-gray-100 text-gray-500"}`}>.apps.buildcustom.ai</span>
           </div>
           {deploymentUrl && <p className={`mt-1.5 text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>The included address is locked after the first publish.</p>}
+          <label className={`mt-3 flex cursor-pointer items-center gap-2 text-sm ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>
+            <input
+              type="checkbox"
+              checked={customDomainEnabled}
+              onChange={(e) => setCustomDomainEnabled(e.target.checked)}
+              className="h-4 w-4 accent-cyan-400"
+              data-testid="settings-use-custom-domain"
+            />
+            Use a custom domain
+          </label>
         </div>
-        <div>
-          <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Hosting</label>
-          <select value={form.hostingProvider} onChange={(e) => setForm((current) => ({ ...current, hostingProvider: e.target.value }))} className={fieldClass}>
-            <option value="buildcustom">BuildCustom.Ai Hosting</option>
-            <option value="custom">External hosting</option>
-          </select>
-        </div>
-        <div>
-          <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Custom domain</label>
-          <input value={form.customDomain} onChange={(e) => setForm((current) => ({ ...current, customDomain: e.target.value }))} placeholder="app.example.com" className={fieldClass} data-testid="settings-custom-domain" />
-        </div>
-        {form.hostingProvider === "custom" && (
-          <div>
-            <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>External origin hostname</label>
-            <input value={form.customOrigin} onChange={(e) => setForm((current) => ({ ...current, customOrigin: e.target.value }))} placeholder="project.hosting-provider.com" className={fieldClass} />
+        {customDomainEnabled && (
+          <div className={`space-y-4 rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-gray-50/60"}`}>
+            <div>
+              <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Hosting</label>
+              <select value={form.hostingProvider} onChange={(e) => setForm((current) => ({ ...current, hostingProvider: e.target.value }))} className={fieldClass}>
+                <option value="buildcustom">BuildCustom.Ai Hosting</option>
+                <option value="custom">External hosting</option>
+              </select>
+            </div>
+            <div>
+              <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Custom domain</label>
+              <input value={form.customDomain} onChange={(e) => setForm((current) => ({ ...current, customDomain: e.target.value }))} placeholder="app.example.com" className={fieldClass} data-testid="settings-custom-domain" />
+            </div>
+            {form.hostingProvider === "custom" && (
+              <div>
+                <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>External origin hostname</label>
+                <input value={form.customOrigin} onChange={(e) => setForm((current) => ({ ...current, customOrigin: e.target.value }))} placeholder="project.hosting-provider.com" className={fieldClass} />
+              </div>
+            )}
           </div>
         )}
         {message && <p className={`text-xs ${message.includes("saved") ? "text-emerald-400" : "text-red-400"}`}>{message}</p>}
