@@ -461,7 +461,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const result = await runtimeAdapter.deploy(await runtimeProject(project));
       const scriptName = deploymentScriptName(result.workersUrl, result.url);
       const publicUrl = publishedProjectUrl(subdomainSlug);
-      await setPublishedProjectRoute(subdomainSlug, scriptName);
+      const seo = await storage.getSeoSettings(project.id);
+      await setPublishedProjectRoute(subdomainSlug, scriptName, seo ? {
+        title: seo.metaTitle,
+        description: seo.metaDescription,
+        canonicalUrl: seo.canonicalUrl,
+        ogTitle: seo.ogTitle,
+        ogDescription: seo.ogDescription,
+        ogImageUrl: seo.ogImageUrl,
+        faviconData: seo.faviconData,
+        allowIndexing: seo.allowIndexing,
+        schemaJson: seo.schemaJson,
+      } : undefined);
       let release;
       try {
         ({ release } = await storage.finalizeRuntimePublish(project.id, {
@@ -471,7 +482,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }, result.commitHash));
       } catch (error) {
         if (settings?.deploymentScriptName) {
-          await setPublishedProjectRoute(subdomainSlug, settings.deploymentScriptName).catch(() => undefined);
+          await setPublishedProjectRoute(subdomainSlug, settings.deploymentScriptName, seo ? {
+            title: seo.metaTitle,
+            description: seo.metaDescription,
+            canonicalUrl: seo.canonicalUrl,
+            ogTitle: seo.ogTitle,
+            ogDescription: seo.ogDescription,
+            ogImageUrl: seo.ogImageUrl,
+            faviconData: seo.faviconData,
+            allowIndexing: seo.allowIndexing,
+            schemaJson: seo.schemaJson,
+          } : undefined).catch(() => undefined);
         } else {
           await removePublishedProjectRoute(subdomainSlug).catch(() => undefined);
         }
@@ -662,7 +683,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
       const settings = await storage.getSeoSettings(project.id);
-      return res.json(settings || { projectId: project.id, metaTitle: "", metaDescription: "", focusKeyword: "", schemaJson: "{}" });
+      return res.json(settings || {
+        projectId: project.id,
+        metaTitle: "",
+        metaDescription: "",
+        focusKeyword: "",
+        schemaJson: "{}",
+        faviconData: "",
+        canonicalUrl: "",
+        ogTitle: "",
+        ogDescription: "",
+        ogImageUrl: "",
+        allowIndexing: true,
+      });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
@@ -674,7 +707,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!userId) return;
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
-      const settings = await storage.upsertSeoSettings(project.id, req.body);
+      const text = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) : undefined;
+      const update = {
+        metaTitle: text(req.body?.metaTitle, 120),
+        metaDescription: text(req.body?.metaDescription, 500),
+        focusKeyword: text(req.body?.focusKeyword, 120),
+        schemaJson: text(req.body?.schemaJson, 50_000),
+        faviconData: text(req.body?.faviconData, 350_000),
+        canonicalUrl: text(req.body?.canonicalUrl, 2_000),
+        ogTitle: text(req.body?.ogTitle, 120),
+        ogDescription: text(req.body?.ogDescription, 500),
+        ogImageUrl: text(req.body?.ogImageUrl, 2_000),
+        allowIndexing: typeof req.body?.allowIndexing === "boolean" ? req.body.allowIndexing : undefined,
+      };
+      const clean = Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined));
+      if (update.faviconData && !/^data:image\/(?:png|x-icon|vnd\.microsoft\.icon|svg\+xml|webp);base64,/i.test(update.faviconData)) {
+        return res.status(400).json({ message: "Upload a PNG, ICO, SVG, or WebP favicon." });
+      }
+      if (update.canonicalUrl) {
+        try { new URL(update.canonicalUrl); } catch { return res.status(400).json({ message: "Enter a valid canonical URL." }); }
+      }
+      if (update.ogImageUrl) {
+        try { new URL(update.ogImageUrl); } catch { return res.status(400).json({ message: "Enter a valid social image URL." }); }
+      }
+      if (update.schemaJson && update.schemaJson !== "{}") {
+        try { JSON.parse(update.schemaJson); } catch { return res.status(400).json({ message: "Structured data must be valid JSON." }); }
+      }
+      const settings = await storage.upsertSeoSettings(project.id, clean);
+      const link = await storage.getRuntimeProjectLink(project.id);
+      if (link?.subdomainSlug && link.deploymentScriptName) {
+        await setPublishedProjectRoute(link.subdomainSlug, link.deploymentScriptName, {
+          title: settings.metaTitle,
+          description: settings.metaDescription,
+          canonicalUrl: settings.canonicalUrl,
+          ogTitle: settings.ogTitle,
+          ogDescription: settings.ogDescription,
+          ogImageUrl: settings.ogImageUrl,
+          faviconData: settings.faviconData,
+          allowIndexing: settings.allowIndexing,
+          schemaJson: settings.schemaJson,
+        });
+      }
       return res.json(settings);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });

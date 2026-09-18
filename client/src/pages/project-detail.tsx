@@ -410,7 +410,100 @@ function HistoryTab() {
 }
 
 // ── PROJECT SETTINGS (real) ───────────────────────────────────────────────────
-function ProjectSettingsTab({ project, projectId }: { project: any; projectId: number }) {
+function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId: number; deploymentUrl?: string }) {
+  const { theme } = useTheme();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ subdomainSlug: "", hostingProvider: "buildcustom", customDomain: "", customOrigin: "" });
+  const [message, setMessage] = useState("");
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["publishing-settings", projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load publishing settings.");
+      return body;
+    },
+  });
+  useEffect(() => {
+    if (!settings) return;
+    setForm({
+      subdomainSlug: settings.subdomainSlug || "",
+      hostingProvider: settings.hostingProvider || "buildcustom",
+      customDomain: settings.customDomain || "",
+      customOrigin: settings.customOrigin || "",
+    });
+  }, [settings]);
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(form),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to save publishing settings.");
+      return body;
+    },
+    onSuccess: (body) => {
+      qc.setQueryData(["publishing-settings", projectId], body);
+      setMessage("Publishing settings saved.");
+    },
+    onError: (error: any) => setMessage(error.message),
+  });
+  const fieldClass = `w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition-colors ${theme === "dark" ? "border-white/10 bg-white/5 text-white focus:border-cyan-400/50" : "border-gray-200 bg-gray-50 text-gray-900 focus:border-cyan-400"}`;
+  if (isLoading) return <div className={`h-56 animate-pulse rounded-2xl ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />;
+  return (
+    <GlassCard>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Publishing</h3>
+          <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Manage the included address, hosting, and custom domain.</p>
+        </div>
+        {deploymentUrl && <a href={deploymentUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><ExternalLink size={13} /> View live</a>}
+      </div>
+      <div className="space-y-4">
+        <div>
+          <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Included project address</label>
+          <div className="flex">
+            <input
+              value={form.subdomainSlug}
+              disabled={Boolean(deploymentUrl)}
+              maxLength={63}
+              onChange={(e) => setForm((current) => ({ ...current, subdomainSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
+              className={`${fieldClass} rounded-r-none disabled:cursor-not-allowed disabled:opacity-60`}
+              data-testid="settings-subdomain"
+            />
+            <span className={`flex items-center rounded-r-xl border border-l-0 px-3 text-sm ${theme === "dark" ? "border-white/10 bg-white/5 text-white/40" : "border-gray-200 bg-gray-100 text-gray-500"}`}>.apps.buildcustom.ai</span>
+          </div>
+          {deploymentUrl && <p className={`mt-1.5 text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>The included address is locked after the first publish.</p>}
+        </div>
+        <div>
+          <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Hosting</label>
+          <select value={form.hostingProvider} onChange={(e) => setForm((current) => ({ ...current, hostingProvider: e.target.value }))} className={fieldClass}>
+            <option value="buildcustom">BuildCustom.Ai Hosting</option>
+            <option value="custom">External hosting</option>
+          </select>
+        </div>
+        <div>
+          <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Custom domain</label>
+          <input value={form.customDomain} onChange={(e) => setForm((current) => ({ ...current, customDomain: e.target.value }))} placeholder="app.example.com" className={fieldClass} data-testid="settings-custom-domain" />
+        </div>
+        {form.hostingProvider === "custom" && (
+          <div>
+            <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>External origin hostname</label>
+            <input value={form.customOrigin} onChange={(e) => setForm((current) => ({ ...current, customOrigin: e.target.value }))} placeholder="project.hosting-provider.com" className={fieldClass} />
+          </div>
+        )}
+        {message && <p className={`text-xs ${message.includes("saved") ? "text-emerald-400" : "text-red-400"}`}>{message}</p>}
+        <button onClick={() => { setMessage(""); save.mutate(); }} disabled={save.isPending} className="flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-black disabled:opacity-50">
+          <Save size={15} /> {save.isPending ? "Saving…" : "Save publishing settings"}
+        </button>
+      </div>
+    </GlassCard>
+  );
+}
+
+function ProjectSettingsTab({ project, projectId, runtimeStatus }: { project: any; projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
@@ -436,7 +529,7 @@ function ProjectSettingsTab({ project, projectId }: { project: any; projectId: n
   });
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="max-w-5xl space-y-6">
       <GlassCard>
         <h3 className={`font-semibold mb-5 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>General</h3>
         <div className="space-y-4">
@@ -475,6 +568,10 @@ function ProjectSettingsTab({ project, projectId }: { project: any; projectId: n
           </button>
         </div>
       </GlassCard>
+
+      <PublishingSettingsCard projectId={projectId} deploymentUrl={runtimeStatus?.deploymentUrl} />
+
+      <SEOTab projectId={projectId} />
 
       <GlassCard>
         <h3 className="font-semibold mb-2 text-red-400">Danger Zone</h3>
@@ -989,17 +1086,33 @@ function SEOTab({ projectId }: { projectId: number }) {
 
   const [metaForm, setMetaForm] = useState<any>(null);
   const [schemaForm, setSchemaForm] = useState<any>(null);
-  if (settings && !metaForm) { setMetaForm({ metaTitle: settings.metaTitle, metaDescription: settings.metaDescription, focusKeyword: settings.focusKeyword }); }
+  if (settings && !metaForm) {
+    setMetaForm({
+      metaTitle: settings.metaTitle,
+      metaDescription: settings.metaDescription,
+      focusKeyword: settings.focusKeyword,
+      faviconData: settings.faviconData || "",
+      canonicalUrl: settings.canonicalUrl || "",
+      ogTitle: settings.ogTitle || "",
+      ogDescription: settings.ogDescription || "",
+      ogImageUrl: settings.ogImageUrl || "",
+      allowIndexing: settings.allowIndexing !== false,
+    });
+  }
   if (settings && !schemaForm) { setSchemaForm(settings.schemaJson || "{}"); }
 
-  const meta = metaForm || { metaTitle: "", metaDescription: "", focusKeyword: "" };
+  const meta = metaForm || {
+    metaTitle: "", metaDescription: "", focusKeyword: "", faviconData: "", canonicalUrl: "",
+    ogTitle: "", ogDescription: "", ogImageUrl: "", allowIndexing: true,
+  };
   const schema = schemaForm ?? "{}";
 
   const saveMeta = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/seo`, { method: "PUT", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(meta) });
-      if (!res.ok) throw new Error("Failed to save");
-      return res.json();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Failed to save");
+      return body;
     },
     onSuccess: (data) => { qc.setQueryData(["seo", projectId], data); setMetaSaved(true); setTimeout(() => setMetaSaved(false), 2000); },
   });
@@ -1086,6 +1199,36 @@ function SEOTab({ projectId }: { projectId: number }) {
           <div className="space-y-4">
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Meta Tags</h3>
             <div>
+              <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Favicon</label>
+              <div className="flex items-center gap-3">
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-50"}`}>
+                  {meta.faviconData ? <img src={meta.faviconData} alt="Favicon preview" className="h-8 w-8 object-contain" /> : <Globe size={20} className="opacity-35" />}
+                </div>
+                <label className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium ${theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
+                  <Upload size={15} /> Upload favicon
+                  <input
+                    type="file"
+                    accept=".png,.ico,.svg,.webp,image/png,image/x-icon,image/svg+xml,image/webp"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (!file) return;
+                      if (file.size > 250_000) {
+                        alert("Favicon files must be 250 KB or less.");
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => setMetaForm((current: any) => ({ ...current, faviconData: String(reader.result || "") }));
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+                {meta.faviconData && <button onClick={() => setMetaForm((current: any) => ({ ...current, faviconData: "" }))} className="text-xs text-red-400">Remove</button>}
+              </div>
+              <p className={`mt-1.5 text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>PNG, ICO, SVG, or WebP. Maximum 250 KB.</p>
+            </div>
+            <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Site Title <span className="opacity-50">(50–60 chars)</span></label>
               <input value={meta.metaTitle} onChange={e => setMetaForm((f: any) => ({ ...f, metaTitle: e.target.value }))}
                 placeholder="My Site | Fast & Reliable Service"
@@ -1109,6 +1252,30 @@ function SEOTab({ projectId }: { projectId: number }) {
                 className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
                 data-testid="input-focus-keyword" />
             </div>
+            <div>
+              <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Canonical URL</label>
+              <input value={meta.canonicalUrl} onChange={e => setMetaForm((f: any) => ({ ...f, canonicalUrl: e.target.value }))}
+                placeholder="https://example.com"
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`} />
+            </div>
+            <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-gray-50"}`}>
+              <label className="flex items-center justify-between gap-4">
+                <span>
+                  <span className={`block text-sm font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Allow search engine indexing</span>
+                  <span className={`block text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Turn this off to publish a noindex directive.</span>
+                </span>
+                <input type="checkbox" checked={meta.allowIndexing} onChange={(e) => setMetaForm((f: any) => ({ ...f, allowIndexing: e.target.checked }))} className="h-4 w-4 accent-cyan-400" />
+              </label>
+            </div>
+            <div className={`border-t pt-4 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+              <h4 className={`mb-3 text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Social sharing</h4>
+              <div className="space-y-3">
+                <input value={meta.ogTitle} onChange={e => setMetaForm((f: any) => ({ ...f, ogTitle: e.target.value }))} placeholder="Social sharing title" className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+                <textarea value={meta.ogDescription} onChange={e => setMetaForm((f: any) => ({ ...f, ogDescription: e.target.value }))} placeholder="Social sharing description" rows={2} className={`w-full resize-none px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+                <input value={meta.ogImageUrl} onChange={e => setMetaForm((f: any) => ({ ...f, ogImageUrl: e.target.value }))} placeholder="https://example.com/social-image.jpg" className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+              </div>
+            </div>
+            <p className={`text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>For published projects, saved metadata is applied to the live domain immediately.</p>
             <button onClick={() => saveMeta.mutate()} disabled={saveMeta.isPending}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50 ${metaSaved ? "bg-emerald-400 text-black" : "bg-cyan-400 text-black"}`}
               data-testid="button-save-meta">
@@ -1355,7 +1522,7 @@ export default function ProjectDetail() {
             {activeTab === "files" && <FilesTab />}
             {activeTab === "console" && <ConsoleTab />}
             {activeTab === "history" && <HistoryTab />}
-            {activeTab === "settings" && <ProjectSettingsTab project={project} projectId={projectId} />}
+            {activeTab === "settings" && <ProjectSettingsTab project={project} projectId={projectId} runtimeStatus={runtimeStatus} />}
             {activeTab === "pages" && <PagesTab projectId={projectId} />}
             {activeTab === "blog" && <BlogTab projectId={projectId} />}
             {activeTab === "autoblogger" && <AutoBloggerTab projectId={projectId} />}

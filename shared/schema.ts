@@ -101,6 +101,12 @@ export const seoSettings = pgTable("seo_settings", {
   metaDescription: text("meta_description").notNull().default(""),
   focusKeyword: text("focus_keyword").notNull().default(""),
   schemaJson: text("schema_json").notNull().default("{}"),
+  faviconData: text("favicon_data").notNull().default(""),
+  canonicalUrl: text("canonical_url").notNull().default(""),
+  ogTitle: text("og_title").notNull().default(""),
+  ogDescription: text("og_description").notNull().default(""),
+  ogImageUrl: text("og_image_url").notNull().default(""),
+  allowIndexing: boolean("allow_indexing").notNull().default(true),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

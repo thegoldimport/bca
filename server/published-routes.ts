@@ -3,6 +3,18 @@ import { RuntimeAdapterError } from "./runtime-adapter";
 const DEFAULT_APPS_DOMAIN = "apps.buildcustom.ai";
 const SCRIPT_NAME_PATTERN = /^[a-z0-9_][a-z0-9-_]*$/;
 
+export type PublishedRouteMetadata = {
+  title?: string;
+  description?: string;
+  canonicalUrl?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImageUrl?: string;
+  faviconData?: string;
+  allowIndexing?: boolean;
+  schemaJson?: string;
+};
+
 function routeConfig() {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
   const namespaceId = process.env.CLOUDFLARE_ROUTES_KV_NAMESPACE_ID?.trim();
@@ -59,14 +71,14 @@ export function deploymentScriptName(...candidateUrls: Array<string | undefined>
   );
 }
 
-export async function setPublishedProjectRoute(slug: string, scriptName: string) {
+export async function setPublishedProjectRoute(slug: string, scriptName: string, metadata?: PublishedRouteMetadata) {
   if (!SCRIPT_NAME_PATTERN.test(scriptName)) {
     throw new RuntimeAdapterError(
       "The deployment returned an invalid project identifier.",
       "RUNTIME_UPSTREAM_ERROR",
     );
   }
-  await writeRoute(slug, "PUT", scriptName);
+  await writeRoute(slug, "PUT", JSON.stringify({ scriptName, metadata: metadata || {} }));
 }
 
 export async function removePublishedProjectRoute(slug: string) {
