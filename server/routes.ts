@@ -14,6 +14,8 @@ import {
   restorePublishedProjectRouteValue,
   setPublishedProjectRoute,
 } from "./published-routes";
+import { deleteProjectAndPublishedRoute, PublishedRouteRestoreError } from "./project-deletion";
+import { savePublishingSettings } from "./publishing-settings";
 
 const RESERVED_SUBDOMAINS = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers"]);
 
@@ -263,28 +265,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
       const link = await storage.getRuntimeProjectLink(project.id);
-      const routeValue = link?.subdomainSlug && link.deploymentUrl
-        ? await getPublishedProjectRouteValue(link.subdomainSlug)
-        : null;
-      if (link?.subdomainSlug && link.deploymentUrl) await removePublishedProjectRoute(link.subdomainSlug);
       try {
-        await storage.deleteProject(project.id);
+        await deleteProjectAndPublishedRoute(project.id, link, {
+          getRouteValue: getPublishedProjectRouteValue,
+          removeRoute: removePublishedProjectRoute,
+          restoreRouteValue: restorePublishedProjectRouteValue,
+          deleteProject: (projectId) => storage.deleteProject(projectId),
+        });
       } catch (error) {
-        if (link?.subdomainSlug && routeValue !== null) {
-          try {
-            await restorePublishedProjectRouteValue(link.subdomainSlug, routeValue);
-          } catch (restoreError) {
-            console.error("Project deletion and published-route restoration both failed", {
-              projectId: project.id,
-              subdomainSlug: link.subdomainSlug,
-              deleteError: error,
-              restoreError,
-            });
-            throw new RuntimeAdapterError(
-              "Project deletion failed and its public route could not be restored. Support has been alerted.",
-              "RUNTIME_UPSTREAM_ERROR",
-            );
-          }
+        if (error instanceof PublishedRouteRestoreError) {
+          console.error("Project deletion and published-route restoration both failed", {
+            projectId: project.id,
+            subdomainSlug: link?.subdomainSlug,
+            deleteError: error.deleteError,
+            restoreError: error.restoreError,
+          });
+          throw new RuntimeAdapterError(
+            "Project deletion failed and its public route could not be restored. Support has been alerted.",
+            "RUNTIME_UPSTREAM_ERROR",
+          );
         }
         throw error;
       }
@@ -760,21 +759,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (update.schemaJson && update.schemaJson !== "{}") {
         try { JSON.parse(update.schemaJson); } catch { return res.status(400).json({ message: "Structured data must be valid JSON." }); }
       }
-      const settings = await storage.upsertSeoSettings(project.id, clean);
-      const link = await storage.getRuntimeProjectLink(project.id);
-      if (link?.subdomainSlug && link.deploymentScriptName) {
-        await setPublishedProjectRoute(link.subdomainSlug, link.deploymentScriptName, {
-          title: settings.metaTitle,
-          description: settings.metaDescription,
-          canonicalUrl: settings.canonicalUrl,
-          ogTitle: settings.ogTitle,
-          ogDescription: settings.ogDescription,
-          ogImageUrl: settings.ogImageUrl,
-          faviconData: settings.faviconData,
-          allowIndexing: settings.allowIndexing,
-          schemaJson: settings.schemaJson,
-        });
-      }
+      const settings = await savePublishingSettings(project.id, clean, {
+        upsertSettings: (projectId, data) => storage.upsertSeoSettings(projectId, data),
+        getRuntimeLink: (projectId) => storage.getRuntimeProjectLink(projectId),
+        setPublishedRoute: setPublishedProjectRoute,
+      });
       return res.json(settings);
     } catch (err: any) {
       return res.status(500).json({ message: err.message });

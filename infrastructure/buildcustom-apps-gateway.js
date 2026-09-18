@@ -12,7 +12,7 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function routeConfig(raw) {
+export function routeConfig(raw) {
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
@@ -24,7 +24,7 @@ function routeConfig(raw) {
   return { scriptName: raw, metadata: {} };
 }
 
-function metadataTags(metadata) {
+export function metadataTags(metadata) {
   const tags = [];
   if (metadata.title) tags.push(`<title>${escapeHtml(metadata.title)}</title>`);
   if (metadata.description) tags.push(`<meta name="description" content="${escapeHtml(metadata.description)}">`);
