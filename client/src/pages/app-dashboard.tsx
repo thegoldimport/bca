@@ -2172,9 +2172,10 @@ function EditorPage() {
                       <input
                         value={subdomainSlug}
                         onChange={(event) => setSubdomainSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                        disabled={Boolean(productionUrl)}
                         maxLength={63}
                         aria-label="BuildCustom.Ai subdomain name"
-                        className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-right text-sm outline-none"
+                        className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-right text-sm outline-none disabled:cursor-not-allowed disabled:opacity-55"
                         data-testid="input-subdomain-slug"
                       />
                       <span className={`flex items-center border-l px-3 text-sm ${theme === "dark" ? "border-white/10 text-white/45" : "border-gray-200 text-gray-500"}`}>
@@ -2182,7 +2183,7 @@ function EditorPage() {
                       </span>
                     </div>
                     <div className={`mt-2 flex items-center justify-between gap-3 text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-                      <span>{planEntitlement.name} includes {planEntitlement.liveProjectLimit} live {planEntitlement.liveProjectLimit === 1 ? "project" : "projects"}.</span>
+                      <span>{productionUrl ? "Project addresses are locked after the first publish." : `${planEntitlement.name} includes ${planEntitlement.liveProjectLimit} live ${planEntitlement.liveProjectLimit === 1 ? "project" : "projects"}.`}</span>
                       <span className="shrink-0 text-emerald-500">Hosting, SSL, and CDN included</span>
                     </div>
 

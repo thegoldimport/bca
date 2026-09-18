@@ -457,14 +457,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const scriptName = deploymentScriptName(result.workersUrl, result.url);
       const publicUrl = publishedProjectUrl(subdomainSlug);
       await setPublishedProjectRoute(subdomainSlug, scriptName);
-      await storage.upsertRuntimeProjectLink(project.id, {
-        deploymentUrl: publicUrl,
-        deploymentOriginUrl: result.url,
-        deploymentScriptName: scriptName,
-      });
-      const release = result.commitHash
-        ? await storage.createRuntimeRelease(project.id, result.commitHash, publicUrl)
-        : null;
+      let release;
+      try {
+        ({ release } = await storage.finalizeRuntimePublish(project.id, {
+          deploymentUrl: publicUrl,
+          deploymentOriginUrl: result.url,
+          deploymentScriptName: scriptName,
+        }, result.commitHash));
+      } catch (error) {
+        if (settings?.deploymentScriptName) {
+          await setPublishedProjectRoute(subdomainSlug, settings.deploymentScriptName).catch(() => undefined);
+        } else {
+          await removePublishedProjectRoute(subdomainSlug).catch(() => undefined);
+        }
+        throw error;
+      }
       return res.status(201).json({ ...result, url: publicUrl, originUrl: result.url, release });
     } catch (err) { return runtimeError(err, res); }
   });
@@ -524,30 +531,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const currentLink = await storage.getRuntimeProjectLink(project.id);
     const previousSlug = currentLink?.subdomainSlug;
-    const movingPublishedRoute = Boolean(
-      currentLink?.deploymentScriptName
-      && previousSlug
-      && previousSlug !== subdomainSlug,
-    );
-    if (movingPublishedRoute) {
-      await setPublishedProjectRoute(subdomainSlug, currentLink!.deploymentScriptName!);
-    }
-    let link;
-    try {
-      link = await storage.upsertRuntimeProjectLink(project.id, {
-        subdomainSlug,
-        hostingProvider,
-        customDomain: customDomain || null,
-        customOrigin: customOrigin || null,
-        ...(movingPublishedRoute ? { deploymentUrl: publishedProjectUrl(subdomainSlug) } : {}),
+    if (currentLink?.deploymentUrl && previousSlug && previousSlug !== subdomainSlug) {
+      return res.status(409).json({
+        code: "PUBLISHED_SUBDOMAIN_LOCKED",
+        message: "The included project address is locked after the first publish.",
       });
-    } catch (error) {
-      if (movingPublishedRoute) await removePublishedProjectRoute(subdomainSlug).catch(() => undefined);
-      throw error;
     }
-    if (movingPublishedRoute) {
-      await removePublishedProjectRoute(previousSlug!);
-    }
+    const link = await storage.upsertRuntimeProjectLink(project.id, {
+      subdomainSlug,
+      hostingProvider,
+      customDomain: customDomain || null,
+      customOrigin: customOrigin || null,
+    });
     return res.json({
       subdomainSlug: link.subdomainSlug,
       hostingProvider: link.hostingProvider,

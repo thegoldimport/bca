@@ -38,6 +38,11 @@ export interface IStorage {
   getRuntimeReleases(projectId: number): Promise<RuntimeRelease[]>;
   getRuntimeRelease(id: number): Promise<RuntimeRelease | undefined>;
   createRuntimeRelease(projectId: number, commitHash: string, deploymentUrl: string): Promise<RuntimeRelease>;
+  finalizeRuntimePublish(
+    projectId: number,
+    data: Pick<RuntimeProjectLink, "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName">,
+    commitHash?: string,
+  ): Promise<{ link: RuntimeProjectLink; release: RuntimeRelease | null }>;
   getRuntimeBuilderTurns(projectId: number): Promise<RuntimeBuilderTurn[]>;
   getRuntimeBuilderTurn(id: number): Promise<RuntimeBuilderTurn | undefined>;
   createRuntimeBuilderTurn(data: typeof runtimeBuilderTurns.$inferInsert): Promise<RuntimeBuilderTurn>;
@@ -168,6 +173,25 @@ export class DatabaseStorage implements IStorage {
   async createRuntimeRelease(projectId: number, commitHash: string, deploymentUrl: string) {
     const [release] = await db.insert(runtimeReleases).values({ projectId, commitHash, deploymentUrl }).returning();
     return release;
+  }
+  async finalizeRuntimePublish(
+    projectId: number,
+    data: Pick<RuntimeProjectLink, "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName">,
+    commitHash?: string,
+  ) {
+    return db.transaction(async (tx) => {
+      const [link] = await tx.update(runtimeProjectLinks)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(runtimeProjectLinks.projectId, projectId))
+        .returning();
+      if (!link) throw new Error("Runtime project link not found");
+      const [release] = commitHash
+        ? await tx.insert(runtimeReleases)
+          .values({ projectId, commitHash, deploymentUrl: data.deploymentUrl! })
+          .returning()
+        : [];
+      return { link, release: release || null };
+    });
   }
   async getRuntimeBuilderTurns(projectId: number) {
     return db.select().from(runtimeBuilderTurns).where(eq(runtimeBuilderTurns.projectId, projectId)).orderBy(runtimeBuilderTurns.createdAt);
