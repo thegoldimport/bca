@@ -106,6 +106,7 @@ export const seoSettings = pgTable("seo_settings", {
   ogTitle: text("og_title").notNull().default(""),
   ogDescription: text("og_description").notNull().default(""),
   ogImageUrl: text("og_image_url").notNull().default(""),
+  socialImageData: text("social_image_data").notNull().default(""),
   allowIndexing: boolean("allow_indexing").notNull().default(true),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

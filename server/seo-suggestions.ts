@@ -18,31 +18,93 @@ export type SeoSuggestionSet = {
 
 const cache = new Map<string, { expiresAt: number; value: SeoSuggestionSet }>();
 
-function cleanSequence(value: unknown, maxLength: number) {
-  if (!Array.isArray(value)) return [];
-  const unique = value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim().slice(0, maxLength))
-    .filter(Boolean)
-    .filter((item, index, all) => all.indexOf(item) === index);
-  return unique.filter((item, index) => index === 0 || item.toLowerCase().startsWith(unique[index - 1].toLowerCase()));
+function completeValue(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return [...value].reverse().find((item) => typeof item === "string")?.trim() || "";
+  return "";
 }
 
-function progressiveSummary(summary: string, maxLength: number) {
-  const words = summary.replace(/\s+/g, " ").trim().split(" ");
-  const targets = maxLength <= 160 ? [65, 110, maxLength] : [110, 240, maxLength];
-  const results: string[] = [];
-  for (const target of targets) {
-    let candidate = "";
-    for (const word of words) {
-      const expanded = candidate ? `${candidate} ${word}` : word;
-      if (expanded.length > target) break;
-      candidate = expanded;
+function completeMetaDescription(candidate: string, summary: string) {
+  const endings = [
+    " Stay organized.",
+    " Get started today.",
+    " Keep work moving.",
+    " Explore the key features.",
+    " Simplify your daily workflow.",
+    " Plan clearly and get more done.",
+    " Built to keep your work on track.",
+  ];
+  for (const source of [candidate, summary]) {
+    const base = source.replace(/\s+/g, " ").trim();
+    if (base.length >= 150 && base.length <= 160 && /[.!?]$/.test(base)) return base;
+    const withoutPeriod = base.replace(/[.!?]+$/, "");
+    for (const ending of endings) {
+      const completed = `${withoutPeriod}${ending}`;
+      if (completed.length >= 150 && completed.length <= 160) return completed;
     }
-    candidate = candidate.replace(/[,:;]$/, "");
-    if (candidate && candidate.length > (results.at(-1)?.length || 0)) results.push(candidate);
   }
-  return results;
+  return "";
+}
+
+function completeTitle(candidate: string, projectName: string, focusKeyword: string) {
+  if (candidate.length >= 25 && candidate.length <= 60 && candidate.toLowerCase() !== projectName.toLowerCase()) return candidate;
+  const keyword = focusKeyword
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  return `${projectName} | ${keyword || "Helpful Online Software"}`.slice(0, 60).trim();
+}
+
+function fallbackSeoSuggestions(project: ProjectContext, deploymentUrl: string | undefined, context: string): SeoSuggestionSet {
+  const source = context.toLowerCase();
+  let keyword = "online software";
+  let summary = `${project.name} helps users access and manage the core tools and features available throughout the application.`;
+  let description = "";
+
+  if (/\b(task|tasks|subtask|priority|priorities|due date|to-do|kanban)\b/.test(source)) {
+    keyword = "task management software";
+    summary = `${project.name} is a task management app for organizing projects, priorities, due dates, subtasks, categories, and daily work.`;
+    description = `${project.name} helps you manage tasks, priorities, due dates, and subtasks. Organize projects with clear categories and flexible views to stay focused every day.`;
+  } else if (/\b(cart|checkout|products?|inventory|shop|storefront)\b/.test(source)) {
+    keyword = "online shopping platform";
+    summary = `${project.name} is an online shopping experience for browsing products, comparing options, managing a cart, and completing purchases.`;
+  } else if (/\b(workout|fitness|exercise|training|calorie)\b/.test(source)) {
+    keyword = "fitness tracking app";
+    summary = `${project.name} is a fitness app for planning workouts, tracking activity, monitoring progress, and supporting healthier daily routines.`;
+  } else if (/\b(appointment|booking|reservation|availability|schedule)\b/.test(source)) {
+    keyword = "online booking software";
+    summary = `${project.name} is a booking app for checking availability, scheduling appointments, managing reservations, and keeping plans organized.`;
+  } else if (/\b(invoice|budget|expense|transaction|finance|payment)\b/.test(source)) {
+    keyword = "financial management software";
+    summary = `${project.name} is a financial management app for tracking money, reviewing activity, organizing records, and making informed decisions.`;
+  } else if (/\b(portfolio|case studies|experience|skills|resume)\b/.test(source)) {
+    keyword = "professional portfolio";
+    summary = `${project.name} is a professional portfolio showcasing selected work, practical skills, project experience, and ways to get in touch.`;
+  }
+
+  description ||= completeMetaDescription(summary, summary);
+  if (!description) {
+    const base = summary.replace(/[.!?]+$/, "");
+    description = `${base}. Explore its practical features and get started today.`;
+    if (description.length > 160) description = completeMetaDescription("", summary) || summary.slice(0, 156).replace(/\s+\S*$/, "") + ".";
+  }
+  const title = completeTitle("", project.name, keyword);
+  const schemaJson = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": project.type === "website" ? "WebSite" : "SoftwareApplication",
+    name: project.name,
+    description,
+    ...(deploymentUrl ? { url: deploymentUrl } : {}),
+  }, null, 2);
+  return {
+    projectSummary: summary,
+    metaTitle: [title],
+    metaDescription: [description],
+    focusKeyword: [keyword],
+    ogTitle: [title],
+    ogDescription: [description],
+    schemaJson,
+  };
 }
 
 export function isSeoContextPath(path: string) {
@@ -92,11 +154,11 @@ Write specific, natural SEO copy based on the product's real screens, features, 
 
 Return JSON only with:
 - projectSummary: one factual sentence describing the actual product
-- metaTitle: 2-3 progressively longer suggestions, each beginning exactly with the previous suggestion, maximum 60 characters each
-- metaDescription: 2-3 progressively longer suggestions, each beginning exactly with the previous suggestion, maximum 160 characters each
-- focusKeyword: 2-3 progressively longer suggestions, each beginning exactly with the previous suggestion, maximum 120 characters each
-- ogTitle: 2-3 progressively longer suggestions, each beginning exactly with the previous suggestion, maximum 120 characters each
-- ogDescription: 2-3 progressively longer suggestions, each beginning exactly with the previous suggestion, maximum 500 characters each
+- metaTitle: one complete SEO title, 25-60 characters. Use a natural keyword-focused format such as "Product Name | Primary Search Benefit". Never return only the product name
+- metaDescription: one complete, grammatical description between 150 and 160 characters inclusive. Finish the sentence naturally; never truncate a word or thought
+- focusKeyword: one specific primary search phrase, maximum 120 characters
+- ogTitle: one complete social title, 35-80 characters
+- ogDescription: one complete social description, 120-200 characters
 - schemaJson: a valid JSON-LD object encoded as a JSON string, describing the actual product
 
 Project name: ${project.name}
@@ -107,33 +169,66 @@ Published URL: ${deploymentUrl || "Not published"}
 GENERATED PROJECT FILES:
 ${context}`;
 
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
-    }),
-  });
-  if (!response.ok) throw new Error("Unable to analyze the generated project right now.");
-  const payload: any = await response.json();
-  const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
-  const parsed = JSON.parse(text);
+  let parsed: any;
+  let lastParsed: any;
+  for (let attempt = 0; attempt < 1; attempt++) {
+    const correction = attempt
+      ? "\nYour previous response missed a strict length or completeness requirement. Recount every character and return corrected, complete values."
+      : "";
+    try {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt + correction }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) throw new Error("Unable to analyze the generated project right now.");
+      const payload: any = await response.json();
+      const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
+      lastParsed = JSON.parse(text);
+      const summary = completeValue(lastParsed.projectSummary);
+      const description = completeMetaDescription(completeValue(lastParsed.metaDescription), summary);
+      const title = completeTitle(completeValue(lastParsed.metaTitle), project.name, completeValue(lastParsed.focusKeyword));
+      if (title.length >= 25 && description) {
+        parsed = { ...lastParsed, metaTitle: title, metaDescription: description };
+        break;
+      }
+    } catch {
+      // Fall back to source-derived templates below.
+    }
+  }
+  if (!parsed && lastParsed) {
+    const summary = completeValue(lastParsed.projectSummary);
+    const description = completeMetaDescription(completeValue(lastParsed.metaDescription), summary);
+    const title = completeTitle(completeValue(lastParsed.metaTitle), project.name, completeValue(lastParsed.focusKeyword));
+    if (description) parsed = { ...lastParsed, metaTitle: title, metaDescription: description };
+  }
+  if (!parsed) {
+    const value = fallbackSeoSuggestions(project, deploymentUrl, context);
+    cache.set(fingerprint, { expiresAt: Date.now() + 15 * 60_000, value });
+    return value;
+  }
   const schema = typeof parsed.schemaJson === "string" ? parsed.schemaJson : JSON.stringify(parsed.schemaJson || {});
   JSON.parse(schema);
   const projectSummary = typeof parsed.projectSummary === "string" ? parsed.projectSummary.trim().slice(0, 500) : "";
-  const descriptionSequence = progressiveSummary(projectSummary, 160);
-  const socialDescriptionSequence = progressiveSummary(projectSummary, 500);
+  const metaTitle = completeValue(parsed.metaTitle);
+  const metaDescription = completeValue(parsed.metaDescription);
+  const focusKeyword = completeValue(parsed.focusKeyword);
+  const ogTitle = completeValue(parsed.ogTitle);
+  const ogDescription = completeValue(parsed.ogDescription);
   const value: SeoSuggestionSet = {
     projectSummary,
-    metaTitle: cleanSequence(parsed.metaTitle, 60),
-    metaDescription: descriptionSequence.length > 1 ? descriptionSequence : cleanSequence(parsed.metaDescription, 160),
-    focusKeyword: cleanSequence(parsed.focusKeyword, 120),
-    ogTitle: cleanSequence(parsed.ogTitle, 120),
-    ogDescription: socialDescriptionSequence.length > 1 ? socialDescriptionSequence : cleanSequence(parsed.ogDescription, 500),
+    metaTitle: metaTitle ? [metaTitle] : [],
+    metaDescription: metaDescription ? [metaDescription] : [],
+    focusKeyword: focusKeyword ? [focusKeyword.slice(0, 120)] : [],
+    ogTitle: ogTitle ? [ogTitle.slice(0, 120)] : [],
+    ogDescription: ogDescription ? [ogDescription.slice(0, 500)] : [],
     schemaJson: schema.slice(0, 50_000),
   };
   if (!value.projectSummary || !value.metaTitle.length || !value.metaDescription.length) {

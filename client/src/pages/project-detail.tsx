@@ -1157,6 +1157,7 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
   const [metaError, setMetaError] = useState("");
   const [schemaError, setSchemaError] = useState("");
   const [faviconError, setFaviconError] = useState("");
+  const [socialImageError, setSocialImageError] = useState("");
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["seo", projectId],
@@ -1186,6 +1187,7 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
       ogTitle: settings.ogTitle || "",
       ogDescription: settings.ogDescription || "",
       ogImageUrl: settings.ogImageUrl || "",
+      hasSocialImage: settings.hasSocialImage === true,
       allowIndexing: settings.allowIndexing !== false,
     });
   }
@@ -1193,7 +1195,7 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
 
   const meta = metaForm || {
     metaTitle: "", metaDescription: "", focusKeyword: "", faviconData: "", canonicalUrl: "",
-    ogTitle: "", ogDescription: "", ogImageUrl: "", allowIndexing: true,
+    ogTitle: "", ogDescription: "", ogImageUrl: "", hasSocialImage: false, allowIndexing: true,
   };
   const schema = schemaForm ?? "{}";
   const projectName = String(project?.name || "My Project").trim();
@@ -1201,6 +1203,40 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
   const titleSuggestions = suggestionQuery.data?.metaTitle || [];
   const descriptionSuggestions = suggestionQuery.data?.metaDescription || [];
   const keywordSuggestions = suggestionQuery.data?.focusKeyword || [];
+
+  const socialImageUpload = useMutation({
+    mutationFn: async (data: string) => {
+      setSocialImageError("");
+      const res = await fetch(`/api/projects/${projectId}/seo/social-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ data }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to upload the social image.");
+      return body;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(["seo", projectId], data);
+      setMetaForm((current: any) => ({ ...current, ogImageUrl: data.ogImageUrl || "", hasSocialImage: true }));
+    },
+    onError: (error: Error) => setSocialImageError(error.message),
+  });
+
+  const socialImageRemove = useMutation({
+    mutationFn: async () => {
+      setSocialImageError("");
+      const res = await fetch(`/api/projects/${projectId}/seo/social-image`, { method: "DELETE", headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to remove the social image.");
+      return body;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(["seo", projectId], data);
+      setMetaForm((current: any) => ({ ...current, ogImageUrl: "", hasSocialImage: false }));
+    },
+    onError: (error: Error) => setSocialImageError(error.message),
+  });
 
   const saveMeta = useMutation({
     mutationFn: async () => {
@@ -1364,7 +1400,7 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
               <p className={`mt-1.5 text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>PNG, ICO, SVG, or WebP. Maximum 250 KB. The BuildCustom logo is used until a custom favicon is uploaded.</p>
             </div>
             <div>
-              <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Site Title <span className="opacity-50">(50–60 chars)</span></label>
+              <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Site Title <span className="opacity-50">(25–60 chars)</span></label>
               <GuidedSeoField value={meta.metaTitle} onChange={(value) => setMetaForm((f: any) => ({ ...f, metaTitle: value }))}
                 suggestions={titleSuggestions} maxLength={60}
                 className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
@@ -1411,10 +1447,48 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
                 <GuidedSeoField value={meta.ogDescription} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogDescription: value }))}
                   suggestions={suggestionQuery.data?.ogDescription || []} maxLength={500} multiline rows={2}
                   className={`w-full resize-none px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
-                <GuidedSeoField value={meta.ogImageUrl} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogImageUrl: value }))}
-                  suggestions={[`${canonicalSuggestion.replace(/\/$/, "")}/opengraph.jpg`]} maxLength={2000}
-                  className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
-                  testId="input-social-image-url" />
+                <div>
+                  <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Social sharing image</label>
+                  {meta.ogImageUrl && (
+                    <div className={`mb-3 aspect-[1.91/1] max-w-sm overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-50"}`}>
+                      <img src={meta.ogImageUrl} alt="Social sharing preview" className="h-full w-full object-cover" />
+                    </div>
+                  )}
+                  <GuidedSeoField value={meta.ogImageUrl} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogImageUrl: value, hasSocialImage: false }))}
+                    suggestions={[`${canonicalSuggestion.replace(/\/$/, "")}/opengraph.jpg`]} maxLength={2000}
+                    className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`}
+                    testId="input-social-image-url" />
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <label className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2 text-xs font-medium ${theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
+                      <Upload size={14} /> {socialImageUpload.isPending ? "Uploading…" : meta.hasSocialImage ? "Replace image" : "Upload image"}
+                      <input
+                        type="file"
+                        accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        disabled={socialImageUpload.isPending}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          if (!file) return;
+                          if (file.size > 5_000_000) {
+                            setSocialImageError("Social images must be 5 MB or less.");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = () => socialImageUpload.mutate(String(reader.result || ""));
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    {meta.hasSocialImage && (
+                      <button type="button" onClick={() => socialImageRemove.mutate()} disabled={socialImageRemove.isPending} className="text-xs text-red-400 disabled:opacity-50">
+                        {socialImageRemove.isPending ? "Removing…" : "Remove uploaded image"}
+                      </button>
+                    )}
+                    <span className={`text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>Recommended: 1200×630 PNG, JPEG, or WebP.</span>
+                  </div>
+                  {socialImageError && <p className="mt-2 text-xs text-red-400">{socialImageError}</p>}
+                </div>
               </div>
             </div>
             <p className={`text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>For published projects, saved metadata is applied to the live domain immediately.</p>

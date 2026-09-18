@@ -38,6 +38,17 @@ function getUserId(req: any): string | null {
   return typeof header === "string" && header.length > 0 ? header : null;
 }
 
+function publicSocialImageUrl(projectId: number, version?: number) {
+  const base = (process.env.BUILDCUSTOM_PUBLIC_URL?.trim() || "https://buildcustom.ai").replace(/\/$/, "");
+  return `${base}/api/public/projects/${projectId}/social-image${version ? `?v=${version}` : ""}`;
+}
+
+function seoResponse(settings: any) {
+  if (!settings) return settings;
+  const { socialImageData, ...safe } = settings;
+  return { ...safe, hasSocialImage: Boolean(socialImageData) };
+}
+
 async function requireProject(req: any, res: any) {
   const userId = await requireAuth(req, res);
   if (!userId) return null;
@@ -703,6 +714,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── SEO ────────────────────────────────────────────────────────────────────
+  app.get("/api/public/projects/:id/social-image", async (req, res) => {
+    const settings = await storage.getSeoSettings(parseInt(req.params.id));
+    const match = settings?.socialImageData?.match(/^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=]+)$/i);
+    if (!match) return res.status(404).send("Social image not found");
+    const image = Buffer.from(match[2], "base64");
+    res.set({
+      "Content-Type": match[1].toLowerCase(),
+      "Content-Length": String(image.length),
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    });
+    return res.send(image);
+  });
+
   app.get("/api/projects/:id/seo/suggestions", async (req, res) => {
     try {
       const userId = await requireAuth(req, res);
@@ -741,7 +766,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
       const settings = await storage.getSeoSettings(project.id);
-      return res.json(settings || {
+      return res.json(settings ? seoResponse(settings) : {
         projectId: project.id,
         metaTitle: "",
         metaDescription: "",
@@ -752,10 +777,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ogTitle: "",
         ogDescription: "",
         ogImageUrl: "",
+        hasSocialImage: false,
         allowIndexing: true,
       });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/seo/social-image", async (req, res) => {
+    try {
+      const userId = await requireAuth(req, res);
+      if (!userId) return;
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
+      const data = typeof req.body?.data === "string" ? req.body.data : "";
+      const match = data.match(/^data:image\/(?:png|jpeg|webp);base64,([a-z0-9+/=]+)$/i);
+      if (!match) return res.status(400).json({ message: "Upload a PNG, JPEG, or WebP social image." });
+      const bytes = Buffer.from(match[1], "base64");
+      if (!bytes.length || bytes.length > 5_000_000) return res.status(413).json({ message: "Social images must be 5 MB or less." });
+      const settings = await savePublishingSettings(project.id, {
+        socialImageData: data,
+        ogImageUrl: publicSocialImageUrl(project.id, Date.now()),
+      }, {
+        upsertSettings: (projectId, update) => storage.upsertSeoSettings(projectId, update),
+        getRuntimeLink: (projectId) => storage.getRuntimeProjectLink(projectId),
+        setPublishedRoute: setPublishedProjectRoute,
+      });
+      return res.json(seoResponse(settings));
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Unable to upload the social image." });
+    }
+  });
+
+  app.delete("/api/projects/:id/seo/social-image", async (req, res) => {
+    try {
+      const userId = await requireAuth(req, res);
+      if (!userId) return;
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
+      const settings = await savePublishingSettings(project.id, { socialImageData: "", ogImageUrl: "" }, {
+        upsertSettings: (projectId, update) => storage.upsertSeoSettings(projectId, update),
+        getRuntimeLink: (projectId) => storage.getRuntimeProjectLink(projectId),
+        setPublishedRoute: setPublishedProjectRoute,
+      });
+      return res.json(seoResponse(settings));
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Unable to remove the social image." });
     }
   });
 
@@ -796,7 +864,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         getRuntimeLink: (projectId) => storage.getRuntimeProjectLink(projectId),
         setPublishedRoute: setPublishedProjectRoute,
       });
-      return res.json(settings);
+      return res.json(seoResponse(settings));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
