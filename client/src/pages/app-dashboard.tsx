@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAppUser, setAppUser, clearAppUser, authHeaders } from "@/lib/auth";
@@ -42,6 +42,7 @@ import {
   LifeBuoy,
   Cloud,
   Layers,
+  GripVertical,
   Monitor,
   Tablet,
   History,
@@ -64,9 +65,13 @@ import {
   Save,
   FileCode,
   Wand2,
+  StopCircle,
+  FileCode2,
+  Mic,
+  MousePointer2,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
-import cubeLogo from "@/assets/cube-logo.png";
+import logoMark from "@/assets/logo-mark.png";
 import previewPortfolio from "@/assets/preview-portfolio.jpg";
 import previewFitness from "@/assets/preview-fitness.jpg";
 import previewGame from "@/assets/preview-game.jpg";
@@ -74,6 +79,7 @@ import previewEcommerce from "@/assets/preview-ecommerce.jpg";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } from "@/pages/app-admin-pages";
 import ProjectDetail from "@/pages/project-detail";
+import { getPlanEntitlement } from "@shared/plans";
 
 type UserRole = "super_admin" | "user";
 const CURRENT_USER_ROLE: UserRole = "super_admin";
@@ -110,24 +116,117 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
   return (
     <motion.aside
       initial={false}
-      animate={{ width: collapsed ? 72 : 260 }}
+      animate={{ width: collapsed ? 56 : 140 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className={`h-screen flex flex-col border-r shrink-0 ${
+      className={`h-screen relative z-[1000] flex flex-col overflow-visible border-r shrink-0 ${
         theme === "dark"
           ? "bg-[#0a0a12] border-white/10"
           : "bg-white border-gray-200"
       }`}
     >
-      <div className={`flex items-center h-16 px-4 border-b ${
+      {collapsed ? (
+        <>
+          <div className={`h-16 w-14 flex items-center justify-center border-b ${
+            theme === "dark" ? "border-white/10" : "border-gray-200"
+          }`}>
+            <button
+              onClick={onToggle}
+              className={`relative group p-2 rounded-lg transition-colors ${
+                theme === "dark"
+                  ? "text-white/55 hover:bg-white/10 hover:text-white"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+              aria-label="Expand navigation"
+              data-testid="button-expand-sidebar"
+            >
+              <img src={logoMark} alt="" className="h-9 w-9 object-contain" />
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute left-[calc(100%+18px)] top-1/2 z-[1010] -translate-y-1/2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
+                  theme === "dark" ? "border-white/10 bg-[#0a0a12] text-white" : "border-gray-200 bg-white text-gray-700"
+                }`}
+              >
+                Expand navigation
+              </span>
+            </button>
+          </div>
+          <nav className="flex flex-1 flex-col justify-between py-4 px-2">
+            {navItems.map((item) => {
+              const active = isActive(item.path);
+              return (
+                <Link key={item.path} href={item.path}>
+                  <div
+                    className={`relative group flex items-center justify-center px-2 py-2.5 rounded-xl cursor-pointer transition-colors ${
+                      active
+                        ? theme === "dark" ? "bg-white/10 text-purple-400" : "bg-cyan-50 text-purple-500"
+                        : theme === "dark" ? "text-white/55 hover:bg-white/5 hover:text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                    }`}
+                    aria-label={item.label}
+                    data-testid={`nav-collapsed-${item.label.toLowerCase()}`}
+                  >
+                    <item.icon size={20} />
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-[1010] -translate-y-1/2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
+                        theme === "dark"
+                          ? "border-white/10 bg-[#0a0a12] text-white"
+                          : "border-gray-200 bg-white text-gray-700"
+                      }`}
+                    >
+                      <span className={active ? "text-brand-gradient" : ""}>{item.label}</span>
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </nav>
+          <div className={`px-2 py-4 border-t space-y-2 ${
+            theme === "dark" ? "border-white/10" : "border-gray-200"
+          }`}>
+            <button
+              onClick={toggleTheme}
+              className={`relative group flex items-center justify-center w-full px-2 py-2.5 rounded-xl transition-colors ${
+                theme === "dark" ? "text-purple-400 hover:bg-white/5" : "text-purple-500 hover:bg-gray-100"
+              }`}
+              aria-label={theme === "dark" ? "Light Mode" : "Dark Mode"}
+            >
+              {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-[1010] -translate-y-1/2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
+                  theme === "dark" ? "border-white/10 bg-[#0a0a12]" : "border-gray-200 bg-white"
+                }`}
+              >
+                <span className="text-brand-gradient">{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+              </span>
+            </button>
+            <button
+              onClick={() => { clearAppUser(); window.location.href = "/app/login"; }}
+              className={`relative group flex items-center justify-center w-full px-2 py-2.5 rounded-xl transition-colors ${
+                theme === "dark" ? "text-white/55 hover:text-red-400 hover:bg-red-500/10" : "text-gray-500 hover:text-red-600 hover:bg-red-50"
+              }`}
+              aria-label="Log Out"
+            >
+              <LogOut size={20} />
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-[1010] -translate-y-1/2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
+                  theme === "dark" ? "border-white/10 bg-[#0a0a12] text-white" : "border-gray-200 bg-white text-gray-700"
+                }`}
+              >
+                Log Out
+              </span>
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+      <div className={`flex items-center h-16 px-2 border-b ${
         theme === "dark" ? "border-white/10" : "border-gray-200"
       }`}>
         <Link href="/app">
           <div className="flex items-center gap-3 cursor-pointer">
-            {collapsed ? (
-              <img src={cubeLogo} alt="BuildCustom.Ai" className="h-9 w-9 object-contain" />
-            ) : (
-              <img src={logo} alt="BuildCustom.Ai" className="h-8 w-auto" />
-            )}
+            <img src={logo} alt="BuildCustom.Ai" className="h-6 w-[88px] object-contain object-left" />
           </div>
         </Link>
         <button
@@ -139,18 +238,18 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
           }`}
           data-testid="button-toggle-sidebar"
         >
-          {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
+          <PanelLeftClose size={18} />
         </button>
       </div>
 
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+      <nav className="flex flex-1 flex-col justify-between py-4 px-2 overflow-y-auto">
         {navItems.map((item, idx) => {
           const active = isActive(item.path);
           return (
             <div key={item.path}>
               <Link href={item.path}>
                 <div
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group ${
+                  className={`flex items-center gap-2 px-2 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group ${
                     active
                       ? theme === "dark"
                         ? "bg-white/10"
@@ -162,10 +261,8 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
                   data-testid={`nav-${item.label.toLowerCase()}`}
                 >
                   <item.icon size={20} className={active ? "text-purple-400" : ""} />
-                  {!collapsed && (
-                    <span className={`font-medium text-sm ${active ? "text-brand-gradient" : ""}`}>{item.label}</span>
-                  )}
-                  {active && !collapsed && (
+                  <span className={`font-medium text-sm ${active ? "text-brand-gradient" : ""}`}>{item.label}</span>
+                  {active && (
                     <div className="ml-auto w-1.5 h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500" />
                   )}
                 </div>
@@ -175,12 +272,12 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
         })}
       </nav>
 
-      <div className={`px-3 py-4 border-t space-y-2 ${
+      <div className={`px-2 py-4 border-t space-y-2 ${
         theme === "dark" ? "border-white/10" : "border-gray-200"
       }`}>
         <button
           onClick={toggleTheme}
-          className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-colors ${
+          className={`flex items-center gap-2 w-full px-2 py-2.5 rounded-xl transition-colors ${
             theme === "dark"
               ? "text-white/60 hover:text-white hover:bg-white/5"
               : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
@@ -188,15 +285,13 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
           data-testid="button-theme-toggle"
         >
           {theme === "dark" ? <Sun size={20} className="text-purple-400" /> : <Moon size={20} className="text-purple-400" />}
-          {!collapsed && (
-            <span className="font-medium text-sm text-brand-gradient">
-              {theme === "dark" ? "Light Mode" : "Dark Mode"}
-            </span>
-          )}
+          <span className="font-medium text-sm text-brand-gradient">
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          </span>
         </button>
         <button
           onClick={() => { clearAppUser(); window.location.href = "/app/login"; }}
-          className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-colors ${
+          className={`flex items-center gap-2 w-full px-2 py-2.5 rounded-xl transition-colors ${
             theme === "dark"
               ? "text-white/60 hover:text-red-400 hover:bg-red-500/10"
               : "text-gray-600 hover:text-red-600 hover:bg-red-50"
@@ -204,9 +299,11 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
           data-testid="button-logout"
         >
           <LogOut size={20} />
-          {!collapsed && <span className="font-medium text-sm">Log Out</span>}
+          <span className="font-medium text-sm">Log Out</span>
         </button>
       </div>
+        </>
+      )}
     </motion.aside>
   );
 }
@@ -668,21 +765,438 @@ function PreviewMockup({ device }: { device: "desktop" | "tablet" | "mobile" }) 
   );
 }
 
+type RuntimeFile = { path: string; name?: string; size?: number; type?: string };
+type RuntimeRelease = { id: number; commitHash: string; deploymentUrl: string; createdAt: string };
+type RuntimeBuilderTurn = {
+  id: number;
+  mode: "plan" | "build";
+  prompt: string;
+  response: string;
+  changedFiles: Array<{ path: string; change: string; size: number }>;
+  activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
+  commitHash: string | null;
+  createdAt: string;
+};
+type ComposerImage = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  base64Data: string;
+  size: number;
+};
+type SelectedElement = Record<string, unknown>;
+
+function BuildActivity({
+  projectId,
+  theme,
+  isBuilding,
+}: {
+  projectId: number;
+  theme: string;
+  isBuilding: boolean;
+}) {
+  const [open, setOpen] = useState(true);
+  const [openFile, setOpenFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [loadingFile, setLoadingFile] = useState(false);
+  const [steps, setSteps] = useState<string[]>([]);
+  const statusQuery = useQuery({
+    queryKey: ["runtime-status", projectId],
+    enabled: !!projectId,
+    refetchInterval: isBuilding ? 750 : 8000,
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Runtime status unavailable.");
+      return body;
+    },
+  });
+  const filesQuery = useQuery({
+    queryKey: ["runtime-files", projectId],
+    enabled: !!projectId,
+    refetchInterval: isBuilding ? 1500 : 10000,
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/files`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Workspace files unavailable.");
+      return body.files as RuntimeFile[];
+    },
+  });
+  const state = statusQuery.data?.state || {};
+  const generation = state.generation || {};
+  const generationStatus = generation.status || (isBuilding ? "running" : "idle");
+  const files = filesQuery.data || [];
+  const latestTool = state.lastConversationResponse?.tool;
+  const activePath = state.currentFile || latestTool?.args?.path;
+  const summary = statusQuery.isError
+    ? "Runtime activity is unavailable"
+    : isBuilding
+      ? activePath
+        ? `${latestTool?.status === "success" ? "Updated" : "Writing"} ${activePath}`
+        : `${files.length || statusQuery.data?.files || 0} files · Planning changes`
+      : `${files.length || statusQuery.data?.files || 0} files · ${generationStatus}`;
+
+  useEffect(() => {
+    if (!isBuilding) return;
+    setOpen(true);
+    const response = state.lastConversationResponse;
+    const tool = response?.tool;
+    const next = activePath
+      ? `${tool?.status === "success" ? "Updated" : "Working on"} ${activePath}`
+      : typeof response?.message === "string" && response.message.trim()
+        ? response.message.trim()
+        : summary;
+    if (!next) return;
+    setSteps((current) => current[current.length - 1] === next ? current : [...current.slice(-9), next]);
+  }, [isBuilding, activePath, state.lastConversationResponse, summary]);
+
+  const showFile = async (path: string) => {
+    if (openFile === path) {
+      setOpenFile(null);
+      return;
+    }
+    setOpenFile(path);
+    setLoadingFile(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(path)}`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      setFileContent(res.ok ? body.content : "Unable to read this file.");
+    } catch {
+      setFileContent("Unable to read this file.");
+    } finally {
+      setLoadingFile(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isBuilding || !activePath || openFile === activePath) return;
+    setOpenFile(activePath);
+    setLoadingFile(true);
+    fetch(`/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(activePath)}`, { headers: authHeaders() })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        setFileContent(res.ok ? body.content : "The Agent is preparing this file.");
+      })
+      .catch(() => setFileContent("The Agent is preparing this file."))
+      .finally(() => setLoadingFile(false));
+  }, [isBuilding, activePath, projectId]);
+
+  return (
+    <div className={`rounded-xl border overflow-hidden ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+      <button
+        onClick={() => setOpen((value) => !value)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 text-left"
+        data-testid="button-toggle-build-activity"
+      >
+        <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${isBuilding ? "bg-cyan-400/15 text-cyan-300" : "bg-emerald-400/15 text-emerald-300"}`}>
+          {isBuilding ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>Build activity</div>
+          <div className={`text-[11px] truncate ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{summary}</div>
+        </div>
+        <ChevronDown size={15} className={`transition-transform ${open ? "rotate-180" : ""} ${theme === "dark" ? "text-white/40" : "text-gray-400"}`} />
+      </button>
+      {open && (
+        <div className={`px-3 pb-3 border-t ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+          <div className={`grid grid-cols-2 gap-2 py-3 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+            <span>Generation <b className={theme === "dark" ? "text-white/80" : "text-gray-800"}>{generationStatus}</b></span>
+            <span>Connection <b className={theme === "dark" ? "text-white/80" : "text-gray-800"}>{statusQuery.data?.connected ? "connected" : "not connected"}</b></span>
+          </div>
+          {steps.length > 0 && (
+            <div className={`mb-3 space-y-1 border-l-2 pl-3 ${theme === "dark" ? "border-cyan-400/30" : "border-cyan-300"}`}>
+              {steps.map((step, index) => (
+                <div key={`${index}-${step}`} className={`text-[11px] leading-relaxed ${
+                  index === steps.length - 1
+                    ? theme === "dark" ? "text-cyan-200" : "text-cyan-700"
+                    : theme === "dark" ? "text-white/40" : "text-gray-500"
+                }`}>
+                  {step}
+                </div>
+              ))}
+            </div>
+          )}
+          {isBuilding && openFile && (
+            <div className="mb-3">
+              <div className={`mb-1 truncate font-mono text-[10px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{openFile}</div>
+              <pre className={`max-h-48 overflow-auto rounded-lg p-2 text-[10px] leading-relaxed ${theme === "dark" ? "bg-black/40 text-cyan-100/70" : "border border-gray-100 bg-white text-gray-600"}`}>
+                {loadingFile ? "Loading current code…" : fileContent}
+              </pre>
+            </div>
+          )}
+          {files.length > 0 ? (
+            <div className="space-y-1">
+              {files.map((file) => (
+                <div key={file.path}>
+                  <button onClick={() => showFile(file.path)} className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${theme === "dark" ? "text-white/65 hover:bg-white/5" : "text-gray-600 hover:bg-white"}`} data-testid={`button-file-${file.path}`}>
+                    <FileCode2 size={13} className="text-cyan-400 shrink-0" />
+                    <span className="truncate flex-1 font-mono">{file.path}</span>
+                    <span className="text-[10px] opacity-40">{file.size ? `${Math.ceil(file.size / 1024)}kb` : ""}</span>
+                  </button>
+                  {openFile === file.path && (
+                    <pre className={`mt-1 max-h-40 overflow-auto rounded-lg p-2 text-[10px] leading-relaxed ${theme === "dark" ? "bg-black/30 text-white/55" : "bg-white text-gray-500 border border-gray-100"}`}>
+                      {loadingFile ? "Loading file…" : fileContent}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={`text-[11px] py-2 ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>Files will appear here as the Agent writes them.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditorPage() {
   const { theme } = useTheme();
+  const planEntitlement = getPlanEntitlement(getAppUser()?.plan);
   const [, routeParams] = useRoute("/app/editor/:id");
   const projectId = Number(routeParams?.id || 0);
   const [chatInput, setChatInput] = useState("");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [turns, setTurns] = useState<RuntimeBuilderTurn[]>([]);
+  const [restoringTurnId, setRestoringTurnId] = useState<number | null>(null);
+  const [openTurnFile, setOpenTurnFile] = useState<string | null>(null);
+  const [turnFileContent, setTurnFileContent] = useState("");
+  const [loadingTurnFile, setLoadingTurnFile] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [productionUrl, setProductionUrl] = useState("");
+  const [previewEnvironment, setPreviewEnvironment] = useState<"development" | "production">("development");
+  const [publishing, setPublishing] = useState(false);
+  const [publishDrawerOpen, setPublishDrawerOpen] = useState(false);
+  const [hostingProvider, setHostingProvider] = useState("buildcustom");
+  const [customDomain, setCustomDomain] = useState("");
+  const [customOrigin, setCustomOrigin] = useState("");
+  const [savingPublishSettings, setSavingPublishSettings] = useState(false);
+  const [publishSettingsMessage, setPublishSettingsMessage] = useState("");
+  const [previewPath, setPreviewPath] = useState("/");
+  const [addressDraft, setAddressDraft] = useState("dev/");
+  const [publishFlow, setPublishFlow] = useState<{
+    status: "idle" | "approval" | "preparing" | "deploying" | "complete" | "failed";
+    message: string;
+  }>({ status: "idle", message: "" });
+  const [refreshingPreview, setRefreshingPreview] = useState(false);
+  const [previewRevision, setPreviewRevision] = useState(0);
+  const [releases, setReleases] = useState<RuntimeRelease[]>([]);
+  const [restoreCandidate, setRestoreCandidate] = useState<RuntimeRelease | null>(null);
+  const [restoringRelease, setRestoringRelease] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
   const [sending, setSending] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [chatWidth, setChatWidth] = useState(420);
+  const [resizingChat, setResizingChat] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState("");
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const [attachments, setAttachments] = useState<ComposerImage[]>([]);
+  const [textContext, setTextContext] = useState<{ id: string; filename: string; content: string }[]>([]);
+  const [selectorEnabled, setSelectorEnabled] = useState(false);
+  const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
+  const requestController = useRef<AbortController | null>(null);
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const receiveElement = (event: MessageEvent) => {
+      if (event.source !== previewFrameRef.current?.contentWindow || event.data?.type !== "buildcustom:element-selected") return;
+      if (event.data.element && typeof event.data.element === "object") setSelectedElement(event.data.element);
+    };
+    window.addEventListener("message", receiveElement);
+    return () => window.removeEventListener("message", receiveElement);
+  }, []);
+
+  useEffect(() => {
+    const frame = previewFrameRef.current;
+    if (frame?.contentWindow) {
+      frame.contentWindow.postMessage({ type: "buildcustom:selector", enabled: selectorEnabled }, "*");
+    }
+  }, [selectorEnabled, previewUrl]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(textarea.scrollHeight, 220);
+    textarea.style.height = `${Math.max(nextHeight, 40)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 220 ? "auto" : "hidden";
+  }, [chatInput]);
+
+  const toggleSelector = () => {
+    const enabled = !selectorEnabled;
+    setSelectorEnabled(enabled);
+    previewFrameRef.current?.contentWindow?.postMessage({ type: "buildcustom:selector", enabled }, "*");
+  };
+
+  const toggleListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceError("Voice input is not supported in this browser.");
+      return;
+    }
+    setVoiceError("");
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onstart = () => setListening(true);
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0]?.transcript || "")
+        .join(" ");
+      setChatInput((current) => `${current}${current ? " " : ""}${transcript}`.trim());
+    };
+    recognition.onerror = (event: any) => {
+      setVoiceError(event.error === "not-allowed" ? "Microphone access was blocked." : "Voice input could not be captured.");
+      setListening(false);
+    };
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const readFileAsBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
+
+  const handleAttachmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (selected.length > 4) {
+      setVoiceError("Attach no more than 4 files at a time.");
+      return;
+    }
+    const imageFiles = selected.filter((file) => ["image/png", "image/jpeg", "image/webp"].includes(file.type));
+    const textFiles = selected.filter((file) => !imageFiles.includes(file) && (
+      file.type.startsWith("text/") || /\.(tsx?|jsx?|css|scss|html|json|md|py|sql|yaml|yml|sh|xml)$/i.test(file.name)
+    ));
+    if (imageFiles.some((file) => file.size > 4_000_000)) {
+      setVoiceError("Images must be 4 MB or less.");
+      return;
+    }
+    if (imageFiles.reduce((total, file) => total + file.size, 0) > 8_000_000) {
+      setVoiceError("Image attachments must be 8 MB or less in total.");
+      return;
+    }
+    try {
+      const images = await Promise.all(imageFiles.map(async (file) => ({
+        id: `${file.name}-${file.lastModified}-${file.size}`,
+        filename: file.name,
+        mimeType: file.type,
+        base64Data: await readFileAsBase64(file),
+        size: file.size,
+      })));
+      const contexts = await Promise.all(textFiles.map(async (file) => ({
+        id: `${file.name}-${file.lastModified}-${file.size}`,
+        filename: file.name,
+        content: (await file.text()).slice(0, 12000),
+      })));
+      setAttachments((current) => [...current.filter((item) => !images.some((next) => next.id === item.id)), ...images]);
+      setTextContext((current) => [...current.filter((item) => !contexts.some((next) => next.id === item.id)), ...contexts]);
+      if (selected.some((file) => !imageFiles.includes(file) && !textFiles.includes(file))) {
+        setVoiceError("Some files were skipped. Attach PNG, JPEG, WebP, or text/code files.");
+      }
+    } catch (error: any) {
+      setVoiceError(error.message || "Could not read the attachment.");
+    }
+  };
+
+  const removeAttachment = (id: string) => setAttachments((current) => current.filter((item) => item.id !== id));
+  const removeTextContext = (id: string) => setTextContext((current) => current.filter((item) => item.id !== id));
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!cancelled && response.ok) {
+          if (body.previewUrl || body.state?.previewUrl) {
+            setPreviewUrl(body.previewUrl || body.state.previewUrl);
+          }
+          if (body.deploymentUrl) setProductionUrl(body.deploymentUrl);
+        }
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          setHostingProvider(data.hostingProvider || "buildcustom");
+          setCustomDomain(data.customDomain || "");
+          setCustomOrigin(data.customOrigin || "");
+        }
+      })
+      .catch(() => undefined);
+  }, [projectId]);
+
+  const loadReleases = async () => {
+    if (!projectId) return;
+    const response = await fetch(`/api/projects/${projectId}/runtime/releases`, { headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setReleases(data.releases || []);
+  };
+
+  useEffect(() => {
+    loadReleases().catch(() => undefined);
+  }, [projectId]);
+
+  const loadTurns = async () => {
+    if (!projectId) return;
+    const response = await fetch(`/api/projects/${projectId}/runtime/turns`, { headers: authHeaders() });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setTurns(data.turns || []);
+  };
+
+  useEffect(() => {
+    setMessages([]);
+    loadTurns().catch(() => undefined);
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!publishing || !projectId) return;
+    const poll = window.setInterval(async () => {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
+        const data = await response.json().catch(() => ({}));
+        const cloudflare = data.state?.cloudflare;
+        if (cloudflare?.status === "running") {
+          setPublishFlow({
+            status: "deploying",
+            message: "Cloudflare is uploading and activating the production Worker.",
+          });
+        } else if (cloudflare?.status === "failed") {
+          setPublishFlow({ status: "failed", message: cloudflare.error || "Production deployment failed." });
+        }
+      } catch {
+        // The publish request remains authoritative; a transient status poll may safely retry.
+      }
+    }, 1000);
+    return () => window.clearInterval(poll);
+  }, [publishing, projectId]);
 
   const handleSend = async () => {
     if (!chatInput.trim()) return;
     if (!projectId) {
-      setRuntimeError("Open Builder from a runtime-backed project to start a ThinkAgent session.");
+      setRuntimeError("Open Builder from a runtime-backed project to start an Agent session.");
       return;
     }
     const prompt = chatInput.trim();
@@ -693,52 +1207,248 @@ function EditorPage() {
     setChatInput("");
     setSending(true);
     setRuntimeError("");
+    const controller = new AbortController();
+    requestController.current = controller;
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant" as const, content: planMode ? "Agent is preparing a plan…" : "Agent is working on your request…" },
+    ]);
+    const imageContext = attachments.length
+      ? `\n\nAttached images: ${attachments.map((image) => `${image.filename} (${image.mimeType}, ${image.size} bytes)`).join(", ")}`
+      : "";
+    const selectedContext = selectedElement
+      ? `\n\nSelected element from the preview:\n${JSON.stringify(selectedElement).slice(0, 6000)}`
+      : "";
+    const textFileContext = textContext.length
+      ? `\n\nAttached file context:\n${textContext.map((file) => `--- ${file.filename} ---\n${file.content}`).join("\n").slice(0, 30000)}`
+      : "";
+    const approvedPlanContext = !planMode && pendingPlan
+      ? `\n\nApproved implementation plan from Plan mode:\n${pendingPlan}\n\nFollow this approved plan while applying the user's request.`
+      : "";
+    const agentPrompt = `${prompt}${imageContext}${selectedContext}${textFileContext}${approvedPlanContext}`;
     try {
-      const workspace = await fetch(`/api/projects/${projectId}/runtime/workspace`, {
-        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({}),
-      });
-      if (!workspace.ok) {
-        const data = await workspace.json().catch(() => ({}));
-        throw new Error(data.message || "Unable to initialize the VibeSDK workspace.");
-      }
-      const session = await fetch(`/api/projects/${projectId}/runtime/agent/sessions`, {
-        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({}),
-      });
-      const sessionData = await session.json();
-      if (!session.ok) throw new Error(sessionData.message || "Unable to start the ThinkAgent session.");
-      const response = await fetch(`/api/projects/${projectId}/runtime/agent/messages`, {
+      const response = await fetch(`/api/projects/${projectId}/runtime/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...authHeaders() },
-        body: JSON.stringify({ sessionId: sessionData.id || sessionData.sessionId, message: prompt }),
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ message: agentPrompt, displayMessage: prompt, images: attachments, mode: planMode ? "plan" : "build" }),
+        signal: controller.signal,
       });
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || "ThinkAgent could not process the request.");
+        throw new Error(data.message || "Agent could not process the request.");
       }
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let output = "";
-      while (reader) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        output += decoder.decode(value, { stream: true });
-        setMessages((prev) => {
-          const withoutStreaming = prev.filter((message) => message.role !== "assistant" || message.content !== output.slice(0, -1));
-          return [...withoutStreaming.filter((message) => message.content !== output), { role: "assistant", content: output }];
-        });
+      if (data.turn) setTurns((current) => [...current, data.turn]);
+      setMessages([]);
+      if (planMode) {
+        setPendingPlan(data.message || "");
+        setPlanMode(false);
+      } else {
+        setPendingPlan("");
       }
-      if (!output) setMessages((prev) => [...prev, { role: "assistant", content: "ThinkAgent completed the request." }]);
+      setAttachments([]);
+      setTextContext([]);
+      setSelectedElement(null);
+      if (planMode) return;
       const preview = await fetch(`/api/projects/${projectId}/runtime/previews`, {
         method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({}),
       });
       const previewData = await preview.json().catch(() => ({}));
       if (preview.ok && previewData.url) setPreviewUrl(previewData.url);
     } catch (error: any) {
-      setRuntimeError(error.message || "The runtime request failed.");
+      if (error?.name === "AbortError") {
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: "Build stopped. Your workspace is unchanged from the last completed step." },
+        ]);
+        return;
+      }
+      const message = error.message || "The Agent could not complete the request.";
+      setRuntimeError(message);
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: message },
+      ]);
     } finally {
+      requestController.current = null;
       setSending(false);
+    }
+  };
+
+  const restoreBuilderTurn = async (turn: RuntimeBuilderTurn) => {
+    if (!projectId || !turn.commitHash || restoringTurnId !== null) return;
+    if (!window.confirm("Restore this checkpoint to Development? Your live Production app will not change.")) return;
+    const commitHash = turn.commitHash;
+    setRestoringTurnId(turn.id);
+    setRuntimeError("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/turns/${turn.id}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "The checkpoint could not be restored.");
+      setPreviewUrl(data.previewUrl || "");
+      setPreviewEnvironment("development");
+      setPreviewRevision((revision) => revision + 1);
+      setMessages((current) => [...current, {
+        role: "assistant",
+        content: `Checkpoint ${commitHash.slice(0, 8)} was restored to Development. Production is unchanged.`,
+      }]);
+    } catch (error: any) {
+      setRuntimeError(error.message || "The checkpoint could not be restored.");
+    } finally {
+      setRestoringTurnId(null);
+    }
+  };
+
+  const showTurnFile = async (turnId: number, path: string) => {
+    const key = `${turnId}:${path}`;
+    if (openTurnFile === key) {
+      setOpenTurnFile(null);
+      return;
+    }
+    setOpenTurnFile(key);
+    setLoadingTurnFile(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(path)}`, { headers: authHeaders() });
+      const data = await response.json().catch(() => ({}));
+      setTurnFileContent(response.ok ? data.content : "Unable to load this file.");
+    } catch {
+      setTurnFileContent("Unable to load this file.");
+    } finally {
+      setLoadingTurnFile(false);
+    }
+  };
+
+  const stopBuild = async () => {
+    if (projectId) {
+      await fetch(`/api/projects/${projectId}/runtime/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({}),
+      }).catch(() => undefined);
+    }
+    requestController.current?.abort();
+    setSending(false);
+  };
+
+  const requestPublishApproval = () => {
+    if (!projectId || publishing || !previewUrl) return;
+    setPublishDrawerOpen(true);
+    if (hostingProvider === "custom") {
+      setPublishFlow({
+        status: "failed",
+        message: "External hosting is selected. Deploy through that provider, then point the custom domain CNAME record shown above to its origin hostname.",
+      });
+      return;
+    }
+    setPublishFlow({
+      status: "approval",
+      message: "Publishing updates the live app and cannot be reversed in place. Every publish is saved as a release point that can be restored to Development and published again.",
+    });
+  };
+
+  const savePublishingSettings = async () => {
+    if (!projectId || savingPublishSettings) return;
+    setSavingPublishSettings(true);
+    setPublishSettingsMessage("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ hostingProvider, customDomain, customOrigin }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Publishing settings could not be saved.");
+      setCustomDomain(data.customDomain || "");
+      setCustomOrigin(data.customOrigin || "");
+      setPublishSettingsMessage("Publishing settings saved.");
+    } catch (error: any) {
+      setPublishSettingsMessage(error.message || "Publishing settings could not be saved.");
+    } finally {
+      setSavingPublishSettings(false);
+    }
+  };
+
+  const publishProject = async () => {
+    if (!projectId || publishing) return;
+    setPublishing(true);
+    setRuntimeError("");
+    setPublishFlow({
+      status: "preparing",
+      message: "Connecting to the runtime and preparing the production deployment.",
+    });
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/deployments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "The project could not be published.");
+      setProductionUrl(data.url || "");
+      setPreviewEnvironment("production");
+      setPreviewRevision((revision) => revision + 1);
+      setPublishFlow({
+        status: "complete",
+        message: "Production is live. The embedded Production preview has been updated.",
+      });
+      await loadReleases();
+    } catch (error: any) {
+      const message = error.message || "The project could not be published.";
+      setRuntimeError(message);
+      setPublishFlow({ status: "failed", message });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const restoreReleaseToDevelopment = async () => {
+    if (!projectId || !restoreCandidate || restoringRelease) return;
+    setRestoringRelease(true);
+    setRuntimeError("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/releases/${restoreCandidate.id}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "The release could not be restored.");
+      setPreviewUrl(data.previewUrl || "");
+      setPreviewEnvironment("development");
+      setPreviewRevision((revision) => revision + 1);
+      setRestoreCandidate(null);
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: `Release ${String(data.release?.commitHash || "").slice(0, 8)} was restored to Development. Production is unchanged until you publish again.`,
+        },
+      ]);
+    } catch (error: any) {
+      setRuntimeError(error.message || "The release could not be restored.");
+    } finally {
+      setRestoringRelease(false);
+    }
+  };
+
+  const refreshActivePreview = async () => {
+    if (!projectId || refreshingPreview) return;
+    setRefreshingPreview(true);
+    try {
+      if (previewEnvironment === "production") {
+        const response = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || "The production URL could not be refreshed.");
+        setProductionUrl(data.deploymentUrl || "");
+      }
+      setPreviewRevision((revision) => revision + 1);
+    } catch (error: any) {
+      setRuntimeError(error.message || "The preview could not be refreshed.");
+    } finally {
+      setRefreshingPreview(false);
     }
   };
 
@@ -748,27 +1458,213 @@ function EditorPage() {
     { id: "tablet" as const, icon: Tablet, label: "Tablet" },
     { id: "mobile" as const, icon: Smartphone, label: "Mobile" },
   ];
+  const activePreviewUrl = previewEnvironment === "development" ? previewUrl : productionUrl;
+  const managedCnameTarget = (() => {
+    try { return productionUrl ? new URL(productionUrl).hostname : ""; } catch { return ""; }
+  })();
+  const activePreviewSrc = (() => {
+    if (!activePreviewUrl || previewEnvironment === "production" || previewPath === "/") return activePreviewUrl;
+    try {
+      const url = new URL(activePreviewUrl);
+      url.pathname = `${url.pathname.replace(/\/$/, "")}${previewPath}`;
+      return url.toString();
+    } catch {
+      return activePreviewUrl;
+    }
+  })();
+  const navigatePreviewPath = () => {
+    const raw = addressDraft.trim().replace(/^dev\/?/, "");
+    const nextPath = raw ? `/${raw.replace(/^\/+/, "")}` : "/";
+    setPreviewPath(nextPath);
+    setAddressDraft(`dev${nextPath}`);
+    setPreviewRevision((revision) => revision + 1);
+  };
+
+  const startChatResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (chatCollapsed) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = chatWidth;
+    let finalWidth = startWidth;
+    setResizingChat(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (moveEvent: PointerEvent) => {
+      const maxWidth = Math.max(300, Math.min(760, window.innerWidth * 0.7));
+      finalWidth = Math.min(maxWidth, Math.max(40, startWidth + moveEvent.clientX - startX));
+      setChatWidth(finalWidth);
+    };
+    const onEnd = () => {
+      if (finalWidth <= 72) {
+        setChatCollapsed(true);
+      } else if (finalWidth < 240) {
+        setChatWidth(240);
+      }
+      setResizingChat(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+  };
 
   return (
     <div className="flex h-[calc(100vh-64px)]">
-      <div className={`w-[420px] flex flex-col border-r shrink-0 ${
+      <motion.aside
+        initial={false}
+        animate={{ width: chatCollapsed ? 40 : chatWidth }}
+        transition={{ duration: resizingChat ? 0 : 0.2, ease: "easeInOut" }}
+        className={`relative flex flex-col overflow-visible border-r shrink-0 ${
         theme === "dark"
           ? "bg-[#0a0a12] border-white/10"
           : "bg-white border-gray-200"
-      }`}>
+      }`}
+      >
+        {chatCollapsed ? (
+          <div className={`h-[53px] w-10 flex items-center justify-center border-b ${
+            theme === "dark" ? "border-white/10" : "border-gray-200"
+          }`}>
+            <button
+              onClick={() => {
+                setChatWidth(420);
+                setChatCollapsed(false);
+              }}
+              className={`p-1.5 rounded-md transition-colors ${
+                theme === "dark"
+                  ? "text-cyan-300 hover:bg-white/10"
+                  : "text-cyan-600 hover:bg-gray-100"
+              }`}
+              title="Expand AI chat"
+              aria-label="Expand AI chat"
+              data-testid="button-expand-ai-chat"
+            >
+              <PanelLeft size={18} />
+            </button>
+          </div>
+        ) : (
+          <>
         <div className={`px-5 py-4 border-b flex items-center gap-3 ${
           theme === "dark" ? "border-white/10" : "border-gray-200"
         }`}>
           <Zap size={18} className="text-purple-400" />
           <h2 className="font-display font-semibold text-brand-gradient">AI Builder</h2>
+          <button
+            onClick={() => setChatCollapsed(true)}
+            className={`ml-auto p-1.5 rounded-md transition-colors ${
+              theme === "dark"
+                ? "text-white/50 hover:bg-white/10 hover:text-white"
+                : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+            }`}
+            title="Collapse AI chat"
+            aria-label="Collapse AI chat"
+            data-testid="button-collapse-ai-chat"
+          >
+            <PanelLeftClose size={18} />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {runtimeError && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{runtimeError}</div>}
-          {!messages.length && !runtimeError && <div className={`rounded-2xl px-4 py-3 text-sm ${theme === "dark" ? "bg-white/5 text-white/60 border border-white/10" : "bg-gray-100 text-gray-600 border border-gray-200"}`}>ThinkAgent is ready. Describe what you want to build.</div>}
+          {!turns.length && !messages.length && !runtimeError && <div className={`rounded-2xl px-4 py-3 text-sm ${theme === "dark" ? "bg-white/5 text-white/60 border border-white/10" : "bg-gray-100 text-gray-600 border border-gray-200"}`}>Agent is ready. Describe what you want to build.</div>}
+          {turns.map((turn) => (
+            <div key={turn.id} className="space-y-3" data-testid={`builder-turn-${turn.id}`}>
+              <div className="flex justify-end">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-r from-cyan-500 to-cyan-400 px-4 py-3 text-sm leading-relaxed text-black">
+                  {turn.prompt}
+                </div>
+              </div>
+              <div className="flex justify-start">
+                <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
+                  theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
+                }`}>
+                  {turn.response}
+                </div>
+              </div>
+              {turn.mode === "build" && (
+                <details className={`group rounded-xl border ${
+                  theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"
+                }`}>
+                  <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-400/15 text-emerald-400"><Check size={13} /></div>
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>Completed checkpoint</div>
+                      <div className={`text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+                        {(turn.activity?.length || 0)} {(turn.activity?.length || 0) === 1 ? "action" : "actions"} · {turn.changedFiles.length} changed {turn.changedFiles.length === 1 ? "file" : "files"}
+                      </div>
+                    </div>
+                    <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className={`border-t px-3 py-3 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                    {(turn.activity?.length || 0) > 0 && (
+                      <div className={`mb-3 space-y-1 border-b pb-3 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                        {turn.activity.map((entry, index) => (
+                          <div key={`${entry.createdAt}-${index}`} className={`flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs ${
+                            theme === "dark" ? "text-white/60" : "text-gray-600"
+                          }`}>
+                            <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
+                              entry.status === "success" ? "bg-emerald-400/15 text-emerald-400" : "bg-cyan-400/15 text-cyan-400"
+                            }`}>
+                              {entry.type === "tool" ? <Terminal size={11} /> : <Sparkles size={11} />}
+                            </div>
+                            <span className="min-w-0 break-words leading-5">{entry.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {turn.changedFiles.length ? (
+                      <div className="space-y-1">
+                        {turn.changedFiles.map((file) => (
+                          <div key={file.path}>
+                            <button
+                              onClick={() => showTurnFile(turn.id, file.path)}
+                              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${
+                                theme === "dark" ? "text-white/65 hover:bg-white/5" : "text-gray-600 hover:bg-white"
+                              }`}
+                            >
+                              <FileCode2 size={13} className="shrink-0 text-cyan-400" />
+                              <span className="min-w-0 flex-1 truncate font-mono">{file.path}</span>
+                              <span className="text-[10px] capitalize opacity-50">{file.change}</span>
+                              <ChevronDown size={12} className={`transition-transform ${openTurnFile === `${turn.id}:${file.path}` ? "rotate-180" : ""}`} />
+                            </button>
+                            {openTurnFile === `${turn.id}:${file.path}` && (
+                              <pre className={`mt-1 max-h-56 overflow-auto rounded-lg p-2 text-[10px] leading-relaxed ${
+                                theme === "dark" ? "bg-black/40 text-cyan-100/70" : "border border-gray-100 bg-white text-gray-600"
+                              }`}>
+                                {loadingTurnFile ? "Loading code…" : turnFileContent}
+                              </pre>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>No file content changed in this turn.</p>
+                    )}
+                    {turn.commitHash && (
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <span className={`font-mono text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{turn.commitHash.slice(0, 8)}</span>
+                        <button
+                          onClick={() => restoreBuilderTurn(turn)}
+                          disabled={restoringTurnId !== null}
+                          className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-50 ${
+                            theme === "dark" ? "border-white/10 text-cyan-300 hover:bg-white/5" : "border-gray-200 bg-white text-cyan-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          {restoringTurnId === turn.id ? "Restoring…" : "Restore checkpoint"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+          ))}
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+              <div className={`max-w-[85%] whitespace-pre-wrap px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-gradient-to-r from-cyan-500 to-cyan-400 text-black rounded-br-md"
                   : theme === "dark"
@@ -779,17 +1675,59 @@ function EditorPage() {
               </div>
             </div>
           ))}
+          {projectId > 0 && sending && (
+            <BuildActivity projectId={projectId} theme={theme} isBuilding={sending} />
+          )}
         </div>
 
         <div className={`p-4 border-t ${
           theme === "dark" ? "border-white/10" : "border-gray-200"
         }`}>
-          <div className={`flex items-end gap-2 p-3 rounded-xl ${
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            multiple
+            accept="image/png,image/jpeg,image/webp,text/*,.tsx,.ts,.jsx,.js,.css,.scss,.html,.json,.md,.py,.sql,.yaml,.yml,.sh,.xml"
+            onChange={handleAttachmentChange}
+            data-testid="input-editor-attachments"
+          />
+          {(attachments.length > 0 || textContext.length > 0 || selectedElement || pendingPlan) && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {attachments.map((file) => (
+                <span key={file.id} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-200" : "border-cyan-200 bg-cyan-50 text-cyan-700"}`}>
+                  <Image size={11} /> {file.filename}
+                  <button onClick={() => removeAttachment(file.id)} aria-label={`Remove ${file.filename}`} className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
+                </span>
+              ))}
+              {textContext.map((file) => (
+                <span key={file.id} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-purple-400/20 bg-purple-400/10 text-purple-200" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
+                  <FileText size={11} /> {file.filename}
+                  <button onClick={() => removeTextContext(file.id)} aria-label={`Remove ${file.filename}`} className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
+                </span>
+              ))}
+              {selectedElement && (
+                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-pink-400/20 bg-pink-400/10 text-pink-200" : "border-pink-200 bg-pink-50 text-pink-700"}`}>
+                  <Code2 size={11} /> Element selected
+                  <button onClick={() => setSelectedElement(null)} aria-label="Remove selected element" className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
+                </span>
+              )}
+              {pendingPlan && (
+                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${theme === "dark" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                  <Check size={11} /> Plan ready for next build
+                  <button onClick={() => setPendingPlan("")} aria-label="Remove approved plan" className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
+                </span>
+              )}
+            </div>
+          )}
+          {voiceError && <p className="mb-2 text-[11px] text-amber-400">{voiceError}</p>}
+          <div className={`p-3 rounded-xl ${
             theme === "dark"
               ? "bg-white/5 border border-white/10"
               : "bg-gray-100 border border-gray-200"
           }`}>
             <textarea
+              ref={textareaRef}
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => {
@@ -799,30 +1737,87 @@ function EditorPage() {
                 }
               }}
               placeholder="Describe what you want to build..."
-              rows={2}
-              className={`flex-1 bg-transparent border-none outline-none resize-none text-sm ${
+              rows={1}
+              className={`block w-full min-h-10 max-h-[220px] bg-transparent border-none outline-none resize-none text-sm leading-6 ${
                 theme === "dark"
                   ? "text-white placeholder-white/40"
                   : "text-gray-900 placeholder-gray-400"
               }`}
               data-testid="input-editor-chat"
             />
-            <button
-              onClick={handleSend}
-              disabled={sending}
-              className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
-              data-testid="button-send-chat"
-            >
-              <ChevronRight size={18} />
-            </button>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setPlanMode((value) => !value)}
+                  className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold border transition-colors ${planMode ? "border-purple-400/50 bg-purple-400/15 text-purple-200" : theme === "dark" ? "border-white/10 text-white/45 hover:text-white/75" : "border-gray-200 text-gray-500 hover:text-gray-800"}`}
+                  title="Plan only. No workspace files will be changed."
+                  aria-pressed={planMode}
+                  data-testid="button-plan-toggle"
+                >Plan</button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-1.5 rounded-md transition-colors ${theme === "dark" ? "text-white/45 hover:bg-white/10 hover:text-white" : "text-gray-500 hover:bg-white hover:text-gray-800"}`}
+                  title="Attach files"
+                  data-testid="button-attach-file"
+                ><Plus size={16} /></button>
+                <button
+                  onClick={toggleListening}
+                  className={`p-1.5 rounded-md transition-colors ${listening ? "bg-cyan-400/20 text-cyan-300" : theme === "dark" ? "text-white/45 hover:bg-white/10 hover:text-white" : "text-gray-500 hover:bg-white hover:text-gray-800"}`}
+                  title={listening ? "Stop listening" : "Use voice input"}
+                  data-testid="button-editor-microphone"
+                ><Mic size={15} /></button>
+                <button
+                  onClick={toggleSelector}
+                  className={`p-1.5 rounded-md transition-colors ${selectorEnabled ? "bg-pink-400/20 text-pink-300" : theme === "dark" ? "text-white/45 hover:bg-white/10 hover:text-white" : "text-gray-500 hover:bg-white hover:text-gray-800"}`}
+                  title={selectorEnabled ? "Turn off element selector" : "Select an element in preview"}
+                  data-testid="button-element-selector"
+                ><MousePointer2 size={15} /></button>
+              </div>
+              {sending ? (
+              <button
+                onClick={stopBuild}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/30 text-red-300 hover:bg-red-500/25 transition-colors text-xs font-semibold"
+                data-testid="button-stop-build"
+              >
+                <StopCircle size={16} />
+                Stop
+              </button>
+              ) : (
+              <button
+                onClick={handleSend}
+                className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
+                data-testid="button-send-chat"
+              >
+                <ChevronRight size={18} />
+              </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+          </>
+        )}
+        {!chatCollapsed && (
+          <div
+            onPointerDown={startChatResize}
+            className="group absolute inset-y-0 -right-1 z-50 w-3 cursor-col-resize touch-none"
+            role="separator"
+            aria-label="Resize AI chat"
+            aria-orientation="vertical"
+            data-testid="resize-handle-ai-chat"
+          >
+            <div className={`absolute right-1 top-1/2 flex h-9 w-4 -translate-y-1/2 items-center justify-center rounded-full border opacity-0 shadow-lg transition-opacity group-hover:opacity-100 ${
+              theme === "dark" ? "border-white/15 bg-[#151522] text-white/65" : "border-gray-200 bg-white text-gray-500"
+            }`}>
+              <GripVertical size={13} />
+            </div>
+          </div>
+        )}
+      </motion.aside>
 
-      <div className={`flex-1 flex flex-col ${
+      <div className={`min-w-0 flex-1 flex flex-col ${
         theme === "dark" ? "bg-[#060610]" : "bg-gray-50"
       }`}>
-        <div className={`flex items-center gap-3 px-5 py-3 border-b ${
+        <div className={`min-w-0 flex items-center gap-3 px-5 py-3 border-b ${
           theme === "dark" ? "border-white/10" : "border-gray-200"
         }`}>
           <div className="flex items-center gap-2">
@@ -831,7 +1826,30 @@ function EditorPage() {
             <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
           </div>
 
-          <div className={`flex items-center gap-1 p-1 rounded-lg ${
+          <div className={`flex items-center gap-1 p-1 rounded-lg shrink-0 ${
+            theme === "dark" ? "bg-white/5" : "bg-gray-200"
+          }`}>
+            {(["development", "production"] as const).map((environment) => (
+              <button
+                key={environment}
+                onClick={() => setPreviewEnvironment(environment)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  previewEnvironment === environment
+                    ? theme === "dark"
+                      ? "bg-white/10 text-white shadow-sm"
+                      : "bg-white text-gray-900 shadow-sm"
+                    : theme === "dark"
+                      ? "text-white/40 hover:text-white/70"
+                      : "text-gray-500 hover:text-gray-700"
+                }`}
+                data-testid={`button-environment-${environment}`}
+              >
+                {environment === "development" ? "Development" : "Production"}
+              </button>
+            ))}
+          </div>
+
+          <div className={`ml-auto flex items-center gap-1 p-1 rounded-lg shrink-0 ${
             theme === "dark" ? "bg-white/5" : "bg-gray-200"
           }`}>
             {deviceButtons.map((btn) => (
@@ -855,21 +1873,494 @@ function EditorPage() {
             ))}
           </div>
 
-          <div className={`flex-1 px-4 py-1.5 rounded-lg text-center text-xs ${
-            theme === "dark"
-              ? "bg-white/5 text-white/40"
-              : "bg-gray-200 text-gray-500"
-          }`}>
-             {previewUrl || (projectId ? "Waiting for an authorized preview…" : "Select a runtime project")}
-          </div>
-          <button className={`p-1.5 rounded-lg transition-colors ${
-            theme === "dark"
-              ? "hover:bg-white/10 text-white/40"
-              : "hover:bg-gray-200 text-gray-400"
-          }`}>
-            <ExternalLink size={14} />
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (previewEnvironment === "development") navigatePreviewPath();
+            }}
+            className={`w-[clamp(160px,24vw,280px)] shrink-0 overflow-hidden px-3 py-1.5 rounded-lg text-xs ${
+              theme === "dark"
+                ? "bg-white/5 text-white/40"
+                : "bg-gray-200 text-gray-500"
+            }`}
+            title={activePreviewUrl || undefined}
+          >
+            {previewEnvironment === "development" && activePreviewUrl ? (
+              <input
+                value={addressDraft}
+                onChange={(event) => setAddressDraft(event.target.value)}
+                onBlur={navigatePreviewPath}
+                aria-label="Development preview path"
+                className="w-full bg-transparent text-center outline-none"
+                spellCheck={false}
+                data-testid="input-preview-address"
+              />
+            ) : (
+              <div className="truncate text-center">
+                {activePreviewUrl ? customDomain || activePreviewUrl : (
+                previewEnvironment === "production"
+                  ? "Not published yet"
+                  : projectId ? "Waiting for an Agent preview…" : "Select a runtime project"
+                )}
+              </div>
+            )}
+          </form>
+          <button
+            onClick={() => {
+              setPublishDrawerOpen(true);
+              if (publishFlow.status === "idle" && !productionUrl) {
+                if (hostingProvider === "custom") {
+                  setPublishFlow({ status: "failed", message: "External hosting uses your provider's deployment process. After deploying there, use the custom-domain DNS instructions in this panel." });
+                } else {
+                  setPublishFlow({ status: "approval", message: "Review hosting and domain settings, then approve this Development version for publishing." });
+                }
+              }
+            }}
+            disabled={!previewUrl}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-400 text-black hover:bg-cyan-300 disabled:opacity-40 text-xs font-semibold transition-colors"
+            data-testid="button-open-publish-drawer"
+          >
+            {publishing ? <RefreshCw size={13} className="animate-spin" /> : <Rocket size={13} />}
+            {publishing ? "Publishing" : "Publish"}
           </button>
+          {previewEnvironment === "production" && !productionUrl ? null : (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={refreshActivePreview}
+                disabled={!activePreviewUrl || refreshingPreview}
+                aria-label={`Refresh ${previewEnvironment} preview`}
+                title={`Refresh ${previewEnvironment} preview`}
+                className={`p-1.5 rounded-lg transition-colors disabled:opacity-30 ${
+                  theme === "dark"
+                    ? "hover:bg-white/10 text-white/40"
+                    : "hover:bg-gray-200 text-gray-400"
+                }`}
+                data-testid="button-refresh-preview"
+              >
+                <RefreshCw size={14} className={refreshingPreview ? "animate-spin" : ""} />
+              </button>
+              <button
+                onClick={() => activePreviewSrc && window.open(activePreviewSrc, "_blank", "noopener,noreferrer")}
+                disabled={!activePreviewUrl}
+                aria-label={`Open ${previewEnvironment} preview in a new tab`}
+                className={`p-1.5 rounded-lg transition-colors disabled:opacity-30 ${
+                  theme === "dark"
+                    ? "hover:bg-white/10 text-white/40"
+                    : "hover:bg-gray-200 text-gray-400"
+                }`}
+              >
+                <ExternalLink size={14} />
+              </button>
+            </div>
+          )}
         </div>
+
+        {false && publishFlow.status !== "idle" && (
+          <div className={`border-b px-5 py-4 ${
+            theme === "dark" ? "border-white/10 bg-[#0b0b16]" : "border-gray-200 bg-white"
+          }`} data-testid="publish-activity">
+            <div className="flex items-start gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  {publishing ? (
+                    <RefreshCw size={15} className="animate-spin text-cyan-400" />
+                  ) : publishFlow.status === "complete" ? (
+                    <Check size={15} className="text-emerald-400" />
+                  ) : publishFlow.status === "failed" ? (
+                    <X size={15} className="text-red-400" />
+                  ) : (
+                    <Shield size={15} className="text-amber-400" />
+                  )}
+                  <h3 className={`text-sm font-semibold ${theme === "dark" ? "text-white/90" : "text-gray-900"}`}>
+                    {publishFlow.status === "approval" ? "Approval required" : publishFlow.status === "complete" ? "Published" : publishFlow.status === "failed" ? "Publish failed" : "Publishing"}
+                  </h3>
+                </div>
+                <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{publishFlow.message}</p>
+                <div className="mt-3 grid grid-cols-4 gap-2">
+                  {[
+                    { id: "approval", label: "Approval" },
+                    { id: "preparing", label: "Prepare" },
+                    { id: "deploying", label: "Cloudflare" },
+                    { id: "complete", label: "Live" },
+                  ].map((stage, index) => {
+                    const order = ["approval", "preparing", "deploying", "complete"];
+                    const current = order.indexOf(publishFlow.status);
+                    const done = publishFlow.status === "complete" || (current > index && publishFlow.status !== "failed");
+                    const active = stage.id === publishFlow.status;
+                    return (
+                      <div key={stage.id}>
+                        <div className={`h-1 rounded-full ${
+                          done ? "bg-emerald-400" : active ? "bg-cyan-400 animate-pulse" : theme === "dark" ? "bg-white/10" : "bg-gray-200"
+                        }`} />
+                        <div className={`mt-1.5 text-[10px] font-medium ${
+                          done || active ? theme === "dark" ? "text-white/75" : "text-gray-800" : theme === "dark" ? "text-white/30" : "text-gray-400"
+                        }`}>{stage.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {publishFlow.status === "approval" && (
+                  <>
+                    <button
+                      onClick={() => setPublishFlow({ status: "idle", message: "" })}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold ${
+                        theme === "dark" ? "border-white/10 text-white/60 hover:bg-white/5" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
+                      data-testid="button-cancel-publish"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={publishProject}
+                      className="px-3 py-1.5 rounded-lg bg-cyan-400 text-black hover:bg-cyan-300 text-xs font-semibold"
+                      data-testid="button-approve-publish"
+                    >
+                      Approve and publish
+                    </button>
+                  </>
+                )}
+                {(publishFlow.status === "complete" || publishFlow.status === "failed") && (
+                  <button
+                    onClick={() => setPublishFlow({ status: "idle", message: "" })}
+                    className={`p-1.5 rounded-md ${theme === "dark" ? "text-white/40 hover:bg-white/10" : "text-gray-400 hover:bg-gray-100"}`}
+                    aria-label="Dismiss publish activity"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+            {(publishFlow.status === "preparing" || publishFlow.status === "deploying") && (
+              <p className={`mt-2 text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>
+                The deployment can no longer be cancelled after approval because Cloudflare may already be activating the new Worker.
+              </p>
+            )}
+          </div>
+        )}
+
+        {false && previewEnvironment === "production" && releases.length > 0 && (
+          <div className={`border-b px-5 py-3 ${
+            theme === "dark" ? "border-white/10 bg-[#090912]" : "border-gray-200 bg-gray-50"
+          }`}>
+            <h3 className={`text-xs font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>Published releases</h3>
+            <p className={`mb-2 text-[10px] ${theme === "dark" ? "text-white/35" : "text-gray-500"}`}>Restore a release to Development without changing the live app.</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {releases.map((release, index) => (
+                <div key={release.id} className={`shrink-0 flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                  theme === "dark" ? "border-white/10 bg-white/[0.03]" : "border-gray-200 bg-white"
+                }`}>
+                  <div>
+                    <div className={`text-[11px] font-semibold ${theme === "dark" ? "text-white/75" : "text-gray-700"}`}>
+                      {index === 0 ? "Current production" : new Date(release.createdAt).toLocaleString()}
+                    </div>
+                    <div className={`font-mono text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{release.commitHash.slice(0, 8)}</div>
+                  </div>
+                  <button
+                    onClick={() => setRestoreCandidate(release)}
+                    disabled={restoringRelease}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border ${
+                      theme === "dark" ? "border-white/10 text-cyan-300 hover:bg-white/5" : "border-gray-200 text-cyan-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    Restore to Dev
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {false && restoreCandidate && (
+          <div className={`border-b px-5 py-4 ${
+            theme === "dark" ? "border-amber-400/20 bg-amber-400/[0.06]" : "border-amber-200 bg-amber-50"
+          }`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className={`text-sm font-semibold ${theme === "dark" ? "text-amber-100" : "text-amber-900"}`}>Restore this release to Development?</h3>
+                <p className={`mt-1 text-xs ${theme === "dark" ? "text-amber-100/55" : "text-amber-800/70"}`}>
+                  This creates a new Development restore point from {restoreCandidate?.commitHash.slice(0, 8)}. Production stays live and unchanged.
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => setRestoreCandidate(null)}
+                  disabled={restoringRelease}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold ${
+                    theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 bg-white text-gray-600"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={restoreReleaseToDevelopment}
+                  disabled={restoringRelease}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 text-black hover:bg-amber-300 disabled:opacity-50 text-xs font-semibold"
+                  data-testid="button-confirm-restore-release"
+                >
+                  {restoringRelease && <RefreshCw size={13} className="animate-spin" />}
+                  {restoringRelease ? "Restoring" : "Restore to Development"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AnimatePresence>
+          {publishDrawerOpen && (
+            <>
+              <motion.button
+                type="button"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setPublishDrawerOpen(false)}
+                className="fixed inset-0 z-[70] bg-black/35"
+                aria-label="Close publishing settings"
+              />
+              <motion.aside
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className={`fixed inset-y-0 right-0 z-[71] flex w-full max-w-[430px] flex-col border-l shadow-2xl ${
+                  theme === "dark" ? "border-white/10 bg-[#0b0b16] text-white" : "border-gray-200 bg-white text-gray-900"
+                }`}
+                data-testid="publishing-drawer"
+              >
+                <div className={`flex items-center gap-3 border-b px-5 py-4 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-400"><Rocket size={18} /></div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-semibold">Publish project</h2>
+                    <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Hosting, domain, progress, and release history</p>
+                  </div>
+                  <button
+                    onClick={() => setPublishDrawerOpen(false)}
+                    className={`rounded-lg p-2 ${theme === "dark" ? "text-white/45 hover:bg-white/10" : "text-gray-400 hover:bg-gray-100"}`}
+                    aria-label="Close publishing settings"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-5 overflow-y-auto p-5">
+                  <section>
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide opacity-60">Hosting choice</h3>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium">
+                      Where should this project be hosted?
+                      <span className="group relative inline-flex" tabIndex={0}>
+                        <HelpCircle size={13} className="opacity-45" />
+                        <span className={`pointer-events-none absolute left-1/2 top-5 z-20 hidden w-64 -translate-x-1/2 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
+                          theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
+                        }`}>
+                          BuildCustom.Ai Hosting is a paid managed service with an automatic project subdomain. External hosting lets you deploy with another provider and store its DNS destination here.
+                        </span>
+                      </span>
+                    </label>
+                    <select
+                      value={hostingProvider}
+                      onChange={(event) => setHostingProvider(event.target.value)}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${
+                        theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-white"
+                      }`}
+                    >
+                      <option value="buildcustom">BuildCustom.Ai Hosting — managed</option>
+                      <option value="custom">External hosting — bring your own</option>
+                    </select>
+                    {hostingProvider === "buildcustom" && (
+                      <div className={`mt-3 rounded-xl border p-3 ${theme === "dark" ? "border-cyan-400/15 bg-cyan-400/[0.05]" : "border-cyan-100 bg-cyan-50"}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-semibold">BuildCustom.Ai Hosting</div>
+                            <p className={`mt-1 text-[11px] leading-relaxed ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>
+                              Your {planEntitlement.name} plan includes {planEntitlement.liveProjectLimit} live {planEntitlement.liveProjectLimit === 1 ? "project" : "projects"}, managed hosting, SSL, CDN, and a BuildCustom.Ai subdomain.
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-cyan-400/15 px-2 py-1 text-[10px] font-semibold text-cyan-500">Managed</span>
+                        </div>
+                      </div>
+                    )}
+                    {hostingProvider === "custom" && (
+                      <>
+                        <label className="mb-1.5 mt-4 flex items-center gap-1.5 text-xs font-medium">
+                          External hosting origin
+                          <span className="group relative inline-flex" tabIndex={0}>
+                            <HelpCircle size={13} className="opacity-45" />
+                            <span className={`pointer-events-none absolute right-0 top-5 z-20 hidden w-64 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
+                              theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
+                            }`}>
+                              Deploy the project with your external provider first, then enter the hostname they give you. Do not include https:// or a path.
+                            </span>
+                          </span>
+                        </label>
+                        <input
+                          value={customOrigin}
+                          onChange={(event) => setCustomOrigin(event.target.value)}
+                          placeholder="project.hosting-provider.com"
+                          className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-cyan-400/60 ${
+                            theme === "dark" ? "border-white/10 bg-white/5 placeholder:text-white/25" : "border-gray-200 bg-white"
+                          }`}
+                          data-testid="input-custom-origin"
+                        />
+                      </>
+                    )}
+                    <label className="mb-1.5 mt-4 block text-xs font-medium">Custom domain <span className="font-normal opacity-40">(optional)</span></label>
+                    <input
+                      value={customDomain}
+                      onChange={(event) => setCustomDomain(event.target.value)}
+                      placeholder="app.example.com"
+                      className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-cyan-400/60 ${
+                        theme === "dark" ? "border-white/10 bg-white/5 placeholder:text-white/25" : "border-gray-200 bg-white"
+                      }`}
+                      data-testid="input-custom-domain"
+                    />
+                    {hostingProvider === "buildcustom" && customDomain && !planEntitlement.managedCustomDomains && (
+                      <div className={`mt-3 rounded-xl border p-3 text-[11px] leading-relaxed ${
+                        theme === "dark" ? "border-amber-400/20 bg-amber-400/[0.06] text-amber-100/70" : "border-amber-200 bg-amber-50 text-amber-800"
+                      }`}>
+                        BuildCustom.Ai-hosted custom domains start on Launch. Free projects can stay live on their included BuildCustom.Ai subdomain or use external hosting.
+                        <a href="/#pricing" className="ml-1 font-semibold underline underline-offset-2">View plans</a>
+                      </div>
+                    )}
+                    <div className={`mt-3 rounded-xl border p-3 ${theme === "dark" ? "border-white/10 bg-black/20" : "border-gray-200 bg-gray-50"}`}>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold">
+                        DNS record
+                        <span className="group relative inline-flex" tabIndex={0}>
+                          <HelpCircle size={13} className="opacity-45" />
+                          <span className={`pointer-events-none absolute right-0 top-5 z-20 hidden w-64 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
+                            theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
+                          }`}>
+                            Add this record at the DNS provider that controls your domain. Use CNAME flattening or an ALIAS/ANAME record when connecting an apex domain such as example.com.
+                          </span>
+                        </span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-[70px_1fr] gap-x-3 gap-y-1.5 text-[11px]">
+                        <span className="opacity-40">Type</span><code>CNAME</code>
+                        <span className="opacity-40">Name</span><code className="truncate">{customDomain ? customDomain.split(".")[0] : "app"}</code>
+                        <span className="opacity-40">Target</span>
+                        <code className="truncate">
+                          {hostingProvider === "custom"
+                            ? customOrigin || "Enter your hosting origin above"
+                            : managedCnameTarget || "Available after the first publish"}
+                        </code>
+                      </div>
+                      <ol className={`mt-3 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+                        <li>Open DNS settings with your domain registrar or DNS provider.</li>
+                        <li>Add the CNAME record shown above.</li>
+                        <li>Remove conflicting A, AAAA, or CNAME records for the same name.</li>
+                        <li>Save and allow DNS propagation, which can take several hours.</li>
+                      </ol>
+                    </div>
+                    <div className="mt-3 flex items-center gap-3">
+                      <button
+                        onClick={savePublishingSettings}
+                        disabled={savingPublishSettings}
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50 ${
+                          theme === "dark" ? "border-white/10 text-cyan-300 hover:bg-white/5" : "border-gray-200 text-cyan-700 hover:bg-gray-50"
+                        }`}
+                        data-testid="button-save-publishing-settings"
+                      >
+                        {savingPublishSettings ? "Saving…" : "Save settings"}
+                      </button>
+                      {publishSettingsMessage && <span className={`text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{publishSettingsMessage}</span>}
+                    </div>
+                  </section>
+
+                  <section className={`rounded-2xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.03]" : "border-gray-200 bg-gray-50"}`}>
+                    <div className="flex items-center gap-2">
+                      {publishing ? <RefreshCw size={15} className="animate-spin text-cyan-400" /> :
+                        publishFlow.status === "complete" ? <Check size={15} className="text-emerald-400" /> :
+                        publishFlow.status === "failed" ? <X size={15} className="text-red-400" /> :
+                        <Cloud size={15} className="text-cyan-400" />}
+                      <h3 className="text-sm font-semibold">
+                        {publishFlow.status === "idle" ? "Ready to publish" :
+                          publishFlow.status === "approval" ? "Approval required" :
+                          publishFlow.status === "complete" ? "Published" :
+                          publishFlow.status === "failed" ? "Publish failed" : "Publishing"}
+                      </h3>
+                    </div>
+                    <p className={`mt-1.5 text-xs leading-relaxed ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+                      {publishFlow.message || "Publish the current Development version to Production."}
+                    </p>
+                    <div className="mt-4 grid grid-cols-4 gap-2">
+                      {[
+                        { id: "approval", label: "Approval" },
+                        { id: "preparing", label: "Prepare" },
+                        { id: "deploying", label: "Deploy" },
+                        { id: "complete", label: "Live" },
+                      ].map((stage, index) => {
+                        const order = ["approval", "preparing", "deploying", "complete"];
+                        const current = order.indexOf(publishFlow.status);
+                        const done = publishFlow.status === "complete" || (current > index && publishFlow.status !== "failed");
+                        const active = stage.id === publishFlow.status;
+                        return (
+                          <div key={stage.id}>
+                            <div className={`h-1 rounded-full ${done ? "bg-emerald-400" : active ? "animate-pulse bg-cyan-400" : theme === "dark" ? "bg-white/10" : "bg-gray-200"}`} />
+                            <div className={`mt-1.5 text-[10px] font-medium ${done || active ? "opacity-80" : "opacity-30"}`}>{stage.label}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      {publishFlow.status === "idle" && (
+                        <button
+                          onClick={requestPublishApproval}
+                          className="rounded-lg bg-cyan-400 px-3 py-2 text-xs font-semibold text-black hover:bg-cyan-300"
+                        >
+                          {hostingProvider === "custom" ? "View external hosting steps" : "Publish with BuildCustom.Ai"}
+                        </button>
+                      )}
+                      {publishFlow.status === "approval" && hostingProvider !== "custom" && (
+                        <>
+                          <button onClick={() => setPublishFlow({ status: "idle", message: "" })} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}>Cancel</button>
+                          <button onClick={publishProject} className="rounded-lg bg-cyan-400 px-3 py-2 text-xs font-semibold text-black hover:bg-cyan-300">Approve and publish</button>
+                        </>
+                      )}
+                      {(publishFlow.status === "complete" || publishFlow.status === "failed") && (
+                        <button onClick={() => setPublishFlow({ status: "idle", message: "" })} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}>Done</button>
+                      )}
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide opacity-60">Published releases</h3>
+                    <p className={`mb-3 mt-1 text-[11px] ${theme === "dark" ? "text-white/35" : "text-gray-500"}`}>Restore an earlier release to Development without changing the live app.</p>
+                    {releases.length ? (
+                      <div className="space-y-2">
+                        {releases.map((release, index) => (
+                          <div key={release.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${theme === "dark" ? "border-white/10 bg-white/[0.03]" : "border-gray-200"}`}>
+                            <History size={14} className="shrink-0 text-cyan-400" />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-semibold">{index === 0 ? "Current production" : new Date(release.createdAt).toLocaleString()}</div>
+                              <div className="font-mono text-[10px] opacity-35">{release.commitHash.slice(0, 8)}</div>
+                            </div>
+                            <button onClick={() => setRestoreCandidate(release)} className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${theme === "dark" ? "border-white/10 text-cyan-300" : "border-gray-200 text-cyan-700"}`}>Restore to Dev</button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={`rounded-xl border border-dashed px-3 py-4 text-center text-xs ${theme === "dark" ? "border-white/10 text-white/35" : "border-gray-200 text-gray-500"}`}>Your published versions will appear here.</div>
+                    )}
+                  </section>
+
+                  {restoreCandidate && (
+                    <section className={`rounded-2xl border p-4 ${theme === "dark" ? "border-amber-400/20 bg-amber-400/[0.06]" : "border-amber-200 bg-amber-50"}`}>
+                      <h3 className="text-sm font-semibold">Restore this release to Development?</h3>
+                      <p className="mt-1 text-xs opacity-60">Production stays unchanged until you publish again.</p>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <button onClick={() => setRestoreCandidate(null)} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${theme === "dark" ? "border-white/10" : "border-gray-200 bg-white"}`}>Cancel</button>
+                        <button onClick={restoreReleaseToDevelopment} disabled={restoringRelease} className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-black disabled:opacity-50">
+                          {restoringRelease ? "Restoring…" : "Restore to Development"}
+                        </button>
+                      </div>
+                    </section>
+                  )}
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
 
         <div className="flex-1 flex items-start justify-center overflow-hidden p-4">
           <motion.div
@@ -888,9 +2379,36 @@ function EditorPage() {
             }`}
             style={{ width: deviceWidths[previewDevice], maxWidth: "100%" }}
           >
-             {previewUrl ? <iframe src={previewUrl} title="Runtime preview" className="w-full h-full border-0 bg-white" /> : (
+             {activePreviewUrl ? (
+               <iframe
+                 key={`${previewEnvironment}-${previewRevision}-${activePreviewUrl}`}
+                 ref={previewFrameRef}
+                  src={activePreviewSrc}
+                 title={`${previewEnvironment === "development" ? "Development" : "Production"} project preview`}
+                 onLoad={() => previewFrameRef.current?.contentWindow?.postMessage({ type: "buildcustom:selector", enabled: selectorEnabled }, "*")}
+                 className="w-full h-full border-0 bg-white"
+               />
+             ) : previewEnvironment === "production" ? (
+               <div className="h-full flex flex-col items-center justify-center gap-4 px-6 text-center">
+                 <div className={`p-4 rounded-2xl ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`}>
+                   <Rocket size={28} className="text-cyan-400" />
+                 </div>
+                 <div>
+                   <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>No production deployment yet</p>
+                   <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Publish the current development version when it is ready for users.</p>
+                 </div>
+                 <button
+                   onClick={requestPublishApproval}
+                   disabled={publishing || !previewUrl}
+                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-400 text-black hover:bg-cyan-300 disabled:opacity-40 text-sm font-semibold transition-colors"
+                 >
+                   {publishing ? <RefreshCw size={15} className="animate-spin" /> : <Rocket size={15} />}
+                   {publishing ? "Publishing…" : "Publish to production"}
+                 </button>
+               </div>
+             ) : (
                <div className={`h-full flex items-center justify-center text-sm ${theme === "dark" ? "bg-[#0d0d1a] text-white/40" : "bg-white text-gray-500"}`}>
-                 {projectId ? "Send a ThinkAgent request to create a preview." : "A project is required for a live preview."}
+                 {projectId ? "Send an Agent request to create a preview." : "A project is required for a live preview."}
                </div>
              )}
           </motion.div>
@@ -1516,15 +3034,20 @@ function AccountSettings() {
 
 function PlanSettings() {
   const { theme } = useTheme();
+  const currentPlan = getPlanEntitlement(getAppUser()?.plan);
   const plans = [
-    { name: "Starter", price: "$0", features: ["3 Projects", "Basic AI Builder", "Shared Hosting"], current: false },
-    { name: "Pro", price: "$29", features: ["Unlimited Projects", "Advanced AI Builder", "Custom Domains", "Priority Support"], current: true },
-    { name: "Enterprise", price: "Custom", features: ["Everything in Pro", "Team Collaboration", "Dedicated Support", "SLA"], current: false },
+    { id: "free", name: "Free", price: "$0", features: ["1 live project", "BuildCustom.Ai subdomain", "Hosting, SSL, and CDN"], current: currentPlan.id === "free" },
+    { id: "launch", name: "Launch", price: "$9", features: ["5 live projects", "Custom domains", "Hosting, SSL, and CDN"], current: currentPlan.id === "launch" },
+    { id: "pro", name: "Pro", price: "$19", features: ["25 live projects", "Custom domains", "Hosting, SSL, and CDN"], current: currentPlan.id === "pro" },
+    { id: "agency", name: "Agency", price: "$49", features: ["100 live projects", "Custom domains", "Hosting, SSL, and CDN"], current: currentPlan.id === "agency" },
   ];
 
   return (
     <SettingsCard title="Plan & Billing" description="Manage your subscription">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <p className={`mb-4 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+        AI generation and model usage are metered separately from hosting.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {plans.map((plan) => (
           <div
             key={plan.name}

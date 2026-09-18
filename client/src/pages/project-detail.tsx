@@ -127,7 +127,7 @@ function OverviewTab({ project, blogCount, projectId }: { project: any; blogCoun
               )}
             </div>
             <div className="flex gap-3 mt-4">
-              <Link href="/app/editor">
+              <Link href={`/app/editor/${projectId}`}>
                 <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-all"
                   style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
                   data-testid="button-open-editor">
@@ -326,28 +326,17 @@ function HistoryTab() {
   const { theme } = useTheme();
   const [, params] = useRoute("/app/project/:id");
   const [deployMessage, setDeployMessage] = useState("");
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["runtime-revisions", params?.id],
-    queryFn: async () => {
-      const res = await fetch(`/api/projects/${params?.id}/runtime/revisions`, { headers: authHeaders() });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "Unable to load runtime revisions.");
-      return body;
-    },
-    enabled: Boolean(params?.id),
-  });
-  const revisions = Array.isArray(data) ? data : data?.revisions || [];
   const deployMutation = useMutation({
-    mutationFn: async (revisionId: string) => {
+    mutationFn: async () => {
       const res = await fetch(`/api/projects/${params?.id}/runtime/deployments`, {
         method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ revisionId }),
+        body: JSON.stringify({}),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Unable to deploy runtime revision.");
       return body;
     },
-    onSuccess: (body) => setDeployMessage(body.url || body.hostname ? `Deployment started: ${body.url || body.hostname}` : "Deployment started in staging."),
+    onSuccess: (body) => setDeployMessage(body.url ? `Deployed: ${body.url}` : "Deployment completed."),
     onError: (error: any) => setDeployMessage(error.message),
   });
   return (
@@ -355,19 +344,14 @@ function HistoryTab() {
       <h3 className={`font-semibold mb-5 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Version History</h3>
       {deployMessage && <p className={`mb-4 text-sm ${deployMessage.startsWith("Unable") || deployMessage.includes("not configured") ? "text-red-400" : "text-emerald-400"}`}>{deployMessage}</p>}
       <div className="space-y-3">
-        {isLoading && <p className="text-sm text-white/40">Loading runtime revisions…</p>}
-        {error && <p className="text-sm text-red-400">{(error as Error).message}</p>}
-        {!isLoading && !error && revisions.map((v: any, i: number) => (
-          <div key={v.id || i} className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${i === 0 ? theme === "dark" ? "border-cyan-400/30 bg-cyan-500/5" : "border-cyan-400 bg-cyan-50" : theme === "dark" ? "border-white/5 hover:border-white/10 hover:bg-white/[0.02]" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"}`} data-testid={`version-row-${v.id || i}`}>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${theme === "dark" ? "bg-white/10 text-white" : "bg-gray-100 text-gray-700"}`}>{v.version || `r${revisions.length - i}`}</div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium truncate ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{v.summary || v.message || v.label || "Runtime revision"}</p>
-              <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{v.createdAt || v.time || "Unknown time"}</p>
-            </div>
-            {i === 0 && <span className="text-xs px-2 py-1 rounded-full bg-cyan-400 text-black font-semibold shrink-0">Current</span>}
-            {v.id && <button onClick={() => deployMutation.mutate(String(v.id))} disabled={deployMutation.isPending} className="px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-300 text-xs font-semibold disabled:opacity-50">{deployMutation.isPending ? "Deploying…" : "Deploy staging"}</button>}
+        <div className={`flex items-center gap-4 p-4 rounded-xl border ${theme === "dark" ? "border-cyan-400/30 bg-cyan-500/5" : "border-cyan-400 bg-cyan-50"}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${theme === "dark" ? "bg-white/10 text-white" : "bg-gray-100 text-gray-700"}`}>Git</div>
+          <div className="flex-1">
+            <p className={`text-sm font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Current Agent workspace</p>
+            <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Conversational revisions are committed inside the isolated runtime workspace.</p>
           </div>
-        ))}
+          <button onClick={() => deployMutation.mutate()} disabled={deployMutation.isPending} className="px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-300 text-xs font-semibold disabled:opacity-50">{deployMutation.isPending ? "Deploying…" : "Deploy current"}</button>
+        </div>
       </div>
     </GlassCard>
   );
@@ -1280,7 +1264,7 @@ export default function ProjectDetail() {
               <p className={`text-sm mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{project.description || "No description"}</p>
             </div>
           </div>
-          <Link href="/app/editor">
+          <Link href={`/app/editor/${projectId}`}>
             <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-all"
               style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
               data-testid="button-header-open-builder"><Code2 size={15} /> Open Builder</button>

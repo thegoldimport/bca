@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { insertWaitlistSchema, insertProjectSchema, insertBlogPostSchema, insertSitePageSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { isRuntimeConfigured, runtimeAdapter, runtimeProjectId, RuntimeAdapterError, streamRuntimeResponse } from "./runtime-adapter";
+import { isRuntimeConfigured, runtimeAdapter, RuntimeAdapterError, type RuntimeImageAttachment } from "./runtime-adapter";
+import { getPlanEntitlement } from "@shared/plans";
 
 function getUserId(req: any): string | null {
   const header = req.headers["x-user-id"];
@@ -241,29 +242,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── VIBESDK RUNTIME ─────────────────────────────────────────────────────────
+  async function runtimeProject(project: any) {
+    const link = await storage.getRuntimeProjectLink(project.id);
+    return { id: project.id, name: project.name, type: project.type, description: project.description, agentId: link?.agentId };
+  }
+
   app.get("/api/projects/:id/runtime/status", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
     if (!isRuntimeConfigured()) {
       return res.status(503).json({ configured: false, code: "RUNTIME_UNCONFIGURED", message: "The VibeSDK runtime is not configured." });
     }
-    return res.json({ configured: true, projectId: runtimeProjectId(project.id), provider: "vibesdk" });
-  });
-
-  app.post("/api/projects/:id/runtime/workspace", async (req, res) => {
-    const project = await requireProject(req, res);
-    if (!project) return;
     try {
-      return res.status(201).json(await runtimeAdapter.createProject({
-        id: runtimeProjectId(project.id), name: project.name, type: project.type, description: project.description,
-      }));
+      const [status, link] = await Promise.all([
+        runtimeAdapter.status(await runtimeProject(project)),
+        storage.getRuntimeProjectLink(project.id),
+      ]);
+      return res.json({
+        ...status,
+        previewUrl: (status.state as any)?.previewUrl || link?.previewUrl || null,
+        deploymentUrl: link?.deploymentUrl || null,
+      });
     } catch (err) { return runtimeError(err, res); }
   });
 
   app.get("/api/projects/:id/runtime/files", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
-    try { return res.json(await runtimeAdapter.files(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
+    try { return res.json(await runtimeAdapter.files(await runtimeProject(project))); } catch (err) { return runtimeError(err, res); }
   });
 
   app.get("/api/projects/:id/runtime/files/content", async (req, res) => {
@@ -271,62 +277,233 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!project) return;
     const path = typeof req.query.path === "string" ? req.query.path : "";
     if (!path || path.includes("..")) return res.status(400).json({ message: "A safe file path is required" });
-    try { return res.json(await runtimeAdapter.fileContent(runtimeProjectId(project.id), path)); } catch (err) { return runtimeError(err, res); }
-  });
-
-  app.post("/api/projects/:id/runtime/agent/sessions", async (req, res) => {
-    const project = await requireProject(req, res);
-    if (!project) return;
-    try { return res.status(201).json(await runtimeAdapter.startAgentSession(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
-  });
-
-  app.post("/api/projects/:id/runtime/agent/messages", async (req, res) => {
-    const project = await requireProject(req, res);
-    if (!project) return;
-    try { return streamRuntimeResponse(await runtimeAdapter.agentMessage(runtimeProjectId(project.id), req.body), res); } catch (err) { return runtimeError(err, res); }
-  });
-
-  app.get("/api/projects/:id/runtime/revisions", async (req, res) => {
-    const project = await requireProject(req, res);
-    if (!project) return;
-    try { return res.json(await runtimeAdapter.revisions(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
-  });
-
-  app.post("/api/projects/:id/runtime/revisions/:revisionId/restore", async (req, res) => {
-    const project = await requireProject(req, res);
-    if (!project) return;
-    try { return res.json(await runtimeAdapter.restoreRevision(runtimeProjectId(project.id), req.params.revisionId)); } catch (err) { return runtimeError(err, res); }
-  });
-
-  app.post("/api/projects/:id/runtime/previews", async (req, res) => {
-    const project = await requireProject(req, res);
-    if (!project) return;
-    try { return res.status(201).json(await runtimeAdapter.createPreview(runtimeProjectId(project.id), req.body?.revisionId)); } catch (err) { return runtimeError(err, res); }
-  });
-
-  app.get("/api/projects/:id/runtime/previews/:previewId", async (req, res) => {
-    const project = await requireProject(req, res);
-    if (!project) return;
-    try { return res.json(await runtimeAdapter.preview(runtimeProjectId(project.id), req.params.previewId)); } catch (err) { return runtimeError(err, res); }
+    try { return res.json(await runtimeAdapter.fileContent(await runtimeProject(project), path)); } catch (err) { return runtimeError(err, res); }
   });
 
   app.get("/api/projects/:id/runtime/console", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
-    try { return res.json(await runtimeAdapter.console(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
+    try {
+      const status = await runtimeAdapter.status(await runtimeProject(project));
+      const state = status.state as any;
+      const generation = state?.generation?.status || "idle";
+      return res.json({
+        lines: [
+          {
+            time: new Date().toLocaleTimeString(),
+            type: state?.lastError ? "error" : status.connected ? "success" : "info",
+            msg: state?.lastError || `Agent ${status.connected ? "connected" : "not connected"}; generation ${generation}; ${status.files} workspace files.`,
+          },
+        ],
+      });
+    } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/messages", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    if (!message) return res.status(400).json({ message: "A message is required" });
+    const rawImages = req.body?.images;
+    if (rawImages !== undefined && !Array.isArray(rawImages)) {
+      return res.status(400).json({ message: "Images must be an array" });
+    }
+    if ((rawImages?.length || 0) > 4) {
+      return res.status(400).json({ message: "Attach no more than 4 images at a time" });
+    }
+    const images: RuntimeImageAttachment[] = [];
+    let totalImageBytes = 0;
+    for (const image of rawImages || []) {
+      const validMime = ["image/png", "image/jpeg", "image/webp"].includes(image?.mimeType);
+      const validFields = typeof image?.id === "string"
+        && typeof image?.filename === "string"
+        && image.filename.length <= 255
+        && typeof image?.base64Data === "string"
+        && image.base64Data.length <= 5_600_000
+        && Number.isFinite(image?.size)
+        && image.size >= 0
+        && image.size <= 4_000_000;
+      if (!validMime || !validFields) {
+        return res.status(400).json({ message: "Attach PNG, JPEG, or WebP images up to 4 MB each" });
+      }
+      totalImageBytes += image.size;
+      images.push(image as RuntimeImageAttachment);
+    }
+    if (totalImageBytes > 8_000_000) {
+      return res.status(400).json({ message: "Image attachments must be 8 MB or less in total" });
+    }
+    try {
+      const displayPrompt = typeof req.body?.displayMessage === "string" && req.body.displayMessage.trim()
+        ? req.body.displayMessage.trim()
+        : message;
+      if (req.body?.mode === "plan") {
+        const ref = await runtimeProject(project);
+        const result = await runtimeAdapter.plan(
+          ref,
+          message,
+          async () => (await storage.getRuntimeProjectLink(project.id))?.agentId,
+          async (agentId) => (await storage.claimRuntimeProjectLink(project.id, agentId)).agentId,
+          images,
+        );
+        const turn = await storage.createRuntimeBuilderTurn({
+          projectId: project.id, mode: "plan", prompt: displayPrompt,
+          response: result.message, changedFiles: [], commitHash: null,
+          activity: [],
+        });
+        return res.json({ ...result, turn });
+      }
+      const ref = await runtimeProject(project);
+      const result = await runtimeAdapter.generate(
+        ref,
+        message,
+        async () => (await storage.getRuntimeProjectLink(project.id))?.agentId,
+        async (agentId) => (await storage.claimRuntimeProjectLink(project.id, agentId)).agentId,
+        images,
+      );
+      const turn = await storage.createRuntimeBuilderTurn({
+        projectId: project.id, mode: "build", prompt: displayPrompt,
+        response: result.message, changedFiles: result.changedFiles, commitHash: result.commitHash,
+        activity: result.activity,
+      });
+      return res.json({ ...result, turn });
+    } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.get("/api/projects/:id/runtime/turns", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    return res.json({ turns: await storage.getRuntimeBuilderTurns(project.id) });
+  });
+
+  app.post("/api/projects/:id/runtime/turns/:turnId/restore", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    const turn = await storage.getRuntimeBuilderTurn(Number(req.params.turnId));
+    if (!turn || turn.projectId !== project.id || !turn.commitHash) {
+      return res.status(404).json({ message: "Restorable checkpoint not found" });
+    }
+    try {
+      const result = await runtimeAdapter.restore(await runtimeProject(project), turn.commitHash);
+      await storage.upsertRuntimeProjectLink(project.id, { previewUrl: result.previewUrl });
+      return res.json({ ...result, turn });
+    } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/previews", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const result = await runtimeAdapter.preview(await runtimeProject(project));
+      await storage.upsertRuntimeProjectLink(project.id, { previewUrl: result.url });
+      return res.status(201).json(result);
+    } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/stop", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      return res.json(await runtimeAdapter.stop(await runtimeProject(project)));
+    } catch (err) { return runtimeError(err, res); }
   });
 
   app.post("/api/projects/:id/runtime/deployments", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
-    if (typeof req.body?.revisionId !== "string" || !req.body.revisionId) return res.status(400).json({ message: "revisionId is required" });
-    try { return res.status(202).json(await runtimeAdapter.deploy(runtimeProjectId(project.id), req.body.revisionId)); } catch (err) { return runtimeError(err, res); }
+    try {
+      const settings = await storage.getRuntimeProjectLink(project.id);
+      if (settings?.hostingProvider === "custom") {
+        return res.status(409).json({ message: "Automatic publishing is available with BuildCustom.Ai Hosting. External hosting uses your provider's deployment process." });
+      }
+      if (!settings?.deploymentUrl) {
+        const user = await storage.getUser(project.userId);
+        const entitlement = getPlanEntitlement(user?.plan);
+        const liveProjects = await storage.countLiveRuntimeProjects(project.userId);
+        if (liveProjects >= entitlement.liveProjectLimit) {
+          return res.status(403).json({
+            code: "LIVE_PROJECT_LIMIT_REACHED",
+            message: `${entitlement.name} includes ${entitlement.liveProjectLimit} live ${entitlement.liveProjectLimit === 1 ? "project" : "projects"}. Upgrade your plan or take another project offline before publishing.`,
+          });
+        }
+      }
+      const result = await runtimeAdapter.deploy(await runtimeProject(project));
+      await storage.upsertRuntimeProjectLink(project.id, { deploymentUrl: result.url });
+      const release = result.commitHash
+        ? await storage.createRuntimeRelease(project.id, result.commitHash, result.url)
+        : null;
+      return res.status(201).json({ ...result, release });
+    } catch (err) { return runtimeError(err, res); }
   });
 
-  app.get("/api/projects/:id/runtime/deployments/:deploymentId", async (req, res) => {
+  app.get("/api/projects/:id/runtime/publishing-settings", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
-    try { return res.json(await runtimeAdapter.deployment(runtimeProjectId(project.id), req.params.deploymentId)); } catch (err) { return runtimeError(err, res); }
+    const link = await storage.getRuntimeProjectLink(project.id);
+    return res.json({
+      hostingProvider: !link?.hostingProvider || link.hostingProvider === "cloudflare" ? "buildcustom" : link.hostingProvider,
+      customDomain: link?.customDomain || "",
+      customOrigin: link?.customOrigin || "",
+    });
+  });
+
+  app.put("/api/projects/:id/runtime/publishing-settings", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    const hostingProvider = ["buildcustom", "custom"].includes(req.body?.hostingProvider) ? req.body.hostingProvider : null;
+    const customDomain = typeof req.body?.customDomain === "string"
+      ? req.body.customDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+      : "";
+    const customOrigin = typeof req.body?.customOrigin === "string"
+      ? req.body.customOrigin.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+      : "";
+    if (!hostingProvider) return res.status(400).json({ message: "Choose a supported hosting provider" });
+    if (customDomain && !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(customDomain)) {
+      return res.status(400).json({ message: "Enter a valid domain such as app.example.com" });
+    }
+    if (hostingProvider === "custom" && !customOrigin) {
+      return res.status(400).json({ message: "Enter the origin hostname supplied by your external hosting provider" });
+    }
+    if (customOrigin && !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(customOrigin)) {
+      return res.status(400).json({ message: "Enter a valid hosting hostname such as project.hosting-provider.com" });
+    }
+    if (hostingProvider === "buildcustom" && customDomain) {
+      const user = await storage.getUser(project.userId);
+      const entitlement = getPlanEntitlement(user?.plan);
+      if (!entitlement.managedCustomDomains) {
+        return res.status(403).json({
+          code: "MANAGED_CUSTOM_DOMAIN_REQUIRES_PAID_PLAN",
+          message: "BuildCustom.Ai-hosted custom domains are available on Launch, Pro, and Agency plans. You can still use external hosting on the Free plan.",
+        });
+      }
+    }
+    const link = await storage.upsertRuntimeProjectLink(project.id, {
+      hostingProvider,
+      customDomain: customDomain || null,
+      customOrigin: customOrigin || null,
+    });
+    return res.json({
+      hostingProvider: link.hostingProvider,
+      customDomain: link.customDomain || "",
+      customOrigin: link.customOrigin || "",
+    });
+  });
+
+  app.get("/api/projects/:id/runtime/releases", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    return res.json({ releases: await storage.getRuntimeReleases(project.id) });
+  });
+
+  app.post("/api/projects/:id/runtime/releases/:releaseId/restore", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    const release = await storage.getRuntimeRelease(Number(req.params.releaseId));
+    if (!release || release.projectId !== project.id) return res.status(404).json({ message: "Release not found" });
+    try {
+      const result = await runtimeAdapter.restore(await runtimeProject(project), release.commitHash);
+      await storage.upsertRuntimeProjectLink(project.id, { previewUrl: result.previewUrl });
+      return res.json({ ...result, release });
+    } catch (err) { return runtimeError(err, res); }
   });
 
   // ── BLOG POSTS ─────────────────────────────────────────────────────────────

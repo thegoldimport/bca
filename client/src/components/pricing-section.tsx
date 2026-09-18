@@ -1,57 +1,69 @@
 import { motion } from "framer-motion";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import glassGeoBg from "@/assets/glass-geo-bg.png";
 
 const PLANS = [
   {
-    name: "Hobby",
+    name: "Free",
     price: "$0",
     period: "/mo",
-    description: "Perfect for testing ideas and building small tools.",
+    description: "Publish your first app and keep it live.",
     features: [
-      "Unlimited public projects",
-      "5 AI generations per day",
-      "Community support",
-      "Standard speed",
-      "Subdomain deployment"
+      "1 live project",
+      "BuildCustom.Ai subdomain",
+      "Managed hosting, SSL, and CDN",
+      "AI usage metered separately",
     ],
     cta: "Start Building",
     featured: false,
     color: "cyan"
   },
   {
-    name: "Pro",
-    price: "$29",
+    name: "Launch",
+    price: "$9",
     period: "/mo",
-    description: "For serious builders who want power and privacy.",
+    description: "For launching several apps with custom domains.",
     features: [
-      "Unlimited private projects",
-      "Unlimited AI generations",
-      "Priority support",
-      "Fastest generation speed",
-      "Custom domain deployment",
-      "Database access",
-      "Export code"
+      "5 live projects",
+      "Custom domains",
+      "Managed hosting, SSL, and CDN",
+      "BuildCustom.Ai subdomains",
+      "AI usage metered separately",
     ],
-    cta: "Go Pro",
+    cta: "Choose Launch",
+    featured: false,
+    color: "cyan"
+  },
+  {
+    name: "Pro",
+    price: "$19",
+    period: "/mo",
+    description: "For builders running a growing app portfolio.",
+    features: [
+      "25 live projects",
+      "Custom domains",
+      "Managed hosting, SSL, and CDN",
+      "BuildCustom.Ai subdomains",
+      "AI usage metered separately",
+    ],
+    cta: "Choose Pro",
     featured: true,
     color: "purple"
   },
   {
-    name: "Team",
-    price: "Custom",
-    period: "",
-    description: "For teams building production-grade software.",
+    name: "Agency",
+    price: "$49",
+    period: "/mo",
+    description: "For agencies managing many live customer projects.",
     features: [
-      "Everything in Pro",
-      "Shared workspace",
-      "Admin controls",
-      "SSO & Audit logs",
-      "Dedicated support",
-      "SLA guarantee"
+      "100 live projects",
+      "Custom domains",
+      "Managed hosting, SSL, and CDN",
+      "BuildCustom.Ai subdomains",
+      "AI usage metered separately",
     ],
-    cta: "Contact Sales",
+    cta: "Choose Agency",
     featured: false,
     color: "emerald"
   }
@@ -78,7 +90,7 @@ export function PricingSection({ onPlanClick }: PricingSectionProps) {
             viewport={{ once: true }}
             className="text-4xl md:text-5xl font-display font-bold text-white mb-6 drop-shadow-[0_0_15px_rgba(0,255,255,0.3)]"
           >
-            Pick your vibe.
+            Build, publish, and host in one place.
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
@@ -87,11 +99,11 @@ export function PricingSection({ onPlanClick }: PricingSectionProps) {
             transition={{ delay: 0.1 }}
             className="text-xl text-white/60 max-w-2xl mx-auto"
           >
-            Start for free, scale when you're ready. No hidden fees.
+            Hosting, SSL, CDN, and BuildCustom.Ai subdomains are included. AI usage is metered separately.
           </motion.p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
           {PLANS.map((plan, index) => (
             <motion.div
               key={plan.name}

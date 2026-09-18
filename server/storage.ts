@@ -1,16 +1,16 @@
 import {
   type User, type InsertUser,
   type WaitlistEntry, type InsertWaitlistEntry,
-  type Project, type InsertProject,
+  type Project, type InsertProject, type RuntimeProjectLink, type RuntimeRelease, type RuntimeBuilderTurn,
   type BlogPost, type InsertBlogPost,
   type AutobloggerSettings, type SeoSettings,
   type SitePage, type InsertSitePage,
   type Template, type InsertTemplate,
   users, waitlistEntries, projects, blogPosts,
-  autobloggerSettings, seoSettings, sitePages, templates,
+  autobloggerSettings, seoSettings, sitePages, templates, runtimeProjectLinks, runtimeReleases, runtimeBuilderTurns,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count, isNotNull, and } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -30,6 +30,16 @@ export interface IStorage {
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, data: Partial<InsertProject>): Promise<Project | undefined>;
   deleteProject(id: number): Promise<void>;
+  getRuntimeProjectLink(projectId: number): Promise<RuntimeProjectLink | undefined>;
+  claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink>;
+  upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "hostingProvider" | "customDomain" | "customOrigin">>): Promise<RuntimeProjectLink>;
+  countLiveRuntimeProjects(userId: string): Promise<number>;
+  getRuntimeReleases(projectId: number): Promise<RuntimeRelease[]>;
+  getRuntimeRelease(id: number): Promise<RuntimeRelease | undefined>;
+  createRuntimeRelease(projectId: number, commitHash: string, deploymentUrl: string): Promise<RuntimeRelease>;
+  getRuntimeBuilderTurns(projectId: number): Promise<RuntimeBuilderTurn[]>;
+  getRuntimeBuilderTurn(id: number): Promise<RuntimeBuilderTurn | undefined>;
+  createRuntimeBuilderTurn(data: typeof runtimeBuilderTurns.$inferInsert): Promise<RuntimeBuilderTurn>;
   // Blog Posts
   getBlogPosts(projectId: number): Promise<BlogPost[]>;
   getBlogPost(id: number): Promise<BlogPost | undefined>;
@@ -108,6 +118,62 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteProject(id: number) {
     await db.delete(projects).where(eq(projects.id, id));
+  }
+  async getRuntimeProjectLink(projectId: number) {
+    const [result] = await db.select().from(runtimeProjectLinks).where(eq(runtimeProjectLinks.projectId, projectId));
+    return result;
+  }
+  async claimRuntimeProjectLink(projectId: number, agentId: string) {
+    const [inserted] = await db.insert(runtimeProjectLinks)
+      .values({ projectId, agentId })
+      .onConflictDoNothing({ target: runtimeProjectLinks.projectId })
+      .returning();
+    if (inserted) return inserted;
+    const existing = await this.getRuntimeProjectLink(projectId);
+    if (!existing) throw new Error("Unable to claim runtime project link");
+    return existing;
+  }
+  async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "hostingProvider" | "customDomain" | "customOrigin">>) {
+    const existing = await this.getRuntimeProjectLink(projectId);
+    if (existing) {
+      const [result] = await db.update(runtimeProjectLinks)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(runtimeProjectLinks.projectId, projectId))
+        .returning();
+      return result;
+    }
+    if (!data.agentId) throw new Error("agentId is required for a new runtime project link");
+    const [result] = await db.insert(runtimeProjectLinks).values({ projectId, agentId: data.agentId }).returning();
+    return result;
+  }
+  async countLiveRuntimeProjects(userId: string) {
+    const [result] = await db.select({ value: count() })
+      .from(runtimeProjectLinks)
+      .innerJoin(projects, eq(runtimeProjectLinks.projectId, projects.id))
+      .where(and(eq(projects.userId, userId), isNotNull(runtimeProjectLinks.deploymentUrl)));
+    return Number(result?.value || 0);
+  }
+  async getRuntimeReleases(projectId: number) {
+    return db.select().from(runtimeReleases).where(eq(runtimeReleases.projectId, projectId)).orderBy(desc(runtimeReleases.createdAt));
+  }
+  async getRuntimeRelease(id: number) {
+    const [release] = await db.select().from(runtimeReleases).where(eq(runtimeReleases.id, id));
+    return release;
+  }
+  async createRuntimeRelease(projectId: number, commitHash: string, deploymentUrl: string) {
+    const [release] = await db.insert(runtimeReleases).values({ projectId, commitHash, deploymentUrl }).returning();
+    return release;
+  }
+  async getRuntimeBuilderTurns(projectId: number) {
+    return db.select().from(runtimeBuilderTurns).where(eq(runtimeBuilderTurns.projectId, projectId)).orderBy(runtimeBuilderTurns.createdAt);
+  }
+  async getRuntimeBuilderTurn(id: number) {
+    const [turn] = await db.select().from(runtimeBuilderTurns).where(eq(runtimeBuilderTurns.id, id));
+    return turn;
+  }
+  async createRuntimeBuilderTurn(data: typeof runtimeBuilderTurns.$inferInsert) {
+    const [turn] = await db.insert(runtimeBuilderTurns).values(data).returning();
+    return turn;
   }
 
   async getBlogPosts(projectId: number) {

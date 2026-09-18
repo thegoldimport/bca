@@ -3,6 +3,7 @@ import cors from "cors";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { ensureRuntimeSchema } from "./runtime-schema";
 
 const app = express();
 const httpServer = createServer(app);
@@ -21,6 +22,7 @@ app.use(cors({
 
 app.use(
   express.json({
+    limit: "12mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -67,6 +69,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await ensureRuntimeSchema();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

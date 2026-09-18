@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -8,7 +8,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   email: text("email").notNull().unique().default(""),
-  plan: text("plan").notNull().default("starter"),
+  plan: text("plan").notNull().default("free"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -32,6 +32,38 @@ export const projects = pgTable("projects", {
   url: text("url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const runtimeProjectLinks = pgTable("runtime_project_links", {
+  projectId: integer("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  agentId: text("agent_id").notNull().unique(),
+  previewUrl: text("preview_url"),
+  deploymentUrl: text("deployment_url"),
+  hostingProvider: text("hosting_provider").notNull().default("buildcustom"),
+  customDomain: text("custom_domain"),
+  customOrigin: text("custom_origin"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const runtimeReleases = pgTable("runtime_releases", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  commitHash: text("commit_hash").notNull(),
+  deploymentUrl: text("deployment_url").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const runtimeBuilderTurns = pgTable("runtime_builder_turns", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  mode: text("mode").notNull().default("build"),
+  prompt: text("prompt").notNull(),
+  response: text("response").notNull(),
+  changedFiles: jsonb("changed_files").$type<Array<{ path: string; change: string; size: number }>>().notNull().default([]),
+  activity: jsonb("activity").$type<Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>>().notNull().default([]),
+  commitHash: text("commit_hash"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const blogPosts = pgTable("blog_posts", {
@@ -111,6 +143,9 @@ export type InsertWaitlistEntry = z.infer<typeof insertWaitlistSchema>;
 export type WaitlistEntry = typeof waitlistEntries.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
+export type RuntimeProjectLink = typeof runtimeProjectLinks.$inferSelect;
+export type RuntimeRelease = typeof runtimeReleases.$inferSelect;
+export type RuntimeBuilderTurn = typeof runtimeBuilderTurns.$inferSelect;
 export type InsertBlogPost = z.infer<typeof insertBlogPostSchema>;
 export type BlogPost = typeof blogPosts.$inferSelect;
 export type AutobloggerSettings = typeof autobloggerSettings.$inferSelect;
