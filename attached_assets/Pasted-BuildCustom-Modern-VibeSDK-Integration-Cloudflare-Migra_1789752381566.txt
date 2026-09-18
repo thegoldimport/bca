@@ -1,0 +1,262 @@
+BuildCustom: Modern VibeSDK Integration + Cloudflare Migration Plan
+
+We have now completed an inspection of the old BuildCustom/VibeSDK Cloudflare infrastructure. Do not implement or change anything yet. This is a planning and architecture task only.
+
+Product context
+
+BuildCustom.ai is intended to be a full AI app-building platform similar in experience to Replit.
+
+A normal user should be able to log into BuildCustom, open a project, talk to the built-in coding agent, have it create or modify a real application, see a live preview, continue editing conversationally, and deploy the finished application.
+
+The native BuildCustom coding agent should be the current VibeSDK agent/runtime branded and presented as BuildCustom. We do NOT want to build another coding agent in front of VibeSDK.
+
+To the customer it is simply:
+
+User → BuildCustom chat → VibeSDK-powered coding agent/runtime → preview → deployment.
+
+Later, advanced users should be able to bypass the native agent and use Claude Code, Codex, Hermes, OpenClaw, etc. through BuildCustom MCP/API/CLI access to the same underlying project/runtime/deployment capabilities.
+
+Do NOT design:
+
+Claude Code → BuildCustom agent → VibeSDK agent.
+
+Claude Code is already an agent. Eventually it should access BuildCustom's underlying capabilities directly.
+
+Critical infrastructure requirement
+
+We want BuildCustom off Replit as soon as practical.
+
+Replit is currently being used because the existing BuildCustom application was developed here. Replit is a temporary development environment during the migration, not part of the desired production architecture.
+
+When making architectural decisions, favor approaches that reduce our dependency on Replit rather than deepen it.
+
+The desired end state is:
+
+Deleting this Replit project would have zero effect on BuildCustom or any customer application.
+
+Do not introduce new permanent dependencies on Replit hosting, Replit databases, Replit deployment infrastructure, Replit object storage, or Replit-specific services unless absolutely necessary for the temporary migration.
+
+Domain model
+
+Keep:
+
+buildcustom.ai = public sales/marketing website
+
+app.buildcustom.ai = logged-in BuildCustom dashboard, builder, project UI and native coding-agent experience
+
+Generated apps should NOT use the old ambiguous domain architecture where app.buildcustom.ai can be interpreted as an app named app.
+
+Design separate hostname responsibilities for:
+
+BuildCustom product
+internal runtime if necessary
+temporary previews
+BuildCustom-hosted production applications
+customer custom domains
+
+For example, preview applications could eventually use something like:
+
+<id>.preview.buildcustom.ai
+
+Do not assume that exact naming is required. Recommend the cleanest architecture.
+
+What we discovered in Cloudflare
+
+The old VibeSDK deployment is separate from this BuildCustom repository.
+
+Existing Cloudflare resources include:
+
+Worker: vibesdk
+Workers for Platforms
+Dispatch namespace: vibesdk-default-namespace
+Orphan/legacy dispatch namespace: buildcustomai
+D1: vibesdk-db
+Durable Objects including CodeGenObject, DORateLimitStore, UserSecretsStore, and UserAppSandboxService
+KV: VibecoderStore
+R2: vibesdk-templates
+Container: vibesdk-production-userappsandboxservice
+Workers AI
+
+Workers Paid, Containers, R2 and Workers for Platforms have now been re-enabled.
+
+Do not delete or modify those legacy resources yet.
+
+We also determined the current failure at app.buildcustom.ai is caused by the old vibesdk Worker incorrectly treating app.buildcustom.ai as a generated application named app.
+
+Do not fix this by creating a Worker named app.
+
+We are more interested in establishing the correct modern architecture than reviving the old architecture blindly.
+
+Important new direction
+
+Research and inspect the current official Cloudflare VibeSDK repository and current Cloudflare documentation, not merely the old version represented by our existing Cloudflare resources.
+
+The old installation appears to predate the current VibeSDK architecture.
+
+Determine what the current VibeSDK provides today for:
+
+coding agent
+agent tools
+project/workspace management
+file operations
+revisions/Git/history
+SpaceDO
+ThinkAgent
+Cloudflare Artifacts
+Worker Loader
+Dynamic Workers
+live previews
+Sandbox SDK
+Containers
+dependency installation
+command execution
+build execution
+logs
+Workers for Platforms
+deployment
+D1
+R2
+KV
+Durable Objects
+generated application bindings
+authentication capabilities
+secrets
+custom domains
+
+Verify capabilities against current official source/docs rather than assuming the legacy architecture still applies.
+
+Full applications are required
+
+BuildCustom is NOT merely a landing-page generator.
+
+We want users to be able to create full applications and SaaS products from the beginning.
+
+Our eventual acceptance case should support something like:
+
+"Build me a simple CRM SaaS with signup/login, contacts, companies, notes, a dashboard, persistent database and settings."
+
+The generated application must have real persistence and server-side functionality, not mocked data.
+
+We want BuildCustom to make infrastructure invisible to the end user.
+
+A nontechnical customer should never have to know they need D1, R2, KV, Workers, Durable Objects, etc.
+
+Architecture principle
+
+Do NOT tightly couple BuildCustom's product layer directly to legacy resource names such as CodeGenObject, VibecoderStore, etc.
+
+We want stable BuildCustom concepts such as:
+
+Project
+Workspace
+Agent Session
+Preview
+Revision
+Deployment
+Database
+Storage
+Domain
+
+Cloudflare/VibeSDK implementation details should remain underneath those concepts.
+
+This is important because VibeSDK and Cloudflare will continue evolving.
+
+Your assignment
+
+Inspect:
+
+The current BuildCustom repository.
+The current official VibeSDK architecture/source.
+Current Cloudflare documentation relevant to the architecture.
+The legacy Cloudflare findings supplied above.
+
+Then produce a Modern BuildCustom Architecture + Migration Plan.
+
+I specifically want you to determine:
+
+A. What current VibeSDK/Cloudflare already gives us
+
+Identify functionality we should adopt rather than rebuild.
+
+B. What BuildCustom itself still needs
+
+Separate product-specific functionality from infrastructure already provided by VibeSDK/Cloudflare.
+
+C. How the native BuildCustom agent should work
+
+Remember: the native coding agent should be the VibeSDK-powered agent, not a second agent wrapped around it.
+
+D. How MCP/API/CLI should eventually fit
+
+Do not build it yet unless necessary. Define the boundary that would later allow Claude Code, Codex, Hermes, OpenClaw and other agents to operate BuildCustom directly.
+
+E. How to move BuildCustom off Replit
+
+Give me an incremental migration sequence that gets production dependencies off Replit as early as practical without unnecessarily rewriting working UI.
+
+Identify specifically what currently lives in Replit that eventually needs to move and its recommended Cloudflare replacement.
+
+F. What to do with the legacy Cloudflare deployment
+
+Categorize resources as:
+
+KEEP
+INSPECT/MIGRATE
+REPLACE
+RETIRE LATER
+
+Do not delete anything.
+
+G. The smallest end-to-end proof
+
+Design the smallest implementation milestone that proves:
+
+User talks to native BuildCustom coding agent
+→ agent creates actual project
+→ actual code exists
+→ project executes
+→ real preview appears inside BuildCustom
+→ user requests a conversational change
+→ actual project changes
+→ project successfully deploys to Cloudflare
+→ deployed URL works independently of Replit.
+
+The deployment MUST NOT depend on Replit.
+
+H. Full-stack proof immediately after
+
+Define the next acceptance test using a small full-stack application with authentication and persistent database.
+
+I. Exact Phase 1 implementation plan
+
+After completing the analysis, give me a proposed Phase 1 plan with:
+
+files/components affected
+new Cloudflare resources required
+VibeSDK components reused
+BuildCustom components built
+data model
+APIs/interfaces
+migration steps
+security boundaries
+tests
+acceptance criteria
+rollback strategy
+
+Do not implement Phase 1.
+
+I want to review the architecture and plan before any code or Cloudflare resources are changed.
+
+Guiding principle
+
+BuildCustom should ultimately feel extremely simple:
+
+Tell BuildCustom what you want. Watch it build. Make changes by talking to it. Deploy.
+
+Cloudflare complexity should be invisible.
+
+And eventually:
+
+Use BuildCustom's AI, or bring your own agent.
+
+We are building the product and user experience around the infrastructure rather than rebuilding infrastructure Cloudflare/VibeSDK already provides.
