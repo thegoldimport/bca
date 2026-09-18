@@ -82,10 +82,24 @@ function fmtDate(dateStr: string) {
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
-function OverviewTab({ project, blogCount }: { project: any; blogCount: number }) {
+function OverviewTab({ project, blogCount, projectId }: { project: any; blogCount: number; projectId: number }) {
   const { theme } = useTheme();
   const isWebsite = project.type === "website";
   const preview = PREVIEW_IMAGES[project.type] || previewPortfolio;
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewError, setPreviewError] = useState("");
+  const previewMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/previews`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({}),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to create runtime preview.");
+      return body;
+    },
+    onSuccess: (body) => { setPreviewUrl(body.url || body.previewUrl || ""); setPreviewError(body.url || body.previewUrl ? "" : "Runtime did not return a preview URL."); },
+    onError: (error: any) => setPreviewError(error.message),
+  });
 
   return (
     <div className="space-y-6">
@@ -103,7 +117,14 @@ function OverviewTab({ project, blogCount }: { project: any; blogCount: number }
           <GlassCard>
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Preview</h3>
             <div className="rounded-xl overflow-hidden aspect-video">
-              <img src={preview} alt={project.name} className="w-full h-full object-cover" />
+              {previewUrl ? <iframe src={previewUrl} title={`${project.name} runtime preview`} className="w-full h-full border-0 bg-white" /> : (
+                <div className={`w-full h-full flex flex-col items-center justify-center gap-3 ${theme === "dark" ? "bg-[#0d0d1a] text-white/50" : "bg-gray-100 text-gray-500"}`}>
+                  <p className="text-sm">{previewError || "No runtime preview is active."}</p>
+                  <button onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending} className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold disabled:opacity-50">
+                    {previewMutation.isPending ? "Starting preview…" : "Start runtime preview"}
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-4">
               <Link href="/app/editor">
@@ -211,17 +232,32 @@ function FileRow({ file, depth = 0 }: { file: any; depth?: number }) {
 
 function FilesTab() {
   const { theme } = useTheme();
+  const [, params] = useRoute("/app/project/:id");
+  const projectId = params?.id || "";
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["runtime-files", projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/files`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load runtime files.");
+      return body;
+    },
+    enabled: Boolean(projectId),
+  });
+  const files = Array.isArray(data) ? data : data?.files || [];
   return (
     <GlassCard>
       <div className="flex items-center justify-between mb-4">
-        <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Project Files</h3>
-        <div className="flex gap-2">
-          <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${theme === "dark" ? "bg-white/10 text-white hover:bg-white/15" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`} data-testid="button-upload-file"><Upload size={13} /> Upload</button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }} data-testid="button-new-file"><Plus size={13} /> New File</button>
-        </div>
+        <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Runtime Workspace Files</h3>
       </div>
+      {isLoading && <p className="text-sm text-white/50">Loading workspace…</p>}
+      {error && <p className="text-sm text-red-400">{(error as Error).message}</p>}
       <div className={`rounded-xl overflow-hidden border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-        {DEMO_FILES.map((file, i) => <FileRow key={i} file={file} />)}
+        {!isLoading && !error && files.length === 0 && <p className="p-4 text-sm text-white/40">The runtime workspace has no files yet.</p>}
+        {files.map((file: any, i: number) => <FileRow key={file.path || file.name || i} file={{
+          ...file, name: file.name || file.path?.split("/").pop(), type: file.type || "file",
+          size: file.size ? `${Math.round(file.size / 1024 * 10) / 10} KB` : undefined,
+        }} />)}
       </div>
     </GlassCard>
   );
@@ -241,18 +277,32 @@ const CONSOLE_LINES = [
 ];
 function ConsoleTab() {
   const { theme } = useTheme();
+  const [, params] = useRoute("/app/project/:id");
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["runtime-console", params?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${params?.id}/runtime/console`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load runtime console.");
+      return body;
+    },
+    enabled: Boolean(params?.id),
+  });
+  const lines = Array.isArray(data) ? data : data?.lines || data?.logs || [];
   const typeStyles: Record<string, string> = { info: theme === "dark" ? "text-white/50" : "text-gray-500", success: "text-emerald-400", warn: "text-amber-400", error: "text-red-400" };
   return (
     <GlassCard>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Console</h3>
-          <span className="flex items-center gap-1.5 text-xs text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live</span>
+          <span className="flex items-center gap-1.5 text-xs text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Runtime</span>
         </div>
         <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${theme === "dark" ? "bg-white/10 text-white/60 hover:bg-white/15" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`} data-testid="button-clear-console"><Trash2 size={13} /> Clear</button>
       </div>
       <div className={`rounded-xl font-mono text-xs p-4 space-y-2 max-h-[420px] overflow-y-auto ${theme === "dark" ? "bg-black/40 border border-white/10" : "bg-gray-900 border border-gray-700"}`}>
-        {CONSOLE_LINES.map((line, i) => (
+        {isLoading && <div className="text-white/40">Loading runtime logs…</div>}
+        {error && <div className="text-red-400">{(error as Error).message}</div>}
+        {!isLoading && !error && lines.map((line: any, i: number) => (
           <div key={i} className="flex items-start gap-3">
             <span className="text-white/20 shrink-0">{line.time}</span>
             <span className={`uppercase text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${line.type === "error" ? "bg-red-500/20 text-red-400" : line.type === "warn" ? "bg-amber-500/20 text-amber-400" : line.type === "success" ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-white/30"}`}>{line.type}</span>
@@ -274,24 +324,48 @@ const VERSIONS = [
 ];
 function HistoryTab() {
   const { theme } = useTheme();
+  const [, params] = useRoute("/app/project/:id");
+  const [deployMessage, setDeployMessage] = useState("");
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["runtime-revisions", params?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${params?.id}/runtime/revisions`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load runtime revisions.");
+      return body;
+    },
+    enabled: Boolean(params?.id),
+  });
+  const revisions = Array.isArray(data) ? data : data?.revisions || [];
+  const deployMutation = useMutation({
+    mutationFn: async (revisionId: string) => {
+      const res = await fetch(`/api/projects/${params?.id}/runtime/deployments`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ revisionId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to deploy runtime revision.");
+      return body;
+    },
+    onSuccess: (body) => setDeployMessage(body.url || body.hostname ? `Deployment started: ${body.url || body.hostname}` : "Deployment started in staging."),
+    onError: (error: any) => setDeployMessage(error.message),
+  });
   return (
     <GlassCard>
       <h3 className={`font-semibold mb-5 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Version History</h3>
+      {deployMessage && <p className={`mb-4 text-sm ${deployMessage.startsWith("Unable") || deployMessage.includes("not configured") ? "text-red-400" : "text-emerald-400"}`}>{deployMessage}</p>}
       <div className="space-y-3">
-        {VERSIONS.map((v) => (
-          <div key={v.version} className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${v.current ? theme === "dark" ? "border-cyan-400/30 bg-cyan-500/5" : "border-cyan-400 bg-cyan-50" : theme === "dark" ? "border-white/5 hover:border-white/10 hover:bg-white/[0.02]" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"}`} data-testid={`version-row-${v.version}`}>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${theme === "dark" ? "bg-white/10 text-white" : "bg-gray-100 text-gray-700"}`}>{v.version}</div>
+        {isLoading && <p className="text-sm text-white/40">Loading runtime revisions…</p>}
+        {error && <p className="text-sm text-red-400">{(error as Error).message}</p>}
+        {!isLoading && !error && revisions.map((v: any, i: number) => (
+          <div key={v.id || i} className={`flex items-center gap-4 p-4 rounded-xl border transition-colors ${i === 0 ? theme === "dark" ? "border-cyan-400/30 bg-cyan-500/5" : "border-cyan-400 bg-cyan-50" : theme === "dark" ? "border-white/5 hover:border-white/10 hover:bg-white/[0.02]" : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"}`} data-testid={`version-row-${v.id || i}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${theme === "dark" ? "bg-white/10 text-white" : "bg-gray-100 text-gray-700"}`}>{v.version || `r${revisions.length - i}`}</div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium truncate ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{v.label}</p>
-              <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{v.author} · {v.time}</p>
+              <p className={`text-sm font-medium truncate ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{v.summary || v.message || v.label || "Runtime revision"}</p>
+              <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{v.createdAt || v.time || "Unknown time"}</p>
             </div>
-            {v.current && <span className="text-xs px-2 py-1 rounded-full bg-cyan-400 text-black font-semibold shrink-0">Current</span>}
-            {!v.current && (
-              <div className="flex gap-1.5 shrink-0">
-                <button className={`p-1.5 rounded-lg text-xs transition-colors ${theme === "dark" ? "hover:bg-white/10 text-white/40" : "hover:bg-gray-100 text-gray-400"}`} title="Preview" data-testid={`button-preview-${v.version}`}><Eye size={14} /></button>
-                <button className={`p-1.5 rounded-lg text-xs transition-colors ${theme === "dark" ? "hover:bg-white/10 text-white/40" : "hover:bg-gray-100 text-gray-400"}`} title="Restore" data-testid={`button-restore-${v.version}`}><RefreshCw size={14} /></button>
-              </div>
-            )}
+            {i === 0 && <span className="text-xs px-2 py-1 rounded-full bg-cyan-400 text-black font-semibold shrink-0">Current</span>}
+            {v.id && <button onClick={() => deployMutation.mutate(String(v.id))} disabled={deployMutation.isPending} className="px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-300 text-xs font-semibold disabled:opacity-50">{deployMutation.isPending ? "Deploying…" : "Deploy staging"}</button>}
           </div>
         ))}
       </div>
@@ -1146,6 +1220,17 @@ export default function ProjectDetail() {
     enabled: !!projectId,
   });
 
+  const { data: runtimeStatus, error: runtimeStatusError } = useQuery({
+    queryKey: ["runtime-status", projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "VibeSDK runtime is unavailable.");
+      return body;
+    },
+    enabled: !!projectId,
+  });
+
   if (isLoading) {
     return (
       <div className={`min-h-full p-8 ${theme === "dark" ? "bg-[#060610]" : "bg-gray-50"}`}>
@@ -1222,9 +1307,14 @@ export default function ProjectDetail() {
       </div>
 
       <div className="p-8">
+        {(runtimeStatusError || runtimeStatus?.configured === false) && (
+          <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            VibeSDK runtime unavailable: {(runtimeStatusError as Error)?.message || "runtime is not configured."}
+          </div>
+        )}
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15 }}>
-            {activeTab === "overview" && <OverviewTab project={project} blogCount={blogPosts.length} />}
+            {activeTab === "overview" && <OverviewTab project={project} blogCount={blogPosts.length} projectId={projectId} />}
             {activeTab === "files" && <FilesTab />}
             {activeTab === "console" && <ConsoleTab />}
             {activeTab === "history" && <HistoryTab />}

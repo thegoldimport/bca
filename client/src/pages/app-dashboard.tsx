@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Route, Switch, useLocation, Link } from "wouter";
+import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAppUser, setAppUser, clearAppUser, authHeaders } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -670,20 +670,76 @@ function PreviewMockup({ device }: { device: "desktop" | "tablet" | "mobile" }) 
 
 function EditorPage() {
   const { theme } = useTheme();
+  const [, routeParams] = useRoute("/app/editor/:id");
+  const projectId = Number(routeParams?.id || 0);
   const [chatInput, setChatInput] = useState("");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
-    { role: "assistant", content: "Hi! I'm your AI builder. Describe what you'd like to create and I'll build it for you." },
-  ]);
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [runtimeError, setRuntimeError] = useState("");
+  const [sending, setSending] = useState(false);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!chatInput.trim()) return;
+    if (!projectId) {
+      setRuntimeError("Open Builder from a runtime-backed project to start a ThinkAgent session.");
+      return;
+    }
+    const prompt = chatInput.trim();
     setMessages((prev) => [
       ...prev,
-      { role: "user" as const, content: chatInput },
-      { role: "assistant" as const, content: "I'm working on building that for you. This is a preview of the builder interface — the actual AI generation will be powered by the VibeSdk on app.buildcustom.ai." },
+      { role: "user" as const, content: prompt },
     ]);
     setChatInput("");
+    setSending(true);
+    setRuntimeError("");
+    try {
+      const workspace = await fetch(`/api/projects/${projectId}/runtime/workspace`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({}),
+      });
+      if (!workspace.ok) {
+        const data = await workspace.json().catch(() => ({}));
+        throw new Error(data.message || "Unable to initialize the VibeSDK workspace.");
+      }
+      const session = await fetch(`/api/projects/${projectId}/runtime/agent/sessions`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({}),
+      });
+      const sessionData = await session.json();
+      if (!session.ok) throw new Error(sessionData.message || "Unable to start the ThinkAgent session.");
+      const response = await fetch(`/api/projects/${projectId}/runtime/agent/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...authHeaders() },
+        body: JSON.stringify({ sessionId: sessionData.id || sessionData.sessionId, message: prompt }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || "ThinkAgent could not process the request.");
+      }
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let output = "";
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        output += decoder.decode(value, { stream: true });
+        setMessages((prev) => {
+          const withoutStreaming = prev.filter((message) => message.role !== "assistant" || message.content !== output.slice(0, -1));
+          return [...withoutStreaming.filter((message) => message.content !== output), { role: "assistant", content: output }];
+        });
+      }
+      if (!output) setMessages((prev) => [...prev, { role: "assistant", content: "ThinkAgent completed the request." }]);
+      const preview = await fetch(`/api/projects/${projectId}/runtime/previews`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({}),
+      });
+      const previewData = await preview.json().catch(() => ({}));
+      if (preview.ok && previewData.url) setPreviewUrl(previewData.url);
+    } catch (error: any) {
+      setRuntimeError(error.message || "The runtime request failed.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "390px" };
@@ -708,6 +764,8 @@ function EditorPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {runtimeError && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{runtimeError}</div>}
+          {!messages.length && !runtimeError && <div className={`rounded-2xl px-4 py-3 text-sm ${theme === "dark" ? "bg-white/5 text-white/60 border border-white/10" : "bg-gray-100 text-gray-600 border border-gray-200"}`}>ThinkAgent is ready. Describe what you want to build.</div>}
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
@@ -751,6 +809,7 @@ function EditorPage() {
             />
             <button
               onClick={handleSend}
+              disabled={sending}
               className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
               data-testid="button-send-chat"
             >
@@ -801,7 +860,7 @@ function EditorPage() {
               ? "bg-white/5 text-white/40"
               : "bg-gray-200 text-gray-500"
           }`}>
-            preview.buildcustom.ai
+             {previewUrl || (projectId ? "Waiting for an authorized preview…" : "Select a runtime project")}
           </div>
           <button className={`p-1.5 rounded-lg transition-colors ${
             theme === "dark"
@@ -829,7 +888,11 @@ function EditorPage() {
             }`}
             style={{ width: deviceWidths[previewDevice], maxWidth: "100%" }}
           >
-            <PreviewMockup device={previewDevice} />
+             {previewUrl ? <iframe src={previewUrl} title="Runtime preview" className="w-full h-full border-0 bg-white" /> : (
+               <div className={`h-full flex items-center justify-center text-sm ${theme === "dark" ? "bg-[#0d0d1a] text-white/40" : "bg-white text-gray-500"}`}>
+                 {projectId ? "Send a ThinkAgent request to create a preview." : "A project is required for a live preview."}
+               </div>
+             )}
           </motion.div>
         </div>
       </div>

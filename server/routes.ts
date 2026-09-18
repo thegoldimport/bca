@@ -4,10 +4,28 @@ import { storage } from "./storage";
 import { insertWaitlistSchema, insertProjectSchema, insertBlogPostSchema, insertSitePageSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { isRuntimeConfigured, runtimeAdapter, runtimeProjectId, RuntimeAdapterError, streamRuntimeResponse } from "./runtime-adapter";
 
 function getUserId(req: any): string | null {
   const header = req.headers["x-user-id"];
   return typeof header === "string" && header.length > 0 ? header : null;
+}
+
+async function requireProject(req: any, res: any) {
+  const userId = await requireAuth(req, res);
+  if (!userId) return null;
+  const projectId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(projectId)) { res.status(400).json({ message: "Invalid project ID" }); return null; }
+  const project = await storage.getProject(projectId);
+  if (!project || project.userId !== userId) { res.status(404).json({ message: "Project not found" }); return null; }
+  return project;
+}
+
+function runtimeError(err: unknown, res: any) {
+  if (err instanceof RuntimeAdapterError) {
+    return res.status(err.status).json({ message: err.message, code: err.code });
+  }
+  return res.status(502).json({ message: "VibeSDK runtime request failed", code: "RUNTIME_UPSTREAM_ERROR" });
 }
 
 async function requireAuth(req: any, res: any): Promise<string | null> {
@@ -220,6 +238,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
+  });
+
+  // ── VIBESDK RUNTIME ─────────────────────────────────────────────────────────
+  app.get("/api/projects/:id/runtime/status", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    if (!isRuntimeConfigured()) {
+      return res.status(503).json({ configured: false, code: "RUNTIME_UNCONFIGURED", message: "The VibeSDK runtime is not configured." });
+    }
+    return res.json({ configured: true, projectId: runtimeProjectId(project.id), provider: "vibesdk" });
+  });
+
+  app.post("/api/projects/:id/runtime/workspace", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      return res.status(201).json(await runtimeAdapter.createProject({
+        id: runtimeProjectId(project.id), name: project.name, type: project.type, description: project.description,
+      }));
+    } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.get("/api/projects/:id/runtime/files", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.json(await runtimeAdapter.files(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.get("/api/projects/:id/runtime/files/content", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    const path = typeof req.query.path === "string" ? req.query.path : "";
+    if (!path || path.includes("..")) return res.status(400).json({ message: "A safe file path is required" });
+    try { return res.json(await runtimeAdapter.fileContent(runtimeProjectId(project.id), path)); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/agent/sessions", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.status(201).json(await runtimeAdapter.startAgentSession(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/agent/messages", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return streamRuntimeResponse(await runtimeAdapter.agentMessage(runtimeProjectId(project.id), req.body), res); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.get("/api/projects/:id/runtime/revisions", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.json(await runtimeAdapter.revisions(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/revisions/:revisionId/restore", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.json(await runtimeAdapter.restoreRevision(runtimeProjectId(project.id), req.params.revisionId)); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/previews", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.status(201).json(await runtimeAdapter.createPreview(runtimeProjectId(project.id), req.body?.revisionId)); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.get("/api/projects/:id/runtime/previews/:previewId", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.json(await runtimeAdapter.preview(runtimeProjectId(project.id), req.params.previewId)); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.get("/api/projects/:id/runtime/console", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.json(await runtimeAdapter.console(runtimeProjectId(project.id))); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.post("/api/projects/:id/runtime/deployments", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    if (typeof req.body?.revisionId !== "string" || !req.body.revisionId) return res.status(400).json({ message: "revisionId is required" });
+    try { return res.status(202).json(await runtimeAdapter.deploy(runtimeProjectId(project.id), req.body.revisionId)); } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.get("/api/projects/:id/runtime/deployments/:deploymentId", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try { return res.json(await runtimeAdapter.deployment(runtimeProjectId(project.id), req.params.deploymentId)); } catch (err) { return runtimeError(err, res); }
   });
 
   // ── BLOG POSTS ─────────────────────────────────────────────────────────────
