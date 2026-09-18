@@ -31,8 +31,9 @@ export interface IStorage {
   updateProject(id: number, data: Partial<InsertProject>): Promise<Project | undefined>;
   deleteProject(id: number): Promise<void>;
   getRuntimeProjectLink(projectId: number): Promise<RuntimeProjectLink | undefined>;
+  getRuntimeProjectLinkBySubdomainSlug(subdomainSlug: string): Promise<RuntimeProjectLink | undefined>;
   claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink>;
-  upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "hostingProvider" | "customDomain" | "customOrigin">>): Promise<RuntimeProjectLink>;
+  upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin">>): Promise<RuntimeProjectLink>;
   countLiveRuntimeProjects(userId: string): Promise<number>;
   getRuntimeReleases(projectId: number): Promise<RuntimeRelease[]>;
   getRuntimeRelease(id: number): Promise<RuntimeRelease | undefined>;
@@ -123,6 +124,10 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select().from(runtimeProjectLinks).where(eq(runtimeProjectLinks.projectId, projectId));
     return result;
   }
+  async getRuntimeProjectLinkBySubdomainSlug(subdomainSlug: string) {
+    const [result] = await db.select().from(runtimeProjectLinks).where(eq(runtimeProjectLinks.subdomainSlug, subdomainSlug));
+    return result;
+  }
   async claimRuntimeProjectLink(projectId: number, agentId: string) {
     const [inserted] = await db.insert(runtimeProjectLinks)
       .values({ projectId, agentId })
@@ -133,7 +138,7 @@ export class DatabaseStorage implements IStorage {
     if (!existing) throw new Error("Unable to claim runtime project link");
     return existing;
   }
-  async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "hostingProvider" | "customDomain" | "customOrigin">>) {
+  async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin">>) {
     const existing = await this.getRuntimeProjectLink(projectId);
     if (existing) {
       const [result] = await db.update(runtimeProjectLinks)

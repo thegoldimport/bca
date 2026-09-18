@@ -7,4 +7,4 @@ Every plan includes BuildCustom.Ai managed hosting, SSL, CDN, and an automatic B
 
 **Why:** Workers for Platforms keeps hosting costs predictable enough to bundle hosting aggressively. AI generation and model usage are the unpredictable variable costs and must be metered separately. Infrastructure vendors must remain hidden from customer-facing copy.
 
-**How to apply:** Enforce live-project limits on first publish, not republish. Allow Free projects on managed subdomains. Require Launch or higher only for BuildCustom-hosted custom domains; external hosting stores its origin and remains available independently.
+**How to apply:** Default publishing UI to one editable `project.apps.buildcustom.ai` address and a publish action. Hide custom-domain hosting and DNS controls until “Add a custom domain” is selected. Enforce live-project limits on first publish, not republish. Require Launch or higher only for BuildCustom-hosted custom domains; external hosting stores its origin and remains available independently.

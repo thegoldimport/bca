@@ -968,6 +968,8 @@ function EditorPage() {
   const [previewEnvironment, setPreviewEnvironment] = useState<"development" | "production">("development");
   const [publishing, setPublishing] = useState(false);
   const [publishDrawerOpen, setPublishDrawerOpen] = useState(false);
+  const [subdomainSlug, setSubdomainSlug] = useState("");
+  const [customDomainOpen, setCustomDomainOpen] = useState(false);
   const [hostingProvider, setHostingProvider] = useState("buildcustom");
   const [customDomain, setCustomDomain] = useState("");
   const [customOrigin, setCustomOrigin] = useState("");
@@ -1140,9 +1142,11 @@ function EditorPage() {
       .then(async (response) => {
         const data = await response.json().catch(() => ({}));
         if (response.ok) {
+          setSubdomainSlug(data.subdomainSlug || "");
           setHostingProvider(data.hostingProvider || "buildcustom");
           setCustomDomain(data.customDomain || "");
           setCustomOrigin(data.customOrigin || "");
+          setCustomDomainOpen(Boolean(data.customDomain || data.customOrigin || data.hostingProvider === "custom"));
         }
       })
       .catch(() => undefined);
@@ -1357,10 +1361,16 @@ function EditorPage() {
       const response = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ hostingProvider, customDomain, customOrigin }),
+        body: JSON.stringify({
+          subdomainSlug,
+          hostingProvider,
+          customDomain: customDomainOpen ? customDomain : "",
+          customOrigin: customDomainOpen && hostingProvider === "custom" ? customOrigin : "",
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || "Publishing settings could not be saved.");
+      setSubdomainSlug(data.subdomainSlug || "");
       setCustomDomain(data.customDomain || "");
       setCustomOrigin(data.customOrigin || "");
       setPublishSettingsMessage("Publishing settings saved.");
@@ -1459,9 +1469,7 @@ function EditorPage() {
     { id: "mobile" as const, icon: Smartphone, label: "Mobile" },
   ];
   const activePreviewUrl = previewEnvironment === "development" ? previewUrl : productionUrl;
-  const managedCnameTarget = (() => {
-    try { return productionUrl ? new URL(productionUrl).hostname : ""; } catch { return ""; }
-  })();
+  const managedCnameTarget = subdomainSlug ? `${subdomainSlug}.apps.buildcustom.ai` : "";
   const activePreviewSrc = (() => {
     if (!activePreviewUrl || previewEnvironment === "production" || previewPath === "/") return activePreviewUrl;
     try {
@@ -2133,7 +2141,7 @@ function EditorPage() {
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-400"><Rocket size={18} /></div>
                   <div className="min-w-0 flex-1">
                     <h2 className="text-sm font-semibold">Publish project</h2>
-                    <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Hosting, domain, progress, and release history</p>
+                    <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Subdomain, custom domain, progress, and releases</p>
                   </div>
                   <button
                     onClick={() => setPublishDrawerOpen(false)}
@@ -2146,112 +2154,146 @@ function EditorPage() {
 
                 <div className="flex-1 space-y-5 overflow-y-auto p-5">
                   <section>
-                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide opacity-60">Hosting choice</h3>
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide opacity-60">BuildCustom.Ai subdomain</h3>
                     <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium">
-                      Where should this project be hosted?
+                      Your included project address
                       <span className="group relative inline-flex" tabIndex={0}>
                         <HelpCircle size={13} className="opacity-45" />
                         <span className={`pointer-events-none absolute left-1/2 top-5 z-20 hidden w-64 -translate-x-1/2 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
                           theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
                         }`}>
-                          BuildCustom.Ai Hosting is a paid managed service with an automatic project subdomain. External hosting lets you deploy with another provider and store its DNS destination here.
+                          This address is included with your plan. Change the first part before publishing if you want a different project address.
                         </span>
                       </span>
                     </label>
-                    <select
-                      value={hostingProvider}
-                      onChange={(event) => setHostingProvider(event.target.value)}
-                      className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${
-                        theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-white"
-                      }`}
-                    >
-                      <option value="buildcustom">BuildCustom.Ai Hosting — managed</option>
-                      <option value="custom">External hosting — bring your own</option>
-                    </select>
-                    {hostingProvider === "buildcustom" && (
-                      <div className={`mt-3 rounded-xl border p-3 ${theme === "dark" ? "border-cyan-400/15 bg-cyan-400/[0.05]" : "border-cyan-100 bg-cyan-50"}`}>
-                        <div className="flex items-center justify-between gap-3">
+                    <div className={`flex overflow-hidden rounded-xl border focus-within:border-cyan-400/60 ${
+                      theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-white"
+                    }`}>
+                      <input
+                        value={subdomainSlug}
+                        onChange={(event) => setSubdomainSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                        maxLength={63}
+                        aria-label="BuildCustom.Ai subdomain name"
+                        className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-right text-sm outline-none"
+                        data-testid="input-subdomain-slug"
+                      />
+                      <span className={`flex items-center border-l px-3 text-sm ${theme === "dark" ? "border-white/10 text-white/45" : "border-gray-200 text-gray-500"}`}>
+                        .apps.buildcustom.ai
+                      </span>
+                    </div>
+                    <div className={`mt-2 flex items-center justify-between gap-3 text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+                      <span>{planEntitlement.name} includes {planEntitlement.liveProjectLimit} live {planEntitlement.liveProjectLimit === 1 ? "project" : "projects"}.</span>
+                      <span className="shrink-0 text-emerald-500">Hosting, SSL, and CDN included</span>
+                    </div>
+
+                    {!customDomainOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => setCustomDomainOpen(true)}
+                        className={`mt-4 flex w-full items-center justify-between rounded-xl border border-dashed px-3 py-3 text-left text-xs font-semibold ${
+                          theme === "dark" ? "border-white/15 text-white/65 hover:bg-white/5" : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                        }`}
+                        data-testid="button-add-custom-domain"
+                      >
+                        <span className="flex items-center gap-2"><Globe size={14} className="text-purple-400" /> Add a custom domain</span>
+                        <Plus size={14} />
+                      </button>
+                    ) : (
+                      <div className={`mt-4 rounded-2xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+                        <div className="mb-3 flex items-center justify-between">
                           <div>
-                            <div className="text-xs font-semibold">BuildCustom.Ai Hosting</div>
-                            <p className={`mt-1 text-[11px] leading-relaxed ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>
-                              Your {planEntitlement.name} plan includes {planEntitlement.liveProjectLimit} live {planEntitlement.liveProjectLimit === 1 ? "project" : "projects"}, managed hosting, SSL, CDN, and a BuildCustom.Ai subdomain.
-                            </p>
+                            <h4 className="text-xs font-semibold">Custom domain</h4>
+                            <p className={`mt-0.5 text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Use a domain you already own.</p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-cyan-400/15 px-2 py-1 text-[10px] font-semibold text-cyan-500">Managed</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomDomainOpen(false);
+                              setCustomDomain("");
+                              setCustomOrigin("");
+                              setHostingProvider("buildcustom");
+                            }}
+                            className={`rounded-lg p-1.5 ${theme === "dark" ? "text-white/40 hover:bg-white/10" : "text-gray-400 hover:bg-gray-200"}`}
+                            aria-label="Remove custom domain"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
-                      </div>
-                    )}
-                    {hostingProvider === "custom" && (
-                      <>
-                        <label className="mb-1.5 mt-4 flex items-center gap-1.5 text-xs font-medium">
-                          External hosting origin
-                          <span className="group relative inline-flex" tabIndex={0}>
-                            <HelpCircle size={13} className="opacity-45" />
-                            <span className={`pointer-events-none absolute right-0 top-5 z-20 hidden w-64 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
-                              theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
-                            }`}>
-                              Deploy the project with your external provider first, then enter the hostname they give you. Do not include https:// or a path.
-                            </span>
-                          </span>
-                        </label>
                         <input
-                          value={customOrigin}
-                          onChange={(event) => setCustomOrigin(event.target.value)}
-                          placeholder="project.hosting-provider.com"
+                          value={customDomain}
+                          onChange={(event) => setCustomDomain(event.target.value)}
+                          placeholder="app.example.com"
                           className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-cyan-400/60 ${
                             theme === "dark" ? "border-white/10 bg-white/5 placeholder:text-white/25" : "border-gray-200 bg-white"
                           }`}
-                          data-testid="input-custom-origin"
+                          data-testid="input-custom-domain"
                         />
-                      </>
-                    )}
-                    <label className="mb-1.5 mt-4 block text-xs font-medium">Custom domain <span className="font-normal opacity-40">(optional)</span></label>
-                    <input
-                      value={customDomain}
-                      onChange={(event) => setCustomDomain(event.target.value)}
-                      placeholder="app.example.com"
-                      className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-cyan-400/60 ${
-                        theme === "dark" ? "border-white/10 bg-white/5 placeholder:text-white/25" : "border-gray-200 bg-white"
-                      }`}
-                      data-testid="input-custom-domain"
-                    />
-                    {hostingProvider === "buildcustom" && customDomain && !planEntitlement.managedCustomDomains && (
-                      <div className={`mt-3 rounded-xl border p-3 text-[11px] leading-relaxed ${
-                        theme === "dark" ? "border-amber-400/20 bg-amber-400/[0.06] text-amber-100/70" : "border-amber-200 bg-amber-50 text-amber-800"
-                      }`}>
-                        BuildCustom.Ai-hosted custom domains start on Launch. Free projects can stay live on their included BuildCustom.Ai subdomain or use external hosting.
-                        <a href="/#pricing" className="ml-1 font-semibold underline underline-offset-2">View plans</a>
-                      </div>
-                    )}
-                    <div className={`mt-3 rounded-xl border p-3 ${theme === "dark" ? "border-white/10 bg-black/20" : "border-gray-200 bg-gray-50"}`}>
-                      <div className="flex items-center gap-1.5 text-xs font-semibold">
-                        DNS record
-                        <span className="group relative inline-flex" tabIndex={0}>
-                          <HelpCircle size={13} className="opacity-45" />
-                          <span className={`pointer-events-none absolute right-0 top-5 z-20 hidden w-64 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
-                            theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
+                        <label className="mb-1.5 mt-4 block text-xs font-medium">How should this custom domain be hosted?</label>
+                        <select
+                          value={hostingProvider}
+                          onChange={(event) => setHostingProvider(event.target.value)}
+                          className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${
+                            theme === "dark" ? "border-white/10 bg-[#141420]" : "border-gray-200 bg-white"
+                          }`}
+                        >
+                          <option value="buildcustom">BuildCustom.Ai Hosting</option>
+                          <option value="custom">My external hosting provider</option>
+                        </select>
+                        {hostingProvider === "buildcustom" && !planEntitlement.managedCustomDomains && (
+                          <div className={`mt-3 rounded-xl border p-3 text-[11px] leading-relaxed ${
+                            theme === "dark" ? "border-amber-400/20 bg-amber-400/[0.06] text-amber-100/70" : "border-amber-200 bg-amber-50 text-amber-800"
                           }`}>
-                            Add this record at the DNS provider that controls your domain. Use CNAME flattening or an ALIAS/ANAME record when connecting an apex domain such as example.com.
-                          </span>
-                        </span>
+                            BuildCustom.Ai-hosted custom domains start on Launch. Your included BuildCustom.Ai subdomain remains free.
+                            <a href="/#pricing" className="ml-1 font-semibold underline underline-offset-2">View plans</a>
+                          </div>
+                        )}
+                        {hostingProvider === "custom" && (
+                          <>
+                            <label className="mb-1.5 mt-4 flex items-center gap-1.5 text-xs font-medium">
+                              External hosting origin
+                              <span className="group relative inline-flex" tabIndex={0}>
+                                <HelpCircle size={13} className="opacity-45" />
+                                <span className={`pointer-events-none absolute right-0 top-5 z-20 hidden w-64 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
+                                  theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
+                                }`}>
+                                  Deploy with your external provider first, then enter the hostname they supply. Do not include https:// or a path.
+                                </span>
+                              </span>
+                            </label>
+                            <input
+                              value={customOrigin}
+                              onChange={(event) => setCustomOrigin(event.target.value)}
+                              placeholder="project.hosting-provider.com"
+                              className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-cyan-400/60 ${
+                                theme === "dark" ? "border-white/10 bg-white/5 placeholder:text-white/25" : "border-gray-200 bg-white"
+                              }`}
+                              data-testid="input-custom-origin"
+                            />
+                          </>
+                        )}
+                        {customDomain && (
+                          <div className={`mt-3 rounded-xl border p-3 ${theme === "dark" ? "border-white/10 bg-black/20" : "border-gray-200 bg-white"}`}>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold">
+                              DNS record
+                              <span className="group relative inline-flex" tabIndex={0}>
+                                <HelpCircle size={13} className="opacity-45" />
+                                <span className={`pointer-events-none absolute right-0 top-5 z-20 hidden w-64 rounded-lg border p-2.5 text-[11px] font-normal leading-relaxed shadow-xl group-hover:block group-focus:block ${
+                                  theme === "dark" ? "border-white/10 bg-[#171724] text-white/70" : "border-gray-200 bg-white text-gray-600"
+                                }`}>
+                                  Add this record with the DNS provider that controls your domain. Apex domains may require CNAME flattening or an ALIAS/ANAME record.
+                                </span>
+                              </span>
+                            </div>
+                            <div className="mt-2 grid grid-cols-[70px_1fr] gap-x-3 gap-y-1.5 text-[11px]">
+                              <span className="opacity-40">Type</span><code>CNAME</code>
+                              <span className="opacity-40">Name</span><code className="truncate">{customDomain.split(".")[0]}</code>
+                              <span className="opacity-40">Target</span>
+                              <code className="truncate">{hostingProvider === "custom" ? customOrigin || "Enter your hosting origin above" : managedCnameTarget}</code>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-2 grid grid-cols-[70px_1fr] gap-x-3 gap-y-1.5 text-[11px]">
-                        <span className="opacity-40">Type</span><code>CNAME</code>
-                        <span className="opacity-40">Name</span><code className="truncate">{customDomain ? customDomain.split(".")[0] : "app"}</code>
-                        <span className="opacity-40">Target</span>
-                        <code className="truncate">
-                          {hostingProvider === "custom"
-                            ? customOrigin || "Enter your hosting origin above"
-                            : managedCnameTarget || "Available after the first publish"}
-                        </code>
-                      </div>
-                      <ol className={`mt-3 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-                        <li>Open DNS settings with your domain registrar or DNS provider.</li>
-                        <li>Add the CNAME record shown above.</li>
-                        <li>Remove conflicting A, AAAA, or CNAME records for the same name.</li>
-                        <li>Save and allow DNS propagation, which can take several hours.</li>
-                      </ol>
-                    </div>
+                    )}
                     <div className="mt-3 flex items-center gap-3">
                       <button
                         onClick={savePublishingSettings}

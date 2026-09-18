@@ -7,6 +7,21 @@ import { z } from "zod";
 import { isRuntimeConfigured, runtimeAdapter, RuntimeAdapterError, type RuntimeImageAttachment } from "./runtime-adapter";
 import { getPlanEntitlement } from "@shared/plans";
 
+const RESERVED_SUBDOMAINS = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers"]);
+
+function projectSubdomainSlug(name: string) {
+  return name.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 63) || "project";
+}
+
+async function availableProjectSubdomain(projectId: number, name: string) {
+  const base = RESERVED_SUBDOMAINS.has(projectSubdomainSlug(name)) ? `${projectSubdomainSlug(name)}-${projectId}` : projectSubdomainSlug(name);
+  const existing = await storage.getRuntimeProjectLinkBySubdomainSlug(base);
+  return !existing || existing.projectId === projectId ? base : `${base.slice(0, Math.max(1, 62 - String(projectId).length))}-${projectId}`;
+}
+
 function getUserId(req: any): string | null {
   const header = req.headers["x-user-id"];
   return typeof header === "string" && header.length > 0 ? header : null;
@@ -426,6 +441,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
       }
+      if (!settings?.subdomainSlug) {
+        await storage.upsertRuntimeProjectLink(project.id, {
+          subdomainSlug: await availableProjectSubdomain(project.id, project.name),
+        });
+      }
       const result = await runtimeAdapter.deploy(await runtimeProject(project));
       await storage.upsertRuntimeProjectLink(project.id, { deploymentUrl: result.url });
       const release = result.commitHash
@@ -440,6 +460,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!project) return;
     const link = await storage.getRuntimeProjectLink(project.id);
     return res.json({
+      subdomainSlug: link?.subdomainSlug || await availableProjectSubdomain(project.id, project.name),
       hostingProvider: !link?.hostingProvider || link.hostingProvider === "cloudflare" ? "buildcustom" : link.hostingProvider,
       customDomain: link?.customDomain || "",
       customOrigin: link?.customOrigin || "",
@@ -450,6 +471,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const project = await requireProject(req, res);
     if (!project) return;
     const hostingProvider = ["buildcustom", "custom"].includes(req.body?.hostingProvider) ? req.body.hostingProvider : null;
+    const subdomainSlug = typeof req.body?.subdomainSlug === "string" ? req.body.subdomainSlug.trim().toLowerCase() : "";
     const customDomain = typeof req.body?.customDomain === "string"
       ? req.body.customDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")
       : "";
@@ -457,6 +479,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ? req.body.customOrigin.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")
       : "";
     if (!hostingProvider) return res.status(400).json({ message: "Choose a supported hosting provider" });
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomainSlug)) {
+      return res.status(400).json({ message: "Use 1–63 lowercase letters, numbers, or hyphens for the BuildCustom.Ai subdomain" });
+    }
+    if (RESERVED_SUBDOMAINS.has(subdomainSlug)) {
+      return res.status(400).json({ message: "That BuildCustom.Ai subdomain is reserved. Choose another name." });
+    }
+    const existingSubdomain = await storage.getRuntimeProjectLinkBySubdomainSlug(subdomainSlug);
+    if (existingSubdomain && existingSubdomain.projectId !== project.id) {
+      return res.status(409).json({ message: "That BuildCustom.Ai subdomain is already in use. Choose another name." });
+    }
     if (customDomain && !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(customDomain)) {
       return res.status(400).json({ message: "Enter a valid domain such as app.example.com" });
     }
@@ -477,11 +509,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
     const link = await storage.upsertRuntimeProjectLink(project.id, {
+      subdomainSlug,
       hostingProvider,
       customDomain: customDomain || null,
       customOrigin: customOrigin || null,
     });
     return res.json({
+      subdomainSlug: link.subdomainSlug,
       hostingProvider: link.hostingProvider,
       customDomain: link.customDomain || "",
       customOrigin: link.customOrigin || "",

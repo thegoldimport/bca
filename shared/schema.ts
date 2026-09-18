@@ -39,6 +39,7 @@ export const runtimeProjectLinks = pgTable("runtime_project_links", {
   agentId: text("agent_id").notNull().unique(),
   previewUrl: text("preview_url"),
   deploymentUrl: text("deployment_url"),
+  subdomainSlug: text("subdomain_slug").unique(),
   hostingProvider: text("hosting_provider").notNull().default("buildcustom"),
   customDomain: text("custom_domain"),
   customOrigin: text("custom_origin"),
