@@ -1161,6 +1161,17 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
     queryKey: ["seo", projectId],
     queryFn: async () => { const res = await fetch(`/api/projects/${projectId}/seo`, { headers: authHeaders() }); return res.json(); },
   });
+  const suggestionQuery = useQuery({
+    queryKey: ["seo-suggestions", projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/seo/suggestions`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to analyze this project.");
+      return body;
+    },
+    retry: false,
+    staleTime: 15 * 60_000,
+  });
 
   const [metaForm, setMetaForm] = useState<any>(null);
   const [schemaForm, setSchemaForm] = useState<any>(null);
@@ -1185,27 +1196,10 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
   };
   const schema = schemaForm ?? "{}";
   const projectName = String(project?.name || "My Project").trim();
-  const projectType = String(project?.type || "website").replace(/-/g, " ");
-  const projectDescription = String(project?.description || "").trim();
-  const shortPurpose = projectDescription || `a ${projectType} built with ${project?.framework || "BuildCustom"}`;
-  const descriptionBase = `${projectName} is ${shortPurpose.replace(/^a /, "a ")}.`;
-  const descriptionExpanded = `${descriptionBase} Explore the key features and see how it can help you get more done.`;
-  const descriptionComplete = `${descriptionExpanded} Get started today.`;
   const canonicalSuggestion = deploymentUrl || `https://${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.apps.buildcustom.ai`;
-  const schemaSuggestion = JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": projectType === "website" ? "WebSite" : "SoftwareApplication",
-    name: projectName,
-    description: projectDescription || shortPurpose,
-    url: canonicalSuggestion,
-  }, null, 2);
-  const titleSuggestions = [
-    projectName,
-    `${projectName} | ${projectType.charAt(0).toUpperCase() + projectType.slice(1)}`,
-    `${projectName} | ${projectDescription || `Modern ${projectType}`}`,
-  ];
-  const descriptionSuggestions = [descriptionBase, descriptionExpanded, descriptionComplete];
-  const keywordSuggestions = [projectName, `${projectName} ${projectType}`, `${projectName} ${projectType} platform`];
+  const titleSuggestions = suggestionQuery.data?.metaTitle || [];
+  const descriptionSuggestions = suggestionQuery.data?.metaDescription || [];
+  const keywordSuggestions = suggestionQuery.data?.focusKeyword || [];
 
   const saveMeta = useMutation({
     mutationFn: async () => {
@@ -1298,6 +1292,16 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
         {activeSection === "meta" && (
           <div className="space-y-4">
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Meta Tags</h3>
+            {suggestionQuery.isLoading && (
+              <p className={`rounded-xl border px-3 py-2 text-xs ${theme === "dark" ? "border-cyan-400/15 bg-cyan-400/5 text-cyan-200/60" : "border-cyan-100 bg-cyan-50 text-cyan-700"}`}>
+                Reading the generated project to prepare suggestions…
+              </p>
+            )}
+            {suggestionQuery.isError && (
+              <p className={`rounded-xl border px-3 py-2 text-xs ${theme === "dark" ? "border-amber-400/15 bg-amber-400/5 text-amber-200/60" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                {suggestionQuery.error instanceof Error ? suggestionQuery.error.message : "Project-aware suggestions are unavailable."} You can still enter your own values.
+              </p>
+            )}
             <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Favicon</label>
               <div className="flex items-center gap-3">
@@ -1370,10 +1374,10 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
               <h4 className={`mb-3 text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Social sharing</h4>
               <div className="space-y-3">
                 <GuidedSeoField value={meta.ogTitle} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogTitle: value }))}
-                  suggestions={titleSuggestions} maxLength={120}
+                  suggestions={suggestionQuery.data?.ogTitle || []} maxLength={120}
                   className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
                 <GuidedSeoField value={meta.ogDescription} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogDescription: value }))}
-                  suggestions={descriptionSuggestions} maxLength={500} multiline rows={2}
+                  suggestions={suggestionQuery.data?.ogDescription || []} maxLength={500} multiline rows={2}
                   className={`w-full resize-none px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
                 <GuidedSeoField value={meta.ogImageUrl} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogImageUrl: value }))}
                   suggestions={[`${canonicalSuggestion.replace(/\/$/, "")}/opengraph.jpg`]} maxLength={2000}
@@ -1392,7 +1396,7 @@ function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; proj
           <div>
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Structured Data (JSON-LD)</h3>
             <GuidedSeoField value={schema === "{}" ? "" : schema} onChange={(value) => setSchemaForm(value || "{}")}
-              suggestions={[schemaSuggestion]} maxLength={50_000} multiline rows={12}
+              suggestions={suggestionQuery.data?.schemaJson ? [suggestionQuery.data.schemaJson] : []} maxLength={50_000} multiline rows={12}
               className={`w-full px-4 py-3 rounded-xl border text-xs outline-none transition-colors resize-none font-mono ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
               testId="input-schema" />
             <button onClick={() => saveSchema.mutate()} disabled={saveSchema.isPending}

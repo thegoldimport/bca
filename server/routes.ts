@@ -14,6 +14,7 @@ import {
   restorePublishedProjectRouteValue,
   setPublishedProjectRoute,
 } from "./published-routes";
+import { generateSeoSuggestions, isSeoContextPath, rankSeoContextPath } from "./seo-suggestions";
 import { deleteProjectAndPublishedRoute, PublishedRouteRestoreError } from "./project-deletion";
 import { savePublishingSettings } from "./publishing-settings";
 
@@ -702,6 +703,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── SEO ────────────────────────────────────────────────────────────────────
+  app.get("/api/projects/:id/seo/suggestions", async (req, res) => {
+    try {
+      const userId = await requireAuth(req, res);
+      if (!userId) return;
+      const project = await storage.getProject(parseInt(req.params.id));
+      if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
+      const ref = await runtimeProject(project);
+      if (!ref.agentId) return res.status(409).json({ message: "Generate the project before requesting project-aware suggestions." });
+      const listing = await runtimeAdapter.files(ref);
+      const selected = listing.files
+        .filter((file) => isSeoContextPath(file.path))
+        .sort((a, b) => rankSeoContextPath(b.path) - rankSeoContextPath(a.path))
+        .slice(0, 12);
+      const files: Array<{ path: string; content: string }> = [];
+      let remaining = 60_000;
+      for (const file of selected) {
+        if (remaining <= 0) break;
+        const result = await runtimeAdapter.fileContent(ref, file.path);
+        if (!result.content) continue;
+        const content = result.content.slice(0, Math.min(12_000, remaining));
+        remaining -= content.length;
+        files.push({ path: file.path, content });
+      }
+      if (!files.length) return res.status(422).json({ message: "No readable generated project files were found." });
+      const link = await storage.getRuntimeProjectLink(project.id);
+      return res.json(await generateSeoSuggestions(project, link?.deploymentUrl || undefined, files));
+    } catch (err: any) {
+      return res.status(502).json({ message: err.message || "Unable to create project-aware suggestions." });
+    }
+  });
+
   app.get("/api/projects/:id/seo", async (req, res) => {
     try {
       const userId = await requireAuth(req, res);
