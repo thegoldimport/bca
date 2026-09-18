@@ -1,0 +1,1433 @@
+# BuildCustom.ai Agent-First Platform Architecture Inspection
+
+## IMPORTANT: INSPECTION / PLAN MODE ONLY
+
+Do NOT build anything.
+
+Do NOT modify code.
+
+Do NOT modify the database.
+
+Do NOT change Cloudflare resources.
+
+Do NOT install packages.
+
+Do NOT modify environment variables.
+
+Do NOT deploy anything.
+
+Do NOT refactor anything.
+
+I want you to thoroughly inspect the existing BuildCustom.ai repository and infrastructure so we can determine what we already built, what can be reused, what is missing, and the shortest path to finishing the platform.
+
+---
+
+# 1. ORIGINAL BUILDCUSTOM.AI VISION
+
+BuildCustom.ai was originally being built as an AI software development platform similar in concept to Replit.
+
+It was NOT originally intended to be merely:
+
+* a website builder
+* a landing-page builder
+* a hosting company
+* a code generator
+
+The larger vision was:
+
+> **Tell AI what you want to build, let AI build it, and deploy it without leaving BuildCustom.**
+
+We had already started building infrastructure around Cloudflare because we wanted applications created inside BuildCustom to be deployable onto our own underlying infrastructure.
+
+Cloudflare would effectively be infrastructure underneath BuildCustom.
+
+The customer should interact with:
+
+**BuildCustom**
+
+not:
+
+**Cloudflare**
+
+The intended experience was approximately:
+
+USER
+
+↓
+
+BUILDCUSTOM AI
+
+↓
+
+AI CREATES APPLICATION
+
+↓
+
+LIVE PREVIEW
+
+↓
+
+USER TALKS TO AI TO MAKE CHANGES
+
+↓
+
+AI BUILDS / TESTS / FIXES
+
+↓
+
+USER TELLS AI TO DEPLOY
+
+↓
+
+BUILDCUSTOM DEPLOYS APPLICATION
+
+↓
+
+CLOUDFLARE INFRASTRUCTURE
+
+↓
+
+LIVE APPLICATION
+
+We never completely finished this system.
+
+---
+
+# 2. UPDATED VISION: BUILDCUSTOM SHOULD BE AGENT-FIRST
+
+We now want to push the original concept further.
+
+BuildCustom should be an:
+
+# AGENT-FIRST AI BUILDING + DEPLOYMENT PLATFORM
+
+The primary interface should be an AI agent.
+
+The user should NOT have to understand:
+
+* coding
+* Git
+* deployments
+* DNS
+* Cloudflare
+* Workers
+* servers
+* build commands
+* package managers
+* SSL
+* infrastructure configuration
+
+The user should be able to talk naturally to an AI agent.
+
+For example:
+
+> Build me a landing page for my roofing company.
+
+The BuildCustom agent builds it.
+
+Then:
+
+> Make the hero darker and add a quote form.
+
+The agent modifies it.
+
+Then:
+
+> Connect the form to my CRM.
+
+The agent handles that if the necessary integration exists.
+
+Then:
+
+> Put this online.
+
+The agent deploys it.
+
+Then:
+
+> I own roofingexample.com. Connect that domain.
+
+The agent walks the user through or performs as much of the domain setup as BuildCustom can safely automate.
+
+The user should be able to operate nearly the entire BuildCustom platform conversationally.
+
+---
+
+# 3. BUILDCUSTOM'S NATIVE AI AGENT
+
+BuildCustom should have its own simple AI agent similar to the conversational experience users expect from modern AI coding platforms.
+
+We are interested in using Cloudflare's current AI/vibe-coding tooling and SDK infrastructure on the backend where appropriate.
+
+Do NOT assume we have implemented this correctly.
+
+Inspect what actually exists.
+
+The BuildCustom agent eventually needs tools/capabilities allowing it to:
+
+### PROJECT
+
+* create projects
+* inspect projects
+* create files
+* edit files
+* delete files
+* understand the project structure
+* understand dependencies
+* maintain context across the project
+
+### BUILD
+
+* generate code
+* modify code
+* install dependencies
+* run build commands
+* run tests
+* inspect errors
+* fix errors
+* iterate on failures
+
+### PREVIEW
+
+* launch previews
+* inspect build failures
+* inspect runtime failures
+* potentially inspect rendered output
+* update previews after changes
+
+### INFRASTRUCTURE
+
+* create deployments
+* redeploy applications
+* inspect deployment status
+* inspect deployment errors
+* manage BuildCustom subdomains
+* manage custom domains
+* configure supported databases/storage
+* configure environment variables
+* configure supported integrations
+
+### HOSTING
+
+The user should eventually be able to say:
+
+> Deploy this.
+
+rather than having to understand a traditional hosting control panel.
+
+Hosting itself should therefore be **AI-first**.
+
+---
+
+# 4. EXTERNAL AGENTS ARE A CORE PART OF THE VISION
+
+This is another major requirement.
+
+We do NOT want BuildCustom to force every advanced user to use only the native BuildCustom agent.
+
+Many developers and AI builders already prefer agents such as:
+
+* Claude Code
+* Codex
+* Hermes
+* OpenClaw
+* other current/future coding agents
+
+We want BuildCustom to eventually expose an agent-friendly interface so these external agents can operate BuildCustom on the user's behalf.
+
+Conceptually:
+
+CLAUDE CODE
+
+↓
+
+BUILDCUSTOM AGENT/API/MCP INTERFACE
+
+↓
+
+CREATE PROJECT
+
+↓
+
+UPLOAD/MODIFY FILES
+
+↓
+
+BUILD
+
+↓
+
+PREVIEW
+
+↓
+
+DEPLOY
+
+↓
+
+CONFIGURE DOMAIN
+
+↓
+
+MANAGE APPLICATION
+
+The same should be possible with Codex, Hermes, OpenClaw, or another sufficiently capable agent.
+
+The customer could therefore choose between:
+
+### OPTION A — BUILDCUSTOM AGENT
+
+Open BuildCustom.ai and simply talk to our native agent.
+
+OR:
+
+### OPTION B — BRING YOUR OWN AGENT
+
+Connect an external agent they already use and allow that agent to operate BuildCustom for them.
+
+This means the architecture should NOT tightly couple all platform functionality to our chat UI.
+
+Core BuildCustom capabilities should eventually be exposed as secure tools/actions that can be invoked by:
+
+* BuildCustom's native agent
+* BuildCustom's UI
+* BuildCustom API clients
+* MCP or another agent protocol
+* Claude Code
+* Codex
+* Hermes
+* OpenClaw
+* future agents
+
+This is an important architectural principle.
+
+---
+
+# 5. THE PLATFORM SHOULD BE TOOL-DRIVEN UNDERNEATH
+
+Evaluate whether the existing architecture supports this model.
+
+Conceptually, we want BuildCustom's capabilities to exist as reusable platform actions.
+
+For example:
+
+`create_project`
+
+`get_project`
+
+`list_project_files`
+
+`write_file`
+
+`delete_file`
+
+`install_dependency`
+
+`run_build`
+
+`run_tests`
+
+`create_preview`
+
+`inspect_logs`
+
+`create_deployment`
+
+`get_deployment`
+
+`rollback_deployment`
+
+`add_custom_domain`
+
+`verify_domain`
+
+`set_environment_variable`
+
+`create_database`
+
+`create_storage_bucket`
+
+etc.
+
+The native BuildCustom agent should call these tools.
+
+An external agent should eventually be able to call the SAME underlying capabilities through an authenticated interface.
+
+Do NOT implement these.
+
+Determine whether the existing application is already structured this way or whether functionality is tightly coupled to UI/routes/components.
+
+---
+
+# 6. WHY WE ARE REVISITING BUILDCUSTOM NOW
+
+We recently considered purchasing/using PLR AI agents that specifically create:
+
+* landing pages
+* sales pages
+* thank-you pages
+
+Then we considered building our own hosting company as the recurring backend offer.
+
+That led to the realization that BuildCustom may already represent the larger version of this opportunity.
+
+Instead of:
+
+LANDING PAGE AGENT
+
+↓
+
+GENERATES PAGE
+
+↓
+
+HOSTING UPSELL
+
+we could have:
+
+BUILDCUSTOM
+
+↓
+
+"WHAT DO YOU WANT TO BUILD?"
+
+↓
+
+AI AGENT BUILDS IT
+
+↓
+
+AI AGENT MODIFIES IT
+
+↓
+
+AI AGENT DEPLOYS IT
+
+↓
+
+BUILDCUSTOM HOSTING
+
+Landing pages would simply be one BuildCustom use case.
+
+---
+
+# 7. POSSIBLE SPECIALIZED BUILD MODES
+
+Eventually BuildCustom could present users with options such as:
+
+**What do you want to build?**
+
+* Landing Page
+* Website
+* Sales Funnel
+* SaaS
+* Web App
+* Internal Tool
+* Start From Scratch
+
+These should NOT necessarily be separate products or separate agents.
+
+They could potentially be specialized:
+
+* system prompts
+* skills
+* templates
+* workflows
+* starter repositories
+* agent instructions
+
+running on the same underlying BuildCustom agent.
+
+For example:
+
+### Landing Page Mode
+
+User:
+
+> Build me a landing page for my $97 Facebook Ads course.
+
+Agent asks relevant questions.
+
+Agent creates page.
+
+Agent previews page.
+
+User says:
+
+> Make this feel more premium.
+
+Agent modifies page.
+
+User says:
+
+> Add a thank-you page.
+
+Agent adds it.
+
+User says:
+
+> Publish everything.
+
+Agent deploys it to BuildCustom hosting.
+
+That may eliminate the need for separate standalone landing-page agents.
+
+---
+
+# 8. INSPECT THE EXISTING APPLICATION
+
+Perform a thorough repository inspection.
+
+Identify:
+
+### FRONTEND
+
+* framework
+* routing
+* UI
+* editor
+* chat
+* preview interface
+* project management
+* file browser
+* deployment interface
+
+### BACKEND
+
+* framework
+* API architecture
+* services
+* database
+* ORM
+* authentication
+* authorization
+* job processing
+* queues
+* caching
+* storage
+* logging
+* analytics
+* billing
+
+### AI
+
+* LLM providers
+* model configuration
+* prompts
+* tool calling
+* agent architecture
+* code generation
+* code modification
+* project context
+* conversation memory
+* iterative execution
+* error correction
+* testing
+* build execution
+
+### INFRASTRUCTURE
+
+* Cloudflare Workers
+* Workers for Platforms
+* dispatch namespaces
+* Cloudflare Pages
+* Cloudflare for SaaS
+* custom hostnames
+* R2
+* D1
+* KV
+* Durable Objects
+* Queues
+* DNS APIs
+* SSL
+* Wrangler
+* Worker bindings
+
+Do NOT expose secret values.
+
+Environment variable names are sufficient.
+
+---
+
+# 9. CLASSIFY EVERYTHING HONESTLY
+
+For each major feature classify it as:
+
+**WORKING**
+
+**PARTIALLY WORKING**
+
+**STUBBED / MOCKED**
+
+**BROKEN**
+
+**PLANNED BUT NOT IMPLEMENTED**
+
+**NOT PRESENT**
+
+Do not call something working merely because:
+
+* a route exists
+* a UI exists
+* a database table exists
+* a TODO exists
+* a mock response exists
+
+Trace the complete path.
+
+---
+
+# 10. INSPECT THE EXISTING AI BUILDER
+
+Determine exactly what BuildCustom's AI can do TODAY.
+
+Could a user currently say:
+
+> Build me a landing page for an AI marketing agency.
+
+Does BuildCustom actually create the necessary files?
+
+Can the user then say:
+
+> Change the CTA to orange.
+
+Does the AI understand and modify the existing project?
+
+Could the user say:
+
+> Add authentication and a dashboard.
+
+Can the AI create the required frontend/backend architecture?
+
+Can the agent:
+
+* inspect files
+* create files
+* modify files
+* delete files
+* understand project context
+* install dependencies
+* run commands
+* build
+* test
+* debug
+* inspect errors
+* retry
+* preview
+* deploy
+
+Explain the actual implementation of each capability.
+
+---
+
+# 11. INSPECT AGENT ARCHITECTURE
+
+This section is particularly important.
+
+Determine whether BuildCustom currently has a genuine agent loop or primarily an LLM chat/code-generation system.
+
+Inspect for:
+
+* tool definitions
+* tool execution
+* multi-step reasoning/execution
+* task loops
+* retry loops
+* planning
+* tool permissions
+* state management
+* context management
+* subagents
+* background agents
+* terminal tools
+* filesystem tools
+* deployment tools
+* database tools
+* infrastructure tools
+
+Show the current agent architecture in a diagram.
+
+Then identify what would need to change for BuildCustom to become truly **agent-first**.
+
+---
+
+# 12. CLOUDFLARE VIBE-CODING / AGENT INFRASTRUCTURE
+
+Investigate the existing codebase for any integration with Cloudflare's AI development, agent, or vibe-coding SDK/infrastructure.
+
+Determine:
+
+* what is already implemented
+* what was planned
+* what is obsolete
+* what is missing
+
+Then, based on the Cloudflare capabilities already present in this project, explain whether Cloudflare's current agent/vibe-coding infrastructure could simplify the BuildCustom native agent.
+
+Do NOT implement it.
+
+We want to understand whether we should continue our existing architecture or replace portions of the AI builder with newer Cloudflare-native tooling.
+
+---
+
+# 13. HOW GENERATED CODE CURRENTLY RUNS
+
+Determine where user-generated code executes DURING development.
+
+Look for:
+
+* isolated sandboxes
+* containers
+* WebContainers
+* Workers
+* preview Workers
+* remote environments
+* Docker
+* server-side execution
+* build servers
+
+This is critical.
+
+AI generating arbitrary code is different from safely executing arbitrary code.
+
+Explain:
+
+USER
+
+↓
+
+AGENT
+
+↓
+
+CODE
+
+↓
+
+EXECUTION ENVIRONMENT
+
+↓
+
+BUILD
+
+↓
+
+PREVIEW
+
+and identify the security/isolation boundaries.
+
+---
+
+# 14. PREVIEW SYSTEM
+
+Determine how preview currently works.
+
+Inspect:
+
+* live preview
+* hot reload
+* preview URLs
+* temporary deployments
+* iframe preview
+* preview Workers
+* asset serving
+* build errors
+* console errors
+* runtime errors
+
+Show the actual current flow:
+
+PROMPT
+
+↓
+
+AGENT
+
+↓
+
+FILES
+
+↓
+
+BUILD
+
+↓
+
+PREVIEW
+
+↓
+
+USER FEEDBACK
+
+↓
+
+AGENT EDIT
+
+↓
+
+UPDATED PREVIEW
+
+---
+
+# 15. DEPLOYMENT AND HOSTING
+
+Trace the existing deployment system completely.
+
+Determine:
+
+1. What happens when Deploy is clicked?
+
+2. Can deployment be initiated programmatically?
+
+3. How files are packaged.
+
+4. Where files are stored.
+
+5. Where builds occur.
+
+6. Whether each application receives its own Worker.
+
+7. Whether Workers for Platforms is used.
+
+8. Whether a dispatch namespace exists.
+
+9. How tenant isolation works.
+
+10. How BuildCustom subdomains work.
+
+11. Whether custom domains work.
+
+12. Whether SSL is automated.
+
+13. Whether server-side code can run.
+
+14. Whether databases can be attached.
+
+15. Whether storage can be attached.
+
+16. Whether environment variables/secrets are supported.
+
+17. Whether deployment logs exist.
+
+18. Whether deployment history exists.
+
+19. Whether rollback exists.
+
+20. Whether usage is metered.
+
+Show the ACTUAL architecture in a diagram.
+
+---
+
+# 16. AI-FIRST HOSTING
+
+Hosting should not merely be a traditional dashboard attached to BuildCustom.
+
+The hosting layer itself should be operable by AI.
+
+A user should eventually be able to say:
+
+> Deploy this.
+
+> Give it the domain mycoolapp.com.
+
+> Roll back the last deployment.
+
+> Show me why production is failing.
+
+> Add a database.
+
+> Add object storage.
+
+> Set my Stripe secret.
+
+> Show me which apps are getting the most traffic.
+
+The agent should invoke safe BuildCustom platform tools to perform these actions.
+
+Inspect the existing hosting architecture and determine how much work is required to expose hosting operations as reusable agent tools.
+
+---
+
+# 17. EXTERNAL AGENT ACCESS
+
+Design conceptually, but DO NOT implement, how external agents should interact with BuildCustom.
+
+Compare approaches such as:
+
+### REST API
+
+### MCP server
+
+### CLI
+
+### SDK
+
+### OAuth / delegated authorization
+
+### Combination of these
+
+We want something where a user could potentially tell Claude Code:
+
+> Deploy this project to BuildCustom.
+
+Or tell Codex:
+
+> Create a BuildCustom project for this repo, deploy it and connect my domain.
+
+Or tell Hermes/OpenClaw:
+
+> Check my BuildCustom apps and fix the one whose deployment is failing.
+
+Determine what underlying BuildCustom capabilities would need to be exposed.
+
+Pay special attention to:
+
+* authentication
+* authorization
+* project permissions
+* destructive actions
+* secret handling
+* approval requirements
+* rate limits
+* audit logs
+* agent identity
+* user identity
+* revocation
+
+We want external agents to be powerful without giving them unrestricted access to a user's entire account.
+
+---
+
+# 18. ONE PLATFORM API, MULTIPLE INTERFACES
+
+Evaluate this architectural principle:
+
+BuildCustom should ideally have ONE core platform layer.
+
+Then different interfaces sit on top:
+
+```
+                     BUILDCUSTOM NATIVE AGENT
+                              ↓
+```
+
+BUILDCUSTOM UI → BUILDCUSTOM PLATFORM API/TOOLS ← EXTERNAL AGENTS
+↑
+MCP / SDK / CLI
+↓
+CLOUDFLARE INFRASTRUCTURE
+
+The native agent should NOT have secret internal capabilities unavailable through the platform architecture unless there is a strong security reason.
+
+Determine how close the current codebase is to this structure.
+
+---
+
+# 19. WHAT CAN BUILDCUSTOM CURRENTLY CREATE AND HOST?
+
+Break this down specifically.
+
+### STATIC
+
+* HTML
+* CSS
+* JavaScript
+* landing pages
+* websites
+* sales pages
+* thank-you pages
+
+### FRAMEWORKS
+
+* React
+* Vite
+* Next.js
+* Vue
+* Svelte
+
+### APPLICATIONS
+
+* APIs
+* server-side JavaScript
+* authentication
+* webhooks
+* scheduled tasks
+* background jobs
+
+### DATA
+
+* D1
+* KV
+* R2
+* Durable Objects
+* external databases
+
+### AI
+
+* OpenAI
+* Anthropic
+* other AI APIs
+* user API keys
+* server-side secrets
+
+Tell me what genuinely works TODAY.
+
+---
+
+# 20. USERS, PROJECTS AND MULTI-TENANCY
+
+Inspect:
+
+* users
+* authentication
+* organizations
+* teams
+* projects
+* project ownership
+* permissions
+* tenant isolation
+* usage
+* limits
+* API keys
+* billing
+* Stripe
+* subscriptions
+
+Show the important database relationships.
+
+---
+
+# 21. LANDING-PAGE AGENTS VS BUILDCUSTOM
+
+After inspecting the existing implementation, answer this product question:
+
+Would standalone AI landing-page agents actually give us anything meaningful that couldn't simply become a specialized BuildCustom workflow?
+
+For example:
+
+BUILDCUSTOM
+
+↓
+
+LANDING PAGE MODE
+
+↓
+
+SPECIALIZED LANDING PAGE SKILL/PROMPT
+
+↓
+
+BUILDCUSTOM AGENT
+
+↓
+
+BUILD
+
+↓
+
+PREVIEW
+
+↓
+
+CONVERSATIONAL EDITING
+
+↓
+
+DEPLOY
+
+↓
+
+BUILDCUSTOM HOSTING
+
+If BuildCustom already has substantial pieces of this system, identify what we would need to add to make a specialized landing-page experience excellent.
+
+---
+
+# 22. STATIC HOSTING VS FULL APPLICATION HOSTING
+
+Because BuildCustom can potentially generate both simple websites and complete applications, determine whether we should use different deployment paths.
+
+For example:
+
+### STATIC PROJECT
+
+Landing page
+
+↓
+
+Static assets
+
+↓
+
+Very inexpensive Cloudflare hosting
+
+VERSUS:
+
+### APPLICATION
+
+SaaS
+
+↓
+
+Worker / application runtime
+
+↓
+
+Workers for Platforms
+
+↓
+
+D1 / KV / R2 / other bindings as required
+
+Evaluate whether a HYBRID architecture would let us keep simple sites extremely cheap while still supporting sophisticated applications.
+
+Determine how this compares with the architecture we've already built.
+
+---
+
+# 23. GAP ANALYSIS
+
+Create this table:
+
+| Capability | Status | Existing Implementation | Reusable? | Missing | V1 Priority |
+| ---------- | ------ | ----------------------- | --------- | ------- | ----------- |
+
+Include:
+
+* native BuildCustom agent
+* agent loop
+* agent tools
+* AI chat
+* code generation
+* multi-file editing
+* terminal execution
+* dependency management
+* build system
+* testing
+* debugging
+* sandbox
+* live preview
+* static deployment
+* application deployment
+* Cloudflare Workers
+* Workers for Platforms
+* dispatch namespaces
+* BuildCustom subdomains
+* custom domains
+* SSL
+* D1
+* KV
+* R2
+* secrets
+* authentication
+* projects
+* deployment history
+* rollback
+* logs
+* analytics
+* usage metering
+* billing
+* API keys
+* platform API
+* MCP
+* CLI
+* SDK
+* external-agent authentication
+* external-agent permissions
+
+---
+
+# 24. WHAT IS DEAD OR OVERENGINEERED?
+
+Identify:
+
+* dead code
+* abandoned approaches
+* duplicate architectures
+* mocks
+* obsolete Cloudflare implementations
+* old AI implementations
+* unnecessary dependencies
+* unfinished experiments
+* functionality that newer Cloudflare tooling could replace
+
+Do NOT remove anything.
+
+Explain what should eventually be:
+
+**KEEP**
+
+**FINISH**
+
+**REPLACE**
+
+**REMOVE**
+
+---
+
+# 25. RECOMMEND THE FINAL CORE ARCHITECTURE
+
+After inspecting everything, recommend the architecture for an agent-first BuildCustom.
+
+The ideal conceptual structure is:
+
+USER
+
+↓
+
+BUILDCUSTOM NATIVE AGENT
+
+↓
+
+BUILDCUSTOM PLATFORM TOOLS
+
+↓
+
+PROJECT / FILE / BUILD / PREVIEW / DEPLOYMENT SERVICES
+
+↓
+
+CLOUDFLARE
+
+↓
+
+LIVE APPLICATION
+
+And alternatively:
+
+USER
+
+↓
+
+CLAUDE / CODEX / HERMES / OPENCLAW / OTHER AGENT
+
+↓
+
+BUILDCUSTOM MCP / API / SDK
+
+↓
+
+SAME BUILDCUSTOM PLATFORM TOOLS
+
+↓
+
+CLOUDFLARE
+
+↓
+
+LIVE APPLICATION
+
+The two paths should ultimately operate the SAME underlying BuildCustom platform.
+
+---
+
+# 26. DEFINE THE MINIMUM LAUNCHABLE PRODUCT
+
+We do NOT need to recreate every feature of Replit before launch.
+
+Determine the shortest path to making this core loop reliable:
+
+### PROMPT
+
+> Build me ______.
+
+↓
+
+### BUILD
+
+Agent creates application.
+
+↓
+
+### PREVIEW
+
+User sees application.
+
+↓
+
+### EDIT
+
+> Change ______.
+
+↓
+
+### AGENT
+
+Agent modifies application.
+
+↓
+
+### DEPLOY
+
+> Put this online.
+
+↓
+
+### HOSTING
+
+BuildCustom deploys it.
+
+↓
+
+### DOMAIN
+
+> Connect my domain.
+
+↓
+
+### LIVE PRODUCT
+
+The application is live.
+
+That is the primary BuildCustom experience.
+
+---
+
+# 27. EXTERNAL AGENT V1
+
+Separately determine the minimum we would need so an external coding agent can use BuildCustom.
+
+The initial version does NOT need to expose every capability.
+
+Maybe V1 only requires:
+
+* authenticate
+* create project
+* upload/sync files
+* create deployment
+* check deployment
+* retrieve logs
+* manage domains
+
+Determine what the smallest useful external-agent interface would be.
+
+Then explain whether:
+
+**REST API + MCP**
+
+would be sufficient initially, with CLI/SDK added later.
+
+---
+
+# 28. PHASED IMPLEMENTATION PLAN
+
+Based on the ACTUAL repository, create the shortest sensible implementation sequence.
+
+Potentially:
+
+### Phase 0 — Repair Existing Foundation
+
+### Phase 1 — Native BuildCustom Agent
+
+### Phase 2 — Reliable Build / Preview Loop
+
+### Phase 3 — Cloudflare Deployment
+
+### Phase 4 — BuildCustom Hosting + Domains
+
+### Phase 5 — Agent-Controlled Hosting
+
+### Phase 6 — Billing + Usage
+
+### Phase 7 — Specialized Build Modes
+
+Landing pages, websites, SaaS, etc.
+
+### Phase 8 — BuildCustom Platform API
+
+### Phase 9 — MCP / External Agents
+
+### Phase 10 — Advanced Application Infrastructure
+
+But DO NOT blindly use this sequence.
+
+Adjust it based on what is already built.
+
+For every phase provide:
+
+* what already exists
+* what needs fixing
+* what needs building
+* dependencies
+* risks
+* tests
+* acceptance criteria
+
+---
+
+# 29. FINAL REPORT
+
+Finish with these sections:
+
+## WHAT BUILDCUSTOM ACTUALLY IS TODAY
+
+What can a real user genuinely do right now?
+
+## WHAT WE ALREADY BUILT THAT MATTERS
+
+Which parts of the original Replit-like architecture are valuable and reusable?
+
+## HOW CLOSE WE ARE TO AGENT-FIRST
+
+What prevents the native BuildCustom experience from being primarily conversational today?
+
+## HOW CLOSE WE ARE TO DEPLOYMENT + HOSTING
+
+How much of the Cloudflare infrastructure is actually functioning?
+
+## HOW CLOSE WE ARE TO EXTERNAL AGENT SUPPORT
+
+What would be required for Claude Code, Codex, Hermes, OpenClaw, etc. to control BuildCustom?
+
+## LANDING-PAGE AGENTS
+
+Based on the actual codebase, should landing-page generation simply become a specialized BuildCustom mode?
+
+## RECOMMENDED ARCHITECTURE
+
+Show the recommended architecture visually.
+
+## MINIMUM SELLABLE V1
+
+What is the smallest BuildCustom product worth launching?
+
+## WHAT NOT TO BUILD YET
+
+Identify features that would delay launch without materially improving the initial product.
+
+## NEXT 5 DEVELOPMENT OBJECTIVES
+
+Give me the next five concrete things we should work on, IN ORDER.
+
+---
+
+# MOST IMPORTANT PRODUCT PRINCIPLE
+
+BuildCustom should not be designed around users clicking through dozens of infrastructure screens.
+
+It should be designed around:
+
+> **Tell your agent what you want done.**
+
+The UI exists when visual/manual control is useful.
+
+The agent exists as the primary control layer.
+
+And advanced users should eventually be able to bring the agent they already prefer.
+
+The end-state is:
+
+# BuildCustom.ai
+
+**Build it with AI. Run it with AI. Deploy it with AI.**
+
+The user should be able to go from an idea to a live application without needing to understand the infrastructure underneath it.
+
+Again:
+
+**DO NOT BUILD OR MODIFY ANYTHING YET.**
+
+Inspect the existing system and tell me:
+
+**WHAT WE HAVE → WHAT WORKS → WHAT CAN BE REUSED → WHAT NEEDS TO CHANGE → THE SHORTEST PATH TO THIS AGENT-FIRST VISION.**
