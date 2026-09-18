@@ -592,7 +592,7 @@ function ProjectSettingsTab({ project, projectId, runtimeStatus }: { project: an
 
       <PublishingSettingsCard projectId={projectId} deploymentUrl={runtimeStatus?.deploymentUrl} />
 
-      <SEOTab projectId={projectId} />
+      <SEOTab projectId={projectId} project={project} deploymentUrl={runtimeStatus?.deploymentUrl} />
 
       <GlassCard>
         <h3 className="font-semibold mb-2 text-red-400">Danger Zone</h3>
@@ -1093,7 +1093,64 @@ function AutoBloggerTab({ projectId }: { projectId: number }) {
 }
 
 // ── SEO (real) ────────────────────────────────────────────────────────────────
-function SEOTab({ projectId }: { projectId: number }) {
+function GuidedSeoField({
+  value, onChange, suggestions, maxLength, multiline = false, rows = 1, className, testId,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  suggestions: string[];
+  maxLength: number;
+  multiline?: boolean;
+  rows?: number;
+  className: string;
+  testId?: string;
+}) {
+  const { theme } = useTheme();
+  const next = suggestions.find((suggestion) =>
+    suggestion.length <= maxLength &&
+    suggestion.length > value.length &&
+    suggestion.toLowerCase().startsWith(value.toLowerCase()),
+  );
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (event.key === "Tab" && !event.shiftKey && next) {
+      event.preventDefault();
+      onChange(next);
+    }
+  };
+  const fieldProps = {
+    value,
+    maxLength,
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.target.value),
+    onKeyDown: handleKeyDown,
+    className: `${className} relative z-0`,
+    "data-testid": testId,
+  };
+  return (
+    <>
+      <div className="relative">
+        {multiline
+          ? <textarea {...fieldProps} rows={rows} />
+          : <input {...fieldProps} />}
+        {next && (
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-x-0 top-0 z-10 overflow-hidden whitespace-pre-wrap px-4 py-2.5 text-sm ${theme === "dark" ? "text-white/25" : "text-gray-400"}`}
+          >
+            <span className="invisible">{value}</span>{next.slice(value.length)}
+          </div>
+        )}
+      </div>
+      {next && (
+        <p className={`mt-1 flex items-center gap-1.5 text-[11px] ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>
+          <kbd className={`rounded border px-1.5 py-0.5 font-sans ${theme === "dark" ? "border-white/15 bg-white/5" : "border-gray-200 bg-gray-50"}`}>Tab</kbd>
+          to use this suggestion
+        </p>
+      )}
+    </>
+  );
+}
+
+function SEOTab({ projectId, project, deploymentUrl }: { projectId: number; project: any; deploymentUrl?: string }) {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [activeSection, setActiveSection] = useState("meta");
@@ -1127,6 +1184,28 @@ function SEOTab({ projectId }: { projectId: number }) {
     ogTitle: "", ogDescription: "", ogImageUrl: "", allowIndexing: true,
   };
   const schema = schemaForm ?? "{}";
+  const projectName = String(project?.name || "My Project").trim();
+  const projectType = String(project?.type || "website").replace(/-/g, " ");
+  const projectDescription = String(project?.description || "").trim();
+  const shortPurpose = projectDescription || `a ${projectType} built with ${project?.framework || "BuildCustom"}`;
+  const descriptionBase = `${projectName} is ${shortPurpose.replace(/^a /, "a ")}.`;
+  const descriptionExpanded = `${descriptionBase} Explore the key features and see how it can help you get more done.`;
+  const descriptionComplete = `${descriptionExpanded} Get started today.`;
+  const canonicalSuggestion = deploymentUrl || `https://${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.apps.buildcustom.ai`;
+  const schemaSuggestion = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": projectType === "website" ? "WebSite" : "SoftwareApplication",
+    name: projectName,
+    description: projectDescription || shortPurpose,
+    url: canonicalSuggestion,
+  }, null, 2);
+  const titleSuggestions = [
+    projectName,
+    `${projectName} | ${projectType.charAt(0).toUpperCase() + projectType.slice(1)}`,
+    `${projectName} | ${projectDescription || `Modern ${projectType}`}`,
+  ];
+  const descriptionSuggestions = [descriptionBase, descriptionExpanded, descriptionComplete];
+  const keywordSuggestions = [projectName, `${projectName} ${projectType}`, `${projectName} ${projectType} platform`];
 
   const saveMeta = useMutation({
     mutationFn: async () => {
@@ -1251,33 +1330,32 @@ function SEOTab({ projectId }: { projectId: number }) {
             </div>
             <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Site Title <span className="opacity-50">(50–60 chars)</span></label>
-              <input value={meta.metaTitle} onChange={e => setMetaForm((f: any) => ({ ...f, metaTitle: e.target.value }))}
-                placeholder="My Site | Fast & Reliable Service"
-                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
-                data-testid="input-meta-title" />
+              <GuidedSeoField value={meta.metaTitle} onChange={(value) => setMetaForm((f: any) => ({ ...f, metaTitle: value }))}
+                suggestions={titleSuggestions} maxLength={60}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+                testId="input-meta-title" />
               <p className={`text-xs mt-1 ${meta.metaTitle.length > 60 ? "text-red-400" : theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{meta.metaTitle.length}/60 characters</p>
             </div>
             <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Meta Description <span className="opacity-50">(150–160 chars)</span></label>
-              <textarea value={meta.metaDescription} onChange={e => setMetaForm((f: any) => ({ ...f, metaDescription: e.target.value }))}
-                placeholder="Describe your site in 1-2 sentences for search engines..."
-                rows={3}
-                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors resize-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
-                data-testid="input-meta-description" />
+              <GuidedSeoField value={meta.metaDescription} onChange={(value) => setMetaForm((f: any) => ({ ...f, metaDescription: value }))}
+                suggestions={descriptionSuggestions} maxLength={160} multiline rows={3}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors resize-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+                testId="input-meta-description" />
               <p className={`text-xs mt-1 ${meta.metaDescription.length > 160 ? "text-red-400" : theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{meta.metaDescription.length}/160 characters</p>
             </div>
             <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Focus Keyword</label>
-              <input value={meta.focusKeyword} onChange={e => setMetaForm((f: any) => ({ ...f, focusKeyword: e.target.value }))}
-                placeholder="e.g. plumber Austin TX"
-                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
-                data-testid="input-focus-keyword" />
+              <GuidedSeoField value={meta.focusKeyword} onChange={(value) => setMetaForm((f: any) => ({ ...f, focusKeyword: value }))}
+                suggestions={keywordSuggestions} maxLength={120}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+                testId="input-focus-keyword" />
             </div>
             <div>
               <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Canonical URL</label>
-              <input value={meta.canonicalUrl} onChange={e => setMetaForm((f: any) => ({ ...f, canonicalUrl: e.target.value }))}
-                placeholder="https://example.com"
-                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`} />
+              <GuidedSeoField value={meta.canonicalUrl} onChange={(value) => setMetaForm((f: any) => ({ ...f, canonicalUrl: value }))}
+                suggestions={[canonicalSuggestion]} maxLength={2000}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`} />
             </div>
             <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-gray-50"}`}>
               <label className="flex items-center justify-between gap-4">
@@ -1291,9 +1369,15 @@ function SEOTab({ projectId }: { projectId: number }) {
             <div className={`border-t pt-4 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
               <h4 className={`mb-3 text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Social sharing</h4>
               <div className="space-y-3">
-                <input value={meta.ogTitle} onChange={e => setMetaForm((f: any) => ({ ...f, ogTitle: e.target.value }))} placeholder="Social sharing title" className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
-                <textarea value={meta.ogDescription} onChange={e => setMetaForm((f: any) => ({ ...f, ogDescription: e.target.value }))} placeholder="Social sharing description" rows={2} className={`w-full resize-none px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
-                <input value={meta.ogImageUrl} onChange={e => setMetaForm((f: any) => ({ ...f, ogImageUrl: e.target.value }))} placeholder="https://example.com/social-image.jpg" className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+                <GuidedSeoField value={meta.ogTitle} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogTitle: value }))}
+                  suggestions={titleSuggestions} maxLength={120}
+                  className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+                <GuidedSeoField value={meta.ogDescription} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogDescription: value }))}
+                  suggestions={descriptionSuggestions} maxLength={500} multiline rows={2}
+                  className={`w-full resize-none px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
+                <GuidedSeoField value={meta.ogImageUrl} onChange={(value) => setMetaForm((f: any) => ({ ...f, ogImageUrl: value }))}
+                  suggestions={[`${canonicalSuggestion.replace(/\/$/, "")}/opengraph.jpg`]} maxLength={2000}
+                  className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none ${theme === "dark" ? "bg-white/5 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-gray-900"}`} />
               </div>
             </div>
             <p className={`text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>For published projects, saved metadata is applied to the live domain immediately.</p>
@@ -1307,9 +1391,10 @@ function SEOTab({ projectId }: { projectId: number }) {
         {activeSection === "schema" && (
           <div>
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Structured Data (JSON-LD)</h3>
-            <textarea rows={12} value={schema} onChange={e => setSchemaForm(e.target.value)}
+            <GuidedSeoField value={schema === "{}" ? "" : schema} onChange={(value) => setSchemaForm(value || "{}")}
+              suggestions={[schemaSuggestion]} maxLength={50_000} multiline rows={12}
               className={`w-full px-4 py-3 rounded-xl border text-xs outline-none transition-colors resize-none font-mono ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
-              data-testid="input-schema" />
+              testId="input-schema" />
             <button onClick={() => saveSchema.mutate()} disabled={saveSchema.isPending}
               className={`mt-3 flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50 ${schemaSaved ? "bg-emerald-400 text-black" : "bg-cyan-400 text-black"}`}
               data-testid="button-save-schema">
@@ -1562,7 +1647,7 @@ export default function ProjectDetail() {
             {activeTab === "pages" && <PagesTab projectId={projectId} />}
             {activeTab === "blog" && <BlogTab projectId={projectId} />}
             {activeTab === "autoblogger" && <AutoBloggerTab projectId={projectId} />}
-            {activeTab === "seo" && <SEOTab projectId={projectId} />}
+            {activeTab === "seo" && <SEOTab projectId={projectId} project={project} deploymentUrl={runtimeStatus?.deploymentUrl} />}
             {activeTab === "analytics" && <AnalyticsTab />}
             {activeTab === "domain" && <DomainTab project={project} />}
           </motion.div>
