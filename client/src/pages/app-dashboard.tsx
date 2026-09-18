@@ -590,6 +590,7 @@ function ProjectsPage() {
         {projects.map((project: any) => {
           const IconComponent = PROJECT_TYPE_ICONS[project.type] || Globe;
           const previewImg = PREVIEW_IMAGES[project.type] || previewPortfolio;
+          const isPublished = Boolean(project.deploymentUrl);
           const iconColor = typeColors[project.type] || "text-cyan-400";
           const updatedAgo = (() => {
             const diff = Date.now() - new Date(project.updatedAt).getTime();
@@ -615,17 +616,29 @@ function ProjectsPage() {
               data-testid={`card-project-${project.id}`}
             >
               <div className="relative w-full h-40 overflow-hidden">
-                <img src={previewImg} alt={project.name} className="w-full h-full object-cover" />
+                {isPublished ? (
+                  <iframe
+                    src={project.deploymentUrl}
+                    title={`${project.name} live project cover`}
+                    loading="lazy"
+                    sandbox="allow-scripts allow-same-origin"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-0 top-0 h-[320px] w-[200%] origin-top-left scale-50 border-0 bg-white"
+                  />
+                ) : (
+                  <img src={previewImg} alt={project.name} className="w-full h-full object-cover" />
+                )}
                 <div className={`absolute inset-0 ${theme === "dark" ? "bg-gradient-to-t from-[#0a0a12] via-transparent to-transparent" : "bg-gradient-to-t from-white via-transparent to-transparent"}`} />
                 <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-medium backdrop-blur-md ${
-                  project.status === "live"
+                  isPublished
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
                     : project.status === "building"
                     ? "bg-amber-500/20 text-amber-300 border border-amber-400/30"
                     : "bg-white/10 text-white/70 border border-white/20"
                 }`}>
-                  {project.status === "live" && "● "}
-                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                  {isPublished && "● "}
+                  {isPublished ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)}
                 </span>
               </div>
 

@@ -205,7 +205,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const userId = await requireAuth(req, res);
       if (!userId) return;
-      return res.json(await storage.getProjectsByUser(userId));
+      const projects = await storage.getProjectsByUser(userId);
+      const runtimeLinks = await Promise.all(projects.map((project) => storage.getRuntimeProjectLink(project.id)));
+      return res.json(projects.map((project, index) => ({
+        ...project,
+        deploymentUrl: runtimeLinks[index]?.deploymentUrl || null,
+      })));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }
