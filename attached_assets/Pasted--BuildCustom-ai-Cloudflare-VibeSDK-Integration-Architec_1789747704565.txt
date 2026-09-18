@@ -1,0 +1,1172 @@
+# BuildCustom.ai + Cloudflare VibeSDK Integration Architecture Analysis
+
+## IMPORTANT: RESEARCH + INSPECTION + PLANNING ONLY
+
+Do NOT build anything yet.
+
+Do NOT modify the BuildCustom repository.
+
+Do NOT install VibeSDK.
+
+Do NOT change our database.
+
+Do NOT change authentication.
+
+Do NOT create Cloudflare resources.
+
+Do NOT create Workers.
+
+Do NOT deploy anything.
+
+Do NOT change environment variables.
+
+This is an architecture and integration analysis.
+
+You just completed an inspection of the existing BuildCustom.ai repository.
+
+Now I need you to reconsider that inspection with an important piece of context that I previously forgot to give you.
+
+---
+
+# IMPORTANT CONTEXT ABOUT WHY BUILDCUSTOM CURRENTLY LOOKS INCOMPLETE
+
+BuildCustom.ai was originally intended to be an AI application-building platform similar in concept to Replit.
+
+However, we intentionally started by building the:
+
+* UI
+* dashboard
+* accounts
+* projects
+* templates
+* builder interface
+* project screens
+* deployment UI
+* domain UI
+* console UI
+* version-history UI
+* general product experience
+
+inside Replit.
+
+The plan was NOT necessarily to build the entire AI coding runtime and deployment infrastructure ourselves inside this Replit application.
+
+The original plan was to eventually connect this BuildCustom product/UI to **Cloudflare's open-source VibeSDK and Cloudflare infrastructure**.
+
+That is why you found things like:
+
+* simulated AI Builder
+* fake preview
+* fake console
+* fake file tree
+* fake deployment status
+* fake domains
+* fake version history
+
+without the actual underlying infrastructure.
+
+Those screens were intended to eventually connect to the Cloudflare/VibeSDK engine.
+
+Therefore, do NOT interpret the absence of these systems inside the current repository as meaning we necessarily need to build them ourselves.
+
+We need to determine what Cloudflare/VibeSDK already provides.
+
+---
+
+# STEP 1 — RESEARCH THE CURRENT CLOUDFLARE VIBESDK
+
+Cloudflare VibeSDK is open source.
+
+Research the CURRENT official/open-source VibeSDK implementation and current Cloudflare documentation.
+
+Do not rely on old assumptions about what VibeSDK did when this BuildCustom project was originally started.
+
+Inspect the current:
+
+* official Cloudflare documentation
+* VibeSDK repository/source
+* README
+* architecture
+* examples
+* packages
+* APIs
+* supported Cloudflare services
+* current deployment model
+
+I want to understand what the CURRENT VibeSDK can actually provide us.
+
+For every important claim, identify the relevant VibeSDK file, official documentation, repository section, or source implementation so we can verify it.
+
+---
+
+# STEP 2 — DETERMINE WHAT VIBESDK ACTUALLY IS
+
+Explain precisely what VibeSDK provides today.
+
+Do not summarize it as simply "AI coding."
+
+Break it into components.
+
+Determine whether VibeSDK currently provides or helps provide:
+
+### AI / AGENT
+
+* conversational AI interface
+* agent loop
+* model/provider integration
+* tool calling
+* code generation
+* code editing
+* multi-file editing
+* project context
+* conversation persistence
+* retry/error-correction loops
+* planning
+* streaming responses
+* model switching
+* BYOK model support
+
+### FILE / WORKSPACE
+
+* project filesystem
+* file creation
+* file editing
+* file deletion
+* file tree
+* file persistence
+* project revisions
+* checkpoints
+* undo/restore
+
+### EXECUTION
+
+* isolated execution
+* Cloudflare Sandbox
+* command execution
+* terminal
+* dependency installation
+* npm
+* build commands
+* test execution
+* process management
+* execution limits
+
+### PREVIEW
+
+* live preview
+* preview URLs
+* hot reload
+* iframe previews
+* build output
+* runtime output
+* console logs
+* error capture
+* screenshot/browser inspection
+
+### DEPLOYMENT
+
+* deployment to Cloudflare
+* Workers
+* Workers for Platforms
+* dispatch namespaces
+* user Workers
+* static assets
+* production deployments
+* deployment status
+* deployment logs
+* deployment history
+* rollback
+
+### HOSTING
+
+* multi-tenant hosting
+* application isolation
+* BuildCustom-style subdomains
+* custom domains
+* SSL
+* Cloudflare for SaaS
+* bandwidth/usage metering
+
+### DATA / APPLICATION INFRASTRUCTURE
+
+* D1
+* KV
+* R2
+* Durable Objects
+* Queues
+* environment variables
+* secrets
+* cron jobs
+* backend APIs
+
+Clearly classify each capability as:
+
+**PROVIDED BY VIBESDK**
+
+**SUPPORTED THROUGH CLOUDFLARE BUT BUILDCUSTOM MUST IMPLEMENT**
+
+**PARTIALLY PROVIDED**
+
+**NOT PROVIDED**
+
+---
+
+# STEP 3 — UNDERSTAND VIBESDK'S ARCHITECTURE
+
+Show me the current VibeSDK architecture.
+
+I specifically want to understand:
+
+1. Where the AI agent runs.
+
+2. Where project files live.
+
+3. Where generated code executes.
+
+4. How Cloudflare Sandbox is used, if applicable.
+
+5. How builds happen.
+
+6. How previews happen.
+
+7. How preview URLs are generated.
+
+8. How production deployment works.
+
+9. How Workers for Platforms is involved.
+
+10. How individual customer applications are isolated.
+
+11. Whether VibeSDK assumes one Worker per generated application.
+
+12. How static assets are handled.
+
+13. How backend code is handled.
+
+14. How project state persists.
+
+15. How user conversations persist.
+
+16. How errors/logs are returned to the agent.
+
+17. How deployments are updated.
+
+18. How scaling works for many users/projects.
+
+Create a text architecture diagram showing the current VibeSDK flow.
+
+---
+
+# STEP 4 — COMPARE VIBESDK TO THE BUILDCUSTOM REPOSITORY YOU JUST INSPECTED
+
+You already inspected BuildCustom and found that we currently have real:
+
+* React/Vite frontend
+* Express backend
+* PostgreSQL
+* Drizzle
+* users
+* projects
+* templates
+* CMS
+* SEO
+* onboarding
+* project dashboard
+* builder UI
+* deployment UI
+* domain UI
+* file-tree UI
+* preview UI
+* console UI
+* version-history UI
+
+But many of the actual builder/runtime capabilities are currently simulated.
+
+Now compare the two systems.
+
+Create a large table:
+
+| Capability | BuildCustom Today | VibeSDK Today | Cloudflare Platform | What We Need To Build | Recommended Owner |
+| ---------- | ----------------- | ------------- | ------------------- | --------------------- | ----------------- |
+
+Include at minimum:
+
+* AI chat
+* agent loop
+* model integration
+* tool calling
+* project context
+* conversation history
+* project files
+* file editing
+* file persistence
+* revisions
+* terminal
+* dependency installation
+* build execution
+* testing
+* debugging
+* isolated sandbox
+* live preview
+* preview URL
+* console logs
+* error logs
+* deployment
+* static hosting
+* full application hosting
+* Workers
+* Workers for Platforms
+* dispatch namespaces
+* subdomains
+* custom domains
+* SSL
+* D1
+* KV
+* R2
+* Durable Objects
+* environment variables
+* secrets
+* authentication
+* authorization
+* project ownership
+* usage metering
+* billing
+* API keys
+* REST API
+* MCP
+* external-agent access
+
+For "Recommended Owner," use categories such as:
+
+**KEEP BUILDCUSTOM**
+
+**USE VIBESDK**
+
+**USE CLOUDFLARE SERVICE**
+
+**BUILD THIN BUILDCUSTOM ADAPTER**
+
+**BUILD CUSTOM**
+
+---
+
+# STEP 5 — DETERMINE WHETHER WE SHOULD INTEGRATE VIBESDK OR USE IT AS A REFERENCE
+
+This is extremely important.
+
+Do not automatically assume we should copy VibeSDK into BuildCustom.
+
+Determine whether the best approach is:
+
+### OPTION A
+
+Integrate VibeSDK directly into the existing BuildCustom application.
+
+### OPTION B
+
+Run VibeSDK as a separate service/runtime behind BuildCustom.
+
+### OPTION C
+
+Use VibeSDK packages/components selectively.
+
+### OPTION D
+
+Use VibeSDK as a reference architecture but build a thinner BuildCustom-specific implementation using the underlying Cloudflare services.
+
+### OPTION E
+
+Another architecture you discover through research.
+
+Compare these approaches for:
+
+* development complexity
+* maintainability
+* upgradeability
+* security
+* vendor lock-in
+* performance
+* cost
+* ability to customize BuildCustom
+* ability to support external agents
+* ability to scale
+* ability to add new Cloudflare capabilities later
+
+Then recommend ONE approach.
+
+---
+
+# STEP 6 — AGENT-FIRST BUILDCUSTOM
+
+Our updated product vision is:
+
+# BuildCustom should be agent-first.
+
+The primary user experience should be:
+
+> Tell your agent what you want done.
+
+A normal user should have a native BuildCustom AI agent.
+
+Example:
+
+USER:
+
+> Build me a landing page for my roofing company.
+
+AGENT:
+
+Builds it.
+
+USER:
+
+> Make the hero darker and add a quote form.
+
+AGENT:
+
+Updates it.
+
+USER:
+
+> Looks good. Put it online.
+
+AGENT:
+
+Deploys it.
+
+USER:
+
+> Connect my domain.
+
+AGENT:
+
+Handles as much of the process as possible.
+
+The user should not need to understand:
+
+* code
+* Git
+* build commands
+* hosting
+* DNS
+* Workers
+* Cloudflare
+* SSL
+* infrastructure
+
+Determine how much of the **native BuildCustom agent** VibeSDK can provide.
+
+Specifically answer:
+
+### Can VibeSDK become the engine behind the existing BuildCustom chat/builder UI?
+
+If yes, explain exactly how.
+
+I do NOT necessarily want VibeSDK's frontend/UI.
+
+We already have the BuildCustom product interface.
+
+I want to know whether we can keep our UI and connect it to VibeSDK's underlying agent/build/preview/deployment capabilities.
+
+---
+
+# STEP 7 — AGENT-FIRST HOSTING
+
+Hosting should also be AI-first.
+
+The BuildCustom agent should eventually be able to perform actions such as:
+
+> Deploy this.
+
+> Redeploy this.
+
+> Roll back to yesterday's version.
+
+> Show me the production logs.
+
+> Why is the deployment failing?
+
+> Connect my domain.
+
+> Add storage.
+
+> Add a database.
+
+> Set this environment variable.
+
+> Show me how much traffic this app received.
+
+Determine which of these actions VibeSDK or Cloudflare already makes possible and which BuildCustom needs to implement.
+
+The BuildCustom agent should invoke safe platform actions rather than directly manipulating Cloudflare infrastructure.
+
+---
+
+# STEP 8 — BRING YOUR OWN AGENT
+
+This is a major BuildCustom differentiator.
+
+Users should NOT be forced to use the native BuildCustom agent.
+
+Eventually they should be able to use:
+
+* Claude Code
+* Codex
+* Hermes
+* OpenClaw
+* other coding agents
+
+and connect them to BuildCustom.
+
+For example, someone using Claude Code could say:
+
+> Deploy this project to BuildCustom.
+
+Or:
+
+> Show me the BuildCustom production logs and fix the error.
+
+Or:
+
+> Create a new BuildCustom project for this repo and publish it.
+
+The architecture should ideally become:
+
+```
+                BUILDCUSTOM NATIVE AGENT
+                          ↓
+```
+
+BUILDCUSTOM UI → BUILDCUSTOM PLATFORM ACTIONS ← EXTERNAL AGENTS
+↓
+VIBESDK / CLOUDFLARE
+↓
+CUSTOMER APPLICATION
+
+Determine whether VibeSDK is structured in a way that helps us achieve this.
+
+---
+
+# STEP 9 — PLATFORM ACTION LAYER
+
+I do NOT want BuildCustom's core functionality tightly coupled to the native chat interface.
+
+Determine how we should create reusable BuildCustom actions such as:
+
+* create_project
+* get_project
+* list_files
+* read_file
+* write_file
+* delete_file
+* run_command
+* install_dependency
+* run_build
+* get_build_logs
+* create_preview
+* get_preview
+* deploy
+* get_deployment
+* get_deployment_logs
+* rollback
+* add_domain
+* verify_domain
+* set_secret
+* create_database
+* create_storage
+
+The native BuildCustom agent should call these.
+
+The BuildCustom UI should call these where appropriate.
+
+External agents should eventually call the SAME actions through an authenticated interface.
+
+Determine whether VibeSDK already exposes reusable primitives that map to these actions.
+
+If it does, show the mapping.
+
+Example:
+
+| BuildCustom Action | VibeSDK Primitive | Cloudflare Service | Adapter Needed? |
+
+---
+
+# STEP 10 — EXTERNAL AGENT INTERFACE
+
+Research whether BuildCustom should eventually expose:
+
+* REST API
+* MCP
+* CLI
+* SDK
+* OAuth
+* scoped API tokens
+
+Do NOT build these yet.
+
+Determine the minimum architecture required so that eventually:
+
+Claude Code
+
+Codex
+
+Hermes
+
+OpenClaw
+
+and future agents
+
+can securely operate BuildCustom.
+
+Pay special attention to:
+
+* user authentication
+* agent authentication
+* project scopes
+* permissions
+* destructive actions
+* approval flows
+* secret access
+* audit logs
+* token revocation
+* rate limiting
+
+Remember that the BuildCustom repository inspection already identified the current authentication system as inadequate for this.
+
+---
+
+# STEP 11 — STATIC WEBSITES VS FULL APPLICATIONS
+
+We want BuildCustom to eventually build many things:
+
+* landing pages
+* sales pages
+* websites
+* funnels
+* calculators
+* lead-generation tools
+* dashboards
+* internal tools
+* SaaS
+* AI applications
+* APIs
+
+However, I do NOT want every landing page to require expensive or unnecessarily complicated application infrastructure.
+
+Research whether the best BuildCustom deployment architecture is hybrid.
+
+For example:
+
+## SIMPLE STATIC PROJECT
+
+BuildCustom Agent
+
+↓
+
+VibeSDK
+
+↓
+
+Build
+
+↓
+
+Static assets
+
+↓
+
+Cloudflare static hosting/CDN
+
+↓
+
+BuildCustom subdomain
+
+VERSUS
+
+## FULL APPLICATION
+
+BuildCustom Agent
+
+↓
+
+VibeSDK
+
+↓
+
+Build
+
+↓
+
+Workers for Platforms
+
+↓
+
+Worker runtime
+
+↓
+
+D1/KV/R2/etc.
+
+↓
+
+BuildCustom subdomain
+
+Determine whether VibeSDK already makes this distinction.
+
+If not, determine whether BuildCustom should.
+
+Estimate the infrastructure implications of both paths using CURRENT Cloudflare pricing.
+
+---
+
+# STEP 12 — WORKERS FOR PLATFORMS
+
+Our original plan was to use Cloudflare Workers for Platforms.
+
+I remember the base platform costing roughly $25-$30/month.
+
+Verify the CURRENT pricing and architecture.
+
+Determine:
+
+* base monthly cost
+* included scripts
+* included requests
+* included CPU
+* additional script cost
+* additional request cost
+* CPU overages
+* any other relevant charges
+
+Then model rough infrastructure costs for:
+
+### 100 active customer projects
+
+### 1,000 active customer projects
+
+### 10,000 active customer projects
+
+Do NOT assume every project has equal traffic.
+
+Use reasonable low/medium usage assumptions and clearly state them.
+
+Also explain whether static projects should consume Workers for Platforms resources at all.
+
+---
+
+# STEP 13 — CUSTOM DOMAINS
+
+Research the current Cloudflare approach we would use for:
+
+`customer-project.buildcustom.ai`
+
+and:
+
+`customers-own-domain.com`
+
+Determine whether we should use:
+
+* wildcard DNS
+* Workers routes
+* Cloudflare for SaaS
+* custom hostnames
+* another Cloudflare mechanism
+
+Explain:
+
+* automatic SSL
+* hostname verification
+* certificate provisioning
+* limits
+* current pricing
+* operational complexity
+
+We eventually want the BuildCustom agent to be able to guide/control this conversationally.
+
+---
+
+# STEP 14 — SPECIALIZED BUILDCUSTOM MODES
+
+We recently considered selling separate AI landing-page agents.
+
+We are now considering making these specialized modes inside BuildCustom instead.
+
+Example:
+
+**What do you want to build?**
+
+* Landing Page
+* Website
+* Sales Funnel
+* SaaS
+* Web App
+* Internal Tool
+* Start From Scratch
+
+Determine whether VibeSDK supports an architecture where we can give the same underlying agent different:
+
+* system prompts
+* skills
+* templates
+* starter repositories
+* workflows
+* tool permissions
+
+depending on what the user chooses.
+
+Example:
+
+LANDING PAGE MODE
+
+↓
+
+specialized conversion prompt/skill
+
+↓
+
+same BuildCustom agent
+
+↓
+
+same VibeSDK
+
+↓
+
+same preview
+
+↓
+
+same deployment infrastructure
+
+This would allow us to create highly specialized experiences without building separate products.
+
+---
+
+# STEP 15 — WHAT SHOULD REMAIN IN REPLIT?
+
+This is important.
+
+BuildCustom currently lives in Replit.
+
+Our original idea was roughly:
+
+Build the product/UI in Replit
+
+↓
+
+Connect/move the execution infrastructure to Cloudflare/VibeSDK
+
+I need you to recommend what the final architecture should actually be.
+
+Should:
+
+### A
+
+The BuildCustom frontend/dashboard remain hosted on Replit while VibeSDK/runtime/deployments run on Cloudflare?
+
+### B
+
+The entire BuildCustom application eventually move to Cloudflare?
+
+### C
+
+The frontend remain separate while the BuildCustom platform API and runtime live on Cloudflare?
+
+### D
+
+Something else?
+
+We do NOT need to move infrastructure merely for architectural purity.
+
+Recommend the simplest, safest architecture with the least operational complexity.
+
+Also explain whether keeping BuildCustom's existing PostgreSQL/Drizzle backend makes sense or whether parts should eventually move to Cloudflare-native data services.
+
+Do not recommend a migration unless there is a concrete reason.
+
+---
+
+# STEP 16 — REINTERPRET YOUR ORIGINAL BUILDCUSTOM INSPECTION
+
+Your previous report concluded that BuildCustom is currently missing:
+
+* project workspaces
+* files
+* revisions
+* isolated execution
+* build service
+* preview service
+* LLM integration
+* tool calling
+* agent loop
+* deployment service
+* Cloudflare infrastructure
+
+Now reconsider each of those in light of VibeSDK.
+
+Create this table:
+
+| Previously Identified Missing Piece | VibeSDK Solves It? | Cloudflare Solves It? | BuildCustom Still Needs | Difficulty |
+| ----------------------------------- | ------------------ | --------------------- | ----------------------- | ---------- |
+
+This is one of the most important outputs.
+
+I want to know how much smaller the actual BuildCustom development workload becomes once we correctly use VibeSDK.
+
+---
+
+# STEP 17 — IDENTIFY WHAT WE SHOULD NOT BUILD OURSELVES
+
+One of the main reasons we're doing this research is to avoid reinventing infrastructure Cloudflare already gives us.
+
+Create a section:
+
+# DO NOT REBUILD THIS
+
+List anything VibeSDK or Cloudflare already solves well enough that BuildCustom should integrate it rather than create its own implementation.
+
+Then create:
+
+# BUILDCUSTOM MUST OWN THIS
+
+List the pieces that should remain proprietary BuildCustom product logic.
+
+Examples might include:
+
+* accounts
+* project ownership
+* BuildCustom agent personality/workflows
+* specialized build modes
+* platform action permissions
+* billing
+* usage limits
+* templates
+* user experience
+* external-agent authorization
+
+But base your answer on what you actually discover.
+
+---
+
+# STEP 18 — RECOMMENDED FINAL ARCHITECTURE
+
+Give me a complete architecture diagram for the BuildCustom we should build.
+
+It should account for:
+
+### Native users
+
+User
+
+↓
+
+BuildCustom UI
+
+↓
+
+BuildCustom Agent
+
+↓
+
+BuildCustom Platform Actions
+
+↓
+
+VibeSDK / Cloudflare
+
+↓
+
+Live application
+
+### External-agent users
+
+User
+
+↓
+
+Claude Code / Codex / Hermes / OpenClaw
+
+↓
+
+BuildCustom MCP/API
+
+↓
+
+Same BuildCustom Platform Actions
+
+↓
+
+VibeSDK / Cloudflare
+
+↓
+
+Live application
+
+Show:
+
+* authentication
+* database
+* project metadata
+* project files
+* sandbox
+* build
+* preview
+* deployment
+* hosting
+* logs
+* domains
+* storage
+
+and where each component should live.
+
+---
+
+# STEP 19 — MINIMUM SELLABLE V1
+
+We do NOT need to build a complete Replit replacement immediately.
+
+Determine the smallest product we can launch that reliably supports:
+
+### 1. PROMPT
+
+> Build me a landing page.
+
+### 2. BUILD
+
+AI generates the project.
+
+### 3. PREVIEW
+
+User sees the real application.
+
+### 4. EDIT
+
+> Change the hero and add testimonials.
+
+### 5. REBUILD
+
+Agent modifies the project.
+
+### 6. DEPLOY
+
+> Put it online.
+
+### 7. LIVE
+
+BuildCustom gives them a real URL.
+
+That alone would be enough for our first sellable product.
+
+But architect it so we can expand into full SaaS/application generation later.
+
+---
+
+# STEP 20 — RECOMMENDED IMPLEMENTATION PLAN
+
+After completing all research and comparison, give me the NEW implementation plan.
+
+Do not simply repeat your previous phases.
+
+Your previous plan assumed BuildCustom needed to create much of this infrastructure itself.
+
+Now account for VibeSDK.
+
+Tell me the actual shortest path.
+
+For each phase identify:
+
+### EXISTING BUILDCUSTOM CODE WE KEEP
+
+### VIBESDK COMPONENTS WE USE
+
+### CLOUDFLARE SERVICES WE USE
+
+### THIN ADAPTERS WE NEED TO BUILD
+
+### CUSTOM BUILDCUSTOM CODE WE NEED TO BUILD
+
+### TESTS
+
+### ACCEPTANCE CRITERIA
+
+I want as little unnecessary custom infrastructure as possible.
+
+---
+
+# STEP 21 — FINAL ANSWERS
+
+End the report by answering these questions directly.
+
+## 1. WAS OUR ORIGINAL PLAN SOUND?
+
+Was building the BuildCustom product/UI in Replit first and then connecting it to VibeSDK/Cloudflare a reasonable architecture?
+
+## 2. HOW MUCH DOES VIBESDK CHANGE YOUR PREVIOUS ASSESSMENT?
+
+What major systems you previously classified as "missing" can now come from VibeSDK or Cloudflare?
+
+## 3. HOW CLOSE ARE WE REALLY?
+
+Given the BuildCustom UI/backend that already exists plus current VibeSDK, how much core integration work remains before we have:
+
+**Prompt → Build → Preview → Edit → Deploy**
+
+Do NOT give a fake percentage unless you can substantiate it with a component-by-component breakdown.
+
+## 4. SHOULD BUILDCUSTOM REMAIN ON REPLIT?
+
+Which pieces should stay and which, if any, should move?
+
+## 5. WHAT SHOULD CLOUDFLARE HANDLE?
+
+Be specific.
+
+## 6. WHAT SHOULD BUILDCUSTOM HANDLE?
+
+Be specific.
+
+## 7. WHAT SHOULD VIBESDK HANDLE?
+
+Be specific.
+
+## 8. SHOULD WE BUILD THE LANDING-PAGE AGENTS SEPARATELY?
+
+Or should landing-page generation become a specialized BuildCustom mode?
+
+## 9. HOW SHOULD EXTERNAL AGENTS CONNECT?
+
+What is the cleanest eventual architecture for Claude Code, Codex, Hermes, OpenClaw, etc.?
+
+## 10. WHAT ARE THE NEXT FIVE THINGS WE SHOULD DO?
+
+Give me the exact next five development objectives in order.
+
+---
+
+# MOST IMPORTANT CONSTRAINT
+
+Do NOT build anything during this task.
+
+I want you to research the CURRENT VibeSDK and CURRENT Cloudflare platform, inspect our EXISTING BuildCustom repository, and determine the cleanest integration.
+
+The goal is NOT:
+
+> How can we recreate Replit from scratch?
+
+The goal is:
+
+> **How much of the difficult AI coding, sandbox, preview, deployment, and hosting infrastructure has Cloudflare already solved for us, and how do we connect our existing BuildCustom product to it with the least amount of custom infrastructure possible?**
+
+BuildCustom's eventual philosophy should be:
+
+# Tell your agent what you want done.
+
+Users can use:
+
+**BuildCustom's native agent**
+
+or eventually:
+
+**their own preferred agent**
+
+and both should operate the same underlying BuildCustom platform and Cloudflare infrastructure.
