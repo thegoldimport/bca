@@ -3,7 +3,12 @@ export type AppUser = {
   username: string;
   email: string;
   plan: string;
+  role: "super_admin" | "user";
 };
+
+export function isAdminUser(user: AppUser | null | undefined): boolean {
+  return user?.role === "super_admin";
+}
 
 export function getAppUser(): AppUser | null {
   try {

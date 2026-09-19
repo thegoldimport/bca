@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAppUser, setAppUser, clearAppUser, authHeaders } from "@/lib/auth";
+import { getAppUser, setAppUser, clearAppUser, authHeaders, isAdminUser, type AppUser } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutGrid,
@@ -82,10 +82,7 @@ import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } f
 import ProjectDetail from "@/pages/project-detail";
 import { getPlanEntitlement } from "@shared/plans";
 
-type UserRole = "super_admin" | "user";
-const CURRENT_USER_ROLE: UserRole = "super_admin";
-
-function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onToggle: () => void; isAdmin: boolean }) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
 
@@ -105,7 +102,7 @@ function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
 
   const navItems = [
     ...baseItems,
-    ...(CURRENT_USER_ROLE === "super_admin" ? adminItems : []),
+    ...(isAdmin ? adminItems : []),
     { path: "/app/settings", icon: Settings, label: "Settings" },
   ];
 
@@ -3417,7 +3414,7 @@ function OnboardingWizard({ onComplete }: { onComplete: (destination?: string) =
   );
 }
 
-function AppDashboardContent() {
+function AppDashboardContent({ user }: { user: AppUser }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !!localStorage.getItem("bc_new_user");
@@ -3439,7 +3436,7 @@ function AppDashboardContent() {
         : "bg-gray-50"
     }`}>
       {showOnboarding && <OnboardingWizard onComplete={handleOnboardingComplete} />}
-      <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} isAdmin={isAdminUser(user)} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <AppTopBar />
@@ -3449,11 +3446,11 @@ function AppDashboardContent() {
             <Route path="/app/templates" component={TemplatesPage} />
             <Route path="/app/editor" component={EditorPage} />
             <Route path="/app/editor/:id" component={EditorPage} />
-            <Route path="/app/users" component={UsersPage} />
-            <Route path="/app/analytics" component={AnalyticsPage} />
-            <Route path="/app/billing" component={BillingPage} />
-            <Route path="/app/support" component={SupportPage} />
-            <Route path="/app/deployments" component={DeploymentsPage} />
+            {isAdminUser(user) && <Route path="/app/users" component={UsersPage} />}
+            {isAdminUser(user) && <Route path="/app/analytics" component={AnalyticsPage} />}
+            {isAdminUser(user) && <Route path="/app/billing" component={BillingPage} />}
+            {isAdminUser(user) && <Route path="/app/support" component={SupportPage} />}
+            {isAdminUser(user) && <Route path="/app/deployments" component={DeploymentsPage} />}
             <Route path="/app/settings" component={SettingsPage} />
             <Route path="/app/project/:id" component={ProjectDetail} />
             <Route>{() => <ProjectsPage />}</Route>
@@ -3465,8 +3462,22 @@ function AppDashboardContent() {
 }
 
 export default function AppDashboard() {
-  const appUser = getAppUser();
+  const [appUser, setCurrentUser] = useState<AppUser | null>(() => getAppUser());
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!appUser) return;
+    fetch("/api/auth/me", { headers: authHeaders() })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Unable to refresh account");
+        return res.json();
+      })
+      .then((user: AppUser) => {
+        setAppUser(user);
+        setCurrentUser(user);
+      })
+      .catch(() => {});
+  }, [appUser?.id]);
 
   if (!appUser) {
     navigate("/app/login");
@@ -3475,7 +3486,7 @@ export default function AppDashboard() {
 
   return (
     <ThemeProvider>
-      <AppDashboardContent />
+      <AppDashboardContent user={appUser} />
     </ThemeProvider>
   );
 }

@@ -3,6 +3,8 @@ import { db } from "./db";
 
 export async function ensureRuntimeSchema() {
   await db.execute(sql`ALTER TABLE users ALTER COLUMN plan SET DEFAULT 'free'`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'user'`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS users_single_super_admin ON users (role) WHERE role = 'super_admin'`);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS runtime_project_links (
       project_id integer PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
