@@ -148,7 +148,7 @@ function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onTo
               </span>
             </button>
           </div>
-          <nav className="flex flex-1 flex-col justify-between py-4 px-2">
+          <nav className="flex flex-1 flex-col justify-start gap-1 py-4 px-2">
             {navItems.map((item) => {
               const active = isActive(item.path);
               return (
@@ -240,7 +240,7 @@ function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onTo
         </button>
       </div>
 
-      <nav className="flex flex-1 flex-col justify-between py-4 px-2 overflow-y-auto">
+      <nav className="flex flex-1 flex-col justify-start gap-1 py-4 px-2 overflow-y-auto">
         {navItems.map((item, idx) => {
           const active = isActive(item.path);
           return (
