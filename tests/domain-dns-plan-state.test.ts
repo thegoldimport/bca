@@ -88,3 +88,17 @@ test("final DNS guidance identifies only records that block a required CNAME", (
     { name: "example.com", type: "A", value: "192.0.2.10", action: "replace" },
   ]);
 });
+
+test("older migrations derive final CNAME conflicts directly from saved DNS inventory", () => {
+  const conflicts = dnsConflictsForRequiredRecords([
+    { name: "example.com", type: "A", value: "192.0.2.10" },
+    { name: "example.com", type: "MX", value: "10 mail.example.com" },
+    { name: "mail.example.com", type: "A", value: "192.0.2.20" },
+  ], [
+    { name: "example.com", type: "CNAME", value: "fallback.buildcustom.ai" },
+  ]);
+
+  assert.deepEqual(conflicts, [
+    { name: "example.com", type: "A", value: "192.0.2.10" },
+  ]);
+});

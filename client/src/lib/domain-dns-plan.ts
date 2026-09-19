@@ -83,14 +83,18 @@ export function dnsConflictsForRequiredRecords(replacementPlan: any, requiredRec
         String(record?.value || "").toLowerCase().replace(/\.$/, ""),
       ]),
   );
-  const replacementRecords = Array.isArray(replacementPlan?.records) ? replacementPlan.records : [];
+  const replacementRecords = Array.isArray(replacementPlan)
+    ? replacementPlan
+    : Array.isArray(replacementPlan?.records)
+      ? replacementPlan.records
+      : [];
 
   return replacementRecords.filter((record: any) => {
     const name = String(record?.name || "").toLowerCase().replace(/\.$/, "");
     const type = String(record?.type || "").toUpperCase();
     const value = String(record?.value || "").toLowerCase().replace(/\.$/, "");
     const requiredTarget = requiredCnames.get(name);
-    return record?.action === "replace"
+    return (record?.action === undefined || record?.action === "replace")
       && requiredTarget !== undefined
       && ["A", "AAAA", "CNAME"].includes(type)
       && !(type === "CNAME" && value === requiredTarget);

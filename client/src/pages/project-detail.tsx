@@ -1857,7 +1857,11 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   });
   const activeReplacementPlan = activeInspection.replacementPlan;
   const activeProposedRecords = activeInspection.proposedRecords;
-  const connectionConflicts = dnsConflictsForRequiredRecords(activeReplacementPlan, domain.dnsRecords || []);
+  const activeReplacementRecords = (activeReplacementPlan as any)?.records;
+  const connectionConflictSource = Array.isArray(activeReplacementRecords) && activeReplacementRecords.length > 0
+    ? activeReplacementPlan
+    : discovered;
+  const connectionConflicts = dnsConflictsForRequiredRecords(connectionConflictSource, domain.dnsRecords || []);
   const activeCloudflareImportComparison = cloudflareImportComparison === undefined
     ? (savedInspectionHostname === normalizedHostname ? migration.cloudflareImportComparison : null)
     : cloudflareImportComparison;
