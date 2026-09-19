@@ -517,9 +517,9 @@ function ProjectsPage() {
           </div>
 
           <div className={`overflow-hidden rounded-2xl border shadow-2xl ${theme === "dark" ? "border-white/10 bg-[#11111d] shadow-black/30 focus-within:border-cyan-400/30" : "border-gray-200 bg-white shadow-indigo-100/60 focus-within:border-cyan-400"}`}>
-            <div className="relative min-h-[112px]">
+            <div className="relative min-h-[60px]">
               {completionSuffix && (
-                <div aria-hidden="true" className={`pointer-events-none absolute inset-0 whitespace-pre-wrap px-5 py-4 text-base leading-7 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                <div aria-hidden="true" className={`pointer-events-none absolute inset-0 whitespace-pre-wrap px-5 py-3.5 text-base leading-7 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
                   <span className="invisible">{starterPrompt}</span><span className={theme === "dark" ? "text-white/25" : "text-gray-300"}>{completionSuffix}</span>
                 </div>
               )}
@@ -537,8 +537,8 @@ function ProjectsPage() {
                   }
                 }}
                 placeholder="Describe what you want to build..."
-                rows={3}
-                className={`relative z-10 block min-h-[112px] w-full resize-none bg-transparent px-5 py-4 text-base leading-7 outline-none ${theme === "dark" ? "text-white placeholder:text-white/25" : "text-gray-900 placeholder:text-gray-400"}`}
+                rows={1}
+                className={`relative z-10 block min-h-[60px] w-full resize-none bg-transparent px-5 py-3.5 pr-28 text-base leading-7 outline-none ${theme === "dark" ? "text-white placeholder:text-white/25" : "text-gray-900 placeholder:text-gray-400"}`}
                 data-testid="input-new-project-prompt"
               />
               {completionSuffix && <span className={`absolute bottom-2 right-4 z-20 rounded-md px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "bg-white/10 text-white/40" : "bg-gray-100 text-gray-500"}`}>Tab to complete</span>}
