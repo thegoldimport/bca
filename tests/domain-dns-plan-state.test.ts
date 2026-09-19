@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "../client/src/lib/domain-dns-plan";
+import { actionableDomainDnsRecords, dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "../client/src/lib/domain-dns-plan";
 
 test("a DNS checklist is shown only for the hostname that was inspected", () => {
   const localPlan = { records: [{ name: "first-example.com", action: "replace" }] };
@@ -65,10 +65,24 @@ test("reviewing from step one is read-only while resume changes only the unfinis
 test("connection guidance tells customers whether to act or wait", () => {
   assert.equal(domainConnectionGuidance("pending_dns", 2).kind, "action");
   assert.equal(domainConnectionGuidance("verifying", 0).kind, "waiting");
+  assert.equal(domainConnectionGuidance("verifying", 2).kind, "action");
+  assert.equal(domainConnectionGuidance("verifying", 2).title, "Add the certificate verification records below");
   assert.equal(domainConnectionGuidance("ssl_provisioning", 0).waitForAutomaticCheck, true);
+  assert.equal(domainConnectionGuidance("ssl_provisioning", 1).kind, "action");
   assert.equal(domainConnectionGuidance("connecting", 0).kind, "waiting");
   assert.equal(domainConnectionGuidance("live", 0).kind, "complete");
   assert.equal(domainConnectionGuidance("error", 0).kind, "error");
+});
+
+test("verification shows only outstanding certificate records after the CNAME is accepted", () => {
+  const records = [
+    { name: "example.com", type: "CNAME", value: "fallback.buildcustom.ai" },
+    { name: "_acme-challenge.example.com", type: "TXT", value: "certificate-token" },
+  ];
+
+  assert.deepEqual(actionableDomainDnsRecords("pending_dns", records), records);
+  assert.deepEqual(actionableDomainDnsRecords("verifying", records), [records[1]]);
+  assert.deepEqual(actionableDomainDnsRecords("live", records), []);
 });
 
 test("final DNS guidance identifies only records that block a required CNAME", () => {

@@ -68,10 +68,23 @@ export function domainConnectionGuidance(status: string | null | undefined, dnsR
   if (status === "error") {
     return { kind: "error" as const, title: "The connection needs attention", waitForAutomaticCheck: false };
   }
-  if (status === "pending_dns" && dnsRecordCount > 0) {
-    return { kind: "action" as const, title: "Add the records below in Cloudflare", waitForAutomaticCheck: false };
+  if (dnsRecordCount > 0) {
+    return {
+      kind: "action" as const,
+      title: status === "pending_dns"
+        ? "Add the records below in Cloudflare"
+        : "Add the certificate verification records below",
+      waitForAutomaticCheck: false,
+    };
   }
   return { kind: "waiting" as const, title: "Sit tight while we finish checking", waitForAutomaticCheck: true };
+}
+
+export function actionableDomainDnsRecords(status: string | null | undefined, records: any[]) {
+  const available = Array.isArray(records) ? records : [];
+  if (status === "live" || status === "error") return [];
+  if (status === "pending_dns") return available;
+  return available.filter((record) => String(record?.type || "").toUpperCase() === "TXT");
 }
 
 export function dnsConflictsForRequiredRecords(replacementPlan: any, requiredRecords: any[]) {

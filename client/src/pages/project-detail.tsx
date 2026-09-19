@@ -14,7 +14,7 @@ import {
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders } from "@/lib/auth";
 import { getDomain } from "tldts";
-import { dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
+import { actionableDomainDnsRecords, dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
   website: new URL("../assets/preview-portfolio.jpg", import.meta.url).href,
   app: new URL("../assets/preview-fitness.jpg", import.meta.url).href,
@@ -1837,7 +1837,8 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const migration = domain.migration || {};
   const recoveryProgress = domainWizardProgress(migration, domain.status);
   const recoveryStep = recoveryProgress.steps[recoveryWizardStep] || recoveryProgress.steps[0];
-  const connectionGuidance = domainConnectionGuidance(domain.status, Array.isArray(domain.dnsRecords) ? domain.dnsRecords.length : 0);
+  const actionableDnsRecords = actionableDomainDnsRecords(domain.status, domain.dnsRecords || []);
+  const connectionGuidance = domainConnectionGuidance(domain.status, actionableDnsRecords.length);
   const recoveryStepAllowsChanges = domainWizardStepAllowsChanges(
     recoveryWizardMode,
     recoveryWizardStep,
@@ -1861,7 +1862,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const connectionConflictSource = Array.isArray(activeReplacementRecords) && activeReplacementRecords.length > 0
     ? activeReplacementPlan
     : discovered;
-  const connectionConflicts = dnsConflictsForRequiredRecords(connectionConflictSource, domain.dnsRecords || []);
+  const connectionConflicts = dnsConflictsForRequiredRecords(connectionConflictSource, actionableDnsRecords);
   const activeCloudflareImportComparison = cloudflareImportComparison === undefined
     ? (savedInspectionHostname === normalizedHostname ? migration.cloudflareImportComparison : null)
     : cloudflareImportComparison;
@@ -2213,7 +2214,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                           <div>
                             <p className={`text-sm font-semibold ${connectionGuidance.kind === "action" ? theme === "dark" ? "text-amber-300" : "text-amber-900" : connectionGuidance.kind === "complete" ? theme === "dark" ? "text-emerald-300" : "text-emerald-900" : theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{connectionGuidance.title}</p>
                             {connectionGuidance.kind === "waiting" && <p className="mt-1">No action is needed right now. Keep this page open. DNS and security-certificate checks can take a few minutes, and we are checking automatically.</p>}
-                            {connectionGuidance.kind === "action" && <p className="mt-1">{connectionConflicts.length > 0 ? "Cloudflare cannot add the required CNAME while an old A, AAAA, or CNAME record uses the same name. Replace only the conflicting website records listed below, then add the required records." : <>Open Cloudflare, go to <strong>DNS → Records</strong>, and add each record exactly as shown. After that, come back here. You do not need to restart the wizard.</>}</p>}
+                            {connectionGuidance.kind === "action" && <p className="mt-1">{connectionConflicts.length > 0 ? "Cloudflare cannot add the required CNAME while an old A, AAAA, or CNAME record uses the same name. Replace only the conflicting website records listed below, then add the required records." : domain.status === "pending_dns" ? <>Open Cloudflare, go to <strong>DNS → Records</strong>, and add each record exactly as shown. After that, come back here. You do not need to restart the wizard.</> : <>The website address is recognized, but Cloudflare still needs the TXT records below to issue its security certificate. Open <strong>DNS → Records</strong> in Cloudflare and add them exactly as shown.</>}</p>}
                             {connectionGuidance.kind === "complete" && <p className="mt-1">Your domain is secure and serving this project. Nothing else is required.</p>}
                             {connectionGuidance.kind === "error" && <p className="mt-1">{domain.error || "Review the error above, then check the connection again."}</p>}
                           </div>
@@ -2235,11 +2236,11 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                           </div>
                         )}
 
-                        {connectionGuidance.kind === "action" && domain.dnsRecords?.length > 0 && (
+                        {connectionGuidance.kind === "action" && actionableDnsRecords.length > 0 && (
                           <div className="mt-4">
                             {connectionConflicts.length > 0 && <p className="mb-2 font-bold">2. Add these required records in Cloudflare</p>}
                             <div className={`overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-black/20" : "border-amber-200 bg-white"}`}>
-                              {domain.dnsRecords.map((record: any, index: number) => (
+                              {actionableDnsRecords.map((record: any, index: number) => (
                                 <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_2rem] sm:items-center ${theme === "dark" ? "text-white/80" : "text-gray-900"} ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-200" : ""}`}>
                                   <span className={`font-bold ${theme === "dark" ? "text-cyan-300" : "text-cyan-800"}`}>{record.type}</span>
                                   <span className="break-all font-mono font-medium">{record.name}</span>
