@@ -1622,19 +1622,19 @@ const DOMAIN_STATUS: Record<string, { label: string; tone: string; detail: strin
   error: { label: "Needs attention", tone: "text-red-400 bg-red-500/15", detail: "Review the message below, then check again." },
 };
 
-function DnsReplacementPlanPanel({ plan, proposedRecords, theme }: { plan: any; proposedRecords: any[]; theme: string }) {
+function DnsReplacementPlanPanel({ plan, proposedRecords, comparison, theme }: { plan: any; proposedRecords: any[]; comparison?: any; theme: string }) {
   const groups = [
     { action: "replace", label: "Replace", detail: "Remove these old website records when you add the BuildCustom records.", tone: "text-red-400 bg-red-500/10 border-red-500/20" },
     { action: "keep", label: "Keep", detail: "Copy these records into Cloudflare so existing services continue working.", tone: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
     { action: "review", label: "Review", detail: "Confirm whether these records are still needed before importing them.", tone: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
   ];
   const records = Array.isArray(plan?.records) ? plan.records : [];
-  if (!records.length && !proposedRecords.length) return null;
+  if (!records.length && !proposedRecords.length && !comparison) return null;
   return (
     <div className="space-y-3">
       <div>
         <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>DNS replacement checklist</p>
-        <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>This is a read-only plan. BuildCustom will not change these records.</p>
+        <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Public DNS observations and Cloudflare import findings stay separate. BuildCustom will not change these records.</p>
       </div>
       {groups.map(group => {
         const rows = records.filter((record: any) => record.action === group.action);
@@ -1648,7 +1648,7 @@ function DnsReplacementPlanPanel({ plan, proposedRecords, theme }: { plan: any; 
             <div className="divide-y divide-white/5">
               {rows.map((row: any, index: number) => (
                 <div key={`${row.name}-${row.type}-${index}`} className="grid gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1.4fr)]">
-                  <span className="break-all font-mono">{row.name}</span>
+                  <span className="break-all font-mono">{row.name}<span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] ${theme === "dark" ? "bg-white/5 text-white/35" : "bg-gray-100 text-gray-500"}`}>Public DNS</span></span>
                   <span className="font-semibold">{row.type}</span>
                   <div className="min-w-0"><p className="break-all font-mono">{row.value}</p><p className={`mt-1 leading-4 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{row.reason}</p>{row.proxyGuidance === "dns_only" && <p className="mt-1 font-semibold text-amber-400">Cloudflare: set Proxy status to DNS only.</p>}</div>
                 </div>
@@ -1657,6 +1657,45 @@ function DnsReplacementPlanPanel({ plan, proposedRecords, theme }: { plan: any; 
           </div>
         );
       })}
+      {comparison && (
+        <div className={`overflow-hidden rounded-xl border ${theme === "dark" ? "border-cyan-400/20" : "border-cyan-200"}`}>
+          <div className={`border-b px-3 py-3 ${theme === "dark" ? "border-white/10 bg-cyan-400/[0.04]" : "border-cyan-200 bg-cyan-50"}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><p className="text-xs font-semibold text-cyan-500">Cloudflare import comparison</p><p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>Matched {comparison.counts?.matched || 0} · Missing {comparison.counts?.missing || 0} · Changed {comparison.counts?.changed || 0} · Found only in Cloudflare {comparison.counts?.importOnly || 0}</p></div>
+              {(comparison.counts?.missing || comparison.counts?.changed || comparison.counts?.proxiedServices) ? <span className="rounded-full bg-amber-500/15 px-2 py-1 text-[10px] font-semibold text-amber-500">Review findings</span> : <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-500">Import matches</span>}
+            </div>
+          </div>
+          <div className="divide-y divide-white/5">
+            {(comparison.publicFindings || []).filter((row: any) => row.status !== "matched").map((row: any, index: number) => (
+              <div key={`finding-${row.name}-${row.type}-${index}`} className="grid gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1.4fr)]">
+                <span className="break-all font-mono">{row.name}<span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] ${theme === "dark" ? "bg-cyan-400/10 text-cyan-300" : "bg-cyan-50 text-cyan-700"}`}>Cloudflare import</span></span>
+                <span className="font-semibold">{row.type}</span>
+                <div><p className="break-all font-mono">{row.value}</p><p className={`mt-1 font-semibold ${row.status === "missing" ? "text-red-400" : "text-amber-400"}`}>{row.status === "missing" ? "Missing from Cloudflare." : `Changed in Cloudflare: ${(row.importedValues || []).join(", ")}`}</p></div>
+              </div>
+            ))}
+            {(comparison.importOnlyRecords || []).map((row: any, index: number) => (
+              <div key={`private-${row.name}-${row.type}-${index}`} className="grid gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1.4fr)]">
+                <span className="break-all font-mono">{row.name}<span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] ${theme === "dark" ? "bg-cyan-400/10 text-cyan-300" : "bg-cyan-50 text-cyan-700"}`}>Cloudflare import only</span></span>
+                <span className="font-semibold">{row.type}</span>
+                <div><p className="break-all font-mono">{row.value}</p><p className={`mt-1 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Not visible in the public scan. Keep it unless you know it is obsolete.</p></div>
+              </div>
+            ))}
+          </div>
+          {(comparison.proxiedServiceRecords || []).length > 0 && (
+            <div className="border-t border-red-500/20 bg-red-500/10 px-3 py-3">
+              <p className="text-xs font-semibold text-red-400">Turn off Cloudflare proxy for these service records</p>
+              <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/50" : "text-gray-700"}`}>Mail, FTP, cPanel, webmail, autodiscover, autoconfig, WHM, and webdisk do not work through the standard Cloudflare proxy.</p>
+              <div className="mt-2 space-y-1">{comparison.proxiedServiceRecords.map((row: any, index: number) => <p key={`proxied-${row.name}-${index}`} className="font-mono text-xs text-red-300">{row.name} · {row.type} · set to DNS only</p>)}</div>
+            </div>
+          )}
+          {(comparison.unverifiedServiceRecords || []).length > 0 && (
+            <div className="border-t border-amber-500/20 bg-amber-500/10 px-3 py-3">
+              <p className="text-xs font-semibold text-amber-400">This export does not include proxy status</p>
+              <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/50" : "text-gray-700"}`}>In Cloudflare, confirm these service records are set to DNS only: {(comparison.unverifiedServiceRecords || []).map((row: any) => row.name).join(", ")}.</p>
+            </div>
+          )}
+        </div>
+      )}
       {proposedRecords.length > 0 && (
         <div className={`rounded-xl border p-3 ${theme === "dark" ? "border-cyan-400/20 bg-cyan-400/[0.04]" : "border-cyan-200 bg-cyan-50"}`}>
           <p className={`text-xs font-semibold ${theme === "dark" ? "text-cyan-200" : "text-cyan-900"}`}>Proposed BuildCustom website records</p>
@@ -1664,6 +1703,30 @@ function DnsReplacementPlanPanel({ plan, proposedRecords, theme }: { plan: any; 
           <div className="mt-2 space-y-2">{proposedRecords.map((record: any) => <div key={`${record.name}-${record.type}`} className={`grid gap-1 rounded-lg px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1.4fr)] ${theme === "dark" ? "bg-black/20" : "bg-white"}`}><span className="break-all font-mono">{record.name}</span><span className="font-semibold">{record.type}</span><span className="break-all font-mono">{record.value}</span></div>)}</div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CloudflareDnsImportPanel({ value, filename, comparison, pending, theme, onChange, onFile, onCompare }: {
+  value: string;
+  filename: string;
+  comparison: any;
+  pending: boolean;
+  theme: string;
+  onChange: (value: string) => void;
+  onFile: (file: File) => void;
+  onCompare: () => void;
+}) {
+  return (
+    <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+      <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Confirm Cloudflare imported every record</p>
+      <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>Paste Cloudflare’s copied DNS table, JSON export, or BIND zone export. No account access or credentials are needed.</p>
+      <textarea value={value} onChange={event => onChange(event.target.value)} rows={5} placeholder={"Type\tName\tContent\tProxy status\nMX\texample.com\t10 mail.example.com\tDNS only"} className={`mt-3 w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none ${theme === "dark" ? "border-white/10 bg-black/20 text-white placeholder-white/20" : "border-gray-200 bg-white text-gray-800 placeholder-gray-400"}`} />
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 bg-white text-gray-700"}`}><Upload size={13} /> {filename || "Choose export file"}<input type="file" className="sr-only" accept=".txt,.zone,.bind,.csv,.tsv,.json,text/plain,text/csv,application/json" onChange={event => { const file = event.target.files?.[0]; if (file) onFile(file); }} /></label>
+        <button type="button" onClick={onCompare} disabled={!value.trim() || pending} className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{pending ? "Comparing…" : "Compare with public scan"}</button>
+      </div>
+      {comparison && <p className="mt-3 text-xs font-medium text-emerald-500">Compared {comparison.importedRecords?.length || 0} Cloudflare records with the saved public scan.</p>}
     </div>
   );
 }
@@ -1684,6 +1747,11 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const [inspectedHostname, setInspectedHostname] = useState("");
   const [inventoryWarning, setInventoryWarning] = useState("");
   const [inspectPending, setInspectPending] = useState(false);
+  const [cloudflareImportText, setCloudflareImportText] = useState("");
+  const [cloudflareImportFilename, setCloudflareImportFilename] = useState("");
+  const [cloudflareImportComparison, setCloudflareImportComparison] = useState<any>(undefined);
+  const [cloudflareImportDirty, setCloudflareImportDirty] = useState(false);
+  const [cloudflareImportPending, setCloudflareImportPending] = useState(false);
   const previousStatus = useRef<string | null>(null);
   const queryKey = ["custom-domain", projectId];
   const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
@@ -1776,6 +1844,9 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   });
   const activeReplacementPlan = activeInspection.replacementPlan;
   const activeProposedRecords = activeInspection.proposedRecords;
+  const activeCloudflareImportComparison = cloudflareImportComparison === undefined
+    ? (savedInspectionHostname === normalizedHostname ? migration.cloudflareImportComparison : null)
+    : cloudflareImportComparison;
   const copyRecord = (value: string) => navigator.clipboard?.writeText(value).then(() => setMessage("Copied to clipboard."));
   const clearDnsInspection = () => {
     setInventory([]);
@@ -1783,6 +1854,51 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
     setProposedRecords([]);
     setInspectedHostname("");
     setInventoryWarning("");
+    setCloudflareImportComparison(null);
+    setCloudflareImportDirty(false);
+    setAcknowledged(false);
+  };
+  const changeCloudflareImportText = (value: string) => {
+    setCloudflareImportText(value);
+    setCloudflareImportComparison(null);
+    setCloudflareImportDirty(true);
+    setAcknowledged(false);
+  };
+  const compareCloudflareImport = async () => {
+    setCloudflareImportPending(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/custom-domain/import-dns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          hostname: normalizedHostname,
+          content: cloudflareImportText,
+          filename: cloudflareImportFilename || undefined,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "Unable to compare the Cloudflare import.");
+      setCloudflareImportComparison(body.comparison);
+      setCloudflareImportDirty(false);
+      setAcknowledged(false);
+      qc.setQueryData(queryKey, (existing: any) => ({ ...(existing || domain), migration: body.migration }));
+      setMessage("Cloudflare import compared. Review any missing, changed, or proxied records.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to compare the Cloudflare import.");
+    } finally {
+      setCloudflareImportPending(false);
+    }
+  };
+  const loadCloudflareImportFile = async (file: File) => {
+    if (file.size > 1_000_000) {
+      setMessage("Choose a DNS export smaller than 1 MB.");
+      return;
+    }
+    setCloudflareImportFilename(file.name);
+    setCloudflareImportText(await file.text());
+    setCloudflareImportComparison(null);
+    setCloudflareImportDirty(true);
     setAcknowledged(false);
   };
   const inspectDns = async () => {
@@ -1799,6 +1915,8 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
         setReplacementPlan(body.replacementPlan || null);
         setProposedRecords(body.proposedRecords || []);
         setInspectedHostname(body.hostname || "");
+        setCloudflareImportComparison(body.migration?.cloudflareImportComparison || null);
+        setCloudflareImportDirty(false);
         setInventoryWarning(body.warning || body.completenessWarning || (Array.isArray(body.warnings) ? body.warnings.join(" ") : ""));
         qc.setQueryData(queryKey, (existing: any) => ({
           ...(existing || domain),
@@ -1899,10 +2017,11 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                       { id: "root" as const, hostname: registrableDomain },
                       { id: "www" as const, hostname: `www.${registrableDomain}` },
                     ].map(option => <button key={option.id} type="button" onClick={() => setPrimaryChoice(option.id)} className={`rounded-lg border px-3 py-2 text-left font-mono text-xs ${primaryChoice === option.id ? "border-cyan-400 bg-cyan-400/10" : theme === "dark" ? "border-white/10" : "border-gray-200"}`}>{option.hostname}</button>)}</div><p className={`mt-2 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>The other hostname will redirect permanently to the primary address.</p></div>}
-                    <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} theme={theme} />
+                    <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} comparison={activeCloudflareImportComparison} theme={theme} />
+                    <CloudflareDnsImportPanel value={cloudflareImportText} filename={cloudflareImportFilename} comparison={activeCloudflareImportComparison} pending={cloudflareImportPending} theme={theme} onChange={changeCloudflareImportText} onFile={file => void loadCloudflareImportFile(file)} onCompare={() => void compareCloudflareImport()} />
                     {(migration.emailRiskFlags?.length || inventoryWarning) && <div className={`rounded-lg border px-3 py-2 text-xs leading-5 ${theme === "dark" ? "border-amber-400/20 bg-amber-400/10 text-amber-200" : "border-amber-300 bg-amber-50 text-amber-950"}`}>{migration.emailRiskFlags?.length > 0 && <p className="font-semibold">Email records detected: {migration.emailRiskFlags.join(", ").toUpperCase()}. Missing these records can interrupt email.</p>}{inventoryWarning && <p className={migration.emailRiskFlags?.length ? "mt-1" : ""}>{inventoryWarning}</p>}</div>}
-                    <label className={`flex gap-3 rounded-xl border p-3 text-xs leading-5 ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I reviewed Cloudflare’s scan and confirmed that my website and email records are present.</label>
-                    <button onClick={() => setStep("nameservers")} disabled={!acknowledged} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Continue to nameservers</button>
+                    <label className={`flex gap-3 rounded-xl border p-3 text-xs leading-5 ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}><input type="checkbox" checked={acknowledged} disabled={cloudflareImportDirty} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400 disabled:opacity-40" />{cloudflareImportDirty ? "Compare the current Cloudflare import before confirming the DNS review." : "I reviewed Cloudflare’s scan and confirmed that my website and email records are present."}</label>
+                    <button onClick={() => setStep("nameservers")} disabled={!acknowledged || cloudflareImportDirty} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Continue to nameservers</button>
                   </div>
                 ) : <button onClick={() => { setMessage(""); connect.mutate(undefined); }} disabled={busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Connecting…" : "Connect domain"}</button>}
                 {step === "nameservers" && <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}><p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Enter your two Cloudflare nameservers</p><p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Copy these from Cloudflare and replace your registrar’s nameservers. We will check when the change is active.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white placeholder-white/20" : "border-gray-200 bg-white text-gray-800"}`} />)}</div><button onClick={() => { setMessage(""); connect.mutate(undefined); }} disabled={nameservers.some(ns => !ns.trim()) || busy} className="mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving setup…" : "Start verification"}</button></div>}
@@ -1944,24 +2063,29 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                       <p className="mt-1">Enter <span className="font-mono">{migration.registrableDomain || domain.hostname}</span> in Cloudflare. Cloudflare will scan your existing DNS records. Do not change the nameservers yet.</p>
                     </div>
                     <a href="https://dash.cloudflare.com/?to=/:account/add-site" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white" style={{ background: "linear-gradient(90deg, #f59e0b, #f97316)" }}><ExternalLink size={13} /> Open Cloudflare and add domain</a>
-                    <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} theme={theme} />
+                    <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} comparison={activeCloudflareImportComparison} theme={theme} />
+                    <CloudflareDnsImportPanel value={cloudflareImportText} filename={cloudflareImportFilename} comparison={activeCloudflareImportComparison} pending={cloudflareImportPending} theme={theme} onChange={changeCloudflareImportText} onFile={file => void loadCloudflareImportFile(file)} onCompare={() => void compareCloudflareImport()} />
                     {(migration.emailRiskFlags?.length || inventoryWarning) && <div className={`rounded-lg border px-3 py-2 text-xs leading-5 ${theme === "dark" ? "border-amber-400/20 bg-amber-400/10 text-amber-200" : "border-amber-300 bg-amber-50 text-amber-950"}`}>{migration.emailRiskFlags?.length > 0 && <p className="font-semibold">Email records detected: {migration.emailRiskFlags.join(", ").toUpperCase()}. Missing these records can interrupt email.</p>}{inventoryWarning && <p className={migration.emailRiskFlags?.length ? "mt-1" : ""}>{inventoryWarning}</p>}</div>}
-                    <label className={`flex gap-3 text-xs leading-5 ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I reviewed Cloudflare’s scan and confirmed that my website and email records are present.</label>
+                    <label className={`flex gap-3 text-xs leading-5 ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}><input type="checkbox" checked={acknowledged} disabled={cloudflareImportDirty} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400 disabled:opacity-40" />{cloudflareImportDirty ? "Compare the current Cloudflare import before confirming the DNS review." : "I reviewed Cloudflare’s scan and confirmed that my website and email records are present."}</label>
                     <div className="grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Cloudflare nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white" : "border-gray-200 bg-white text-gray-800"}`} />)}</div>
-                    <button type="button" onClick={() => connect.mutate({ forceCloudflare: true })} disabled={!acknowledged || nameservers.some(ns => !ns.trim()) || busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving nameservers…" : "Start nameserver verification"}</button>
+                    <button type="button" onClick={() => connect.mutate({ forceCloudflare: true })} disabled={!acknowledged || cloudflareImportDirty || nameservers.some(ns => !ns.trim()) || busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving nameservers…" : "Start nameserver verification"}</button>
                     {message && <p aria-live="polite" className={`rounded-lg px-3 py-2 text-xs ${connect.isError ? "bg-red-500/10 text-red-500" : theme === "dark" ? "bg-white/5 text-white/65" : "bg-white text-gray-700"}`}>{message}</p>}
                   </div>
                 )}
               </div>
             )}
             {migration.strategy === "customer_cloudflare" && (
-              <div className={`rounded-xl border p-4 text-xs ${theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
-                <p className="font-semibold">Authoritative DNS migration</p>
-                <p className="mt-1">Expected: {(migration.expectedNameservers || []).join(" and ") || "Cloudflare nameservers not entered"}</p>
-                <p className="mt-1">Detected: {(migration.currentNameservers || []).join(", ") || "Checking current nameservers"}</p>
-                {migration.nameserverCheckSource === "parent_delegation" && migration.nameserversAuthoritative === true && (
-                  <p className="mt-2 font-medium text-emerald-500">Confirmed directly with the domain registry and Cloudflare DNS.</p>
-                )}
+              <div className="space-y-4">
+                <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} comparison={activeCloudflareImportComparison} theme={theme} />
+                <CloudflareDnsImportPanel value={cloudflareImportText} filename={cloudflareImportFilename} comparison={activeCloudflareImportComparison} pending={cloudflareImportPending} theme={theme} onChange={changeCloudflareImportText} onFile={file => void loadCloudflareImportFile(file)} onCompare={() => void compareCloudflareImport()} />
+                <div className={`rounded-xl border p-4 text-xs ${theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+                  <p className="font-semibold">Authoritative DNS migration</p>
+                  <p className="mt-1">Expected: {(migration.expectedNameservers || []).join(" and ") || "Cloudflare nameservers not entered"}</p>
+                  <p className="mt-1">Detected: {(migration.currentNameservers || []).join(", ") || "Checking current nameservers"}</p>
+                  {migration.nameserverCheckSource === "parent_delegation" && migration.nameserversAuthoritative === true && (
+                    <p className="mt-2 font-medium text-emerald-500">Confirmed directly with the domain registry and Cloudflare DNS.</p>
+                  )}
+                </div>
               </div>
             )}
             {domain.secondary && (

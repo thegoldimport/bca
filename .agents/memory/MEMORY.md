@@ -12,3 +12,4 @@
 - [SaaS custom-host routing](saas-custom-host-routing.md) — Cloudflare for SaaS Worker-as-origin needs a zone-wide route; pass platform hosts through and dispatch only verified hostname mappings.
 - [Nameserver activation verification](nameserver-activation-verification.md) — gate activation on parent delegation plus direct authoritative answers; recursive DNS is informational only.
 - [Custom-domain Live gate](custom-domain-live-gate.md) — verify traffic through the customer hostname itself before exposing a domain as Live.
+- [DNS import comparisons](dns-import-comparisons.md) — keep customer-provided Cloudflare imports read-only, source-labeled, and invalidated when either input changes.

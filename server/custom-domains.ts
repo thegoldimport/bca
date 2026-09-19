@@ -17,6 +17,27 @@ export type DnsReplacementRecord = DnsInventoryRecord & {
   reason: string;
   proxyGuidance?: "dns_only";
 };
+export type CloudflareImportedDnsRecord = DnsInventoryRecord & {
+  proxied: boolean | null;
+};
+export type CloudflareDnsImportComparison = {
+  importedRecords: CloudflareImportedDnsRecord[];
+  publicFindings: Array<DnsInventoryRecord & {
+    status: "matched" | "missing" | "changed";
+    importedValues: string[];
+  }>;
+  importOnlyRecords: CloudflareImportedDnsRecord[];
+  proxiedServiceRecords: CloudflareImportedDnsRecord[];
+  unverifiedServiceRecords: CloudflareImportedDnsRecord[];
+  counts: {
+    matched: number;
+    missing: number;
+    changed: number;
+    importOnly: number;
+    proxiedServices: number;
+    unverifiedServices: number;
+  };
+};
 
 type CloudflareCustomHostname = {
   id?: string;
@@ -94,6 +115,285 @@ export function classifyHostname(value: string): { hostname: string; kind: Hostn
 }
 
 const DNS_ONLY_SERVICE_LABELS = new Set(["mail", "ftp", "cpanel", "webmail", "webdisk", "whm", "autodiscover", "autoconfig"]);
+const DNS_RECORD_TYPES = new Set(["A", "AAAA", "CAA", "CERT", "CNAME", "DS", "HTTPS", "LOC", "MX", "NAPTR", "NS", "PTR", "SOA", "SRV", "SSHFP", "SVCB", "TLSA", "TXT"]);
+const COMPARABLE_RECORD_TYPES = new Set(["A", "AAAA", "CAA", "CERT", "CNAME", "HTTPS", "LOC", "MX", "NAPTR", "PTR", "SRV", "SSHFP", "SVCB", "TLSA", "TXT"]);
+
+function normalizeImportedRecordName(name: string, registrableDomain: string) {
+  const value = name.trim().toLowerCase().replace(/\.$/, "");
+  if (!value || value === "@") return registrableDomain;
+  if (value === registrableDomain || value.endsWith(`.${registrableDomain}`)) return value;
+  return `${value}.${registrableDomain}`;
+}
+
+function normalizeDnsRecordValue(type: string, value: string) {
+  let normalized = String(value).trim().replace(/\s+/g, " ");
+  if (type === "TXT") {
+    normalized = normalized.replace(/^"(.*)"$/, "$1").replace(/"\s+"/g, "");
+    return normalized;
+  }
+  if (["CNAME", "NS", "PTR"].includes(type)) return normalized.toLowerCase().replace(/\.$/, "");
+  if (type === "MX") return normalized.replace(/(\s+\S+)\.$/, "$1").toLowerCase();
+  if (type === "SRV") return normalized.replace(/(\s+\S+)\.$/, "$1").toLowerCase();
+  if (type === "CAA") {
+    try {
+      const parsed = JSON.parse(normalized);
+      if (parsed && typeof parsed === "object") {
+        const tag = Object.keys(parsed).find((key) => key !== "critical" && parsed[key] !== undefined);
+        if (tag) return `${Number(parsed.critical || 0)} ${tag.toLowerCase()} ${String(parsed[tag]).replace(/^"(.*)"$/, "$1").toLowerCase()}`;
+      }
+    } catch {
+      // Zone exports use wire-style text instead of the Node resolver object.
+    }
+    const match = normalized.match(/^(\d+)\s+([a-z0-9-]+)\s+"?(.*?)"?$/i);
+    if (match) return `${Number(match[1])} ${match[2].toLowerCase()} ${match[3].replace(/"$/, "").toLowerCase()}`;
+  }
+  return normalized.toLowerCase();
+}
+
+function normalizedImportedRecord(record: { type?: unknown; name?: unknown; value?: unknown; content?: unknown; proxied?: unknown; proxyStatus?: unknown }, registrableDomain: string): CloudflareImportedDnsRecord | null {
+  const type = String(record.type || "").trim().toUpperCase();
+  if (!DNS_RECORD_TYPES.has(type)) return null;
+  const rawName = String(record.name || "").trim();
+  const rawValue = String(record.content ?? record.value ?? "").trim();
+  if (!rawName || !rawValue) return null;
+  const proxyValue = record.proxied ?? record.proxyStatus;
+  const proxied = typeof proxyValue === "boolean"
+    ? proxyValue
+    : typeof proxyValue === "string"
+      ? /^(true|proxied|on|orange cloud)$/i.test(proxyValue.trim())
+        ? true
+        : /^(false|dns only|off|gray cloud|grey cloud)$/i.test(proxyValue.trim())
+          ? false
+          : null
+      : null;
+  return {
+    type,
+    name: normalizeImportedRecordName(rawName, registrableDomain),
+    value: normalizeDnsRecordValue(type, rawValue),
+    proxied,
+  };
+}
+
+function parseDelimitedLine(line: string, delimiter: string) {
+  const values: string[] = [];
+  let value = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === delimiter && !quoted) {
+      values.push(value.trim());
+      value = "";
+    } else {
+      value += character;
+    }
+  }
+  values.push(value.trim());
+  return values;
+}
+
+function parseDelimitedDnsImport(content: string, registrableDomain: string) {
+  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 2) return [];
+  const delimiter = lines[0].includes("\t") ? "\t" : ",";
+  const headers = parseDelimitedLine(lines[0], delimiter).map((header) => header.toLowerCase().replace(/[^a-z]/g, ""));
+  const typeIndex = headers.indexOf("type");
+  const nameIndex = headers.indexOf("name");
+  const valueIndex = headers.findIndex((header) => ["content", "value", "target"].includes(header));
+  const proxiedIndex = headers.findIndex((header) => ["proxied", "proxystatus", "proxy"].includes(header));
+  if (typeIndex < 0 || nameIndex < 0 || valueIndex < 0) return [];
+  return lines.slice(1).flatMap((line) => {
+    const values = parseDelimitedLine(line, delimiter);
+    const record = normalizedImportedRecord({
+      type: values[typeIndex],
+      name: values[nameIndex],
+      content: values[valueIndex],
+      proxyStatus: proxiedIndex >= 0 ? values[proxiedIndex] : undefined,
+    }, registrableDomain);
+    return record ? [record] : [];
+  });
+}
+
+function bindLogicalLines(content: string) {
+  const lines: Array<{ text: string; ownerOmitted: boolean }> = [];
+  let current = "";
+  let depth = 0;
+  let quoted = false;
+  let ownerOmitted = false;
+  for (const rawLine of content.split(/\r?\n/)) {
+    let cleaned = "";
+    for (let index = 0; index < rawLine.length; index += 1) {
+      const character = rawLine[index];
+      if (character === '"' && rawLine[index - 1] !== "\\") quoted = !quoted;
+      if (character === ";" && !quoted) break;
+      if (!quoted && character === "(") depth += 1;
+      if (!quoted && character === ")") depth = Math.max(0, depth - 1);
+      cleaned += character;
+    }
+    if (!current && cleaned.trim()) ownerOmitted = /^\s/.test(rawLine);
+    current = `${current} ${cleaned.replace(/[()]/g, " ")}`.trim();
+    if (depth === 0 && current) {
+      lines.push({ text: current, ownerOmitted });
+      current = "";
+      ownerOmitted = false;
+    }
+  }
+  if (current) lines.push({ text: current, ownerOmitted });
+  return lines;
+}
+
+function tokenizeBindLine(line: string) {
+  const tokens: string[] = [];
+  let token = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"' && line[index - 1] !== "\\") quoted = !quoted;
+    if (/\s/.test(character) && !quoted) {
+      if (token) tokens.push(token);
+      token = "";
+    } else {
+      token += character;
+    }
+  }
+  if (token) tokens.push(token);
+  return tokens;
+}
+
+function parseBindDnsImport(content: string, registrableDomain: string) {
+  let origin = registrableDomain;
+  let priorName = "@";
+  const records: CloudflareImportedDnsRecord[] = [];
+  for (const logicalLine of bindLogicalLines(content)) {
+    const tokens = tokenizeBindLine(logicalLine.text);
+    if (!tokens.length) continue;
+    if (tokens[0].toUpperCase() === "$ORIGIN" && tokens[1]) {
+      origin = tokens[1].toLowerCase().replace(/\.$/, "");
+      continue;
+    }
+    if (tokens[0].startsWith("$")) continue;
+    const typeIndex = tokens.findIndex((token, index) =>
+      index >= (logicalLine.ownerOmitted ? 0 : 1) && DNS_RECORD_TYPES.has(token.toUpperCase()));
+    if (typeIndex < 0 || typeIndex === tokens.length - 1) continue;
+    const first = tokens[0];
+    const ownerOmitted = logicalLine.ownerOmitted;
+    const owner = ownerOmitted ? priorName : first;
+    priorName = owner;
+    const absoluteOwner = owner === "@" ? origin
+      : owner.endsWith(".") ? owner
+        : owner === origin || owner.endsWith(`.${origin}`) ? owner
+          : `${owner}.${origin}`;
+    const record = normalizedImportedRecord({
+      type: tokens[typeIndex],
+      name: absoluteOwner,
+      value: tokens.slice(typeIndex + 1).join(" "),
+    }, registrableDomain);
+    if (record) records.push(record);
+  }
+  return records;
+}
+
+export function parseCloudflareDnsImport(content: string, hostname: string): CloudflareImportedDnsRecord[] {
+  if (typeof content !== "string" || !content.trim()) {
+    throw new RuntimeAdapterError("Paste a Cloudflare DNS export or copied DNS table first.", "RUNTIME_UPSTREAM_ERROR", 400);
+  }
+  if (Buffer.byteLength(content, "utf8") > 1_000_000) {
+    throw new RuntimeAdapterError("The DNS import must be smaller than 1 MB.", "RUNTIME_UPSTREAM_ERROR", 413);
+  }
+  const { registrableDomain } = classifyHostname(hostname);
+  let records: CloudflareImportedDnsRecord[] = [];
+  try {
+    const parsed = JSON.parse(content);
+    const values = Array.isArray(parsed) ? parsed
+      : Array.isArray(parsed?.result) ? parsed.result
+        : Array.isArray(parsed?.records) ? parsed.records
+          : [];
+    records = values.flatMap((value: any) => {
+      const record = normalizedImportedRecord(value, registrableDomain);
+      return record ? [record] : [];
+    });
+  } catch {
+    records = parseDelimitedDnsImport(content, registrableDomain);
+    if (!records.length) records = parseBindDnsImport(content, registrableDomain);
+  }
+  const unique = Array.from(new Map(records.map((record) => [
+    `${record.type}\0${record.name}\0${record.value}\0${String(record.proxied)}`,
+    record,
+  ])).values());
+  if (!unique.length) {
+    throw new RuntimeAdapterError("No DNS records were recognized. Use a Cloudflare zone export, JSON export, or copied DNS table with Type, Name, and Content columns.", "RUNTIME_UPSTREAM_ERROR", 400);
+  }
+  if (unique.length > 2_000) {
+    throw new RuntimeAdapterError("The DNS import contains too many records.", "RUNTIME_UPSTREAM_ERROR", 413);
+  }
+  return unique.sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type) || a.value.localeCompare(b.value));
+}
+
+function recordIdentity(record: DnsInventoryRecord) {
+  const type = record.type.toUpperCase();
+  return `${type}\0${record.name.toLowerCase().replace(/\.$/, "")}\0${normalizeDnsRecordValue(type, record.value)}`;
+}
+
+function isDnsOnlyServiceRecord(record: DnsInventoryRecord, registrableDomain: string) {
+  const relative = record.name.toLowerCase().replace(/\.$/, "").replace(new RegExp(`\\.?${registrableDomain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), "");
+  return relative.split(".").some((label) => DNS_ONLY_SERVICE_LABELS.has(label));
+}
+
+export function compareCloudflareDnsImport(
+  publicRecords: DnsInventoryRecord[],
+  importedRecords: CloudflareImportedDnsRecord[],
+  hostname: string,
+): CloudflareDnsImportComparison {
+  const { registrableDomain } = classifyHostname(hostname);
+  const comparablePublic = publicRecords.filter((record) => COMPARABLE_RECORD_TYPES.has(record.type.toUpperCase()));
+  const importedByHostType = new Map<string, CloudflareImportedDnsRecord[]>();
+  for (const record of importedRecords) {
+    const key = `${record.type.toUpperCase()}\0${record.name.toLowerCase().replace(/\.$/, "")}`;
+    importedByHostType.set(key, [...(importedByHostType.get(key) || []), record]);
+  }
+  const importedIdentities = new Set(importedRecords.map(recordIdentity));
+  const publicIdentities = new Set(comparablePublic.map(recordIdentity));
+  const publicHostTypes = new Set(comparablePublic.map((record) =>
+    `${record.type.toUpperCase()}\0${record.name.toLowerCase().replace(/\.$/, "")}`));
+  const publicFindings = comparablePublic.map((record) => {
+    const type = record.type.toUpperCase();
+    const key = `${type}\0${record.name.toLowerCase().replace(/\.$/, "")}`;
+    const sameHostType = importedByHostType.get(key) || [];
+    const status = importedIdentities.has(recordIdentity(record)) ? "matched" as const
+      : sameHostType.length ? "changed" as const
+        : "missing" as const;
+    return { ...record, status, importedValues: sameHostType.map((value) => value.value) };
+  });
+  const importOnlyRecords = importedRecords.filter((record) =>
+    COMPARABLE_RECORD_TYPES.has(record.type)
+    && !publicIdentities.has(recordIdentity(record))
+    && !publicHostTypes.has(`${record.type}\0${record.name}`));
+  const proxiedServiceRecords = importedRecords.filter((record) =>
+    record.proxied === true && isDnsOnlyServiceRecord(record, registrableDomain));
+  const unverifiedServiceRecords = importedRecords.filter((record) =>
+    record.proxied === null && isDnsOnlyServiceRecord(record, registrableDomain));
+  return {
+    importedRecords,
+    publicFindings,
+    importOnlyRecords,
+    proxiedServiceRecords,
+    unverifiedServiceRecords,
+    counts: {
+      matched: publicFindings.filter((record) => record.status === "matched").length,
+      missing: publicFindings.filter((record) => record.status === "missing").length,
+      changed: publicFindings.filter((record) => record.status === "changed").length,
+      importOnly: importOnlyRecords.length,
+      proxiedServices: proxiedServiceRecords.length,
+      unverifiedServices: unverifiedServiceRecords.length,
+    },
+  };
+}
 
 export function buildDnsReplacementPlan(records: DnsInventoryRecord[], registrableDomain: string, inspectedHostname = registrableDomain) {
   const root = registrableDomain.toLowerCase();

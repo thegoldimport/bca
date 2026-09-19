@@ -11,6 +11,8 @@ import {
   nameserverActivationReady,
   nameserversMatchExpected,
   parseNameserverDnsResponse,
+  parseCloudflareDnsImport,
+  compareCloudflareDnsImport,
   proposedBuildCustomWebsiteRecords,
   removeCnameFollowedAddresses,
   routingStatusAfterVerification,
@@ -133,6 +135,114 @@ test("DNS discovery does not present CNAME target addresses as customer-owned re
     { type: "CNAME", name: "www.example.com", value: "legacy.host.example" },
     { type: "A", name: "example.com", value: "192.0.2.10" },
   ]);
+});
+
+test("Cloudflare BIND exports preserve private records for comparison", () => {
+  const records = parseCloudflareDnsImport(`
+$ORIGIN example.com.
+@ 300 IN A 192.0.2.10
+  300 IN AAAA 2001:db8::10
+  A 192.0.2.12
+mail 300 IN A 192.0.2.11
+selector._domainkey 300 IN TXT ("v=DKIM1; " "p=private-key")
+@ 300 IN MX 10 mail.example.com.
+`, "example.com");
+
+  assert.deepEqual(records, [
+    { type: "A", name: "example.com", value: "192.0.2.10", proxied: null },
+    { type: "A", name: "example.com", value: "192.0.2.12", proxied: null },
+    { type: "AAAA", name: "example.com", value: "2001:db8::10", proxied: null },
+    { type: "MX", name: "example.com", value: "10 mail.example.com", proxied: null },
+    { type: "A", name: "mail.example.com", value: "192.0.2.11", proxied: null },
+    { type: "TXT", name: "selector._domainkey.example.com", value: "v=DKIM1; p=private-key", proxied: null },
+  ]);
+});
+
+test("Cloudflare JSON and copied tables retain proxy status", () => {
+  assert.deepEqual(parseCloudflareDnsImport(JSON.stringify({
+    result: [
+      { type: "A", name: "mail.example.com", content: "192.0.2.11", proxied: true },
+      { type: "TXT", name: "_dmarc.example.com", content: "v=DMARC1; p=none" },
+    ],
+  }), "example.com"), [
+    { type: "TXT", name: "_dmarc.example.com", value: "v=DMARC1; p=none", proxied: null },
+    { type: "A", name: "mail.example.com", value: "192.0.2.11", proxied: true },
+  ]);
+
+  assert.deepEqual(parseCloudflareDnsImport(
+    "Type\tName\tContent\tProxy status\nCNAME\tftp\texample.com\tProxied\nA\twebmail\t192.0.2.12\tDNS only",
+    "example.com",
+  ), [
+    { type: "CNAME", name: "ftp.example.com", value: "example.com", proxied: true },
+    { type: "A", name: "webmail.example.com", value: "192.0.2.12", proxied: false },
+  ]);
+});
+
+test("Cloudflare BIND parser preserves explicit owners named like DNS record types", () => {
+  assert.deepEqual(parseCloudflareDnsImport(`
+$ORIGIN example.com.
+mx 300 IN A 192.0.2.20
+ns 300 IN CNAME service.example.net.
+txt 300 IN AAAA 2001:db8::20
+`, "example.com"), [
+    { type: "A", name: "mx.example.com", value: "192.0.2.20", proxied: null },
+    { type: "CNAME", name: "ns.example.com", value: "service.example.net", proxied: null },
+    { type: "AAAA", name: "txt.example.com", value: "2001:db8::20", proxied: null },
+  ]);
+});
+
+test("Cloudflare import comparison canonicalizes equivalent CAA records", () => {
+  const publicRecord = {
+    type: "CAA",
+    name: "example.com",
+    value: JSON.stringify({ critical: 0, issue: "letsencrypt.org" }),
+  };
+  const matching = compareCloudflareDnsImport([publicRecord], parseCloudflareDnsImport(
+    '@ 300 IN CAA 0 issue "letsencrypt.org"',
+    "example.com",
+  ), "example.com");
+  assert.deepEqual(matching.counts, {
+    matched: 1,
+    missing: 0,
+    changed: 0,
+    importOnly: 0,
+    proxiedServices: 0,
+    unverifiedServices: 0,
+  });
+
+  const changed = compareCloudflareDnsImport([publicRecord], parseCloudflareDnsImport(
+    '@ 300 IN CAA 0 issue "pki.goog"',
+    "example.com",
+  ), "example.com");
+  assert.equal(changed.publicFindings[0].status, "changed");
+});
+
+test("Cloudflare import comparison finds missing, changed, private, and proxied service records", () => {
+  const imported = parseCloudflareDnsImport(JSON.stringify([
+    { type: "A", name: "example.com", content: "192.0.2.99", proxied: true },
+    { type: "MX", name: "example.com", content: "10 mail.example.com", proxied: false },
+    { type: "A", name: "mail.example.com", content: "192.0.2.11", proxied: true },
+    { type: "TXT", name: "private._domainkey.example.com", content: "v=DKIM1; p=private", proxied: false },
+  ]), "example.com");
+  const comparison = compareCloudflareDnsImport([
+    { type: "A", name: "example.com", value: "192.0.2.10" },
+    { type: "MX", name: "example.com", value: "10 mail.example.com." },
+    { type: "TXT", name: "example.com", value: "v=spf1 include:_spf.example.net ~all" },
+    { type: "NS", name: "example.com", value: "old-ns.example.net" },
+  ], imported, "example.com");
+
+  assert.deepEqual(comparison.counts, {
+    matched: 1,
+    missing: 1,
+    changed: 1,
+    importOnly: 2,
+    proxiedServices: 1,
+    unverifiedServices: 0,
+  });
+  assert.equal(comparison.publicFindings.find((record) => record.type === "A")?.status, "changed");
+  assert.equal(comparison.publicFindings.find((record) => record.type === "TXT")?.status, "missing");
+  assert.equal(comparison.importOnlyRecords.some((record) => record.name === "private._domainkey.example.com"), true);
+  assert.deepEqual(comparison.proxiedServiceRecords.map((record) => record.name), ["mail.example.com"]);
 });
 
 test("customer Cloudflare nameservers must be two distinct assigned hosts", () => {

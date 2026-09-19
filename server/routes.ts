@@ -30,6 +30,8 @@ import {
   normalizeCustomDomain,
   classifyHostname,
   inspectPublicDns,
+  parseCloudflareDnsImport,
+  compareCloudflareDnsImport,
   validateExpectedNameservers,
   checkNameserverActivation,
   routingStatusAfterVerification,
@@ -819,6 +821,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const project = await requireProject(req, res);
     if (!project) return;
     try {
+      return await withCustomDomainLock(project.id, async () => {
       const inspection = await inspectPublicDns(typeof req.body?.hostname === "string" ? req.body.hostname : "");
       const link = await storage.getRuntimeProjectLink(project.id);
       const prior = link?.customDomainMigrationState?.hostname === inspection.hostname
@@ -826,8 +829,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : {};
       const inventoryChanged = JSON.stringify(prior.dnsInventory || []) !== JSON.stringify(inspection.records);
       const migrationBase = { ...prior };
-      if (inventoryChanged) delete migrationBase.acknowledgedAt;
-      const migration = {
+      if (inventoryChanged) {
+        delete migrationBase.acknowledgedAt;
+        delete migrationBase.cloudflareImportComparison;
+        delete migrationBase.cloudflareImportCheckedAt;
+        delete migrationBase.cloudflareImportFilename;
+      }
+      const migration: any = {
         ...migrationBase,
         hostname: inspection.hostname,
         hostnameKind: inspection.kind,
@@ -842,7 +850,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
       const updated = await storage.upsertRuntimeProjectLink(project.id, { customDomainMigrationState: migration });
       return res.json({ ...inspection, migration: updated.customDomainMigrationState });
+      });
     } catch (err) { return runtimeError(err, res); }
+  });
+
+  // Compares customer-provided Cloudflare scan/export data without Cloudflare account access.
+  app.post("/api/projects/:id/runtime/custom-domain/import-dns", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      return await withCustomDomainLock(project.id, async () => {
+      const hostname = normalizeCustomDomain(typeof req.body?.hostname === "string" ? req.body.hostname : "");
+      const link = await storage.getRuntimeProjectLink(project.id);
+      const prior = link?.customDomainMigrationState?.hostname === hostname
+        ? link.customDomainMigrationState
+        : null;
+      if (!prior || !Array.isArray(prior.dnsInventory) || !prior.dnsScannedAt) {
+        return res.status(409).json({
+          code: "PUBLIC_DNS_SCAN_REQUIRED",
+          message: "Inspect the existing public DNS records before comparing the Cloudflare import.",
+        });
+      }
+      const importedRecords = parseCloudflareDnsImport(
+        typeof req.body?.content === "string" ? req.body.content : "",
+        hostname,
+      );
+      const comparison = compareCloudflareDnsImport(prior.dnsInventory, importedRecords, hostname);
+      const comparisonChanged = JSON.stringify(prior.cloudflareImportComparison || null) !== JSON.stringify(comparison);
+      const migration: any = {
+        ...prior,
+        cloudflareImportComparison: comparison,
+        cloudflareImportCheckedAt: new Date().toISOString(),
+        cloudflareImportFilename: typeof req.body?.filename === "string"
+          ? req.body.filename.slice(0, 200)
+          : null,
+      };
+      if (comparisonChanged) delete migration.acknowledgedAt;
+      const updated = await storage.upsertRuntimeProjectLink(project.id, { customDomainMigrationState: migration });
+      return res.json({ hostname, comparison, migration: updated.customDomainMigrationState });
+      });
+    } catch (err) {
+      return runtimeError(err, res);
+    }
   });
 
   // Saves wizard decisions only. It never creates a customer zone or changes DNS.
