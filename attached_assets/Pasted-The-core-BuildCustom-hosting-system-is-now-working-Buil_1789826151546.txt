@@ -1,0 +1,655 @@
+The core BuildCustom hosting system is now working:
+
+- BuildCustom can generate a real application through the VibeSDK/ThinkAgent runtime.
+- The generated application can be previewed.
+- It can be published through our Cloudflare/Workers for Platforms hosting infrastructure.
+- The application is publicly accessible on our BuildCustom-hosted subdomain.
+- Assets including favicons and social sharing images are working.
+- We have now begun proving customer-owned custom domains using Cloudflare for SaaS / Custom Hostnames.
+
+During testing we discovered an important real-world onboarding issue:
+
+A customer may want to connect:
+
+buyermagnets.com
+
+but their existing DNS provider may not allow a normal CNAME at the zone apex/root because other records such as A, MX, TXT, etc. already exist.
+
+We do NOT want to require Cloudflare Enterprise / Apex Proxying for BuildCustom V1.
+
+Instead, I want BuildCustom to have a simple, safe domain connection wizard that supports BOTH:
+
+PATH A:
+Keep the customer's existing DNS provider and connect a hostname such as:
+
+www.customer.com → CNAME → fallback.buildcustom.ai
+
+or use the root domain when their DNS provider natively supports ALIAS, ANAME, apex CNAME flattening, or an equivalent capability.
+
+PATH B:
+For customers whose DNS provider cannot connect the root domain properly, recommend moving ONLY authoritative DNS management to Cloudflare DNS.
+
+This is NOT a domain registrar transfer.
+
+The customer continues owning and renewing their domain through their existing registrar. Only the authoritative nameservers change to Cloudflare.
+
+Once Cloudflare is authoritative, Cloudflare's apex CNAME flattening can allow the root domain to connect to BuildCustom without requiring BuildCustom to purchase Enterprise Apex Proxying.
+
+IMPORTANT:
+
+We are going to test this workflow using an owned test domain.
+
+Do NOT disrupt the existing working BuildCustom hosting architecture.
+
+Do NOT modify or remove the existing Workers for Platforms deployment path.
+
+Do NOT modify legacy Cloudflare resources unless explicitly required and approved.
+
+Do NOT purchase, transfer, or move domain registration.
+
+Do NOT automatically change registrar nameservers.
+
+Do NOT delete existing DNS records.
+
+Do NOT guess Cloudflare IP addresses.
+
+Do NOT implement Enterprise Apex Proxying.
+
+Do NOT make destructive DNS changes without explicit confirmation.
+
+Do NOT expose Cloudflare API credentials to the browser.
+
+The goal is to build the minimum real production-quality Domain Connection Wizard necessary to safely test this complete workflow.
+
+
+==================================================
+1. DOMAIN WIZARD ENTRY
+==================================================
+
+Inside an existing BuildCustom project's Domains area, create:
+
+Add Custom Domain
+
+The customer enters:
+
+customer.com
+
+BuildCustom should normalize the hostname and determine whether this appears to be:
+
+- apex/root domain
+- www hostname
+- another subdomain
+
+Show the customer a simple choice when appropriate:
+
+"How would you like to connect your domain?"
+
+OPTION 1:
+Keep My Current DNS
+
+Description:
+
+"Keep your domain and DNS exactly where they are. We'll show you the DNS record needed to connect it to BuildCustom."
+
+OPTION 2:
+Use Cloudflare DNS - Recommended for Root Domains
+
+Description:
+
+"Keep your domain registered where it is, but use Cloudflare's free DNS service. This makes connecting root domains easier and provides Cloudflare DNS/security benefits."
+
+Do NOT imply that choosing Cloudflare DNS transfers ownership or registration of the domain.
+
+
+==================================================
+2. EXISTING DNS PATH
+==================================================
+
+For a www or other subdomain connection, show the required CNAME clearly.
+
+Example:
+
+Type: CNAME
+Name: www
+Target: fallback.buildcustom.ai
+
+Provide:
+
+Copy buttons
+verification status
+Check Again button
+help text
+
+Do not mark the domain Live merely because a DNS record exists.
+
+The full Cloudflare Custom Hostname lifecycle must be checked.
+
+At minimum track:
+
+DNS Required
+DNS Detected
+Ownership Verification Pending
+SSL Provisioning
+Routing Verification
+Live
+Error
+
+A domain should only be considered fully Live when the Cloudflare Custom Hostname and SSL state are active AND BuildCustom confirms the hostname routes to the correct deployed project.
+
+If the user enters an apex/root domain and the current DNS setup cannot support the required target safely, DO NOT tell them to delete conflicting records.
+
+Instead explain:
+
+"Your current DNS setup cannot connect this root domain using a standard CNAME."
+
+Then offer:
+
+Use www instead
+
+OR
+
+Set Up Cloudflare DNS
+
+
+==================================================
+3. CLOUDFLARE DNS SETUP WIZARD
+==================================================
+
+Create a guided Cloudflare DNS migration wizard.
+
+This wizard must clearly explain:
+
+"You are NOT transferring your domain.
+
+Your domain stays registered with your current registrar. You are only changing which service manages its DNS records."
+
+The wizard should have clearly separated steps.
+
+
+STEP 1:
+Inspect Existing DNS
+
+Before telling the customer to change nameservers, BuildCustom should perform a read-only DNS inventory using appropriate server-side DNS resolution.
+
+Attempt to discover existing records including, where available:
+
+A
+AAAA
+CNAME
+MX
+TXT
+CAA
+SRV
+NS
+
+Also specifically look for records commonly associated with email and authentication:
+
+MX
+SPF
+DKIM
+DMARC
+
+Display the discovered records in a readable table.
+
+Do not pretend DNS discovery is guaranteed to find every private/provider-specific record.
+
+Show a warning:
+
+"We found these public DNS records. Before changing nameservers, compare them with the DNS records shown by your current DNS provider. Missing email or verification records can interrupt services."
+
+The system should NEVER claim the scan guarantees completeness.
+
+
+STEP 2:
+Prepare Cloudflare Zone
+
+Determine whether the domain already exists as a zone in the BuildCustom-controlled Cloudflare environment.
+
+For THIS TEST / CURRENT ARCHITECTURE:
+
+Do not automatically create or mutate a Cloudflare zone until you have first inspected the available Cloudflare APIs, permissions, account boundaries, and existing architecture.
+
+Before implementing automatic zone creation, report whether managing customer DNS zones inside the BuildCustom Cloudflare account is actually the architecture we should use.
+
+This is important.
+
+We need to distinguish between:
+
+A) customers creating/managing their own free Cloudflare account and BuildCustom guiding them
+
+versus
+
+B) BuildCustom creating/managing customer DNS zones inside our Cloudflare account.
+
+Do not silently choose B just because our API token can create zones.
+
+Evaluate security, ownership, operational responsibility, account limits, customer portability, API capability, and whether Cloudflare permits the intended SaaS architecture.
+
+For the immediate owned-domain test, use the safest architecture that can later scale appropriately.
+
+If manual Cloudflare onboarding is safer for V1, the wizard may guide the customer through creating a free Cloudflare account and adding their domain rather than BuildCustom owning their DNS zone.
+
+
+STEP 3:
+DNS RECORD SAFETY CHECK
+
+Before nameservers are changed, create a checklist comparing:
+
+Existing publicly discovered DNS records
+
+versus
+
+records expected in Cloudflare.
+
+Highlight especially:
+
+MX
+SPF
+DKIM
+DMARC
+TXT verification records
+mail hostnames
+other subdomains
+
+Use clear warnings for potentially missing records.
+
+Examples:
+
+"Email records detected"
+
+"MX records detected"
+
+"SPF record detected"
+
+"DMARC record detected"
+
+"DKIM record may require manual verification"
+
+"Additional TXT verification records detected"
+
+If the domain appears to use email, display a prominent warning:
+
+"Changing nameservers before your email DNS records are present in Cloudflare could interrupt email."
+
+Require an explicit checkbox:
+
+"I have reviewed my DNS records and understand that missing records can affect email or other services."
+
+Do not allow the wizard to proceed to nameserver switching instructions without this acknowledgement.
+
+
+STEP 4:
+CHANGE NAMESERVERS
+
+Once the DNS safety check is complete, show:
+
+"Change your domain's nameservers"
+
+Explain:
+
+"Go to the company where your domain is registered and replace the current nameservers with the Cloudflare nameservers shown below."
+
+Show the actual Cloudflare-assigned nameservers if they are available through the architecture we choose.
+
+Example UI:
+
+Current DNS provider:
+A2 Hosting
+
+Current nameservers:
+ns1.example.com
+ns2.example.com
+
+New Cloudflare nameservers:
+xxxx.ns.cloudflare.com
+yyyy.ns.cloudflare.com
+
+[Copy]
+
+Do NOT attempt to log into or modify the customer's registrar.
+
+The customer makes this change themselves.
+
+
+STEP 5:
+VERIFY NAMESERVER CHANGE
+
+BuildCustom should periodically or manually check authoritative NS records.
+
+Provide:
+
+Check Again
+
+When the expected Cloudflare nameservers become authoritative, update:
+
+Waiting for Nameservers
+
+to:
+
+Cloudflare DNS Active
+
+Do not rely only on browser state.
+
+Verification must happen server-side.
+
+
+==================================================
+4. CONNECT ROOT DOMAIN AFTER CLOUDFLARE DNS ACTIVE
+==================================================
+
+Once Cloudflare DNS is authoritative and the DNS records are safe, connect the root domain to BuildCustom using the appropriate Cloudflare-supported apex/flattening architecture.
+
+Target conceptually:
+
+customer.com
+→ Cloudflare DNS
+→ flattened target / supported Cloudflare routing
+→ fallback.buildcustom.ai
+→ BuildCustom gateway
+→ project/deployment mapping
+→ Workers for Platforms
+→ generated customer application
+
+Do not create fake A records.
+
+Do not use undocumented Cloudflare IP addresses.
+
+Do not route directly around the existing BuildCustom gateway.
+
+Use the existing working BuildCustom custom-hostname and gateway architecture wherever possible.
+
+
+==================================================
+5. WWW + ROOT BEHAVIOR
+==================================================
+
+We eventually want both:
+
+customer.com
+
+and
+
+www.customer.com
+
+to behave correctly.
+
+The customer should choose a primary domain:
+
+customer.com
+
+OR
+
+www.customer.com
+
+The non-primary hostname should redirect permanently to the primary hostname.
+
+Example:
+
+www.customer.com
+→ 301
+→ customer.com
+
+OR
+
+customer.com
+→ 301
+→ www.customer.com
+
+Do not create redirect loops.
+
+Preserve:
+
+path
+query string
+
+Example:
+
+www.customer.com/pricing?ref=abc
+
+should redirect to:
+
+customer.com/pricing?ref=abc
+
+
+==================================================
+6. BUILDCUSTOM DOMAIN DATA MODEL
+==================================================
+
+Inspect the existing domain/custom-hostname implementation first and extend it rather than creating a competing system.
+
+We should be able to represent at minimum:
+
+project_id
+hostname
+hostname_type
+primary_domain
+dns_strategy
+dns_provider
+cloudflare_custom_hostname_id
+hostname_status
+ssl_status
+routing_status
+verification_status
+expected_dns_records
+observed_dns_records
+cloudflare_nameservers if applicable
+last_checked_at
+error_state
+
+Do not introduce unnecessary complexity if equivalent fields already exist.
+
+
+==================================================
+7. DOMAIN STATUS UI
+==================================================
+
+The customer should NEVER need to understand Cloudflare terminology.
+
+Use customer-friendly statuses such as:
+
+Getting Started
+DNS Setup Required
+Checking DNS
+Waiting for Nameservers
+Cloudflare DNS Active
+Verifying Ownership
+Creating SSL
+Connecting Website
+Live
+Needs Attention
+
+Internally we may store detailed Cloudflare states.
+
+The UI should translate them into simple BuildCustom language.
+
+
+==================================================
+8. SAFETY / FAILURE STATES
+==================================================
+
+Handle these cases explicitly:
+
+Domain already connected to another BuildCustom project
+
+Domain points somewhere unexpected
+
+CNAME conflict
+
+Existing A record at apex
+
+Existing AAAA record at apex
+
+MX records present
+
+Cloudflare nameservers not active
+
+Cloudflare Custom Hostname pending
+
+SSL validation pending
+
+SSL validation failed
+
+DNS verification failed
+
+Gateway mapping missing
+
+Deployment missing
+
+Customer changes DNS after domain was Live
+
+Domain removed from project
+
+Never silently delete DNS records.
+
+Never automatically alter email records.
+
+Never mark a domain Live if routing does not reach the expected BuildCustom project.
+
+
+==================================================
+9. TEST DOMAIN
+==================================================
+
+We currently have an owned test domain available for this proof:
+
+buyermagnets.com
+
+It currently uses A2 Hosting authoritative DNS and has existing DNS records including web and email-related records.
+
+DO NOT CHANGE ITS NAMESERVERS YET.
+
+First:
+
+1. Inventory the existing public DNS records.
+2. Inspect the current BuildCustom custom-domain implementation.
+3. Inspect Cloudflare account/API capabilities.
+4. Determine the safest Cloudflare DNS ownership architecture.
+5. Show me the exact migration plan.
+6. Identify every record that must be preserved.
+7. Identify anything that cannot be reliably discovered automatically.
+8. Confirm how the root domain will ultimately route to the existing BuildCustom gateway.
+9. Confirm how www will be handled.
+10. Confirm rollback procedure.
+
+Only after I explicitly approve the migration should any nameserver or live DNS changes be made.
+
+
+==================================================
+10. ROLLBACK
+==================================================
+
+Design rollback before performing the live test.
+
+If the migration fails, we must know how to restore:
+
+original authoritative nameservers
+original web A/AAAA/CNAME records
+MX records
+TXT records
+email authentication records
+other discovered DNS records
+
+Document the existing state before mutation.
+
+The live test must not depend on memory or manually reconstructing the old DNS configuration.
+
+
+==================================================
+11. ACCEPTANCE TEST
+==================================================
+
+The feature is not considered proven until we can demonstrate:
+
+1. A BuildCustom project is already deployed and working on its BuildCustom-hosted subdomain.
+
+2. The custom-domain wizard accepts an owned domain.
+
+3. Existing DNS is inventoried before migration.
+
+4. Existing email-related DNS records are identified and protected.
+
+5. The wizard clearly explains that DNS migration is NOT domain registration transfer.
+
+6. Nameserver instructions are correct.
+
+7. BuildCustom detects when Cloudflare becomes authoritative.
+
+8. The root domain becomes a valid BuildCustom custom hostname.
+
+9. Cloudflare provisions valid SSL.
+
+10. The root domain serves the correct generated BuildCustom application.
+
+11. www also behaves correctly.
+
+12. Primary-domain redirect works and preserves paths/query strings.
+
+13. The original BuildCustom-hosted subdomain continues working.
+
+14. No other customer's project can claim this hostname.
+
+15. BuildCustom credentials remain server-side.
+
+16. Existing email continues working.
+
+17. No legacy Cloudflare infrastructure was accidentally changed.
+
+18. The generated application continues working independently of the Replit development environment.
+
+
+==================================================
+12. SCOPE LIMITS
+==================================================
+
+Do NOT turn this into a domain registrar.
+
+Do NOT build domain purchasing yet.
+
+Do NOT build domain transfers.
+
+Do NOT build email hosting.
+
+Do NOT build a full DNS management product.
+
+Do NOT implement Cloudflare Enterprise Apex Proxying.
+
+Do NOT migrate BuildCustom itself off Replit during this task.
+
+Do NOT redesign unrelated BuildCustom pages.
+
+Do NOT modify the working VibeSDK agent/runtime architecture.
+
+Do NOT modify the working generated-app deployment architecture unless absolutely necessary for correct hostname routing.
+
+This task is ONLY:
+
+BuildCustom custom-domain onboarding + safe Cloudflare DNS migration + apex/root-domain proof.
+
+
+==================================================
+PLAN MODE REQUIREMENT
+==================================================
+
+You are currently in Plan Mode.
+
+DO NOT IMPLEMENT ANYTHING YET.
+
+First perform the read-only inspection and return a concrete plan containing:
+
+1. Current BuildCustom domain architecture.
+2. Current Cloudflare custom-hostname architecture.
+3. Existing buyermagnets.com DNS inventory.
+4. Whether Cloudflare DNS zones should live in the BuildCustom account or customer-owned Cloudflare accounts.
+5. Exact APIs/services that would be used.
+6. Exact UI wizard states.
+7. Exact data model changes.
+8. Exact server/API changes.
+9. Root-domain routing design.
+10. www routing/redirect design.
+11. Email/DNS safety design.
+12. Rollback plan.
+13. Live test sequence.
+14. Files/components that would be modified.
+15. Anything requiring my approval or manual action.
+
+Do not begin implementation until I review and approve this plan.
