@@ -116,15 +116,15 @@ test("Cloudflare migration review shows the DNS checklist before nameserver setu
     fireEvent.change(hostnameInput, { target: { value: "example.com" } });
     fireEvent.click(screen.getByTestId("button-connect-domain"));
 
-    const checklist = (await screen.findByText("DNS replacement checklist")).parentElement?.parentElement;
+    const checklist = (await screen.findByText("What to keep and what to change")).parentElement?.parentElement;
     assert.ok(checklist);
     const review = within(checklist);
 
-    assert.ok(review.getByText("Replace"));
+    assert.ok(review.getByText("Replace for your website"));
     assert.ok(review.getByText("192.0.2.10"));
-    assert.ok(review.getByText("Keep"));
+    assert.ok(review.getByText("Keep exactly as they are"));
     assert.ok(review.getByText("10 mail.example.com"));
-    assert.ok(review.getByText("Review"));
+    assert.ok(review.getByText("Ask your provider if unsure"));
     assert.ok(review.getByText("legacy-verification"));
     assert.ok(review.getByText("Cloudflare: set Proxy status to DNS only."));
     assert.ok(review.getByText("Proposed BuildCustom website records"));
