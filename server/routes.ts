@@ -12,11 +12,13 @@ import {
   publishedProjectUrl,
   removePublishedProjectRoute,
   restorePublishedProjectRouteValue,
+  setPublishedProjectPreviewImage,
   setPublishedProjectRoute,
 } from "./published-routes";
 import { generateSeoSuggestions, isSeoContextPath, rankSeoContextPath } from "./seo-suggestions";
 import { deleteProjectAndPublishedRoute, PublishedRouteRestoreError } from "./project-deletion";
 import { savePublishingSettings } from "./publishing-settings";
+import { captureProjectPreviewImage } from "./project-preview-image";
 
 const RESERVED_SUBDOMAINS = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers"]);
 
@@ -43,10 +45,37 @@ function publicSocialImageUrl(projectId: number, version?: number) {
   return `${base}/api/public/projects/${projectId}/social-image${version ? `?v=${version}` : ""}`;
 }
 
+function publicPreviewImageUrl(projectId: number, version?: number) {
+  const base = (process.env.BUILDCUSTOM_PUBLIC_URL?.trim() || "https://buildcustom.ai").replace(/\/$/, "");
+  return `${base}/api/public/projects/${projectId}/preview-image${version ? `?v=${version}` : ""}`;
+}
+
+function publishedPreviewImageUrl(deploymentUrl: string, version?: number) {
+  return `${deploymentUrl.replace(/\/$/, "")}/_buildcustom/preview-image${version ? `?v=${version}` : ""}`;
+}
+
 function seoResponse(settings: any) {
   if (!settings) return settings;
-  const { socialImageData, ...safe } = settings;
-  return { ...safe, hasSocialImage: Boolean(socialImageData) };
+  const { socialImageData, previewImageData, ...safe } = settings;
+  return {
+    ...safe,
+    hasSocialImage: Boolean(socialImageData),
+    hasPreviewImage: Boolean(previewImageData),
+    previewImageUrl: previewImageData ? publicPreviewImageUrl(settings.projectId, settings.updatedAt?.getTime?.()) : "",
+  };
+}
+
+function sendStoredImage(res: any, data: string | null | undefined) {
+  const match = data?.match(/^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=]+)$/i);
+  if (!match) return res.status(404).send("Image not found");
+  const image = Buffer.from(match[2], "base64");
+  res.set({
+    "Content-Type": match[1].toLowerCase(),
+    "Content-Length": String(image.length),
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff",
+  });
+  return res.send(image);
 }
 
 async function requireProject(req: any, res: any) {
@@ -222,10 +251,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = await requireAuth(req, res);
       if (!userId) return;
       const projects = await storage.getProjectsByUser(userId);
-      const runtimeLinks = await Promise.all(projects.map((project) => storage.getRuntimeProjectLink(project.id)));
+      const [runtimeLinks, seoSettings] = await Promise.all([
+        Promise.all(projects.map((project) => storage.getRuntimeProjectLink(project.id))),
+        Promise.all(projects.map((project) => storage.getSeoSettings(project.id))),
+      ]);
       return res.json(projects.map((project, index) => ({
         ...project,
         deploymentUrl: runtimeLinks[index]?.deploymentUrl || null,
+        previewImageUrl: seoSettings[index]?.previewImageData && runtimeLinks[index]?.deploymentUrl
+          ? publishedPreviewImageUrl(runtimeLinks[index]!.deploymentUrl!, seoSettings[index]?.updatedAt?.getTime())
+          : null,
       })));
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -318,14 +353,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(503).json({ configured: false, code: "RUNTIME_UNCONFIGURED", message: "The VibeSDK runtime is not configured." });
     }
     try {
-      const [status, link] = await Promise.all([
+      const [status, link, seo] = await Promise.all([
         runtimeAdapter.status(await runtimeProject(project)),
         storage.getRuntimeProjectLink(project.id),
+        storage.getSeoSettings(project.id),
       ]);
       return res.json({
         ...status,
         previewUrl: (status.state as any)?.previewUrl || link?.previewUrl || null,
         deploymentUrl: link?.deploymentUrl || null,
+        previewImageUrl: seo?.previewImageData && link?.deploymentUrl
+          ? publishedPreviewImageUrl(link.deploymentUrl, seo.updatedAt?.getTime())
+          : null,
       });
     } catch (err) { return runtimeError(err, res); }
   });
@@ -536,6 +575,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         throw error;
       }
+      try {
+        const previewImageData = await captureProjectPreviewImage(publicUrl);
+        await setPublishedProjectPreviewImage(subdomainSlug, previewImageData);
+        const currentSeo = await storage.getSeoSettings(project.id);
+        const updatedSeo = await storage.upsertSeoSettings(project.id, {
+          previewImageData,
+          ...(!currentSeo?.socialImageData ? { ogImageUrl: publishedPreviewImageUrl(publicUrl, Date.now()) } : {}),
+        });
+        await setPublishedProjectRoute(subdomainSlug, scriptName, {
+          title: updatedSeo.metaTitle,
+          description: updatedSeo.metaDescription,
+          canonicalUrl: updatedSeo.canonicalUrl,
+          ogTitle: updatedSeo.ogTitle,
+          ogDescription: updatedSeo.ogDescription,
+          ogImageUrl: updatedSeo.ogImageUrl,
+          faviconData: updatedSeo.faviconData,
+          allowIndexing: updatedSeo.allowIndexing,
+          schemaJson: updatedSeo.schemaJson,
+        });
+      } catch (error) {
+        console.warn("Published project preview screenshot could not be refreshed", { projectId: project.id, error });
+      }
       return res.status(201).json({ ...result, url: publicUrl, originUrl: result.url, release });
     } catch (err) { return runtimeError(err, res); }
   });
@@ -714,18 +775,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── SEO ────────────────────────────────────────────────────────────────────
+  app.get("/api/public/projects/:id/preview-image", async (req, res) => {
+    const settings = await storage.getSeoSettings(parseInt(req.params.id));
+    return sendStoredImage(res, settings?.previewImageData);
+  });
+
   app.get("/api/public/projects/:id/social-image", async (req, res) => {
     const settings = await storage.getSeoSettings(parseInt(req.params.id));
-    const match = settings?.socialImageData?.match(/^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=]+)$/i);
-    if (!match) return res.status(404).send("Social image not found");
-    const image = Buffer.from(match[2], "base64");
-    res.set({
-      "Content-Type": match[1].toLowerCase(),
-      "Content-Length": String(image.length),
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "X-Content-Type-Options": "nosniff",
-    });
-    return res.send(image);
+    return sendStoredImage(res, settings?.socialImageData);
   });
 
   app.get("/api/projects/:id/seo/suggestions", async (req, res) => {
@@ -818,7 +875,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!userId) return;
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
-      const settings = await savePublishingSettings(project.id, { socialImageData: "", ogImageUrl: "" }, {
+      const existing = await storage.getSeoSettings(project.id);
+      const link = await storage.getRuntimeProjectLink(project.id);
+      const settings = await savePublishingSettings(project.id, {
+        socialImageData: "",
+        ogImageUrl: existing?.previewImageData && link?.deploymentUrl
+          ? publishedPreviewImageUrl(link.deploymentUrl, Date.now())
+          : "",
+      }, {
         upsertSettings: (projectId, update) => storage.upsertSeoSettings(projectId, update),
         getRuntimeLink: (projectId) => storage.getRuntimeProjectLink(projectId),
         setPublishedRoute: setPublishedProjectRoute,

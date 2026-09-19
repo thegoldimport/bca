@@ -49,6 +49,26 @@ async function writeRoute(slug: string, method: "PUT" | "DELETE", scriptName?: s
   }
 }
 
+export async function setPublishedProjectPreviewImage(slug: string, data: string) {
+  const match = data.match(/^data:image\/jpeg;base64,([a-z0-9+/=]+)$/i);
+  if (!match) throw new RuntimeAdapterError("The project preview image is invalid.", "RUNTIME_UPSTREAM_ERROR");
+  const { accountId, namespaceId, apiToken } = routeConfig();
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/storage/kv/namespaces/${encodeURIComponent(namespaceId)}/values/${encodeURIComponent(`preview:${slug}`)}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/octet-stream",
+      },
+      body: Buffer.from(match[1], "base64"),
+    },
+  );
+  if (!response.ok) {
+    throw new RuntimeAdapterError("The project preview image could not be published.", "RUNTIME_UPSTREAM_ERROR");
+  }
+}
+
 export async function getPublishedProjectRouteValue(slug: string) {
   const { accountId, namespaceId, apiToken } = routeConfig();
   const response = await fetch(

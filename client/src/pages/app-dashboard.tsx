@@ -616,7 +616,9 @@ function ProjectsPage() {
               data-testid={`card-project-${project.id}`}
             >
               <div className="relative w-full h-40 overflow-hidden">
-                {isPublished ? (
+                {project.previewImageUrl ? (
+                  <img src={project.previewImageUrl} alt={`${project.name} live project cover`} className="h-full w-full object-cover" />
+                ) : isPublished ? (
                   <iframe
                     src={project.deploymentUrl}
                     title={`${project.name} live project cover`}

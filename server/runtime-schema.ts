@@ -34,6 +34,7 @@ export async function ensureRuntimeSchema() {
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS og_title text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS og_description text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS og_image_url text NOT NULL DEFAULT ''`);
+  await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS preview_image_data text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS social_image_data text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS allow_indexing boolean NOT NULL DEFAULT true`);
   await db.execute(sql`

@@ -1730,7 +1730,9 @@ export default function ProjectDetail() {
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
             <div className={`relative h-[104px] w-[144px] shrink-0 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-100"}`}>
-              {runtimeStatus?.deploymentUrl ? (
+              {runtimeStatus?.previewImageUrl ? (
+                <img src={runtimeStatus.previewImageUrl} alt={`${project.name} live page thumbnail`} className="h-full w-full object-cover" />
+              ) : runtimeStatus?.deploymentUrl ? (
                 <>
                   <iframe
                     src={runtimeStatus.deploymentUrl}

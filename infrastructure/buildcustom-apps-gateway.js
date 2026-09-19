@@ -63,6 +63,18 @@ export default {
     const { scriptName, metadata } = routeConfig(raw);
     if (!SCRIPT.test(scriptName || "")) return new Response("Project not found", { status: 404 });
 
+    if (url.pathname === "/_buildcustom/preview-image") {
+      const image = await env.ROUTES.get(`preview:${slug}`, "arrayBuffer");
+      if (!image) return new Response("Preview image not found", { status: 404 });
+      return new Response(image, {
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Cache-Control": "public, max-age=31536000, immutable",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+
     if (url.pathname === "/robots.txt") {
       const body = metadata.allowIndexing === false
         ? "User-agent: *\nDisallow: /\n"
