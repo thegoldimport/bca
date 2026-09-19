@@ -1895,8 +1895,8 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                 {domain.secondary.error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{domain.secondary.error}</p>}
                 {domain.secondary.dnsRecords?.length > 0 && (
                   <div className={`mt-3 overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-                    <table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-white"}><tr>{["Type", "Name", "Value"].map(h => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
-                      <tbody>{domain.secondary.dnsRecords.map((row: any, i: number) => <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="px-3 py-2">{row.type}</td><td className="px-3 py-2 font-mono">{row.name}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value}</td></tr>)}</tbody>
+                    <table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-white"}><tr>{["Type", "Name", "Value"].map((h, index) => <th key={h} className={`px-3 py-2 text-left font-semibold ${index === 0 ? "w-20 min-w-20 whitespace-nowrap" : ""}`}>{h}</th>)}</tr></thead>
+                      <tbody>{domain.secondary.dnsRecords.map((row: any, i: number) => <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="w-20 min-w-20 whitespace-nowrap px-3 py-2">{row.type}</td><td className="px-3 py-2 font-mono">{row.name}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value}</td></tr>)}</tbody>
                     </table>
                   </div>
                 )}
@@ -1909,12 +1909,12 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                 <div className={`overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
                   <table className="w-full text-xs">
                     <thead className={theme === "dark" ? "bg-white/5" : "bg-gray-50"}>
-                      <tr>{["Type", "Name", "Value", ""].map((h, index) => <th key={index} className={`text-left px-4 py-2.5 font-semibold ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr>
+                      <tr>{["Type", "Name", "Value", ""].map((h, index) => <th key={index} className={`text-left px-4 py-2.5 font-semibold ${index === 0 ? "w-24 min-w-24 whitespace-nowrap" : ""} ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {domain.dnsRecords.map((row: any, i: number) => (
                         <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}>
-                          {[row.type, row.name, row.value].map((cell, j) => <td key={j} className={`max-w-[260px] break-all px-4 py-3 font-mono ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{cell}</td>)}
+                          {[row.type, row.name, row.value].map((cell, j) => <td key={j} className={`max-w-[260px] px-4 py-3 font-mono ${j === 0 ? "w-24 min-w-24 whitespace-nowrap" : "break-all"} ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{cell}</td>)}
                           <td className="px-3 py-2 text-right"><button onClick={() => copyRecord(String(row.value || ""))} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/45 hover:bg-white/10 hover:text-white" : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"}`} aria-label="Copy DNS value"><Copy size={13} /></button></td>
                         </tr>
                       ))}
