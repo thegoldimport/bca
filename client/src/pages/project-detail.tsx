@@ -1756,6 +1756,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const [recoveryWizardStep, setRecoveryWizardStep] = useState(0);
   const [recoveryWizardMode, setRecoveryWizardMode] = useState<"resume" | "review">("resume");
   const [secondsUntilDomainCheck, setSecondsUntilDomainCheck] = useState(10);
+  const [copiedDnsRecord, setCopiedDnsRecord] = useState("");
   const previousStatus = useRef<string | null>(null);
   const queryKey = ["custom-domain", projectId];
   const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
@@ -1866,7 +1867,16 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const activeCloudflareImportComparison = cloudflareImportComparison === undefined
     ? (savedInspectionHostname === normalizedHostname ? migration.cloudflareImportComparison : null)
     : cloudflareImportComparison;
-  const copyRecord = (value: string) => navigator.clipboard?.writeText(value).then(() => setMessage("Copied to clipboard."));
+  const copyRecord = async (value: string, recordKey: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedDnsRecord(recordKey);
+      setMessage("Copied to clipboard.");
+      window.setTimeout(() => setCopiedDnsRecord((current) => current === recordKey ? "" : current), 2_000);
+    } catch {
+      setMessage("Unable to copy automatically. Select and copy the value manually.");
+    }
+  };
   const clearDnsInspection = () => {
     setInventory([]);
     setReplacementPlan(null);
@@ -2241,11 +2251,15 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                             {connectionConflicts.length > 0 && <p className="mb-2 font-bold">2. Add these required records in Cloudflare</p>}
                             <div className={`overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-black/20" : "border-amber-200 bg-white"}`}>
                               {actionableDnsRecords.map((record: any, index: number) => (
-                                <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_2rem] sm:items-center ${theme === "dark" ? "text-white/80" : "text-gray-900"} ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-200" : ""}`}>
+                                <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_4.5rem] sm:items-center ${theme === "dark" ? "text-white/80" : "text-gray-900"} ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-200" : ""}`}>
                                   <span className={`font-bold ${theme === "dark" ? "text-cyan-300" : "text-cyan-800"}`}>{record.type}</span>
                                   <span className="break-all font-mono font-medium">{record.name}</span>
                                   <span className="break-all font-mono font-medium">{record.value}</span>
-                                  <button type="button" onClick={() => copyRecord(String(record.value || ""))} aria-label={`Copy value for ${record.name}`} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/50 hover:bg-white/10" : "text-gray-500 hover:bg-gray-100"}`}><Copy size={13} /></button>
+                                  {(() => {
+                                    const recordKey = `primary-guide-${record.type}-${record.name}-${index}`;
+                                    const copied = copiedDnsRecord === recordKey;
+                                    return <button type="button" onClick={() => void copyRecord(String(record.value || ""), recordKey)} aria-label={`Copy value for ${record.name}`} className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-2 font-semibold ${copied ? "text-emerald-500" : theme === "dark" ? "text-white/60 hover:bg-white/10" : "text-gray-600 hover:bg-gray-100"}`}>{copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}</button>;
+                                  })()}
                                 </div>
                               ))}
                             </div>
@@ -2295,8 +2309,12 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                 {domain.secondary.error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{domain.secondary.error}</p>}
                 {domain.secondary.dnsRecords?.length > 0 && (
                   <div className={`mt-3 overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-                    <table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-white"}><tr>{["Type", "Name", "Value"].map((h, index) => <th key={h} className={`px-3 py-2 text-left font-semibold ${index === 0 ? "w-20 min-w-20 whitespace-nowrap" : ""}`}>{h}</th>)}</tr></thead>
-                      <tbody>{domain.secondary.dnsRecords.map((row: any, i: number) => <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="w-20 min-w-20 whitespace-nowrap px-3 py-2">{row.type}</td><td className="px-3 py-2 font-mono">{row.name}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value}</td></tr>)}</tbody>
+                    <table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5 text-white/70" : "bg-white text-gray-700"}><tr>{["Type", "Name", "Value", ""].map((h, index) => <th key={`${h}-${index}`} className={`px-3 py-2 text-left font-semibold ${index === 0 ? "w-20 min-w-20 whitespace-nowrap" : index === 3 ? "w-24 text-right" : ""}`}>{h}</th>)}</tr></thead>
+                      <tbody>{domain.secondary.dnsRecords.map((row: any, i: number) => {
+                        const recordKey = `secondary-${row.type}-${row.name}-${i}`;
+                        const copied = copiedDnsRecord === recordKey;
+                        return <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/10 text-white/80" : "border-gray-200 bg-white text-gray-900"}`}><td className="w-20 min-w-20 whitespace-nowrap px-3 py-3 font-bold">{row.type}</td><td className="break-all px-3 py-3 font-mono font-medium">{row.name}</td><td className="max-w-[220px] break-all px-3 py-3 font-mono font-medium">{row.value}</td><td className="w-24 px-3 py-2 text-right"><button type="button" onClick={() => void copyRecord(String(row.value || ""), recordKey)} aria-label={`Copy value for ${row.name}`} className={`inline-flex items-center gap-1 rounded-lg px-2 py-2 font-semibold ${copied ? "text-emerald-500" : theme === "dark" ? "text-white/60 hover:bg-white/10" : "text-gray-600 hover:bg-gray-100"}`}>{copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}</button></td></tr>;
+                      })}</tbody>
                     </table>
                   </div>
                 )}
@@ -2315,7 +2333,11 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                       {domain.dnsRecords.map((row: any, i: number) => (
                         <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}>
                           {[row.type, row.name, row.value].map((cell, j) => <td key={j} className={`max-w-[260px] px-4 py-3 font-mono ${j === 0 ? "w-24 min-w-24 whitespace-nowrap" : "break-all"} ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{cell}</td>)}
-                          <td className="px-3 py-2 text-right"><button onClick={() => copyRecord(String(row.value || ""))} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/45 hover:bg-white/10 hover:text-white" : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"}`} aria-label="Copy DNS value"><Copy size={13} /></button></td>
+                          <td className="w-24 px-3 py-2 text-right">{(() => {
+                            const recordKey = `primary-table-${row.type}-${row.name}-${i}`;
+                            const copied = copiedDnsRecord === recordKey;
+                            return <button type="button" onClick={() => void copyRecord(String(row.value || ""), recordKey)} className={`inline-flex items-center gap-1 rounded-lg px-2 py-2 font-semibold ${copied ? "text-emerald-500" : theme === "dark" ? "text-white/60 hover:bg-white/10 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-800"}`} aria-label={`Copy value for ${row.name}`}>{copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}</button>;
+                          })()}</td>
                         </tr>
                       ))}
                     </tbody>
