@@ -837,6 +837,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         dnsComplete: inspection.complete,
         warnings: inspection.warnings,
         emailRiskFlags: inspection.emailRiskFlags,
+        replacementPlan: inspection.replacementPlan,
+        proposedRecords: inspection.proposedRecords,
       };
       const updated = await storage.upsertRuntimeProjectLink(project.id, { customDomainMigrationState: migration });
       return res.json({ ...inspection, migration: updated.customDomainMigrationState });

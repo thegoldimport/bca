@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createCustomHostname,
+  buildDnsReplacementPlan,
   classifyHostname,
   customDomainRecords,
   customDomainUpdate,
@@ -10,6 +11,8 @@ import {
   nameserverActivationReady,
   nameserversMatchExpected,
   parseNameserverDnsResponse,
+  proposedBuildCustomWebsiteRecords,
+  removeCnameFollowedAddresses,
   routingStatusAfterVerification,
   selectNameserverConsensus,
   validateExpectedNameservers,
@@ -61,6 +64,75 @@ test("hostname classification follows the public suffix list", () => {
   assert.deepEqual(classifyHostname("example.co.uk"), { hostname: "example.co.uk", kind: "apex", registrableDomain: "example.co.uk" });
   assert.deepEqual(classifyHostname("www.example.co.uk"), { hostname: "www.example.co.uk", kind: "www", registrableDomain: "example.co.uk" });
   assert.deepEqual(classifyHostname("app.example.co.uk"), { hostname: "app.example.co.uk", kind: "subdomain", registrableDomain: "example.co.uk" });
+});
+
+test("DNS replacement plan separates website conflicts, protected records, and ambiguous aliases", () => {
+  const plan = buildDnsReplacementPlan([
+    { type: "A", name: "example.com", value: "192.0.2.10" },
+    { type: "CNAME", name: "www.example.com", value: "legacy.example.net" },
+    { type: "MX", name: "example.com", value: "10 mail.example.com" },
+    { type: "TXT", name: "example.com", value: "v=spf1 include:_spf.example.net ~all" },
+    { type: "TXT", name: "selector._domainkey.example.com", value: "v=DKIM1; p=key" },
+    { type: "TXT", name: "_verify.example.com", value: "provider-token" },
+    { type: "SRV", name: "_sip._tcp.example.com", value: "10 5 443 sip.example.com" },
+    { type: "CNAME", name: "ftp.example.com", value: "example.com" },
+    { type: "A", name: "cpanel.example.com", value: "192.0.2.11" },
+  ], "example.com");
+
+  assert.deepEqual(plan.counts, { replace: 2, keep: 6, review: 1 });
+  assert.equal(plan.records.find((record) => record.name === "ftp.example.com")?.action, "review");
+  assert.equal(plan.records.find((record) => record.name === "ftp.example.com")?.proxyGuidance, "dns_only");
+  assert.equal(plan.records.find((record) => record.name === "cpanel.example.com")?.proxyGuidance, "dns_only");
+  assert.equal(plan.records.find((record) => record.name === "_verify.example.com")?.action, "keep");
+});
+
+test("proposed BuildCustom website records show root and www without changing DNS", (t) => {
+  const originalEnv = { ...process.env };
+  Object.assign(process.env, {
+    CLOUDFLARE_ZONE_ID: "zone",
+    CLOUDFLARE_API_TOKEN: "token",
+    CLOUDFLARE_CUSTOM_HOSTNAME_TARGET: "customers.buildcustom.ai",
+  });
+  t.after(() => { process.env = originalEnv; });
+
+  assert.deepEqual(proposedBuildCustomWebsiteRecords("example.com"), [
+    { type: "CNAME", name: "example.com", value: "customers.buildcustom.ai" },
+    { type: "CNAME", name: "www.example.com", value: "customers.buildcustom.ai" },
+  ]);
+});
+
+test("a non-www subdomain replaces and proposes only the inspected hostname", (t) => {
+  const originalEnv = { ...process.env };
+  Object.assign(process.env, {
+    CLOUDFLARE_ZONE_ID: "zone",
+    CLOUDFLARE_API_TOKEN: "token",
+    CLOUDFLARE_CUSTOM_HOSTNAME_TARGET: "customers.buildcustom.ai",
+  });
+  t.after(() => { process.env = originalEnv; });
+  const plan = buildDnsReplacementPlan([
+    { type: "A", name: "example.com", value: "192.0.2.10" },
+    { type: "CNAME", name: "www.example.com", value: "legacy.example.net" },
+    { type: "CNAME", name: "app.example.com", value: "old-app.example.net" },
+  ], "example.com", "app.example.com");
+
+  assert.equal(plan.records.find((record) => record.name === "app.example.com")?.action, "replace");
+  assert.equal(plan.records.find((record) => record.name === "example.com")?.action, "review");
+  assert.equal(plan.records.find((record) => record.name === "www.example.com")?.action, "review");
+  assert.deepEqual(proposedBuildCustomWebsiteRecords("example.com", "app.example.com"), [
+    { type: "CNAME", name: "app.example.com", value: "customers.buildcustom.ai" },
+  ]);
+});
+
+test("DNS discovery does not present CNAME target addresses as customer-owned records", () => {
+  assert.deepEqual(removeCnameFollowedAddresses([
+    { type: "CNAME", name: "www.example.com", value: "legacy.host.example" },
+    { type: "A", name: "www.example.com", value: "192.0.2.20" },
+    { type: "AAAA", name: "www.example.com", value: "2001:db8::20" },
+    { type: "A", name: "example.com", value: "192.0.2.10" },
+  ]), [
+    { type: "CNAME", name: "www.example.com", value: "legacy.host.example" },
+    { type: "A", name: "example.com", value: "192.0.2.10" },
+  ]);
 });
 
 test("customer Cloudflare nameservers must be two distinct assigned hosts", () => {

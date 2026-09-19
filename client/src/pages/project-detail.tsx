@@ -14,6 +14,7 @@ import {
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders } from "@/lib/auth";
 import { getDomain } from "tldts";
+import { selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
   website: new URL("../assets/preview-portfolio.jpg", import.meta.url).href,
   app: new URL("../assets/preview-fitness.jpg", import.meta.url).href,
@@ -1621,7 +1622,53 @@ const DOMAIN_STATUS: Record<string, { label: string; tone: string; detail: strin
   error: { label: "Needs attention", tone: "text-red-400 bg-red-500/15", detail: "Review the message below, then check again." },
 };
 
-function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeStatus: any }) {
+function DnsReplacementPlanPanel({ plan, proposedRecords, theme }: { plan: any; proposedRecords: any[]; theme: string }) {
+  const groups = [
+    { action: "replace", label: "Replace", detail: "Remove these old website records when you add the BuildCustom records.", tone: "text-red-400 bg-red-500/10 border-red-500/20" },
+    { action: "keep", label: "Keep", detail: "Copy these records into Cloudflare so existing services continue working.", tone: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+    { action: "review", label: "Review", detail: "Confirm whether these records are still needed before importing them.", tone: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  ];
+  const records = Array.isArray(plan?.records) ? plan.records : [];
+  if (!records.length && !proposedRecords.length) return null;
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>DNS replacement checklist</p>
+        <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>This is a read-only plan. BuildCustom will not change these records.</p>
+      </div>
+      {groups.map(group => {
+        const rows = records.filter((record: any) => record.action === group.action);
+        if (!rows.length) return null;
+        return (
+          <div key={group.action} className={`overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+            <div className={`flex items-start justify-between gap-3 border-b px-3 py-2 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+              <div><span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${group.tone}`}>{group.label}</span><p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{group.detail}</p></div>
+              <span className={`text-xs font-semibold ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>{rows.length}</span>
+            </div>
+            <div className="divide-y divide-white/5">
+              {rows.map((row: any, index: number) => (
+                <div key={`${row.name}-${row.type}-${index}`} className="grid gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1.4fr)]">
+                  <span className="break-all font-mono">{row.name}</span>
+                  <span className="font-semibold">{row.type}</span>
+                  <div className="min-w-0"><p className="break-all font-mono">{row.value}</p><p className={`mt-1 leading-4 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{row.reason}</p>{row.proxyGuidance === "dns_only" && <p className="mt-1 font-semibold text-amber-400">Cloudflare: set Proxy status to DNS only.</p>}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {proposedRecords.length > 0 && (
+        <div className={`rounded-xl border p-3 ${theme === "dark" ? "border-cyan-400/20 bg-cyan-400/[0.04]" : "border-cyan-200 bg-cyan-50"}`}>
+          <p className={`text-xs font-semibold ${theme === "dark" ? "text-cyan-200" : "text-cyan-900"}`}>Proposed BuildCustom website records</p>
+          <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>Add these after removing the records marked Replace. The secondary address redirects to your primary choice.</p>
+          <div className="mt-2 space-y-2">{proposedRecords.map((record: any) => <div key={`${record.name}-${record.type}`} className={`grid gap-1 rounded-lg px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1.4fr)] ${theme === "dark" ? "bg-black/20" : "bg-white"}`}><span className="break-all font-mono">{record.name}</span><span className="font-semibold">{record.type}</span><span className="break-all font-mono">{record.value}</span></div>)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [customDomain, setCustomDomain] = useState("");
@@ -1632,6 +1679,9 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
   const [nameservers, setNameservers] = useState(["", ""]);
   const [message, setMessage] = useState("");
   const [inventory, setInventory] = useState<any[]>([]);
+  const [replacementPlan, setReplacementPlan] = useState<any>(null);
+  const [proposedRecords, setProposedRecords] = useState<any[]>([]);
+  const [inspectedHostname, setInspectedHostname] = useState("");
   const [inventoryWarning, setInventoryWarning] = useState("");
   const [inspectPending, setInspectPending] = useState(false);
   const previousStatus = useRef<string | null>(null);
@@ -1714,8 +1764,29 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
   const isWww = Boolean(registrableDomain && normalizedHostname === `www.${registrableDomain}`);
   const migration = domain.migration || {};
   const discovered = inventory.length ? inventory : (migration.dnsInventory || domain.dnsInventory || domain.discoveredDns || []);
+  const savedInspectionHostname = migration.inspectedHostname || migration.hostname || "";
+  const activeInspection = selectDnsInspectionForHostname({
+    currentHostname: normalizedHostname,
+    inspectedHostname,
+    replacementPlan,
+    proposedRecords,
+    savedInspectionHostname,
+    savedReplacementPlan: migration.replacementPlan,
+    savedProposedRecords: migration.proposedRecords || [],
+  });
+  const activeReplacementPlan = activeInspection.replacementPlan;
+  const activeProposedRecords = activeInspection.proposedRecords;
   const copyRecord = (value: string) => navigator.clipboard?.writeText(value).then(() => setMessage("Copied to clipboard."));
+  const clearDnsInspection = () => {
+    setInventory([]);
+    setReplacementPlan(null);
+    setProposedRecords([]);
+    setInspectedHostname("");
+    setInventoryWarning("");
+    setAcknowledged(false);
+  };
   const inspectDns = async () => {
+    clearDnsInspection();
     setInspectPending(true);
     try {
       const response = await fetch(`/api/projects/${projectId}/runtime/custom-domain/inspect`, {
@@ -1725,6 +1796,9 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
       const body = await response.json().catch(() => ({}));
       if (response.ok) {
         setInventory(body.records || body.inventory || body.dnsInventory || []);
+        setReplacementPlan(body.replacementPlan || null);
+        setProposedRecords(body.proposedRecords || []);
+        setInspectedHostname(body.hostname || "");
         setInventoryWarning(body.warning || body.completenessWarning || (Array.isArray(body.warnings) ? body.warnings.join(" ") : ""));
         qc.setQueryData(queryKey, (existing: any) => ({
           ...(existing || domain),
@@ -1733,12 +1807,16 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
             dnsInventory: body.records || [],
             emailRiskFlags: body.emailRiskFlags || [],
             warnings: body.warnings || [],
+            replacementPlan: body.replacementPlan,
+            proposedRecords: body.proposedRecords || [],
           },
         }));
       } else {
+        clearDnsInspection();
         setInventoryWarning("The public scan is not available yet. Compare the complete DNS zone at your current provider before changing nameservers.");
       }
     } catch {
+      clearDnsInspection();
       setInventoryWarning("The public scan is not available yet. Compare the complete DNS zone at your current provider before changing nameservers.");
     } finally { setInspectPending(false); }
   };
@@ -1776,7 +1854,7 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
         {!domain.hostname ? (
           <div className="mt-5">
             <div className="flex flex-col gap-3 sm:flex-row">
-              <input value={customDomain} onChange={e => setCustomDomain(e.target.value)} placeholder="app.example.com"
+              <input value={customDomain} onChange={e => { setCustomDomain(e.target.value); clearDnsInspection(); }} placeholder="app.example.com"
                 disabled={!domain.canConnect || busy}
                 className={`flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors disabled:opacity-50 ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
                 data-testid="input-custom-domain" />
@@ -1821,7 +1899,7 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                       { id: "root" as const, hostname: registrableDomain },
                       { id: "www" as const, hostname: `www.${registrableDomain}` },
                     ].map(option => <button key={option.id} type="button" onClick={() => setPrimaryChoice(option.id)} className={`rounded-lg border px-3 py-2 text-left font-mono text-xs ${primaryChoice === option.id ? "border-cyan-400 bg-cyan-400/10" : theme === "dark" ? "border-white/10" : "border-gray-200"}`}>{option.hostname}</button>)}</div><p className={`mt-2 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>The other hostname will redirect permanently to the primary address.</p></div>}
-                    {discovered.length > 0 && <div className={`overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}><table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-gray-50"}><tr>{["Name", "Type", "Value"].map(h => <th key={h} className={`px-3 py-2 text-left font-semibold ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr></thead><tbody>{discovered.map((row: any, i: number) => <tr key={i} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="px-3 py-2 font-mono">{row.name || row.host || "@"}</td><td className="px-3 py-2">{row.type}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value || row.content || "—"}</td></tr>)}</tbody></table></div>}
+                    <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} theme={theme} />
                     {(migration.emailRiskFlags?.length || inventoryWarning) && <div className={`rounded-lg border px-3 py-2 text-xs leading-5 ${theme === "dark" ? "border-amber-400/20 bg-amber-400/10 text-amber-200" : "border-amber-300 bg-amber-50 text-amber-950"}`}>{migration.emailRiskFlags?.length > 0 && <p className="font-semibold">Email records detected: {migration.emailRiskFlags.join(", ").toUpperCase()}. Missing these records can interrupt email.</p>}{inventoryWarning && <p className={migration.emailRiskFlags?.length ? "mt-1" : ""}>{inventoryWarning}</p>}</div>}
                     <label className={`flex gap-3 rounded-xl border p-3 text-xs leading-5 ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I reviewed Cloudflare’s scan and confirmed that my website and email records are present.</label>
                     <button onClick={() => setStep("nameservers")} disabled={!acknowledged} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Continue to nameservers</button>
@@ -1866,7 +1944,7 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                       <p className="mt-1">Enter <span className="font-mono">{migration.registrableDomain || domain.hostname}</span> in Cloudflare. Cloudflare will scan your existing DNS records. Do not change the nameservers yet.</p>
                     </div>
                     <a href="https://dash.cloudflare.com/?to=/:account/add-site" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white" style={{ background: "linear-gradient(90deg, #f59e0b, #f97316)" }}><ExternalLink size={13} /> Open Cloudflare and add domain</a>
-                    {discovered.length > 0 && <div className={`max-h-56 overflow-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}><table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-white"}><tr>{["Name", "Type", "Value"].map(h => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead><tbody>{discovered.map((row: any, i: number) => <tr key={i} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="px-3 py-2 font-mono">{row.name}</td><td className="px-3 py-2">{row.type}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value}</td></tr>)}</tbody></table></div>}
+                    <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} theme={theme} />
                     {(migration.emailRiskFlags?.length || inventoryWarning) && <div className={`rounded-lg border px-3 py-2 text-xs leading-5 ${theme === "dark" ? "border-amber-400/20 bg-amber-400/10 text-amber-200" : "border-amber-300 bg-amber-50 text-amber-950"}`}>{migration.emailRiskFlags?.length > 0 && <p className="font-semibold">Email records detected: {migration.emailRiskFlags.join(", ").toUpperCase()}. Missing these records can interrupt email.</p>}{inventoryWarning && <p className={migration.emailRiskFlags?.length ? "mt-1" : ""}>{inventoryWarning}</p>}</div>}
                     <label className={`flex gap-3 text-xs leading-5 ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I reviewed Cloudflare’s scan and confirmed that my website and email records are present.</label>
                     <div className="grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Cloudflare nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white" : "border-gray-200 bg-white text-gray-800"}`} />)}</div>

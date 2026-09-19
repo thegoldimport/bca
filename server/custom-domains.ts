@@ -11,6 +11,12 @@ export type DomainLifecycle = "pending_dns" | "verifying" | "ssl_provisioning" |
 export type DomainDnsRecord = { type: string; name: string; value: string };
 export type HostnameKind = "apex" | "www" | "subdomain";
 export type DnsInventoryRecord = { type: string; name: string; value: string };
+export type DnsReplacementAction = "replace" | "keep" | "review";
+export type DnsReplacementRecord = DnsInventoryRecord & {
+  action: DnsReplacementAction;
+  reason: string;
+  proxyGuidance?: "dns_only";
+};
 
 type CloudflareCustomHostname = {
   id?: string;
@@ -87,6 +93,76 @@ export function classifyHostname(value: string): { hostname: string; kind: Hostn
   return { hostname, kind, registrableDomain: registrable };
 }
 
+const DNS_ONLY_SERVICE_LABELS = new Set(["mail", "ftp", "cpanel", "webmail", "webdisk", "whm", "autodiscover", "autoconfig"]);
+
+export function buildDnsReplacementPlan(records: DnsInventoryRecord[], registrableDomain: string, inspectedHostname = registrableDomain) {
+  const root = registrableDomain.toLowerCase();
+  const www = `www.${root}`;
+  const inspected = inspectedHostname.toLowerCase();
+  const websiteHosts = inspected === root || inspected === www ? new Set([root, www]) : new Set([inspected]);
+  const classified: DnsReplacementRecord[] = records.map((record) => {
+    const type = record.type.toUpperCase();
+    const name = record.name.toLowerCase().replace(/\.$/, "");
+    const label = name === root ? "@" : name.endsWith(`.${root}`) ? name.slice(0, -(root.length + 1)) : name;
+    const serviceLabel = label.split(".").at(-1) || label;
+    const proxyGuidance = DNS_ONLY_SERVICE_LABELS.has(serviceLabel) ? "dns_only" as const : undefined;
+
+    if (websiteHosts.has(name) && ["A", "AAAA", "CNAME"].includes(type)) {
+      return { ...record, action: "replace" as const, reason: "This record currently controls website traffic and conflicts with BuildCustom." };
+    }
+    if (type === "MX") {
+      return { ...record, action: "keep" as const, reason: "Keep this mail-routing record to avoid interrupting email.", proxyGuidance };
+    }
+    if (type === "SRV") {
+      return { ...record, action: "keep" as const, reason: "Keep this service-discovery record.", proxyGuidance };
+    }
+    if (type === "TXT") {
+      const purpose = /v=spf1/i.test(record.value) ? "SPF email policy"
+        : /v=dmarc1/i.test(record.value) || label.startsWith("_dmarc") ? "DMARC email policy"
+          : /dkim|domainkey/i.test(record.value) || label.includes("_domainkey") ? "DKIM email authentication"
+            : "verification or service";
+      return { ...record, action: "keep" as const, reason: `Keep this ${purpose} record.` };
+    }
+    if (["CAA"].includes(type)) {
+      return { ...record, action: "keep" as const, reason: "Keep this certificate-authority policy record." };
+    }
+    if (serviceLabel === "ftp") {
+      return { ...record, action: "review" as const, reason: "Confirm whether this FTP alias is still used before importing it.", proxyGuidance };
+    }
+    if (DNS_ONLY_SERVICE_LABELS.has(serviceLabel)) {
+      return { ...record, action: "keep" as const, reason: "Keep this service record if the service is still in use.", proxyGuidance };
+    }
+    return { ...record, action: "review" as const, reason: "Confirm what uses this record before importing or removing it." };
+  });
+  return {
+    records: classified,
+    counts: {
+      replace: classified.filter((record) => record.action === "replace").length,
+      keep: classified.filter((record) => record.action === "keep").length,
+      review: classified.filter((record) => record.action === "review").length,
+    },
+  };
+}
+
+export function proposedBuildCustomWebsiteRecords(registrableDomain: string, inspectedHostname = registrableDomain): DomainDnsRecord[] {
+  const { cnameTarget } = config();
+  const inspected = inspectedHostname.toLowerCase();
+  if (inspected !== registrableDomain && inspected !== `www.${registrableDomain}`) {
+    return [{ type: "CNAME", name: inspected, value: cnameTarget }];
+  }
+  return [
+    { type: "CNAME", name: registrableDomain, value: cnameTarget },
+    { type: "CNAME", name: `www.${registrableDomain}`, value: cnameTarget },
+  ];
+}
+
+export function removeCnameFollowedAddresses(records: DnsInventoryRecord[]) {
+  const cnameOwners = new Set(records.filter((record) => record.type.toUpperCase() === "CNAME").map((record) => record.name.toLowerCase().replace(/\.$/, "")));
+  return records.filter((record) =>
+    !["A", "AAAA"].includes(record.type.toUpperCase())
+    || !cnameOwners.has(record.name.toLowerCase().replace(/\.$/, "")));
+}
+
 async function resolve(type: string, name: string): Promise<string[]> {
   try {
     if (type === "A") return await dns.resolve4(name);
@@ -107,6 +183,9 @@ export async function inspectPublicDns(value: string) {
   const names = new Set([classification.registrableDomain, classification.hostname,
     `www.${classification.registrableDomain}`, `mail.${classification.registrableDomain}`,
     `autodiscover.${classification.registrableDomain}`, `webmail.${classification.registrableDomain}`,
+    `autoconfig.${classification.registrableDomain}`, `ftp.${classification.registrableDomain}`,
+    `cpanel.${classification.registrableDomain}`, `whm.${classification.registrableDomain}`,
+    `webdisk.${classification.registrableDomain}`,
     `_dmarc.${classification.registrableDomain}`, `default._domainkey.${classification.registrableDomain}`]);
   const types = ["A", "AAAA", "CNAME", "MX", "TXT", "CAA", "SRV", "NS"];
   const records: DnsInventoryRecord[] = [];
@@ -115,9 +194,13 @@ export async function inspectPublicDns(value: string) {
   })));
   const emailRecords = records.filter((r) => ["MX", "TXT"].includes(r.type) &&
     (r.type === "MX" || /spf|dkim|dmarc|domainkey/i.test(r.value) || /_dmarc|_domainkey/i.test(r.name)));
+  const sortedRecords = removeCnameFollowedAddresses(records)
+    .sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type));
   return {
     ...classification,
-    records: records.sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type)),
+    records: sortedRecords,
+    replacementPlan: buildDnsReplacementPlan(sortedRecords, classification.registrableDomain, classification.hostname),
+    proposedRecords: proposedBuildCustomWebsiteRecords(classification.registrableDomain, classification.hostname),
     scannedAt: new Date().toISOString(),
     complete: false,
     warnings: ["Public DNS cannot enumerate private records, arbitrary DKIM selectors, or the complete provider zone. Compare this scan with your DNS provider before changing nameservers."],
