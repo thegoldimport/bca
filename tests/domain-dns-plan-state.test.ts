@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "../client/src/lib/domain-dns-plan";
+import { dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "../client/src/lib/domain-dns-plan";
 
 test("a DNS checklist is shown only for the hostname that was inspected", () => {
   const localPlan = { records: [{ name: "first-example.com", action: "replace" }] };
@@ -69,4 +69,22 @@ test("connection guidance tells customers whether to act or wait", () => {
   assert.equal(domainConnectionGuidance("connecting", 0).kind, "waiting");
   assert.equal(domainConnectionGuidance("live", 0).kind, "complete");
   assert.equal(domainConnectionGuidance("error", 0).kind, "error");
+});
+
+test("final DNS guidance identifies only records that block a required CNAME", () => {
+  const conflicts = dnsConflictsForRequiredRecords({
+    records: [
+      { name: "example.com", type: "A", value: "192.0.2.10", action: "replace" },
+      { name: "example.com", type: "MX", value: "10 mail.example.com", action: "keep" },
+      { name: "www.example.com", type: "CNAME", value: "old.example.net", action: "replace" },
+      { name: "example.com", type: "TXT", value: "v=spf1 -all", action: "keep" },
+    ],
+  }, [
+    { name: "example.com", type: "CNAME", value: "fallback.buildcustom.ai" },
+    { name: "_cf-custom-hostname.example.com", type: "TXT", value: "verify-me" },
+  ]);
+
+  assert.deepEqual(conflicts, [
+    { name: "example.com", type: "A", value: "192.0.2.10", action: "replace" },
+  ]);
 });

@@ -73,3 +73,26 @@ export function domainConnectionGuidance(status: string | null | undefined, dnsR
   }
   return { kind: "waiting" as const, title: "Sit tight while we finish checking", waitForAutomaticCheck: true };
 }
+
+export function dnsConflictsForRequiredRecords(replacementPlan: any, requiredRecords: any[]) {
+  const requiredCnames = new Map(
+    (Array.isArray(requiredRecords) ? requiredRecords : [])
+      .filter((record) => String(record?.type || "").toUpperCase() === "CNAME")
+      .map((record) => [
+        String(record?.name || "").toLowerCase().replace(/\.$/, ""),
+        String(record?.value || "").toLowerCase().replace(/\.$/, ""),
+      ]),
+  );
+  const replacementRecords = Array.isArray(replacementPlan?.records) ? replacementPlan.records : [];
+
+  return replacementRecords.filter((record: any) => {
+    const name = String(record?.name || "").toLowerCase().replace(/\.$/, "");
+    const type = String(record?.type || "").toUpperCase();
+    const value = String(record?.value || "").toLowerCase().replace(/\.$/, "");
+    const requiredTarget = requiredCnames.get(name);
+    return record?.action === "replace"
+      && requiredTarget !== undefined
+      && ["A", "AAAA", "CNAME"].includes(type)
+      && !(type === "CNAME" && value === requiredTarget);
+  });
+}

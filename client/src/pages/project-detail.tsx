@@ -14,7 +14,7 @@ import {
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders } from "@/lib/auth";
 import { getDomain } from "tldts";
-import { domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
+import { dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
   website: new URL("../assets/preview-portfolio.jpg", import.meta.url).href,
   app: new URL("../assets/preview-fitness.jpg", import.meta.url).href,
@@ -1857,6 +1857,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   });
   const activeReplacementPlan = activeInspection.replacementPlan;
   const activeProposedRecords = activeInspection.proposedRecords;
+  const connectionConflicts = dnsConflictsForRequiredRecords(activeReplacementPlan, domain.dnsRecords || []);
   const activeCloudflareImportComparison = cloudflareImportComparison === undefined
     ? (savedInspectionHostname === normalizedHostname ? migration.cloudflareImportComparison : null)
     : cloudflareImportComparison;
@@ -2208,22 +2209,41 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                           <div>
                             <p className={`text-sm font-semibold ${connectionGuidance.kind === "action" ? theme === "dark" ? "text-amber-300" : "text-amber-900" : connectionGuidance.kind === "complete" ? theme === "dark" ? "text-emerald-300" : "text-emerald-900" : theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{connectionGuidance.title}</p>
                             {connectionGuidance.kind === "waiting" && <p className="mt-1">No action is needed right now. Keep this page open. DNS and security-certificate checks can take a few minutes, and we are checking automatically.</p>}
-                            {connectionGuidance.kind === "action" && <p className="mt-1">Open Cloudflare, go to <strong>DNS → Records</strong>, and add each record exactly as shown. After that, come back here. You do not need to restart the wizard.</p>}
+                            {connectionGuidance.kind === "action" && <p className="mt-1">{connectionConflicts.length > 0 ? "Cloudflare cannot add the required CNAME while an old A, AAAA, or CNAME record uses the same name. Replace only the conflicting website records listed below, then add the required records." : <>Open Cloudflare, go to <strong>DNS → Records</strong>, and add each record exactly as shown. After that, come back here. You do not need to restart the wizard.</>}</p>}
                             {connectionGuidance.kind === "complete" && <p className="mt-1">Your domain is secure and serving this project. Nothing else is required.</p>}
                             {connectionGuidance.kind === "error" && <p className="mt-1">{domain.error || "Review the error above, then check the connection again."}</p>}
                           </div>
                         </div>
 
+                        {connectionGuidance.kind === "action" && connectionConflicts.length > 0 && (
+                          <div className={`mt-4 rounded-xl border p-3 ${theme === "dark" ? "border-red-400/30 bg-red-500/10 text-red-100" : "border-red-300 bg-red-50 text-red-950"}`}>
+                            <p className="font-bold">1. Remove these conflicting website records in Cloudflare</p>
+                            <p className="mt-1">Delete only the records listed here. Keep your MX, TXT, DKIM, SPF, mail, and other service records.</p>
+                            <div className={`mt-3 overflow-hidden rounded-lg border ${theme === "dark" ? "border-red-300/20 bg-black/20" : "border-red-200 bg-white"}`}>
+                              {connectionConflicts.map((record: any, index: number) => (
+                                <div key={`conflict-${record.type}-${record.name}-${record.value}-${index}`} className={`grid gap-1 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)] ${index ? theme === "dark" ? "border-t border-red-300/20" : "border-t border-red-100" : ""}`}>
+                                  <span className="font-bold">{record.type}</span>
+                                  <span className="break-all font-mono font-medium">{record.name}</span>
+                                  <span className="break-all font-mono">{record.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {connectionGuidance.kind === "action" && domain.dnsRecords?.length > 0 && (
-                          <div className={`mt-4 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-black/20" : "border-amber-200 bg-white"}`}>
-                            {domain.dnsRecords.map((record: any, index: number) => (
-                              <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_2rem] sm:items-center ${theme === "dark" ? "text-white/80" : "text-gray-900"} ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-200" : ""}`}>
-                                <span className={`font-bold ${theme === "dark" ? "text-cyan-300" : "text-cyan-800"}`}>{record.type}</span>
-                                <span className="break-all font-mono font-medium">{record.name}</span>
-                                <span className="break-all font-mono font-medium">{record.value}</span>
-                                <button type="button" onClick={() => copyRecord(String(record.value || ""))} aria-label={`Copy value for ${record.name}`} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/50 hover:bg-white/10" : "text-gray-500 hover:bg-gray-100"}`}><Copy size={13} /></button>
-                              </div>
-                            ))}
+                          <div className="mt-4">
+                            {connectionConflicts.length > 0 && <p className="mb-2 font-bold">2. Add these required records in Cloudflare</p>}
+                            <div className={`overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-black/20" : "border-amber-200 bg-white"}`}>
+                              {domain.dnsRecords.map((record: any, index: number) => (
+                                <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_2rem] sm:items-center ${theme === "dark" ? "text-white/80" : "text-gray-900"} ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-200" : ""}`}>
+                                  <span className={`font-bold ${theme === "dark" ? "text-cyan-300" : "text-cyan-800"}`}>{record.type}</span>
+                                  <span className="break-all font-mono font-medium">{record.name}</span>
+                                  <span className="break-all font-mono font-medium">{record.value}</span>
+                                  <button type="button" onClick={() => copyRecord(String(record.value || ""))} aria-label={`Copy value for ${record.name}`} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/50 hover:bg-white/10" : "text-gray-500 hover:bg-gray-100"}`}><Copy size={13} /></button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
 
