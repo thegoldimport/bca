@@ -14,7 +14,7 @@ import {
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders } from "@/lib/auth";
 import { getDomain } from "tldts";
-import { selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
+import { domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
   website: new URL("../assets/preview-portfolio.jpg", import.meta.url).href,
   app: new URL("../assets/preview-fitness.jpg", import.meta.url).href,
@@ -1624,17 +1624,17 @@ const DOMAIN_STATUS: Record<string, { label: string; tone: string; detail: strin
 
 function DnsReplacementPlanPanel({ plan, proposedRecords, comparison, theme }: { plan: any; proposedRecords: any[]; comparison?: any; theme: string }) {
   const groups = [
-    { action: "replace", label: "Replace", detail: "Remove these old website records when you add the BuildCustom records.", tone: "text-red-400 bg-red-500/10 border-red-500/20" },
-    { action: "keep", label: "Keep", detail: "Copy these records into Cloudflare so existing services continue working.", tone: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
-    { action: "review", label: "Review", detail: "Confirm whether these records are still needed before importing them.", tone: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+    { action: "replace", label: "Replace for your website", detail: "These old website addresses should be replaced with the BuildCustom addresses shown below.", tone: "text-red-400 bg-red-500/10 border-red-500/20" },
+    { action: "keep", label: "Keep exactly as they are", detail: "These may run email or other services. Make sure Cloudflare copied them.", tone: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+    { action: "review", label: "Ask your provider if unsure", detail: "We cannot safely tell whether these are still used. Keep them unless you know they are old.", tone: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
   ];
   const records = Array.isArray(plan?.records) ? plan.records : [];
   if (!records.length && !proposedRecords.length && !comparison) return null;
   return (
     <div className="space-y-3">
       <div>
-        <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>DNS replacement checklist</p>
-        <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Public DNS observations and Cloudflare import findings stay separate. BuildCustom will not change these records.</p>
+        <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>What to keep and what to change</p>
+        <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>This is a safety checklist only. BuildCustom will not delete or edit any DNS records.</p>
       </div>
       {groups.map(group => {
         const rows = records.filter((record: any) => record.action === group.action);
@@ -1661,7 +1661,7 @@ function DnsReplacementPlanPanel({ plan, proposedRecords, comparison, theme }: {
         <div className={`overflow-hidden rounded-xl border ${theme === "dark" ? "border-cyan-400/20" : "border-cyan-200"}`}>
           <div className={`border-b px-3 py-3 ${theme === "dark" ? "border-white/10 bg-cyan-400/[0.04]" : "border-cyan-200 bg-cyan-50"}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><p className="text-xs font-semibold text-cyan-500">Cloudflare import comparison</p><p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>Matched {comparison.counts?.matched || 0} · Missing {comparison.counts?.missing || 0} · Changed {comparison.counts?.changed || 0} · Found only in Cloudflare {comparison.counts?.importOnly || 0}</p></div>
+              <div><p className="text-xs font-semibold text-cyan-500">Did Cloudflare copy everything?</p><p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>{comparison.counts?.matched || 0} copied correctly · {comparison.counts?.missing || 0} missing · {comparison.counts?.changed || 0} different · {comparison.counts?.importOnly || 0} extra in Cloudflare</p></div>
               {(comparison.counts?.missing || comparison.counts?.changed || comparison.counts?.proxiedServices) ? <span className="rounded-full bg-amber-500/15 px-2 py-1 text-[10px] font-semibold text-amber-500">Review findings</span> : <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-500">Import matches</span>}
             </div>
           </div>
@@ -1719,12 +1719,12 @@ function CloudflareDnsImportPanel({ value, filename, comparison, pending, theme,
 }) {
   return (
     <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
-      <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Confirm Cloudflare imported every record</p>
-      <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>Paste Cloudflare’s copied DNS table, JSON export, or BIND zone export. No account access or credentials are needed.</p>
+      <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Check Cloudflare’s copy</p>
+      <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-600"}`}>In Cloudflare, open DNS Records and copy the table or export the records. Paste or upload it here. We compare the lists and point out anything that may be missing. Never enter a password or API key.</p>
       <textarea value={value} onChange={event => onChange(event.target.value)} rows={5} placeholder={"Type\tName\tContent\tProxy status\nMX\texample.com\t10 mail.example.com\tDNS only"} className={`mt-3 w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none ${theme === "dark" ? "border-white/10 bg-black/20 text-white placeholder-white/20" : "border-gray-200 bg-white text-gray-800 placeholder-gray-400"}`} />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 bg-white text-gray-700"}`}><Upload size={13} /> {filename || "Choose export file"}<input type="file" className="sr-only" accept=".txt,.zone,.bind,.csv,.tsv,.json,text/plain,text/csv,application/json" onChange={event => { const file = event.target.files?.[0]; if (file) onFile(file); }} /></label>
-        <button type="button" onClick={onCompare} disabled={!value.trim() || pending} className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{pending ? "Comparing…" : "Compare with public scan"}</button>
+        <button type="button" onClick={onCompare} disabled={!value.trim() || pending} className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{pending ? "Checking the two lists…" : "Check for missing records"}</button>
       </div>
       {comparison && <p className="mt-3 text-xs font-medium text-emerald-500">Compared {comparison.importedRecords?.length || 0} Cloudflare records with the saved public scan.</p>}
     </div>
@@ -1752,6 +1752,9 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const [cloudflareImportComparison, setCloudflareImportComparison] = useState<any>(undefined);
   const [cloudflareImportDirty, setCloudflareImportDirty] = useState(false);
   const [cloudflareImportPending, setCloudflareImportPending] = useState(false);
+  const [recoveryWizardOpen, setRecoveryWizardOpen] = useState(false);
+  const [recoveryWizardStep, setRecoveryWizardStep] = useState(0);
+  const [recoveryWizardMode, setRecoveryWizardMode] = useState<"resume" | "review">("resume");
   const previousStatus = useRef<string | null>(null);
   const queryKey = ["custom-domain", projectId];
   const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
@@ -1831,6 +1834,14 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const isApex = Boolean(registrableDomain && normalizedHostname === registrableDomain);
   const isWww = Boolean(registrableDomain && normalizedHostname === `www.${registrableDomain}`);
   const migration = domain.migration || {};
+  const recoveryProgress = domainWizardProgress(migration, domain.status);
+  const recoveryStep = recoveryProgress.steps[recoveryWizardStep] || recoveryProgress.steps[0];
+  const recoveryStepAllowsChanges = domainWizardStepAllowsChanges(
+    recoveryWizardMode,
+    recoveryWizardStep,
+    recoveryProgress.currentIndex,
+    recoveryStep.complete,
+  );
   const discovered = inventory.length ? inventory : (migration.dnsInventory || domain.dnsInventory || domain.discoveredDns || []);
   const savedInspectionHostname = migration.inspectedHostname || migration.hostname || "";
   const activeInspection = selectDnsInspectionForHostname({
@@ -2075,17 +2086,131 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
               </div>
             )}
             {migration.strategy === "customer_cloudflare" && (
-              <div className="space-y-4">
-                <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} comparison={activeCloudflareImportComparison} theme={theme} />
-                <CloudflareDnsImportPanel value={cloudflareImportText} filename={cloudflareImportFilename} comparison={activeCloudflareImportComparison} pending={cloudflareImportPending} theme={theme} onChange={changeCloudflareImportText} onFile={file => void loadCloudflareImportFile(file)} onCompare={() => void compareCloudflareImport()} />
-                <div className={`rounded-xl border p-4 text-xs ${theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
-                  <p className="font-semibold">Authoritative DNS migration</p>
-                  <p className="mt-1">Expected: {(migration.expectedNameservers || []).join(" and ") || "Cloudflare nameservers not entered"}</p>
-                  <p className="mt-1">Detected: {(migration.currentNameservers || []).join(", ") || "Checking current nameservers"}</p>
-                  {migration.nameserverCheckSource === "parent_delegation" && migration.nameserversAuthoritative === true && (
-                    <p className="mt-2 font-medium text-emerald-500">Confirmed directly with the domain registry and Cloudflare DNS.</p>
-                  )}
+              <div className={`overflow-hidden rounded-2xl border ${theme === "dark" ? "border-cyan-400/20 bg-cyan-400/[0.03]" : "border-cyan-200 bg-cyan-50/50"}`}>
+                <div className={`border-b p-4 ${theme === "dark" ? "border-white/10" : "border-cyan-100"}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Cloudflare setup guide</p>
+                      <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>
+                        {recoveryProgress.completedCount} of {recoveryProgress.steps.length} steps complete. Your saved setup is safe.
+                      </p>
+                    </div>
+                    {recoveryWizardOpen && <button type="button" onClick={() => setRecoveryWizardOpen(false)} className={`text-xs font-semibold ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Close guide</button>}
+                  </div>
+                  <div className="mt-4 grid grid-cols-5 gap-1.5">
+                    {recoveryProgress.steps.map((guideStep, index) => (
+                      <button
+                        key={guideStep.id}
+                        type="button"
+                        onClick={() => { if (index <= recoveryProgress.currentIndex) { setRecoveryWizardStep(index); setRecoveryWizardOpen(true); } }}
+                        disabled={index > recoveryProgress.currentIndex}
+                        aria-label={`${index + 1}. ${guideStep.plainTitle}`}
+                        className={`h-2 rounded-full transition-colors disabled:cursor-not-allowed ${guideStep.complete ? "bg-emerald-400" : index === recoveryProgress.currentIndex ? "bg-cyan-400" : theme === "dark" ? "bg-white/10" : "bg-gray-200"}`}
+                      />
+                    ))}
+                  </div>
                 </div>
+
+                {!recoveryWizardOpen ? (
+                  <div className="p-4">
+                    <div className={`rounded-xl p-4 ${theme === "dark" ? "bg-black/20" : "bg-white"}`}>
+                      <p className={`text-xs font-semibold uppercase tracking-wide ${theme === "dark" ? "text-cyan-300" : "text-cyan-700"}`}>Your next step</p>
+                      <p className={`mt-1 text-base font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{recoveryProgress.steps[recoveryProgress.currentIndex].plainTitle}</p>
+                      <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>We found your saved progress and will not repeat completed setup or create duplicate records.</p>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <button type="button" onClick={() => { setRecoveryWizardMode("resume"); setRecoveryWizardStep(recoveryProgress.currentIndex); setRecoveryWizardOpen(true); }} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Continue where I left off</button>
+                      <button type="button" onClick={() => { setRecoveryWizardMode("review"); setRecoveryWizardStep(0); setRecoveryWizardOpen(true); }} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 bg-white text-gray-700"}`}>Review from step 1</button>
+                    </div>
+                    <p className={`mt-3 text-xs leading-5 ${theme === "dark" ? "text-white/35" : "text-gray-500"}`}><strong>Review from step 1</strong> only replays the instructions. It does not remove your domain, change live DNS, or create anything twice.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${recoveryStep.complete ? "bg-emerald-500/15 text-emerald-400" : "bg-cyan-500/15 text-cyan-400"}`}>{recoveryStep.complete ? <Check size={15} /> : recoveryWizardStep + 1}</span>
+                      <div>
+                        <p className={`text-xs font-semibold uppercase tracking-wide ${recoveryStep.complete ? "text-emerald-400" : "text-cyan-400"}`}>{recoveryStep.complete ? "Already completed" : "Do this now"}</p>
+                        <h4 className={`mt-1 font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{recoveryStep.plainTitle}</h4>
+                      </div>
+                    </div>
+
+                    {recoveryStep.id === "scan" && (
+                      <div className={`rounded-xl border p-4 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                        <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>We make a read-only safety list</p>
+                        <p className="mt-1">BuildCustom looks at the public records your domain uses today. Nothing is changed. This gives us a list to compare with Cloudflare so email and other services are less likely to be missed.</p>
+                        {migration.dnsScannedAt && <p className="mt-2 font-medium text-emerald-500">Safety list saved on {new Date(migration.dnsScannedAt).toLocaleString()}.</p>}
+                        {recoveryStepAllowsChanges && <button type="button" onClick={() => void inspectDns()} disabled={inspectPending} className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 text-gray-700"}`}><Search size={13} /> {inspectPending ? "Checking your current setup…" : "Run the safety check"}</button>}
+                        {recoveryWizardMode === "review" && <p className={`mt-3 rounded-lg px-3 py-2 ${theme === "dark" ? "bg-white/5 text-white/45" : "bg-gray-50 text-gray-500"}`}>Review mode is read-only. This saved scan will not run again or change your progress.</p>}
+                      </div>
+                    )}
+
+                    {recoveryStep.id === "import" && (
+                      <div className="space-y-3">
+                        <div className={`rounded-xl border p-3 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                          <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>Why this matters</p>
+                          <p className="mt-1">Cloudflare tries to copy your records automatically, but it can miss private email or service records. Give us Cloudflare’s list and we will compare it with the safety list from step 1.</p>
+                        </div>
+                        {recoveryStepAllowsChanges ? (
+                          <CloudflareDnsImportPanel value={cloudflareImportText} filename={cloudflareImportFilename} comparison={activeCloudflareImportComparison} pending={cloudflareImportPending} theme={theme} onChange={changeCloudflareImportText} onFile={file => void loadCloudflareImportFile(file)} onCompare={() => void compareCloudflareImport()} />
+                        ) : (
+                          <div className={`rounded-xl border p-4 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                            {activeCloudflareImportComparison ? (
+                              <>
+                                <p className="font-semibold text-emerald-500">Saved comparison found</p>
+                                <p className="mt-1">{activeCloudflareImportComparison.counts?.matched || 0} records copied correctly, {activeCloudflareImportComparison.counts?.missing || 0} missing, and {activeCloudflareImportComparison.counts?.changed || 0} different.</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>No saved comparison</p>
+                                <p className="mt-1">This optional check was not saved during the original setup. Reviewing the wizard will not run it now.</p>
+                              </>
+                            )}
+                            <p className={`mt-3 rounded-lg px-3 py-2 ${theme === "dark" ? "bg-white/5 text-white/45" : "bg-gray-50 text-gray-500"}`}>Review mode is read-only. Nothing will be uploaded or compared again.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {recoveryStep.id === "review" && (
+                      <div className="space-y-3">
+                        <div className={`rounded-xl border p-3 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                          <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>Follow the three labels below</p>
+                          <p className="mt-1"><strong>Keep</strong> protects email and other services. <strong>Replace</strong> is for old website records. <strong>Ask if unsure</strong> means leave the record alone until your provider confirms it is safe to remove.</p>
+                        </div>
+                        <DnsReplacementPlanPanel plan={activeReplacementPlan} proposedRecords={activeProposedRecords} comparison={activeCloudflareImportComparison} theme={theme} />
+                      </div>
+                    )}
+
+                    {recoveryStep.id === "nameservers" && (
+                      <div className={`rounded-xl border p-4 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                        <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>Nameservers tell the internet to use Cloudflare</p>
+                        <p className="mt-1">Your registrar is the company where you bought the domain. Cloudflare gives you two nameserver addresses. Those two addresses must replace the old nameservers at your registrar.</p>
+                        <p className="mt-3"><strong>Cloudflare gave you:</strong> {(migration.expectedNameservers || []).join(" and ") || "No nameservers saved yet"}</p>
+                        <p><strong>We currently detect:</strong> {(migration.currentNameservers || []).join(", ") || "Still checking"}</p>
+                        {migration.nameserversActive ? <p className="mt-2 font-semibold text-emerald-500">Confirmed. Your domain now uses Cloudflare.</p> : <p className="mt-2 font-semibold text-amber-400">Waiting for your registrar to publish the change. This can take up to 24 hours.</p>}
+                      </div>
+                    )}
+
+                    {recoveryStep.id === "connect" && (
+                      <div className={`rounded-xl border p-4 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                        <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>BuildCustom is checking the final connection</p>
+                        <p className="mt-1">{domain.status === "live" ? "Your domain is connected, secure, and serving this project." : "You do not need to create the setup again. We are checking the saved domain, its security certificate, and the website connection."}</p>
+                        {status && <p className={`mt-2 font-semibold ${domain.status === "live" ? "text-emerald-500" : "text-cyan-400"}`}>Current status: {status.label}</p>}
+                        {domain.status !== "live" && recoveryStepAllowsChanges && <button type="button" onClick={() => refresh.mutate()} disabled={busy} className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 text-gray-700"}`}><RefreshCw size={13} className={refresh.isPending ? "animate-spin" : ""} /> Check connection now</button>}
+                        {recoveryWizardMode === "review" && <p className={`mt-3 rounded-lg px-3 py-2 ${theme === "dark" ? "bg-white/5 text-white/45" : "bg-gray-50 text-gray-500"}`}>Review mode only shows the saved status. It will not restart verification.</p>}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4">
+                      <button type="button" onClick={() => setRecoveryWizardStep((current) => Math.max(0, current - 1))} disabled={recoveryWizardStep === 0} className={`rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-30 ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}>Previous step</button>
+                      {recoveryWizardStep < recoveryProgress.currentIndex ? (
+                        <button type="button" onClick={() => setRecoveryWizardStep((current) => Math.min(recoveryProgress.currentIndex, current + 1))} className="rounded-lg px-3 py-2 text-xs font-semibold text-white" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Next completed step</button>
+                      ) : (
+                        <span className={`text-xs font-medium ${recoveryStep.complete ? "text-emerald-500" : "text-cyan-400"}`}>{recoveryStep.complete ? "All setup steps are complete." : "This is where you left off."}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {domain.secondary && (
