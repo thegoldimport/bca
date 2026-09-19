@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import gateway, { metadataTags, routeConfig } from "../infrastructure/buildcustom-apps-gateway.js";
+import gateway, { hostnameRoute, metadataTags, routeConfig } from "../infrastructure/buildcustom-apps-gateway.js";
 
 test("empty SEO preserves generated metadata and adds the BuildCustom favicon", () => {
   const tags = metadataTags({});
@@ -97,6 +97,52 @@ test("an unmapped custom hostname cannot reach a user Worker", async () => {
   });
   assert.equal(response.status, 404);
   assert.equal(dispatched, false);
+});
+
+test("route check identifies the expected project without dispatching user code", async () => {
+  let dispatched = false;
+  const response = await gateway.fetch(new Request("https://customer.example.com/_buildcustom/route-check"), {
+    ROUTES: {
+      async get(key) {
+        return key === "hostname:customer.example.com"
+          ? "project"
+          : key === "project"
+            ? JSON.stringify({ scriptName: "project-script", metadata: {} })
+            : null;
+      },
+    },
+    DISPATCHER: { get: () => { dispatched = true; } },
+  });
+  assert.deepEqual(await response.json(), { ok: true, project: "project" });
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(dispatched, false);
+});
+
+test("trusted managed route check verifies the custom-hostname alias", async () => {
+  const routes = {
+    project: JSON.stringify({ scriptName: "project-script", metadata: {} }),
+    "hostname:customer.example.com": "project",
+  };
+  const response = await gateway.fetch(new Request("https://project.apps.buildcustom.ai/_buildcustom/custom-host-route-check?hostname=customer.example.com"), {
+    ROUTES: { get: async (key) => routes[key] || null },
+    DISPATCHER: { get: () => { throw new Error("must not dispatch"); } },
+  });
+  assert.deepEqual(await response.json(), { ok: true, project: "project", redirectTo: null });
+  assert.equal(response.status, 200);
+});
+
+test("secondary hostname redirects permanently to primary while preserving path and query", async () => {
+  const routes = {
+    "hostname:www.customer.example": JSON.stringify({ slug: "project", redirectTo: "customer.example" }),
+    project: JSON.stringify({ scriptName: "project-script", metadata: {} }),
+  };
+  const response = await gateway.fetch(new Request("https://www.customer.example/path/to/page?offer=1"), {
+    ROUTES: { get: async (key) => routes[key] || null },
+    DISPATCHER: { get: () => { throw new Error("redirect must not dispatch"); } },
+  });
+  assert.equal(response.status, 301);
+  assert.equal(response.headers.get("location"), "https://customer.example/path/to/page?offer=1");
+  assert.deepEqual(hostnameRoute(routes["hostname:www.customer.example"]), { slug: "project", redirectTo: "customer.example" });
 });
 
 test("a zone-wide SaaS route passes existing BuildCustom hosts through to their origin", async (t) => {

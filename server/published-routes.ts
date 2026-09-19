@@ -49,8 +49,8 @@ async function writeRoute(slug: string, method: "PUT" | "DELETE", scriptName?: s
   }
 }
 
-export async function setPublishedCustomHostname(hostname: string, slug: string) {
-  await writeRoute(`hostname:${hostname}`, "PUT", slug);
+export async function setPublishedCustomHostname(hostname: string, slug: string, redirectTo?: string) {
+  await writeRoute(`hostname:${hostname}`, "PUT", redirectTo ? JSON.stringify({ slug, redirectTo }) : slug);
 }
 
 export async function removePublishedCustomHostname(hostname: string) {

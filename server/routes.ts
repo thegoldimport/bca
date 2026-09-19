@@ -21,15 +21,34 @@ import { generateSeoSuggestions, isSeoContextPath, rankSeoContextPath } from "./
 import { deleteProjectAndPublishedRoute, PublishedRouteRestoreError } from "./project-deletion";
 import { savePublishingSettings } from "./publishing-settings";
 import { captureProjectPreviewImage } from "./project-preview-image";
+import { pool } from "./db";
 import {
   createCustomHostname,
   customDomainUpdate,
   deleteCustomHostname,
   getCustomHostname,
   normalizeCustomDomain,
+  classifyHostname,
+  inspectPublicDns,
+  validateExpectedNameservers,
+  authoritativeNameservers,
+  nameserversMatchExpected,
+  verifyCustomDomainRouting,
 } from "./custom-domains";
 
 const RESERVED_SUBDOMAINS = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers"]);
+const CUSTOM_DOMAIN_LOCK_NAMESPACE = 1_116_313_668;
+
+async function withCustomDomainLock<T>(projectId: number, operation: () => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock($1, $2)", [CUSTOM_DOMAIN_LOCK_NAMESPACE, projectId]);
+    return await operation();
+  } finally {
+    await client.query("SELECT pg_advisory_unlock($1, $2)", [CUSTOM_DOMAIN_LOCK_NAMESPACE, projectId]).catch(() => undefined);
+    client.release();
+  }
+}
 
 function projectSubdomainSlug(name: string) {
   return name.toLowerCase()
@@ -105,16 +124,89 @@ function runtimeError(err: unknown, res: any) {
 }
 
 function customDomainResponse(link: any) {
+  const primaryStatus = link?.customDomainStatus || null;
+  const secondaryStatus = link?.customDomainSecondary ? link?.customDomainSecondaryStatus || null : "live";
+  const status = primaryStatus === "live" && secondaryStatus === "live"
+    ? "live"
+    : primaryStatus === "error" || secondaryStatus === "error"
+      ? "error"
+      : primaryStatus === "connecting" || secondaryStatus === "connecting"
+        ? "connecting"
+        : primaryStatus;
   return {
     hostname: link?.customDomain || "",
-    status: link?.customDomainStatus || null,
+    status,
     sslStatus: link?.customDomainSslStatus || null,
     dnsRecords: link?.customDomainDnsRecords || [],
     error: link?.customDomainError || null,
     checkedAt: link?.customDomainCheckedAt || null,
     managedUrl: link?.deploymentUrl || "",
     canConnect: Boolean(link?.deploymentUrl && link?.subdomainSlug),
+    migration: link?.customDomainMigrationState || {},
+    secondary: link?.customDomainSecondary ? {
+      hostname: link.customDomainSecondary,
+      status: link.customDomainSecondaryStatus,
+      sslStatus: link.customDomainSecondarySslStatus,
+      dnsRecords: link.customDomainSecondaryDnsRecords || [],
+      error: link.customDomainSecondaryError,
+      checkedAt: link.customDomainSecondaryCheckedAt,
+      redirectTo: link.customDomain,
+    } : null,
   };
+}
+
+async function persistVerifiedCustomDomain(projectId: number, hostname: string, slug: string, cloudflareHostname: any, migrationState: any = {}) {
+  if (normalizeCustomDomain(String(cloudflareHostname?.hostname || "")) !== hostname) {
+    throw new RuntimeAdapterError("Cloudflare returned a different hostname than the requested primary domain.", "RUNTIME_UPSTREAM_ERROR", 502);
+  }
+  const update = customDomainUpdate(cloudflareHostname);
+  let migration = { ...migrationState };
+  if (update.customDomainStatus === "live") {
+    const classification = classifyHostname(hostname);
+    if ((classification.kind === "apex" || migration.pairedHostnames === true) && (migration.strategy !== "customer_cloudflare" || migration.nameserversActive !== true)) {
+      await removePublishedCustomHostname(hostname);
+      update.customDomainStatus = "pending_dns" as any;
+      update.customDomainError = "Root domains must finish the customer-owned Cloudflare DNS migration before they can go live.";
+      migration = { ...migration, lifecycleLabel: "Waiting for Nameservers", routingActive: false };
+      return storage.upsertRuntimeProjectLink(projectId, { ...update, customDomainMigrationState: migration });
+    }
+    await setPublishedCustomHostname(hostname, slug);
+    const routingActive = await verifyCustomDomainRouting(hostname, slug);
+    if (!routingActive) {
+      update.customDomainStatus = "connecting" as any;
+      update.customDomainError = "DNS and SSL are active. BuildCustom is waiting for the project route to finish propagating.";
+      migration = { ...migration, lifecycleLabel: "Connecting Website", routingActive: false };
+    } else {
+      migration = { ...migration, lifecycleLabel: "Live", routingActive: true };
+    }
+  } else {
+    await removePublishedCustomHostname(hostname);
+  }
+  return storage.upsertRuntimeProjectLink(projectId, { ...update, customDomainMigrationState: migration });
+}
+
+async function persistVerifiedSecondaryDomain(projectId: number, hostname: string, primaryHostname: string, slug: string, cloudflareHostname: any) {
+  if (normalizeCustomDomain(String(cloudflareHostname?.hostname || "")) !== hostname) {
+    throw new RuntimeAdapterError("Cloudflare returned a different hostname than the requested secondary domain.", "RUNTIME_UPSTREAM_ERROR", 502);
+  }
+  const update = customDomainUpdate(cloudflareHostname);
+  if (update.customDomainStatus === "live") {
+    await setPublishedCustomHostname(hostname, slug, primaryHostname);
+    if (!await verifyCustomDomainRouting(hostname, slug, primaryHostname)) {
+      update.customDomainStatus = "connecting" as any;
+      update.customDomainError = "DNS and SSL are active. BuildCustom is waiting for the redirect route to finish propagating.";
+    }
+  } else {
+    await removePublishedCustomHostname(hostname);
+  }
+  return storage.upsertRuntimeProjectLink(projectId, {
+    customDomainSecondaryCloudflareId: update.customDomainCloudflareId,
+    customDomainSecondaryStatus: update.customDomainStatus,
+    customDomainSecondarySslStatus: update.customDomainSslStatus,
+    customDomainSecondaryDnsRecords: update.customDomainDnsRecords,
+    customDomainSecondaryError: update.customDomainError,
+    customDomainSecondaryCheckedAt: update.customDomainCheckedAt,
+  });
 }
 
 async function requireAuth(req: any, res: any): Promise<string | null> {
@@ -347,8 +439,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!userId) return;
       const project = await storage.getProject(parseInt(req.params.id));
       if (!project || project.userId !== userId) return res.status(404).json({ message: "Project not found" });
+      await withCustomDomainLock(project.id, async () => {
       const link = await storage.getRuntimeProjectLink(project.id);
+      let customAliasRemoved = false;
+      let secondaryAliasRemoved = false;
+      const primaryAliasValue = link?.customDomain
+        ? await getPublishedProjectRouteValue(`hostname:${link.customDomain}`)
+        : null;
+      const secondaryAliasValue = link?.customDomainSecondary
+        ? await getPublishedProjectRouteValue(`hostname:${link.customDomainSecondary}`)
+        : null;
       try {
+        if (link?.customDomain) {
+          await removePublishedCustomHostname(link.customDomain);
+          customAliasRemoved = true;
+        }
+        if (link?.customDomainSecondary) {
+          await removePublishedCustomHostname(link.customDomainSecondary);
+          secondaryAliasRemoved = true;
+        }
         await deleteProjectAndPublishedRoute(project.id, link, {
           getRouteValue: getPublishedProjectRouteValue,
           removeRoute: removePublishedProjectRoute,
@@ -356,6 +465,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           deleteProject: (projectId) => storage.deleteProject(projectId),
         });
       } catch (error) {
+        if (customAliasRemoved && link?.customDomain && primaryAliasValue !== null) {
+          await restorePublishedProjectRouteValue(`hostname:${link.customDomain}`, primaryAliasValue).catch((restoreError) => {
+            console.error("Project deletion failed and the custom-hostname alias could not be restored", {
+              projectId: project.id,
+              hostname: link.customDomain,
+              restoreError,
+            });
+          });
+        }
+        if (secondaryAliasRemoved && link?.customDomainSecondary && secondaryAliasValue !== null) {
+          await restorePublishedProjectRouteValue(`hostname:${link.customDomainSecondary}`, secondaryAliasValue).catch((restoreError) => {
+            console.error("Project deletion failed and the secondary custom-hostname alias could not be restored", {
+              projectId: project.id,
+              hostname: link.customDomainSecondary,
+              restoreError,
+            });
+          });
+        }
         if (error instanceof PublishedRouteRestoreError) {
           console.error("Project deletion and published-route restoration both failed", {
             projectId: project.id,
@@ -370,6 +497,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         throw error;
       }
+      if (link?.customDomainCloudflareId) {
+        await deleteCustomHostname(link.customDomainCloudflareId).catch((error) => {
+          console.error("Deleted project left an orphaned Cloudflare custom hostname", {
+            projectId: project.id,
+            hostname: link.customDomain,
+            cloudflareId: link.customDomainCloudflareId,
+            error,
+          });
+        });
+      }
+      if (link?.customDomainSecondaryCloudflareId) {
+        await deleteCustomHostname(link.customDomainSecondaryCloudflareId).catch((error) => {
+          console.error("Deleted project left an orphaned secondary Cloudflare custom hostname", {
+            projectId: project.id,
+            hostname: link.customDomainSecondary,
+            cloudflareId: link.customDomainSecondaryCloudflareId,
+            error,
+          });
+        });
+      }
+      });
       return res.json({ success: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
@@ -643,6 +791,106 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(customDomainResponse(await storage.getRuntimeProjectLink(project.id)));
   });
 
+  // Read-only discovery used by the safe apex migration wizard.
+  app.post("/api/projects/:id/runtime/custom-domain/inspect", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const inspection = await inspectPublicDns(typeof req.body?.hostname === "string" ? req.body.hostname : "");
+      const link = await storage.getRuntimeProjectLink(project.id);
+      const prior = link?.customDomainMigrationState?.hostname === inspection.hostname
+        ? link.customDomainMigrationState
+        : {};
+      const inventoryChanged = JSON.stringify(prior.dnsInventory || []) !== JSON.stringify(inspection.records);
+      const migrationBase = { ...prior };
+      if (inventoryChanged) delete migrationBase.acknowledgedAt;
+      const migration = {
+        ...migrationBase,
+        hostname: inspection.hostname,
+        hostnameKind: inspection.kind,
+        registrableDomain: inspection.registrableDomain,
+        dnsInventory: inspection.records,
+        dnsScannedAt: inspection.scannedAt,
+        dnsComplete: inspection.complete,
+        warnings: inspection.warnings,
+        emailRiskFlags: inspection.emailRiskFlags,
+      };
+      const updated = await storage.upsertRuntimeProjectLink(project.id, { customDomainMigrationState: migration });
+      return res.json({ ...inspection, migration: updated.customDomainMigrationState });
+    } catch (err) { return runtimeError(err, res); }
+  });
+
+  // Saves wizard decisions only. It never creates a customer zone or changes DNS.
+  app.post("/api/projects/:id/runtime/custom-domain/configure", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      return await withCustomDomainLock(project.id, async () => {
+      const link = await storage.getRuntimeProjectLink(project.id);
+      const hostname = normalizeCustomDomain(typeof req.body?.hostname === "string"
+        ? req.body.hostname : String(link?.customDomain || ""));
+      if (!link?.deploymentUrl || !link.subdomainSlug) {
+        return res.status(409).json({ code: "PROJECT_NOT_PUBLISHED", message: "Publish this project before connecting a custom domain." });
+      }
+      const user = await storage.getUser(project.userId);
+      if (!getPlanEntitlement(user?.plan).managedCustomDomains) {
+        return res.status(403).json({ code: "MANAGED_CUSTOM_DOMAIN_REQUIRES_PAID_PLAN", message: "Custom domains are available on Launch, Pro, Agency, and Admin plans." });
+      }
+      const claimed = await storage.getRuntimeProjectLinkByCustomDomain(hostname);
+      if (claimed && claimed.projectId !== project.id) {
+        return res.status(409).json({ code: "CUSTOM_DOMAIN_IN_USE", message: "That domain is already connected to another project." });
+      }
+      const classification = classifyHostname(hostname);
+      const strategy = req.body?.strategy === "customer_cloudflare" ? "customer_cloudflare" : req.body?.strategy === "current_dns" ? "current_dns" : null;
+      if (!strategy) return res.status(400).json({ code: "INVALID_DNS_STRATEGY", message: "Choose whether to keep your current DNS or use customer-owned Cloudflare DNS." });
+      if (classification.kind === "apex" && strategy !== "customer_cloudflare") {
+        return res.status(409).json({ code: "APEX_REQUIRES_CUSTOMER_CLOUDFLARE", message: "Root domains must use the safe customer-owned Cloudflare DNS migration." });
+      }
+      const prior = link?.customDomainMigrationState?.hostname === hostname ? link.customDomainMigrationState : {};
+      const pairedHostnames = strategy === "customer_cloudflare" && ["apex", "www"].includes(classification.kind);
+      const rootHostname = classification.registrableDomain;
+      const wwwHostname = `www.${classification.registrableDomain}`;
+      const requestedPrimary = pairedHostnames && typeof req.body?.primaryHostname === "string"
+        ? normalizeCustomDomain(req.body.primaryHostname)
+        : hostname;
+      if (pairedHostnames && ![rootHostname, wwwHostname].includes(requestedPrimary)) {
+        return res.status(400).json({ code: "INVALID_PRIMARY_HOSTNAME", message: "Choose either the root domain or www as the primary hostname." });
+      }
+      const primaryHostname = pairedHostnames ? requestedPrimary : hostname;
+      const secondaryHostname = pairedHostnames ? (primaryHostname === rootHostname ? wwwHostname : rootHostname) : null;
+      if ((link?.customDomainCloudflareId || link?.customDomainSecondaryCloudflareId) &&
+          (link.customDomain !== primaryHostname || (link.customDomainSecondary || null) !== secondaryHostname)) {
+        return res.status(409).json({ code: "REMOVE_DOMAIN_BEFORE_REBIND", message: "Remove the existing custom domain before changing the primary or secondary hostname." });
+      }
+      const hasCurrentInventory = prior.hostname === hostname && prior.dnsScannedAt && Array.isArray(prior.dnsInventory);
+      if (pairedHostnames && (!hasCurrentInventory || (req.body?.acknowledged !== true && !prior.acknowledgedAt))) {
+        return res.status(409).json({ code: "DNS_REVIEW_ACKNOWLEDGEMENT_REQUIRED", message: "Review the discovered DNS records and acknowledge that missing records can affect email or other services." });
+      }
+      const expectedNameservers = req.body?.expectedNameservers === undefined ? prior.expectedNameservers : validateExpectedNameservers(req.body.expectedNameservers);
+      if (pairedHostnames && (!Array.isArray(expectedNameservers) || expectedNameservers.length !== 2)) {
+        return res.status(400).json({ code: "CLOUDFLARE_NAMESERVERS_REQUIRED", message: "Enter the two Cloudflare nameservers assigned to your zone." });
+      }
+      const migration = {
+        ...prior, hostname: primaryHostname, inspectedHostname: hostname, hostnameKind: classifyHostname(primaryHostname).kind, registrableDomain: classification.registrableDomain,
+        strategy, expectedNameservers,
+        pairedHostnames, primaryHostname, secondaryHostname,
+        ...(req.body?.acknowledged === true ? { acknowledgedAt: new Date().toISOString() } : {}),
+        lifecycleLabel: "Getting Started",
+      };
+      let updated;
+      try {
+        updated = await storage.configureRuntimeCustomDomains(project.id, primaryHostname, secondaryHostname, migration);
+      } catch (error: any) {
+        if (error?.message === "CUSTOM_DOMAIN_IN_USE") {
+          return res.status(409).json({ code: "CUSTOM_DOMAIN_IN_USE", message: "The root or www hostname is already connected to another project." });
+        }
+        throw error;
+      }
+      return res.json(customDomainResponse(updated));
+      });
+    } catch (err) { return runtimeError(err, res); }
+  });
+
   app.post("/api/projects/:id/runtime/custom-domain", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
@@ -659,36 +907,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           message: "BuildCustom.Ai-hosted custom domains are available on Launch, Pro, and Agency plans.",
         });
       }
-      if (link.customDomainCloudflareId) {
-        if (link.customDomain === hostname) {
-          const refreshed = await getCustomHostname(link.customDomainCloudflareId);
-          const updated = await storage.upsertRuntimeProjectLink(project.id, customDomainUpdate(refreshed));
-          if (updated.customDomainStatus === "live") await setPublishedCustomHostname(hostname, link.subdomainSlug);
-          return res.json(customDomainResponse(updated));
+      const result = await withCustomDomainLock(project.id, async () => {
+        const current = await storage.getRuntimeProjectLink(project.id);
+        const claim = await storage.getRuntimeCustomDomainClaim(hostname);
+        if (current?.customDomain !== hostname || claim?.projectId !== project.id || claim.role !== "primary") {
+          throw new RuntimeAdapterError("Configure and claim this hostname before provisioning it.", "RUNTIME_UPSTREAM_ERROR", 409);
         }
-        return res.status(409).json({ code: "CUSTOM_DOMAIN_EXISTS", message: "Remove the current custom domain before connecting another one." });
-      }
-      const claimed = await storage.getRuntimeProjectLinkByCustomDomain(hostname);
-      if (claimed && claimed.projectId !== project.id) {
-        return res.status(409).json({ code: "CUSTOM_DOMAIN_IN_USE", message: "That domain is already connected to another project." });
-      }
-      const cloudflareHostname = await createCustomHostname(hostname);
-      let updated;
-      try {
-        updated = await storage.upsertRuntimeProjectLink(project.id, {
-          hostingProvider: "buildcustom",
-          customDomain: hostname,
-          customOrigin: null,
-          ...customDomainUpdate(cloudflareHostname),
-        });
-      } catch (error) {
-        if (cloudflareHostname.id) await deleteCustomHostname(cloudflareHostname.id).catch(() => undefined);
-        throw error;
-      }
-      if (updated.customDomainStatus === "live") {
-        await setPublishedCustomHostname(hostname, link.subdomainSlug);
-      }
-      return res.status(201).json(customDomainResponse(updated));
+        const classification = classifyHostname(hostname);
+        if (classification.kind === "apex" || current.customDomainMigrationState?.pairedHostnames === true) {
+          const migration = current.customDomainMigrationState || {};
+          if (migration.hostname !== hostname || migration.strategy !== "customer_cloudflare" || !migration.acknowledgedAt || migration.nameserversActive !== true) {
+            throw new RuntimeAdapterError("Complete the safe customer-owned Cloudflare DNS migration before connecting this root domain.", "RUNTIME_UPSTREAM_ERROR", 409);
+          }
+        }
+        if (current?.customDomainCloudflareId) {
+          const existingHostname = await getCustomHostname(current.customDomainCloudflareId);
+          return {
+            link: await persistVerifiedCustomDomain(project.id, hostname, current.subdomainSlug!, existingHostname, current.customDomainMigrationState),
+            created: false,
+          };
+        }
+        const cloudflareHostname = await createCustomHostname(hostname);
+        try {
+          const saved = await storage.upsertRuntimeProjectLink(project.id, {
+            hostingProvider: "buildcustom",
+            customDomain: hostname,
+            customOrigin: null,
+            ...customDomainUpdate(cloudflareHostname),
+          });
+          const updated = saved.customDomainStatus === "live"
+            ? persistVerifiedCustomDomain(project.id, hostname, current!.subdomainSlug!, cloudflareHostname, saved.customDomainMigrationState)
+            : saved;
+          return { link: await updated, created: true };
+        } catch (error) {
+          if (cloudflareHostname.id) await deleteCustomHostname(cloudflareHostname.id).catch(() => undefined);
+          await removePublishedCustomHostname(hostname).catch(() => undefined);
+          throw error;
+        }
+      });
+      return res.status(result.created ? 201 : 200).json(customDomainResponse(result.link));
     } catch (err) {
       return runtimeError(err, res);
     }
@@ -698,18 +955,98 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const project = await requireProject(req, res);
     if (!project) return;
     try {
+      return await withCustomDomainLock(project.id, async () => {
       const link = await storage.getRuntimeProjectLink(project.id);
+      if (link?.customDomain && !link.customDomainCloudflareId && link.customDomainMigrationState?.expectedNameservers) {
+        const expected = link.customDomainMigrationState.expectedNameservers as string[];
+        const currentNameservers = await authoritativeNameservers(link.customDomain);
+        const active = nameserversMatchExpected(currentNameservers, expected);
+        const migration = {
+          ...link.customDomainMigrationState, currentNameservers, nameserversActive: active,
+          lifecycleLabel: active ? "Cloudflare DNS Active" : "Waiting for Nameservers",
+          lastCheckedAt: new Date().toISOString(),
+        };
+        if (active && link.subdomainSlug) {
+          const migrationHostname = link.customDomain;
+          const migrationSlug = link.subdomainSlug;
+          const current = await storage.getRuntimeProjectLink(project.id);
+          const createdPrimary = !current?.customDomainCloudflareId;
+          const cloudflareHostname = current?.customDomainCloudflareId
+              ? await getCustomHostname(current.customDomainCloudflareId)
+              : await createCustomHostname(migrationHostname);
+          let updated;
+          try {
+            updated = await persistVerifiedCustomDomain(
+              project.id,
+              migrationHostname,
+              migrationSlug,
+              cloudflareHostname,
+              { ...migration, lifecycleLabel: "Verifying Ownership" },
+            );
+          } catch (error) {
+            if (createdPrimary && cloudflareHostname.id) await deleteCustomHostname(cloudflareHostname.id).catch(() => undefined);
+            if (createdPrimary) await removePublishedCustomHostname(migrationHostname).catch(() => undefined);
+            throw error;
+          }
+          if (updated.customDomainSecondary) {
+            const secondaryDomain = updated.customDomainSecondary;
+            const createdSecondary = !updated.customDomainSecondaryCloudflareId;
+            const secondaryHostname = updated.customDomainSecondaryCloudflareId
+                ? await getCustomHostname(updated.customDomainSecondaryCloudflareId)
+                : await createCustomHostname(secondaryDomain);
+            try {
+              updated = await persistVerifiedSecondaryDomain(
+                project.id,
+                secondaryDomain,
+                migrationHostname,
+                migrationSlug,
+                secondaryHostname,
+              );
+            } catch (error) {
+              if (createdSecondary && secondaryHostname.id) await deleteCustomHostname(secondaryHostname.id).catch(() => undefined);
+              if (createdSecondary) await removePublishedCustomHostname(secondaryDomain).catch(() => undefined);
+              throw error;
+            }
+          }
+          return res.json(customDomainResponse(updated));
+        }
+        const updated = await storage.upsertRuntimeProjectLink(project.id, { customDomainMigrationState: migration });
+        return res.json(customDomainResponse(updated));
+      }
       if (!link?.customDomain || !link.customDomainCloudflareId || !link.subdomainSlug) {
         return res.status(404).json({ message: "No custom domain is connected." });
       }
       const cloudflareHostname = await getCustomHostname(link.customDomainCloudflareId);
-      const updated = await storage.upsertRuntimeProjectLink(project.id, customDomainUpdate(cloudflareHostname));
-      if (updated.customDomainStatus === "live") {
-        await setPublishedCustomHostname(link.customDomain, link.subdomainSlug);
-      } else {
-        await removePublishedCustomHostname(link.customDomain);
+      const prior = link.customDomainMigrationState || {};
+      let migration = { ...prior };
+      if (Array.isArray(prior.expectedNameservers) && prior.expectedNameservers.length === 2) {
+        const currentNameservers = await authoritativeNameservers(link.customDomain);
+        const active = nameserversMatchExpected(currentNameservers, prior.expectedNameservers.map(String));
+        migration = { ...migration, currentNameservers, nameserversActive: active, lifecycleLabel: active ? "Cloudflare DNS Active" : "Waiting for Nameservers" };
+      }
+      let updated = await persistVerifiedCustomDomain(project.id, link.customDomain, link.subdomainSlug, cloudflareHostname, migration);
+      if (updated.customDomainSecondary && migration.nameserversActive === true) {
+        const current = await storage.getRuntimeProjectLink(project.id);
+        const createdSecondary = !current!.customDomainSecondaryCloudflareId;
+        const secondaryHostname = current!.customDomainSecondaryCloudflareId
+            ? await getCustomHostname(current!.customDomainSecondaryCloudflareId)
+            : await createCustomHostname(current!.customDomainSecondary!);
+        try {
+          updated = await persistVerifiedSecondaryDomain(
+            project.id,
+            current!.customDomainSecondary!,
+            current!.customDomain!,
+            current!.subdomainSlug!,
+            secondaryHostname,
+          );
+        } catch (error) {
+          if (createdSecondary && secondaryHostname.id) await deleteCustomHostname(secondaryHostname.id).catch(() => undefined);
+          if (createdSecondary) await removePublishedCustomHostname(current!.customDomainSecondary!).catch(() => undefined);
+          throw error;
+        }
       }
       return res.json(customDomainResponse(updated));
+      });
     } catch (err) {
       return runtimeError(err, res);
     }
@@ -719,10 +1056,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const project = await requireProject(req, res);
     if (!project) return;
     try {
+      return await withCustomDomainLock(project.id, async () => {
       const link = await storage.getRuntimeProjectLink(project.id);
       if (!link?.customDomain) return res.status(204).end();
-      if (link.customDomainCloudflareId) await deleteCustomHostname(link.customDomainCloudflareId);
       await removePublishedCustomHostname(link.customDomain);
+      if (link.customDomainSecondary) await removePublishedCustomHostname(link.customDomainSecondary);
+      if (link.customDomainCloudflareId) await deleteCustomHostname(link.customDomainCloudflareId);
+      if (link.customDomainSecondaryCloudflareId) await deleteCustomHostname(link.customDomainSecondaryCloudflareId);
       await storage.upsertRuntimeProjectLink(project.id, {
         customDomain: null,
         customOrigin: null,
@@ -732,8 +1072,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         customDomainDnsRecords: [],
         customDomainError: null,
         customDomainCheckedAt: new Date(),
+        customDomainSecondary: null,
+        customDomainSecondaryCloudflareId: null,
+        customDomainSecondaryStatus: null,
+        customDomainSecondarySslStatus: null,
+        customDomainSecondaryDnsRecords: [],
+        customDomainSecondaryError: null,
+        customDomainSecondaryCheckedAt: new Date(),
+        customDomainMigrationState: {},
       });
+      await storage.releaseRuntimeCustomDomainClaims(project.id);
       return res.status(204).end();
+      });
     } catch (err) {
       return runtimeError(err, res);
     }

@@ -7,10 +7,10 @@ import {
   type SitePage, type InsertSitePage,
   type Template, type InsertTemplate,
   users, waitlistEntries, projects, blogPosts,
-  autobloggerSettings, seoSettings, sitePages, templates, runtimeProjectLinks, runtimeReleases, runtimeBuilderTurns,
+  autobloggerSettings, seoSettings, sitePages, templates, runtimeProjectLinks, runtimeCustomDomainClaims, runtimeReleases, runtimeBuilderTurns,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, count, isNull, isNotNull, and } from "drizzle-orm";
+import { eq, desc, count, isNull, isNotNull, and, or, inArray, notInArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -33,8 +33,11 @@ export interface IStorage {
   getRuntimeProjectLink(projectId: number): Promise<RuntimeProjectLink | undefined>;
   getRuntimeProjectLinkBySubdomainSlug(subdomainSlug: string): Promise<RuntimeProjectLink | undefined>;
   getRuntimeProjectLinkByCustomDomain(customDomain: string): Promise<RuntimeProjectLink | undefined>;
+  getRuntimeCustomDomainClaim(hostname: string): Promise<{ hostname: string; projectId: number; role: string } | undefined>;
+  configureRuntimeCustomDomains(projectId: number, primary: string, secondary: string | null, migration: Record<string, unknown>): Promise<RuntimeProjectLink>;
+  releaseRuntimeCustomDomainClaims(projectId: number): Promise<void>;
   claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink & { agentId: string }>;
-  upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin" | "customDomainCloudflareId" | "customDomainStatus" | "customDomainSslStatus" | "customDomainDnsRecords" | "customDomainError" | "customDomainCheckedAt">>): Promise<RuntimeProjectLink>;
+  upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin" | "customDomainCloudflareId" | "customDomainStatus" | "customDomainSslStatus" | "customDomainDnsRecords" | "customDomainError" | "customDomainCheckedAt" | "customDomainSecondary" | "customDomainSecondaryCloudflareId" | "customDomainSecondaryStatus" | "customDomainSecondarySslStatus" | "customDomainSecondaryDnsRecords" | "customDomainSecondaryError" | "customDomainSecondaryCheckedAt" | "customDomainMigrationState">>): Promise<RuntimeProjectLink>;
   countLiveRuntimeProjects(userId: string): Promise<number>;
   getRuntimeReleases(projectId: number): Promise<RuntimeRelease[]>;
   getRuntimeRelease(id: number): Promise<RuntimeRelease | undefined>;
@@ -135,8 +138,44 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
   async getRuntimeProjectLinkByCustomDomain(customDomain: string) {
-    const [result] = await db.select().from(runtimeProjectLinks).where(eq(runtimeProjectLinks.customDomain, customDomain));
+    const [result] = await db.select().from(runtimeProjectLinks).where(or(
+      eq(runtimeProjectLinks.customDomain, customDomain),
+      eq(runtimeProjectLinks.customDomainSecondary, customDomain),
+    ));
     return result;
+  }
+  async getRuntimeCustomDomainClaim(hostname: string) {
+    const [result] = await db.select().from(runtimeCustomDomainClaims).where(eq(runtimeCustomDomainClaims.hostname, hostname));
+    return result;
+  }
+  async configureRuntimeCustomDomains(projectId: number, primary: string, secondary: string | null, migration: Record<string, unknown>) {
+    return db.transaction(async (tx) => {
+      const claims = [{ hostname: primary, projectId, role: "primary" }, ...(secondary ? [{ hostname: secondary, projectId, role: "secondary" }] : [])];
+      await tx.insert(runtimeCustomDomainClaims).values(claims).onConflictDoNothing();
+      const storedClaims = await tx.select().from(runtimeCustomDomainClaims).where(inArray(runtimeCustomDomainClaims.hostname, claims.map((claim) => claim.hostname)));
+      if (storedClaims.length !== claims.length || storedClaims.some((claim) => claim.projectId !== projectId)) {
+        throw new Error("CUSTOM_DOMAIN_IN_USE");
+      }
+      await tx.delete(runtimeCustomDomainClaims).where(and(
+        eq(runtimeCustomDomainClaims.projectId, projectId),
+        notInArray(runtimeCustomDomainClaims.hostname, claims.map((claim) => claim.hostname)),
+      ));
+      for (const claim of claims) {
+        await tx.update(runtimeCustomDomainClaims)
+          .set({ role: claim.role })
+          .where(and(eq(runtimeCustomDomainClaims.hostname, claim.hostname), eq(runtimeCustomDomainClaims.projectId, projectId)));
+      }
+      const [updated] = await tx.update(runtimeProjectLinks).set({
+        customDomain: primary,
+        customDomainSecondary: secondary,
+        customDomainMigrationState: migration,
+        updatedAt: new Date(),
+      }).where(eq(runtimeProjectLinks.projectId, projectId)).returning();
+      return updated;
+    });
+  }
+  async releaseRuntimeCustomDomainClaims(projectId: number) {
+    await db.delete(runtimeCustomDomainClaims).where(eq(runtimeCustomDomainClaims.projectId, projectId));
   }
   async claimRuntimeProjectLink(projectId: number, agentId: string) {
     const existing = await this.getRuntimeProjectLink(projectId);
@@ -167,7 +206,7 @@ export class DatabaseStorage implements IStorage {
     }
     throw new Error("Unable to claim runtime project link");
   }
-  async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin" | "customDomainCloudflareId" | "customDomainStatus" | "customDomainSslStatus" | "customDomainDnsRecords" | "customDomainError" | "customDomainCheckedAt">>) {
+  async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin" | "customDomainCloudflareId" | "customDomainStatus" | "customDomainSslStatus" | "customDomainDnsRecords" | "customDomainError" | "customDomainCheckedAt" | "customDomainSecondary" | "customDomainSecondaryCloudflareId" | "customDomainSecondaryStatus" | "customDomainSecondarySslStatus" | "customDomainSecondaryDnsRecords" | "customDomainSecondaryError" | "customDomainSecondaryCheckedAt" | "customDomainMigrationState">>) {
     const existing = await this.getRuntimeProjectLink(projectId);
     if (existing) {
       const [result] = await db.update(runtimeProjectLinks)

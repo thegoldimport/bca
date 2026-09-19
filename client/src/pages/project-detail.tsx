@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders } from "@/lib/auth";
+import { getDomain } from "tldts";
 const PREVIEW_IMAGES: Record<string, string> = {
   website: new URL("../assets/preview-portfolio.jpg", import.meta.url).href,
   app: new URL("../assets/preview-fitness.jpg", import.meta.url).href,
@@ -1612,18 +1613,27 @@ function AnalyticsTab() {
 }
 
 const DOMAIN_STATUS: Record<string, { label: string; tone: string; detail: string }> = {
-  pending_dns: { label: "Pending DNS", tone: "text-amber-400 bg-amber-500/15", detail: "Add the DNS records below, then check the connection." },
-  verifying: { label: "Verifying", tone: "text-blue-400 bg-blue-500/15", detail: "Cloudflare is checking domain ownership." },
-  ssl_provisioning: { label: "SSL provisioning", tone: "text-purple-400 bg-purple-500/15", detail: "Ownership is confirmed. Cloudflare is issuing the SSL certificate." },
-  live: { label: "Live", tone: "text-emerald-400 bg-emerald-500/15", detail: "The custom domain is secure and serving this project." },
-  error: { label: "Error", tone: "text-red-400 bg-red-500/15", detail: "The domain could not be connected. Review the message below." },
+  pending_dns: { label: "DNS setup needed", tone: "text-amber-400 bg-amber-500/15", detail: "Add the records below, then check again." },
+  verifying: { label: "Verifying ownership", tone: "text-blue-400 bg-blue-500/15", detail: "We are checking that this hostname belongs to you." },
+  ssl_provisioning: { label: "Creating SSL", tone: "text-violet-400 bg-violet-500/15", detail: "Ownership is confirmed. Your secure certificate is being created." },
+  connecting: { label: "Connecting website", tone: "text-cyan-400 bg-cyan-500/15", detail: "We are checking DNS and the BuildCustom connection." },
+  live: { label: "Live", tone: "text-emerald-400 bg-emerald-500/15", detail: "Your custom domain is secure and serving this project." },
+  error: { label: "Needs attention", tone: "text-red-400 bg-red-500/15", detail: "Review the message below, then check again." },
 };
 
 function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [customDomain, setCustomDomain] = useState("");
+  const [strategy, setStrategy] = useState<"current" | "cloudflare">("current");
+  const [primaryChoice, setPrimaryChoice] = useState<"root" | "www">("root");
+  const [step, setStep] = useState<"entry" | "strategy" | "review" | "nameservers">("entry");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [nameservers, setNameservers] = useState(["", ""]);
   const [message, setMessage] = useState("");
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [inventoryWarning, setInventoryWarning] = useState("");
+  const [inspectPending, setInspectPending] = useState(false);
   const previousStatus = useRef<string | null>(null);
   const queryKey = ["custom-domain", projectId];
   const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
@@ -1652,11 +1662,26 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
     },
   });
   const connect = useMutation({
-    mutationFn: () => updateDomain("POST", "", { hostname: customDomain }),
+    mutationFn: async () => {
+      const hostname = (customDomain || domain.hostname || "").trim();
+      const configured = await updateDomain("POST", "/configure", {
+        hostname,
+        strategy: strategy === "cloudflare" ? "customer_cloudflare" : "current_dns",
+        acknowledged,
+        ...((isApex || isWww) && strategy === "cloudflare" && registrableDomain ? {
+          primaryHostname: primaryChoice === "root" ? registrableDomain : `www.${registrableDomain}`,
+        } : {}),
+        ...(strategy === "cloudflare" ? { expectedNameservers: nameservers.map((value) => value.trim()) } : {}),
+      });
+      return strategy === "cloudflare"
+        ? configured
+        : updateDomain("POST", "", { hostname });
+    },
     onSuccess: (body) => {
       qc.setQueryData(queryKey, body);
       setMessage("");
       setCustomDomain("");
+      setStep("entry");
     },
     onError: (error: Error) => setMessage(error.message),
   });
@@ -1680,6 +1705,41 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
   const status = domain.status ? DOMAIN_STATUS[domain.status] || DOMAIN_STATUS.verifying : null;
   const busy = connect.isPending || refresh.isPending || remove.isPending;
   const managedUrl = domain.managedUrl || runtimeStatus?.deploymentUrl || "";
+  const hostname = (domain.hostname || customDomain).toLowerCase();
+  const normalizedHostname = hostname.trim().replace(/^https?:\/\//, "").replace(/\.$/, "").replace(/\/.*$/, "");
+  const registrableDomain = getDomain(normalizedHostname, { allowPrivateDomains: true });
+  const isApex = Boolean(registrableDomain && normalizedHostname === registrableDomain);
+  const isWww = Boolean(registrableDomain && normalizedHostname === `www.${registrableDomain}`);
+  const migration = domain.migration || {};
+  const discovered = inventory.length ? inventory : (migration.dnsInventory || domain.dnsInventory || domain.discoveredDns || []);
+  const copyRecord = (value: string) => navigator.clipboard?.writeText(value).then(() => setMessage("Copied to clipboard."));
+  const inspectDns = async () => {
+    setInspectPending(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/custom-domain/inspect`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ hostname: (customDomain || domain.hostname || "").trim() }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setInventory(body.records || body.inventory || body.dnsInventory || []);
+        setInventoryWarning(body.warning || body.completenessWarning || (Array.isArray(body.warnings) ? body.warnings.join(" ") : ""));
+        qc.setQueryData(queryKey, (existing: any) => ({
+          ...(existing || domain),
+          migration: body.migration || {
+            ...((existing || domain)?.migration || {}),
+            dnsInventory: body.records || [],
+            emailRiskFlags: body.emailRiskFlags || [],
+            warnings: body.warnings || [],
+          },
+        }));
+      } else {
+        setInventoryWarning("The public scan is not available yet. Compare the complete DNS zone at your current provider before changing nameservers.");
+      }
+    } catch {
+      setInventoryWarning("The public scan is not available yet. Compare the complete DNS zone at your current provider before changing nameservers.");
+    } finally { setInspectPending(false); }
+  };
   useEffect(() => {
     if (domain.status === previousStatus.current) return;
     if (domain.status === "live") setMessage("Your custom domain is live.");
@@ -1713,16 +1773,55 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
 
         {!domain.hostname ? (
           <div className="mt-5">
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <input value={customDomain} onChange={e => setCustomDomain(e.target.value)} placeholder="app.example.com"
                 disabled={!domain.canConnect || busy}
                 className={`flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors disabled:opacity-50 ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
                 data-testid="input-custom-domain" />
-              <button onClick={() => { setMessage(""); connect.mutate(); }} disabled={!customDomain.trim() || !domain.canConnect || busy} className="px-4 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50"
+              <button onClick={() => { setMessage(""); setStrategy(isApex ? "cloudflare" : "current"); setStep("strategy"); }} disabled={!customDomain.trim() || !domain.canConnect || busy} className="px-4 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50"
                 style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}
-                data-testid="button-connect-domain">{connect.isPending ? "Connecting..." : "Connect"}</button>
+                data-testid="button-connect-domain">Continue</button>
             </div>
             {!domain.canConnect && <p className="mt-3 text-xs text-amber-400">Publish this project before connecting a custom domain.</p>}
+            {customDomain.trim() && <p className={`mt-3 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>We’ll treat <span className="font-mono">{customDomain.trim()}</span> as an {isApex ? "apex (root) domain" : isWww ? "www hostname" : "subdomain"}.</p>}
+            {step !== "entry" && (
+              <div className="mt-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>How should DNS connect?</h4>
+                  <button onClick={() => setStep("entry")} className={`text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Edit hostname</button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    ...(!isApex ? [{ id: "current" as const, title: "Keep my current DNS", copy: "Add a CNAME at your current DNS provider." }] : []),
+                    { id: "cloudflare" as const, title: "Use Cloudflare DNS", copy: "Recommended for root domains. You keep your registrar and move DNS authority to your own Cloudflare account." },
+                  ].map(option => (
+                    <button key={option.id} onClick={() => setStrategy(option.id)} className={`text-left rounded-xl border p-4 transition-colors ${strategy === option.id ? "border-cyan-400 bg-cyan-400/10" : theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-gray-50"}`}>
+                      <div className="flex items-center gap-2"><span className={`h-3 w-3 rounded-full border-2 ${strategy === option.id ? "border-cyan-400 bg-cyan-400" : "border-current opacity-30"}`} /><span className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{option.title}</span></div>
+                      <p className={`mt-2 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{option.copy}</p>
+                    </button>
+                  ))}
+                </div>
+                {isApex && <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs leading-5 text-amber-200"><strong>Root-domain safety:</strong> BuildCustom does not offer ordinary apex CNAME or guessed A-record setup. Use your own Cloudflare DNS zone, or connect <span className="font-mono">www</span> instead.</div>}
+                {strategy === "cloudflare" ? (
+                  <div className="space-y-4">
+                    <div className={`rounded-xl border p-4 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+                      <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>A careful migration, not a registration transfer</p>
+                      <p className="mt-1">Create or use your own free Cloudflare account, import the full DNS zone, and change nameservers yourself at your registrar. BuildCustom never asks for Cloudflare credentials or changes registrar settings.</p>
+                    </div>
+                    <button onClick={inspectDns} disabled={inspectPending} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 text-gray-700"}`}><Search size={14} /> {inspectPending ? "Scanning public records…" : "Inspect existing DNS"}</button>
+                    {(isApex || isWww) && registrableDomain && <div className={`rounded-xl border p-3 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}><p className={`text-xs font-semibold ${theme === "dark" ? "text-white/75" : "text-gray-700"}`}>Choose the primary address</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{[
+                      { id: "root" as const, hostname: registrableDomain },
+                      { id: "www" as const, hostname: `www.${registrableDomain}` },
+                    ].map(option => <button key={option.id} type="button" onClick={() => setPrimaryChoice(option.id)} className={`rounded-lg border px-3 py-2 text-left font-mono text-xs ${primaryChoice === option.id ? "border-cyan-400 bg-cyan-400/10" : theme === "dark" ? "border-white/10" : "border-gray-200"}`}>{option.hostname}</button>)}</div><p className={`mt-2 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>The other hostname will redirect permanently to the primary address.</p></div>}
+                    {discovered.length > 0 && <div className={`overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}><table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-gray-50"}><tr>{["Name", "Type", "Value"].map(h => <th key={h} className={`px-3 py-2 text-left font-semibold ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr></thead><tbody>{discovered.map((row: any, i: number) => <tr key={i} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="px-3 py-2 font-mono">{row.name || row.host || "@"}</td><td className="px-3 py-2">{row.type}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value || row.content || "—"}</td></tr>)}</tbody></table></div>}
+                    {(migration.emailRiskFlags?.length || inventoryWarning) && <div className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-200">{migration.emailRiskFlags?.length > 0 && <p className="font-semibold">Email records detected: {migration.emailRiskFlags.join(", ").toUpperCase()}. Missing these records can interrupt email.</p>}{inventoryWarning && <p className={migration.emailRiskFlags?.length ? "mt-1" : ""}>{inventoryWarning}</p>}</div>}
+                    <label className={`flex gap-3 rounded-xl border p-3 text-xs leading-5 ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I have reviewed my DNS records and understand that missing records can affect email or other services.</label>
+                    <button onClick={() => setStep("nameservers")} disabled={!acknowledged} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Continue to nameservers</button>
+                  </div>
+                ) : <button onClick={() => { setMessage(""); connect.mutate(); }} disabled={busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Connecting…" : "Connect domain"}</button>}
+                {step === "nameservers" && <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}><p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Enter your two Cloudflare nameservers</p><p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Find these in your Cloudflare zone. Change them manually at your registrar; BuildCustom only verifies when they become authoritative.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white placeholder-white/20" : "border-gray-200 bg-white text-gray-800"}`} />)}</div><button onClick={() => { setMessage(""); connect.mutate(); }} disabled={nameservers.some(ns => !ns.trim()) || busy} className="mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving setup…" : "Start verification"}</button></div>}
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-5 space-y-5">
@@ -1733,6 +1832,11 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                 <ExternalLink size={14} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
               </div>
               {status && <p className={`mt-3 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{status.detail}</p>}
+              {migration.lifecycleLabel && (
+                <p className={`mt-2 text-xs font-medium ${migration.nameserversActive ? "text-emerald-400" : "text-cyan-400"}`}>
+                  {migration.lifecycleLabel}
+                </p>
+              )}
               {domain.status && !["live", "error"].includes(domain.status) && (
                 <p className={`mt-2 flex items-center gap-2 text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>
                   <RefreshCw size={12} className={domainQuery.isFetching ? "animate-spin" : ""} />
@@ -1741,6 +1845,52 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
               )}
               {domain.error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{domain.error}</p>}
             </div>
+            {isApex && domain.status !== "live" && migration.strategy !== "customer_cloudflare" && (
+              <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-cyan-400/20 bg-cyan-400/[0.04]" : "border-cyan-200 bg-cyan-50"}`}>
+                <h4 className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Connect this root domain with Cloudflare DNS</h4>
+                <p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Your current provider cannot use a standard CNAME at the root. Keep the domain registered where it is and move only DNS management to your own free Cloudflare account.</p>
+                {step !== "nameservers" ? (
+                  <button onClick={() => { setStrategy("cloudflare"); setCustomDomain(domain.hostname); setStep("nameservers"); inspectDns(); }} className="mt-3 rounded-xl px-4 py-2 text-xs font-semibold text-white" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Set up root domain</button>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {discovered.length > 0 && <div className={`max-h-56 overflow-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}><table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-white"}><tr>{["Name", "Type", "Value"].map(h => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead><tbody>{discovered.map((row: any, i: number) => <tr key={i} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="px-3 py-2 font-mono">{row.name}</td><td className="px-3 py-2">{row.type}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value}</td></tr>)}</tbody></table></div>}
+                    {(migration.emailRiskFlags?.length || inventoryWarning) && <div className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-300">{migration.emailRiskFlags?.length > 0 && <p className="font-semibold">Email records detected: {migration.emailRiskFlags.join(", ").toUpperCase()}. Missing these records can interrupt email.</p>}{inventoryWarning && <p className={migration.emailRiskFlags?.length ? "mt-1" : ""}>{inventoryWarning}</p>}</div>}
+                    <label className={`flex gap-3 text-xs leading-5 ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I compared these public records with my current DNS provider and understand missing records can interrupt email or other services.</label>
+                    <div className="grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Cloudflare nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white" : "border-gray-200 bg-white text-gray-800"}`} />)}</div>
+                    <button onClick={() => { setStrategy("cloudflare"); setMessage(""); connect.mutate(); }} disabled={!acknowledged || nameservers.some(ns => !ns.trim()) || busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving setup…" : "Start nameserver verification"}</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {migration.strategy === "customer_cloudflare" && (
+              <div className={`rounded-xl border p-4 text-xs ${theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"}`}>
+                <p className="font-semibold">Authoritative DNS migration</p>
+                <p className="mt-1">Expected: {(migration.expectedNameservers || []).join(" and ") || "Cloudflare nameservers not entered"}</p>
+                <p className="mt-1">Detected: {(migration.currentNameservers || []).join(", ") || "Checking current nameservers"}</p>
+              </div>
+            )}
+            {domain.secondary && (
+              <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Secondary hostname</p>
+                    <p className={`mt-1 font-mono text-xs ${theme === "dark" ? "text-white/55" : "text-gray-600"}`}>{domain.secondary.hostname}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${(DOMAIN_STATUS[domain.secondary.status] || DOMAIN_STATUS.verifying).tone}`}>
+                    {(DOMAIN_STATUS[domain.secondary.status] || DOMAIN_STATUS.verifying).label}
+                  </span>
+                </div>
+                <p className={`mt-3 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>After verification, this hostname redirects permanently to <span className="font-mono">{domain.hostname}</span> while preserving the path and query string. Your BuildCustom address does not redirect.</p>
+                {domain.secondary.error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{domain.secondary.error}</p>}
+                {domain.secondary.dnsRecords?.length > 0 && (
+                  <div className={`mt-3 overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                    <table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5" : "bg-white"}><tr>{["Type", "Name", "Value"].map(h => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+                      <tbody>{domain.secondary.dnsRecords.map((row: any, i: number) => <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}><td className="px-3 py-2">{row.type}</td><td className="px-3 py-2 font-mono">{row.name}</td><td className="max-w-[220px] break-all px-3 py-2 font-mono">{row.value}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
             {domain.dnsRecords?.length > 0 && (
               <div>
                 <h4 className={`text-sm font-semibold mb-2 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>DNS records</h4>
@@ -1748,12 +1898,13 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                 <div className={`overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
                   <table className="w-full text-xs">
                     <thead className={theme === "dark" ? "bg-white/5" : "bg-gray-50"}>
-                      <tr>{["Type", "Name", "Value"].map(h => <th key={h} className={`text-left px-4 py-2.5 font-semibold ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr>
+                      <tr>{["Type", "Name", "Value", ""].map((h, index) => <th key={index} className={`text-left px-4 py-2.5 font-semibold ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {domain.dnsRecords.map((row: any, i: number) => (
                         <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}>
                           {[row.type, row.name, row.value].map((cell, j) => <td key={j} className={`max-w-[260px] break-all px-4 py-3 font-mono ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{cell}</td>)}
+                          <td className="px-3 py-2 text-right"><button onClick={() => copyRecord(String(row.value || ""))} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/45 hover:bg-white/10 hover:text-white" : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"}`} aria-label="Copy DNS value"><Copy size={13} /></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1762,7 +1913,7 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
               </div>
             )}
             <div className="flex flex-wrap gap-3">
-              {domain.status !== "live" && <button onClick={() => { setMessage(""); refresh.mutate(); }} disabled={busy} className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}><RefreshCw size={14} className={refresh.isPending ? "animate-spin" : ""} /> Check connection</button>}
+              {domain.status !== "live" && <button onClick={() => { setMessage(""); refresh.mutate(); }} disabled={busy} className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}><RefreshCw size={14} className={refresh.isPending ? "animate-spin" : ""} /> Check again</button>}
               <button onClick={() => { if (window.confirm(`Remove ${domain.hostname}? The BuildCustom address will stay live.`)) remove.mutate(); }} disabled={busy} className="flex items-center gap-2 rounded-xl border border-red-400/25 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"><Trash2 size={14} /> Remove domain</button>
             </div>
           </div>

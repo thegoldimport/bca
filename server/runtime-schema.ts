@@ -43,6 +43,49 @@ export async function ensureRuntimeSchema() {
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_dns_records jsonb NOT NULL DEFAULT '[]'::jsonb`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_error text`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_checked_at timestamp`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_secondary text`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS runtime_project_links_custom_domain_secondary_unique ON runtime_project_links (custom_domain_secondary) WHERE custom_domain_secondary IS NOT NULL`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_secondary_cloudflare_id text`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS runtime_project_links_custom_domain_secondary_cloudflare_id_unique ON runtime_project_links (custom_domain_secondary_cloudflare_id) WHERE custom_domain_secondary_cloudflare_id IS NOT NULL`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_secondary_status text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_secondary_ssl_status text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_secondary_dns_records jsonb NOT NULL DEFAULT '[]'::jsonb`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_secondary_error text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_secondary_checked_at timestamp`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_migration_state jsonb NOT NULL DEFAULT '{}'::jsonb`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS runtime_custom_domain_claims (
+      hostname text PRIMARY KEY,
+      project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      role text NOT NULL CHECK (role IN ('primary', 'secondary')),
+      created_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    INSERT INTO runtime_custom_domain_claims (hostname, project_id, role)
+    SELECT custom_domain, project_id, 'primary' FROM runtime_project_links WHERE custom_domain IS NOT NULL
+    ON CONFLICT (hostname) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO runtime_custom_domain_claims (hostname, project_id, role)
+    SELECT custom_domain_secondary, project_id, 'secondary' FROM runtime_project_links WHERE custom_domain_secondary IS NOT NULL
+    ON CONFLICT (hostname) DO NOTHING
+  `);
+  await db.execute(sql`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM runtime_project_links links
+        LEFT JOIN runtime_custom_domain_claims primary_claim ON primary_claim.hostname = links.custom_domain
+        LEFT JOIN runtime_custom_domain_claims secondary_claim ON secondary_claim.hostname = links.custom_domain_secondary
+        WHERE (links.custom_domain IS NOT NULL AND primary_claim.project_id IS DISTINCT FROM links.project_id)
+           OR (links.custom_domain_secondary IS NOT NULL AND secondary_claim.project_id IS DISTINCT FROM links.project_id)
+      ) THEN
+        RAISE EXCEPTION 'Conflicting custom-domain claims require manual resolution';
+      END IF;
+    END $$;
+  `);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS favicon_data text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS seo_keywords text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS long_tail_keywords text NOT NULL DEFAULT ''`);

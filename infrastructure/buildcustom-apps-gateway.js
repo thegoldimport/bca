@@ -26,6 +26,16 @@ export function routeConfig(raw) {
   return { scriptName: raw, metadata: {} };
 }
 
+export function hostnameRoute(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.slug === "string") return { slug: parsed.slug, redirectTo: parsed.redirectTo || null };
+  } catch {
+    // Existing hostname aliases contain only the slug.
+  }
+  return { slug: raw, redirectTo: null };
+}
+
 export function metadataTags(metadata) {
   const tags = [];
   if (metadata.title) tags.push(`<title>${escapeHtml(metadata.title)}</title>`);
@@ -59,15 +69,38 @@ export default {
     if (hostname === ZONE || (hostname.endsWith(`.${ZONE}`) && !hostname.endsWith(SUFFIX))) {
       return fetch(request);
     }
-    const slug = hostname.endsWith(SUFFIX)
-      ? hostname.slice(0, -SUFFIX.length)
-      : await env.ROUTES.get(`hostname:${hostname}`);
+    const managedSlug = hostname.endsWith(SUFFIX) ? hostname.slice(0, -SUFFIX.length) : null;
+    const hostnameConfig = managedSlug ? { slug: managedSlug, redirectTo: null } : hostnameRoute(await env.ROUTES.get(`hostname:${hostname}`));
+    const slug = hostnameConfig.slug;
     if (typeof slug !== "string" || !SLUG.test(slug) || slug.includes(".")) return new Response("Not found", { status: 404 });
 
     const raw = await env.ROUTES.get(slug);
     if (!raw) return new Response("Project not found", { status: 404 });
     const { scriptName, metadata } = routeConfig(raw);
     if (!SCRIPT.test(scriptName || "")) return new Response("Project not found", { status: 404 });
+
+    if (!managedSlug && hostnameConfig.redirectTo && hostnameConfig.redirectTo !== hostname) {
+      return Response.redirect(`https://${hostnameConfig.redirectTo}${url.pathname}${url.search}`, 301);
+    }
+
+    if (url.pathname === "/_buildcustom/route-check") {
+      return Response.json(
+        { ok: true, project: slug },
+        { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
+      );
+    }
+
+    if (url.pathname === "/_buildcustom/custom-host-route-check") {
+      const customHostname = (url.searchParams.get("hostname") || "").toLowerCase().replace(/\.$/, "");
+      const mappedRoute = /^[a-z0-9.-]+$/.test(customHostname)
+        ? hostnameRoute(await env.ROUTES.get(`hostname:${customHostname}`))
+        : { slug: null, redirectTo: null };
+      const mappedSlug = mappedRoute.slug;
+      return Response.json(
+        { ok: mappedSlug === slug, project: mappedSlug === slug ? slug : null, redirectTo: mappedSlug === slug ? mappedRoute.redirectTo : null },
+        { status: mappedSlug === slug ? 200 : 404, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
+      );
+    }
 
     if (url.pathname === "/_buildcustom/preview-image") {
       const image = await env.ROUTES.get(`preview:${slug}`, "arrayBuffer");

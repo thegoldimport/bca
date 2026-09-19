@@ -52,8 +52,23 @@ export const runtimeProjectLinks = pgTable("runtime_project_links", {
   customDomainDnsRecords: jsonb("custom_domain_dns_records").$type<Array<{ type: string; name: string; value: string }>>().notNull().default([]),
   customDomainError: text("custom_domain_error"),
   customDomainCheckedAt: timestamp("custom_domain_checked_at"),
+  customDomainSecondary: text("custom_domain_secondary").unique(),
+  customDomainSecondaryCloudflareId: text("custom_domain_secondary_cloudflare_id").unique(),
+  customDomainSecondaryStatus: text("custom_domain_secondary_status"),
+  customDomainSecondarySslStatus: text("custom_domain_secondary_ssl_status"),
+  customDomainSecondaryDnsRecords: jsonb("custom_domain_secondary_dns_records").$type<Array<{ type: string; name: string; value: string }>>().notNull().default([]),
+  customDomainSecondaryError: text("custom_domain_secondary_error"),
+  customDomainSecondaryCheckedAt: timestamp("custom_domain_secondary_checked_at"),
+  customDomainMigrationState: jsonb("custom_domain_migration_state").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const runtimeCustomDomainClaims = pgTable("runtime_custom_domain_claims", {
+  hostname: text("hostname").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const runtimeReleases = pgTable("runtime_releases", {

@@ -2,16 +2,42 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createCustomHostname,
+  classifyHostname,
   customDomainRecords,
   customDomainUpdate,
   domainLifecycle,
   normalizeCustomDomain,
+  nameserversMatchExpected,
+  validateExpectedNameservers,
+  verifyCustomDomainRouting,
 } from "../server/custom-domains";
 
 test("custom domains are normalized and BuildCustom-owned hostnames are rejected", () => {
   assert.equal(normalizeCustomDomain("HTTPS://App.Example.COM/path"), "app.example.com");
   assert.throws(() => normalizeCustomDomain("test1.apps.buildcustom.ai"), /customer-owned domain/);
   assert.throws(() => normalizeCustomDomain("not a hostname"), /valid domain/);
+});
+
+test("hostname classification follows the public suffix list", () => {
+  assert.deepEqual(classifyHostname("example.co.uk"), { hostname: "example.co.uk", kind: "apex", registrableDomain: "example.co.uk" });
+  assert.deepEqual(classifyHostname("www.example.co.uk"), { hostname: "www.example.co.uk", kind: "www", registrableDomain: "example.co.uk" });
+  assert.deepEqual(classifyHostname("app.example.co.uk"), { hostname: "app.example.co.uk", kind: "subdomain", registrableDomain: "example.co.uk" });
+});
+
+test("customer Cloudflare nameservers must be two distinct assigned hosts", () => {
+  assert.deepEqual(validateExpectedNameservers(["BRAD.NS.CLOUDFLARE.COM.", "ollie.ns.cloudflare.com"]), [
+    "brad.ns.cloudflare.com",
+    "ollie.ns.cloudflare.com",
+  ]);
+  assert.throws(() => validateExpectedNameservers(["ns1.example.com", "ns2.example.com"]), /\.ns\.cloudflare\.com/);
+  assert.throws(() => validateExpectedNameservers(["brad.ns.cloudflare.com", "brad.ns.cloudflare.com"]), /two different/);
+});
+
+test("authoritative nameservers must exactly match the expected Cloudflare pair", () => {
+  const expected = ["brad.ns.cloudflare.com", "ollie.ns.cloudflare.com"];
+  assert.equal(nameserversMatchExpected(expected, expected), true);
+  assert.equal(nameserversMatchExpected([...expected, "ns1.legacy.example"], expected), false);
+  assert.equal(nameserversMatchExpected([expected[0]], expected), false);
 });
 
 test("Cloudflare states map to the customer domain lifecycle", () => {
@@ -100,4 +126,17 @@ test("missing Cloudflare for SaaS quota becomes a clear configuration error", as
   t.after(() => { globalThis.fetch = originalFetch; });
 
   await assert.rejects(createCustomHostname("app.example.com"), /Cloudflare for SaaS is not enabled/);
+});
+
+test("routing verification requires the expected managed project slug", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = "";
+  globalThis.fetch = async (input) => {
+    requestedUrl = String(input);
+    return Response.json({ ok: true, project: "test1" });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  assert.equal(await verifyCustomDomainRouting("buyermagnets.com", "test1"), true);
+  assert.match(requestedUrl, /^https:\/\/test1\.apps\.buildcustom\.ai\/_buildcustom\/custom-host-route-check\?/);
+  assert.equal(await verifyCustomDomainRouting("buyermagnets.com", "another-project"), false);
 });
