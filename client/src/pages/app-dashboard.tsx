@@ -503,7 +503,7 @@ function ProjectsPage() {
 
         <section className="mx-auto mt-auto w-full max-w-3xl pb-[6vh] pt-16">
           <div className="mb-6 text-center">
-            <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-indigo-500 to-pink-500 text-white shadow-lg shadow-purple-500/20"><Sparkles size={20} /></div>
+            <img src={logoMark} alt="BuildCustom.Ai" className="mb-3 inline-block h-14 w-14 object-contain drop-shadow-[0_10px_18px_rgba(99,102,241,0.28)]" />
             <h1 className={`font-display text-3xl font-bold tracking-tight sm:text-4xl ${theme === "dark" ? "text-white" : "text-gray-950"}`}>{firstName}, what are we building today?</h1>
             <p className={`mt-2 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Choose a starting point or describe your idea in your own words.</p>
           </div>
