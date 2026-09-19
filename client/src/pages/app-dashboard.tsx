@@ -400,13 +400,6 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const qc = useQueryClient();
   const [form, setForm] = useState({ name: "", type: "website", description: "" });
   const [error, setError] = useState("");
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-  const types = [
-    { id: "website", label: "Website", icon: Globe },
-    { id: "app", label: "App", icon: Smartphone },
-    { id: "game", label: "Game", icon: Gamepad2 },
-    { id: "saas", label: "SaaS", icon: ShoppingBag },
-  ];
   const mutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/projects", {
@@ -421,6 +414,13 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["projects"] }); onCreated(); },
     onError: (err: any) => setError(err.message),
   });
+  const createProject = () => {
+    if (!form.name.trim()) {
+      setError("Project name is required");
+      return;
+    }
+    mutation.mutate();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -433,61 +433,25 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
           theme === "dark" ? "bg-[#0d0d1a] border-white/10" : "bg-white border-gray-200"
         }`}
       >
-        <h2 className={`text-xl font-display font-bold mb-1 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>New Project</h2>
-        <p className={`text-sm mb-6 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>What would you like to build?</p>
+        <h2 className={`text-xl font-display font-bold mb-6 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>New Project</h2>
 
         <div className="space-y-4">
           <div>
             <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Project Name</label>
             <input
               value={form.name}
-              onChange={e => set("name", e.target.value)}
+              onChange={e => setForm(form => ({ ...form, name: e.target.value }))}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !mutation.isPending) createProject();
+              }}
               placeholder="My Awesome Project"
+              autoFocus
               className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none border transition-colors ${
                 theme === "dark"
                   ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50"
                   : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-cyan-400"
               }`}
               data-testid="input-project-name"
-            />
-          </div>
-
-          <div>
-            <label className={`block text-xs font-medium mb-2 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Project Type</label>
-            <div className="grid grid-cols-2 gap-2">
-              {types.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => set("type", t.id)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
-                    form.type === t.id
-                      ? "border-cyan-400/60 bg-cyan-500/10 text-cyan-400"
-                      : theme === "dark"
-                        ? "border-white/10 text-white/50 hover:border-white/20 hover:text-white/80"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                  data-testid={`button-type-${t.id}`}
-                >
-                  <t.icon size={15} />
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Description <span className="opacity-50">(optional)</span></label>
-            <textarea
-              value={form.description}
-              onChange={e => set("description", e.target.value)}
-              placeholder="Briefly describe your project..."
-              rows={2}
-              className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none border transition-colors resize-none ${
-                theme === "dark"
-                  ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50"
-                  : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-cyan-400"
-              }`}
-              data-testid="input-project-description"
             />
           </div>
 
@@ -498,7 +462,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
               theme === "dark" ? "border-white/10 text-white/50 hover:text-white/80" : "border-gray-200 text-gray-600 hover:bg-gray-50"
             }`}>Cancel</button>
             <button
-              onClick={() => { if (!form.name.trim()) { setError("Project name is required"); return; } mutation.mutate(); }}
+              onClick={createProject}
               disabled={mutation.isPending}
               className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
               style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
