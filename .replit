@@ -51,6 +51,7 @@ VIBESDK_RUNTIME_URL = "https://buildcustom-vibesdk-staging.thegoldimport.workers
 BUILDCUSTOM_APPS_DOMAIN = "apps.buildcustom.ai"
 CLOUDFLARE_ACCOUNT_ID = "03ef1e6e42498920987f07059e107538"
 CLOUDFLARE_ROUTES_KV_NAMESPACE_ID = "d6e19823343e46d3965ad167775afb30"
+CLOUDFLARE_ZONE_ID = "56e85999af2d246ac01bfa9ccac5d805"
 
 [postMerge]
 path = "scripts/post-merge.sh"

@@ -1,4 +1,5 @@
 const SUFFIX = ".apps.buildcustom.ai";
+const ZONE = "buildcustom.ai";
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SCRIPT = /^[a-z0-9_][a-z0-9-_]*$/;
 const DEFAULT_FAVICON_URL = "https://buildcustom.ai/favicon.png";
@@ -54,9 +55,14 @@ function removeElement() {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.hostname.endsWith(SUFFIX)) return new Response("Not found", { status: 404 });
-    const slug = url.hostname.slice(0, -SUFFIX.length);
-    if (!SLUG.test(slug) || slug.includes(".")) return new Response("Not found", { status: 404 });
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (hostname === ZONE || (hostname.endsWith(`.${ZONE}`) && !hostname.endsWith(SUFFIX))) {
+      return fetch(request);
+    }
+    const slug = hostname.endsWith(SUFFIX)
+      ? hostname.slice(0, -SUFFIX.length)
+      : await env.ROUTES.get(`hostname:${hostname}`);
+    if (typeof slug !== "string" || !SLUG.test(slug) || slug.includes(".")) return new Response("Not found", { status: 404 });
 
     const raw = await env.ROUTES.get(slug);
     if (!raw) return new Response("Project not found", { status: 404 });

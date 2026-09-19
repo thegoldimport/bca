@@ -30,6 +30,7 @@ const UNIVERSAL_TABS: { id: TabId; label: string; icon: React.ElementType }[] = 
   { id: "console", label: "Console", icon: Terminal },
   { id: "history", label: "Version History", icon: History },
   { id: "settings", label: "Settings", icon: Settings },
+  { id: "domain", label: "Domains", icon: Globe },
 ];
 const WEBSITE_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "pages", label: "Pages", icon: FileText },
@@ -37,7 +38,6 @@ const WEBSITE_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "autoblogger", label: "Auto-Blogger", icon: Bot },
   { id: "seo", label: "SEO", icon: Search },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "domain", label: "Domain", icon: Globe },
 ];
 
 function GlassCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -1611,48 +1611,143 @@ function AnalyticsTab() {
   );
 }
 
-// ── DOMAIN (demo) ─────────────────────────────────────────────────────────────
-function DomainTab({ project }: { project: any }) {
+const DOMAIN_STATUS: Record<string, { label: string; tone: string; detail: string }> = {
+  pending_dns: { label: "Pending DNS", tone: "text-amber-400 bg-amber-500/15", detail: "Add the DNS records below, then check the connection." },
+  verifying: { label: "Verifying", tone: "text-blue-400 bg-blue-500/15", detail: "Cloudflare is checking domain ownership." },
+  ssl_provisioning: { label: "SSL provisioning", tone: "text-purple-400 bg-purple-500/15", detail: "Ownership is confirmed. Cloudflare is issuing the SSL certificate." },
+  live: { label: "Live", tone: "text-emerald-400 bg-emerald-500/15", detail: "The custom domain is secure and serving this project." },
+  error: { label: "Error", tone: "text-red-400 bg-red-500/15", detail: "The domain could not be connected. Review the message below." },
+};
+
+function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
-  const [customDomain, setCustomDomain] = useState(project.url || "");
+  const qc = useQueryClient();
+  const [customDomain, setCustomDomain] = useState("");
+  const [message, setMessage] = useState("");
+  const queryKey = ["custom-domain", projectId];
+  const domainQuery = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/custom-domain`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load domain settings.");
+      return body;
+    },
+  });
+  const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
+    method,
+    headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...authHeaders() },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  }).then(async (res) => {
+    const result = res.status === 204 ? {} : await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(result.message || "Unable to update the custom domain.");
+    return result;
+  });
+  const connect = useMutation({
+    mutationFn: () => updateDomain("POST", "", { hostname: customDomain }),
+    onSuccess: (body) => {
+      qc.setQueryData(queryKey, body);
+      setMessage("");
+      setCustomDomain("");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const refresh = useMutation({
+    mutationFn: () => updateDomain("POST", "/refresh"),
+    onSuccess: (body) => {
+      qc.setQueryData(queryKey, body);
+      setMessage("");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: () => updateDomain("DELETE"),
+    onSuccess: () => {
+      qc.setQueryData(queryKey, { hostname: "", status: null, sslStatus: null, dnsRecords: [], error: null, managedUrl: runtimeStatus?.deploymentUrl || "", canConnect: Boolean(runtimeStatus?.deploymentUrl) });
+      setMessage("");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  if (domainQuery.isLoading) return <div className={`h-72 animate-pulse rounded-2xl ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />;
+  const domain = domainQuery.data || {};
+  const status = domain.status ? DOMAIN_STATUS[domain.status] || DOMAIN_STATUS.verifying : null;
+  const busy = connect.isPending || refresh.isPending || remove.isPending;
+  const managedUrl = domain.managedUrl || runtimeStatus?.deploymentUrl || "";
   return (
     <div className="space-y-6 max-w-2xl">
-      <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Domain</h2>
+      <div>
+        <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Domains</h2>
+        <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Your BuildCustom address stays active when you connect a custom domain.</p>
+      </div>
       <GlassCard>
-        <h3 className={`font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Current Domain</h3>
+        <h3 className={`font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>BuildCustom address</h3>
         <div className={`flex items-center gap-3 p-3 rounded-xl mb-4 ${theme === "dark" ? "bg-white/5 border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
           <Globe size={16} className="text-cyan-400 shrink-0" />
-          <span className={`text-sm font-mono flex-1 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>{project.url || `proj-${project.id}.buildcustom.ai`}</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">Active</span>
+          <span className={`text-sm font-mono flex-1 break-all ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>{managedUrl || "Publish the project to create its address"}</span>
+          {managedUrl && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">Live</span>}
         </div>
-        <div className="flex items-center gap-3"><CheckCircle2 size={14} className="text-emerald-400" /><span className={`text-xs ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>SSL certificate active · Auto-renews Dec 2026</span></div>
+        {managedUrl && <div className="flex items-center gap-3"><CheckCircle2 size={14} className="text-emerald-400" /><span className={`text-xs ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>This address remains live after a custom domain is connected.</span></div>}
       </GlassCard>
       <GlassCard>
-        <h3 className={`font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Custom Domain</h3>
-        <p className={`text-sm mb-4 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Connect your own domain to this project.</p>
-        <div className="flex gap-3 mb-6">
-          <input value={customDomain} onChange={e => setCustomDomain(e.target.value)} placeholder="yourdomain.com"
-            className={`flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
-            data-testid="input-custom-domain" />
-          <button className="px-4 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all"
-            style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}
-            data-testid="button-connect-domain">Connect</button>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Custom domain</h3>
+            <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Connect one domain or subdomain that you own.</p>
+          </div>
+          {status && <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>}
         </div>
-        <h4 className={`text-sm font-semibold mb-3 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>DNS Configuration</h4>
-        <div className={`rounded-xl overflow-hidden border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-          <table className="w-full text-xs">
-            <thead className={theme === "dark" ? "bg-white/5" : "bg-gray-50"}>
-              <tr>{["Type", "Name", "Value", "TTL"].map(h => <th key={h} className={`text-left px-4 py-2.5 font-semibold ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {[{ type: "A", name: "@", value: "76.76.21.21", ttl: "3600" }, { type: "CNAME", name: "www", value: "cname.buildcustom.ai", ttl: "3600" }].map((row, i) => (
-                <tr key={i} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}>
-                  {[row.type, row.name, row.value, row.ttl].map((cell, j) => <td key={j} className={`px-4 py-3 font-mono ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{cell}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+        {!domain.hostname ? (
+          <div className="mt-5">
+            <div className="flex gap-3">
+              <input value={customDomain} onChange={e => setCustomDomain(e.target.value)} placeholder="app.example.com"
+                disabled={!domain.canConnect || busy}
+                className={`flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors disabled:opacity-50 ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
+                data-testid="input-custom-domain" />
+              <button onClick={() => { setMessage(""); connect.mutate(); }} disabled={!customDomain.trim() || !domain.canConnect || busy} className="px-4 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50"
+                style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}
+                data-testid="button-connect-domain">{connect.isPending ? "Connecting..." : "Connect"}</button>
+            </div>
+            {!domain.canConnect && <p className="mt-3 text-xs text-amber-400">Publish this project before connecting a custom domain.</p>}
+          </div>
+        ) : (
+          <div className="mt-5 space-y-5">
+            <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+              <div className="flex items-center gap-3">
+                <Globe size={16} className="text-purple-400" />
+                <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className={`min-w-0 flex-1 break-all font-mono text-sm ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{domain.hostname}</a>
+                <ExternalLink size={14} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
+              </div>
+              {status && <p className={`mt-3 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{status.detail}</p>}
+              {domain.error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{domain.error}</p>}
+            </div>
+            {domain.dnsRecords?.length > 0 && (
+              <div>
+                <h4 className={`text-sm font-semibold mb-2 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>DNS records</h4>
+                <p className={`mb-3 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Add these records with your DNS provider. Use the default TTL.</p>
+                <div className={`overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                  <table className="w-full text-xs">
+                    <thead className={theme === "dark" ? "bg-white/5" : "bg-gray-50"}>
+                      <tr>{["Type", "Name", "Value"].map(h => <th key={h} className={`text-left px-4 py-2.5 font-semibold ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {domain.dnsRecords.map((row: any, i: number) => (
+                        <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/5" : "border-gray-100"}`}>
+                          {[row.type, row.name, row.value].map((cell, j) => <td key={j} className={`max-w-[260px] break-all px-4 py-3 font-mono ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{cell}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3">
+              {domain.status !== "live" && <button onClick={() => { setMessage(""); refresh.mutate(); }} disabled={busy} className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}><RefreshCw size={14} className={refresh.isPending ? "animate-spin" : ""} /> Check connection</button>}
+              <button onClick={() => { if (window.confirm(`Remove ${domain.hostname}? The BuildCustom address will stay live.`)) remove.mutate(); }} disabled={busy} className="flex items-center gap-2 rounded-xl border border-red-400/25 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"><Trash2 size={14} /> Remove domain</button>
+            </div>
+          </div>
+        )}
+        {message && <p className="mt-4 text-xs text-red-400">{message}</p>}
       </GlassCard>
     </div>
   );
@@ -1803,7 +1898,7 @@ export default function ProjectDetail() {
             {activeTab === "autoblogger" && <AutoBloggerTab projectId={projectId} />}
             {activeTab === "seo" && <SEOTab projectId={projectId} project={project} deploymentUrl={runtimeStatus?.deploymentUrl} />}
             {activeTab === "analytics" && <AnalyticsTab />}
-            {activeTab === "domain" && <DomainTab project={project} />}
+            {activeTab === "domain" && <DomainTab projectId={projectId} runtimeStatus={runtimeStatus} />}
           </motion.div>
         </AnimatePresence>
       </div>

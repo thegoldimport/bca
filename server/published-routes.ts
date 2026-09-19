@@ -49,6 +49,14 @@ async function writeRoute(slug: string, method: "PUT" | "DELETE", scriptName?: s
   }
 }
 
+export async function setPublishedCustomHostname(hostname: string, slug: string) {
+  await writeRoute(`hostname:${hostname}`, "PUT", slug);
+}
+
+export async function removePublishedCustomHostname(hostname: string) {
+  await writeRoute(`hostname:${hostname}`, "DELETE");
+}
+
 export async function setPublishedProjectPreviewImage(slug: string, data: string) {
   const match = data.match(/^data:image\/jpeg;base64,([a-z0-9+/=]+)$/i);
   if (!match) throw new RuntimeAdapterError("The project preview image is invalid.", "RUNTIME_UPSTREAM_ERROR");

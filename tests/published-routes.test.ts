@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getPublishedProjectRouteValue,
+  removePublishedCustomHostname,
   removePublishedProjectRoute,
   restorePublishedProjectRouteValue,
+  setPublishedCustomHostname,
   setPublishedProjectRoute,
 } from "../server/published-routes";
 
@@ -35,6 +37,8 @@ test("published route operations preserve exact KV values and metadata", async (
   await removePublishedProjectRoute("my-site");
   await restorePublishedProjectRouteValue("my-site", exact!);
   await setPublishedProjectRoute("my-site", "new-script", { title: "New", faviconData: "data:image/png;base64,a" });
+  await setPublishedCustomHostname("www.example.com", "my-site");
+  await removePublishedCustomHostname("www.example.com");
 
   assert.equal(exact, '{"scriptName":"old","metadata":{"title":"Exact"}}');
   assert.equal(calls[1].init?.method, "DELETE");
@@ -43,4 +47,7 @@ test("published route operations preserve exact KV values and metadata", async (
     scriptName: "new-script",
     metadata: { title: "New", faviconData: "data:image/png;base64,a" },
   });
+  assert.match(calls[4].url, /hostname%3Awww\.example\.com$/);
+  assert.equal(calls[4].init?.body, "my-site");
+  assert.equal(calls[5].init?.method, "DELETE");
 });

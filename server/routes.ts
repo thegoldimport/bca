@@ -12,13 +12,22 @@ import {
   publishedProjectUrl,
   removePublishedProjectRoute,
   restorePublishedProjectRouteValue,
+  removePublishedCustomHostname,
   setPublishedProjectPreviewImage,
+  setPublishedCustomHostname,
   setPublishedProjectRoute,
 } from "./published-routes";
 import { generateSeoSuggestions, isSeoContextPath, rankSeoContextPath } from "./seo-suggestions";
 import { deleteProjectAndPublishedRoute, PublishedRouteRestoreError } from "./project-deletion";
 import { savePublishingSettings } from "./publishing-settings";
 import { captureProjectPreviewImage } from "./project-preview-image";
+import {
+  createCustomHostname,
+  customDomainUpdate,
+  deleteCustomHostname,
+  getCustomHostname,
+  normalizeCustomDomain,
+} from "./custom-domains";
 
 const RESERVED_SUBDOMAINS = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers"]);
 
@@ -93,6 +102,19 @@ function runtimeError(err: unknown, res: any) {
     return res.status(err.status).json({ message: err.message, code: err.code });
   }
   return res.status(502).json({ message: "VibeSDK runtime request failed", code: "RUNTIME_UPSTREAM_ERROR" });
+}
+
+function customDomainResponse(link: any) {
+  return {
+    hostname: link?.customDomain || "",
+    status: link?.customDomainStatus || null,
+    sslStatus: link?.customDomainSslStatus || null,
+    dnsRecords: link?.customDomainDnsRecords || [],
+    error: link?.customDomainError || null,
+    checkedAt: link?.customDomainCheckedAt || null,
+    managedUrl: link?.deploymentUrl || "",
+    canConnect: Boolean(link?.deploymentUrl && link?.subdomainSlug),
+  };
 }
 
 async function requireAuth(req: any, res: any): Promise<string | null> {
@@ -615,6 +637,108 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { return runtimeError(err, res); }
   });
 
+  app.get("/api/projects/:id/runtime/custom-domain", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    return res.json(customDomainResponse(await storage.getRuntimeProjectLink(project.id)));
+  });
+
+  app.post("/api/projects/:id/runtime/custom-domain", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const hostname = normalizeCustomDomain(typeof req.body?.hostname === "string" ? req.body.hostname : "");
+      const link = await storage.getRuntimeProjectLink(project.id);
+      if (!link?.deploymentUrl || !link.subdomainSlug) {
+        return res.status(409).json({ code: "PROJECT_NOT_PUBLISHED", message: "Publish this project before connecting a custom domain." });
+      }
+      const user = await storage.getUser(project.userId);
+      if (!getPlanEntitlement(user?.plan).managedCustomDomains) {
+        return res.status(403).json({
+          code: "MANAGED_CUSTOM_DOMAIN_REQUIRES_PAID_PLAN",
+          message: "BuildCustom.Ai-hosted custom domains are available on Launch, Pro, and Agency plans.",
+        });
+      }
+      if (link.customDomainCloudflareId) {
+        if (link.customDomain === hostname) {
+          const refreshed = await getCustomHostname(link.customDomainCloudflareId);
+          const updated = await storage.upsertRuntimeProjectLink(project.id, customDomainUpdate(refreshed));
+          if (updated.customDomainStatus === "live") await setPublishedCustomHostname(hostname, link.subdomainSlug);
+          return res.json(customDomainResponse(updated));
+        }
+        return res.status(409).json({ code: "CUSTOM_DOMAIN_EXISTS", message: "Remove the current custom domain before connecting another one." });
+      }
+      const claimed = await storage.getRuntimeProjectLinkByCustomDomain(hostname);
+      if (claimed && claimed.projectId !== project.id) {
+        return res.status(409).json({ code: "CUSTOM_DOMAIN_IN_USE", message: "That domain is already connected to another project." });
+      }
+      const cloudflareHostname = await createCustomHostname(hostname);
+      let updated;
+      try {
+        updated = await storage.upsertRuntimeProjectLink(project.id, {
+          hostingProvider: "buildcustom",
+          customDomain: hostname,
+          customOrigin: null,
+          ...customDomainUpdate(cloudflareHostname),
+        });
+      } catch (error) {
+        if (cloudflareHostname.id) await deleteCustomHostname(cloudflareHostname.id).catch(() => undefined);
+        throw error;
+      }
+      if (updated.customDomainStatus === "live") {
+        await setPublishedCustomHostname(hostname, link.subdomainSlug);
+      }
+      return res.status(201).json(customDomainResponse(updated));
+    } catch (err) {
+      return runtimeError(err, res);
+    }
+  });
+
+  app.post("/api/projects/:id/runtime/custom-domain/refresh", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const link = await storage.getRuntimeProjectLink(project.id);
+      if (!link?.customDomain || !link.customDomainCloudflareId || !link.subdomainSlug) {
+        return res.status(404).json({ message: "No custom domain is connected." });
+      }
+      const cloudflareHostname = await getCustomHostname(link.customDomainCloudflareId);
+      const updated = await storage.upsertRuntimeProjectLink(project.id, customDomainUpdate(cloudflareHostname));
+      if (updated.customDomainStatus === "live") {
+        await setPublishedCustomHostname(link.customDomain, link.subdomainSlug);
+      } else {
+        await removePublishedCustomHostname(link.customDomain);
+      }
+      return res.json(customDomainResponse(updated));
+    } catch (err) {
+      return runtimeError(err, res);
+    }
+  });
+
+  app.delete("/api/projects/:id/runtime/custom-domain", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const link = await storage.getRuntimeProjectLink(project.id);
+      if (!link?.customDomain) return res.status(204).end();
+      if (link.customDomainCloudflareId) await deleteCustomHostname(link.customDomainCloudflareId);
+      await removePublishedCustomHostname(link.customDomain);
+      await storage.upsertRuntimeProjectLink(project.id, {
+        customDomain: null,
+        customOrigin: null,
+        customDomainCloudflareId: null,
+        customDomainStatus: null,
+        customDomainSslStatus: null,
+        customDomainDnsRecords: [],
+        customDomainError: null,
+        customDomainCheckedAt: new Date(),
+      });
+      return res.status(204).end();
+    } catch (err) {
+      return runtimeError(err, res);
+    }
+  });
+
   app.get("/api/projects/:id/runtime/publishing-settings", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
@@ -659,6 +783,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "Enter a valid hosting hostname such as project.hosting-provider.com" });
     }
     if (hostingProvider === "buildcustom" && customDomain) {
+      const currentManagedLink = await storage.getRuntimeProjectLink(project.id);
+      if (currentManagedLink?.customDomain !== customDomain) {
+        return res.status(409).json({
+          code: "CUSTOM_DOMAIN_USE_DOMAINS_FLOW",
+          message: "Connect managed custom domains from the Domains tab so DNS and SSL can be verified.",
+        });
+      }
       const user = await storage.getUser(project.userId);
       const entitlement = getPlanEntitlement(user?.plan);
       if (!entitlement.managedCustomDomains) {

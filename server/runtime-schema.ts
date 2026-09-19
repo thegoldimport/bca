@@ -13,8 +13,14 @@ export async function ensureRuntimeSchema() {
       deployment_script_name text,
       subdomain_slug text UNIQUE,
       hosting_provider text NOT NULL DEFAULT 'buildcustom',
-      custom_domain text,
+      custom_domain text UNIQUE,
       custom_origin text,
+      custom_domain_cloudflare_id text UNIQUE,
+      custom_domain_status text,
+      custom_domain_ssl_status text,
+      custom_domain_dns_records jsonb NOT NULL DEFAULT '[]'::jsonb,
+      custom_domain_error text,
+      custom_domain_checked_at timestamp,
       created_at timestamp NOT NULL DEFAULT now(),
       updated_at timestamp NOT NULL DEFAULT now()
     )
@@ -27,6 +33,14 @@ export async function ensureRuntimeSchema() {
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS hosting_provider text NOT NULL DEFAULT 'buildcustom'`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain text`);
   await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_origin text`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS runtime_project_links_custom_domain_unique ON runtime_project_links (custom_domain) WHERE custom_domain IS NOT NULL`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_cloudflare_id text`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS runtime_project_links_custom_domain_cloudflare_id_unique ON runtime_project_links (custom_domain_cloudflare_id) WHERE custom_domain_cloudflare_id IS NOT NULL`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_status text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_ssl_status text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_dns_records jsonb NOT NULL DEFAULT '[]'::jsonb`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_error text`);
+  await db.execute(sql`ALTER TABLE runtime_project_links ADD COLUMN IF NOT EXISTS custom_domain_checked_at timestamp`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS favicon_data text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS seo_keywords text NOT NULL DEFAULT ''`);
   await db.execute(sql`ALTER TABLE seo_settings ADD COLUMN IF NOT EXISTS long_tail_keywords text NOT NULL DEFAULT ''`);

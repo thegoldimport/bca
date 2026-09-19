@@ -55,3 +55,58 @@ test("legacy plain and JSON route values both dispatch to their scripts", async 
 
   assert.deepEqual(routeConfig("legacy-script"), { scriptName: "legacy-script", metadata: {} });
 });
+
+test("a verified custom hostname aliases the managed slug without changing managed routing", async () => {
+  const reads = [];
+  const routes = {
+    "hostname:www.customer-example.com": "project",
+    project: JSON.stringify({ scriptName: "project-script", metadata: {} }),
+  };
+  let dispatchedScript;
+  const env = {
+    ROUTES: {
+      async get(key) {
+        reads.push(key);
+        return routes[key] || null;
+      },
+    },
+    DISPATCHER: {
+      get(scriptName) {
+        dispatchedScript = scriptName;
+        return { fetch: async () => new Response("same project", { headers: { "content-type": "text/plain" } }) };
+      },
+    },
+  };
+
+  const customResponse = await gateway.fetch(new Request("https://www.customer-example.com/"), env);
+  assert.equal(await customResponse.text(), "same project");
+  assert.equal(dispatchedScript, "project-script");
+  assert.deepEqual(reads, ["hostname:www.customer-example.com", "project"]);
+
+  reads.length = 0;
+  const managedResponse = await gateway.fetch(new Request("https://project.apps.buildcustom.ai/"), env);
+  assert.equal(await managedResponse.text(), "same project");
+  assert.deepEqual(reads, ["project"]);
+});
+
+test("an unmapped custom hostname cannot reach a user Worker", async () => {
+  let dispatched = false;
+  const response = await gateway.fetch(new Request("https://unverified.example.com/"), {
+    ROUTES: { get: async () => null },
+    DISPATCHER: { get: () => { dispatched = true; } },
+  });
+  assert.equal(response.status, 404);
+  assert.equal(dispatched, false);
+});
+
+test("a zone-wide SaaS route passes existing BuildCustom hosts through to their origin", async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (request) => new Response(`origin:${new URL(request.url).hostname}`);
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const response = await gateway.fetch(new Request("https://buildcustom.ai/pricing"), {
+    ROUTES: { get: async () => { throw new Error("must not read tenant routes"); } },
+    DISPATCHER: { get: () => { throw new Error("must not dispatch"); } },
+  });
+  assert.equal(await response.text(), "origin:buildcustom.ai");
+});

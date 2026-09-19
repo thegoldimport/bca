@@ -32,8 +32,9 @@ export interface IStorage {
   deleteProject(id: number): Promise<void>;
   getRuntimeProjectLink(projectId: number): Promise<RuntimeProjectLink | undefined>;
   getRuntimeProjectLinkBySubdomainSlug(subdomainSlug: string): Promise<RuntimeProjectLink | undefined>;
+  getRuntimeProjectLinkByCustomDomain(customDomain: string): Promise<RuntimeProjectLink | undefined>;
   claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink & { agentId: string }>;
-  upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin">>): Promise<RuntimeProjectLink>;
+  upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin" | "customDomainCloudflareId" | "customDomainStatus" | "customDomainSslStatus" | "customDomainDnsRecords" | "customDomainError" | "customDomainCheckedAt">>): Promise<RuntimeProjectLink>;
   countLiveRuntimeProjects(userId: string): Promise<number>;
   getRuntimeReleases(projectId: number): Promise<RuntimeRelease[]>;
   getRuntimeRelease(id: number): Promise<RuntimeRelease | undefined>;
@@ -133,6 +134,10 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select().from(runtimeProjectLinks).where(eq(runtimeProjectLinks.subdomainSlug, subdomainSlug));
     return result;
   }
+  async getRuntimeProjectLinkByCustomDomain(customDomain: string) {
+    const [result] = await db.select().from(runtimeProjectLinks).where(eq(runtimeProjectLinks.customDomain, customDomain));
+    return result;
+  }
   async claimRuntimeProjectLink(projectId: number, agentId: string) {
     const existing = await this.getRuntimeProjectLink(projectId);
     if (existing?.agentId) return existing as RuntimeProjectLink & { agentId: string };
@@ -162,7 +167,7 @@ export class DatabaseStorage implements IStorage {
     }
     throw new Error("Unable to claim runtime project link");
   }
-  async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin">>) {
+  async upsertRuntimeProjectLink(projectId: number, data: Partial<Pick<RuntimeProjectLink, "agentId" | "previewUrl" | "deploymentUrl" | "deploymentOriginUrl" | "deploymentScriptName" | "subdomainSlug" | "hostingProvider" | "customDomain" | "customOrigin" | "customDomainCloudflareId" | "customDomainStatus" | "customDomainSslStatus" | "customDomainDnsRecords" | "customDomainError" | "customDomainCheckedAt">>) {
     const existing = await this.getRuntimeProjectLink(projectId);
     if (existing) {
       const [result] = await db.update(runtimeProjectLinks)
