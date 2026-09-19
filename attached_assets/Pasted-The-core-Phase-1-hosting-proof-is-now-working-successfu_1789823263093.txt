@@ -1,0 +1,33 @@
+The core Phase 1 hosting proof is now working successfully. Before we consider the customer hosting infrastructure fully proven and move on to migrating BuildCustom itself off Replit, I want to perform one final isolated test: customer custom domains.
+
+Do not change the working VibeSDK/ThinkAgent/build/preview/deployment architecture.
+
+Add the minimum implementation necessary for a BuildCustom project that has already been successfully deployed through our new Cloudflare staging hosting infrastructure to connect a customer-owned custom domain.
+
+Use the current recommended Cloudflare architecture for a multi-tenant Workers for Platforms application, including Cloudflare for SaaS / Custom Hostnames where appropriate.
+
+The intended customer experience is:
+
+Project → Domains → Add Custom Domain → enter hostname → receive exact DNS instructions → BuildCustom checks verification → Cloudflare provisions SSL → domain status becomes Live → visiting the custom domain serves that project's deployed Worker.
+
+This must be a platform-level domain mapping. Do not simply manually attach my test domain directly to one Worker in a way that would not scale to customer applications.
+
+Keep the existing BuildCustom-hosted subdomain working simultaneously. A project should eventually be able to have both:
+
+project.<our-hosting-domain>
+
+and
+
+customer-domain.com
+
+pointing to the same deployed application.
+
+For this test, support one customer-owned domain or subdomain. Do not build domain purchasing, registrar integration, domain transfers, email hosting, or advanced domain management.
+
+BuildCustom should expose domain state clearly, including at minimum:
+
+Pending DNS → Verifying → SSL provisioning → Live → Error
+
+Do not expose Cloudflare credentials or internal infrastructure details to the browser.
+
+Before implementing, inspect the current working staging deployment architecture and tell me exactly how you propose to route the custom hostname to the correct Workers for Platforms user Worker without disrupting the existing subdomain deployment flow.
