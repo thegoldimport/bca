@@ -36,6 +36,7 @@ import {
   checkNameserverActivation,
   routingStatusAfterVerification,
   verifyCustomDomainRouting,
+  validateApplicationHostname,
 } from "./custom-domains";
 import {
   configurePrimaryDomainPair,
@@ -163,6 +164,30 @@ function customDomainResponse(link: any) {
   };
 }
 
+function applicationDomainResponse(domain: any) {
+  if (!domain) return null;
+  return {
+    hostname: domain.hostname,
+    purpose: "application",
+    role: "direct",
+    status: domain.status || null,
+    sslStatus: domain.sslStatus || null,
+    dnsRecords: domain.dnsRecords || [],
+    error: domain.error || null,
+    checkedAt: domain.checkedAt || null,
+    migration: domain.migrationState || {},
+  };
+}
+
+async function customDomainResponseWithApplication(projectId: number, link: any) {
+  const domains = await storage.getRuntimeCustomDomains(projectId);
+  return {
+    ...customDomainResponse(link),
+    appDomain: applicationDomainResponse(domains.find((domain) =>
+      domain.purpose === "application" && domain.role === "direct")),
+  };
+}
+
 async function persistVerifiedCustomDomain(projectId: number, hostname: string, slug: string, cloudflareHostname: any, migrationState: any = {}) {
   if (normalizeCustomDomain(String(cloudflareHostname?.hostname || "")) !== hostname) {
     throw new RuntimeAdapterError("Cloudflare returned a different hostname than the requested primary domain.", "RUNTIME_UPSTREAM_ERROR", 502);
@@ -247,6 +272,45 @@ async function persistVerifiedSecondaryDomain(projectId: number, hostname: strin
     checkedAt: update.customDomainCheckedAt,
   });
   return saved;
+}
+
+async function persistApplicationDomain(projectId: number, claim: any, slug: string, cloudflareHostname: any) {
+  if (normalizeCustomDomain(String(cloudflareHostname?.hostname || "")) !== claim.hostname) {
+    throw new RuntimeAdapterError("Cloudflare returned a different hostname than the requested app domain.", "RUNTIME_UPSTREAM_ERROR", 502);
+  }
+  const update = customDomainUpdate(cloudflareHostname);
+  let migrationState = { ...(claim.migrationState || {}) };
+  if (update.customDomainStatus === "live") {
+    const routing = await domainRoutingContext(projectId, claim.hostname);
+    await setPublishedCustomHostname(claim.hostname, slug, undefined, {
+      ...(routing || {}),
+      purpose: "application",
+      role: "direct",
+    });
+    const routingVerified = await verifyCustomDomainRouting(claim.hostname, slug, null, {
+      ...(routing || {}),
+      purpose: "application",
+      role: "direct",
+    });
+    update.customDomainStatus = routingStatusAfterVerification(update.customDomainStatus, routingVerified) as any;
+    migrationState = {
+      ...migrationState,
+      lifecycleLabel: routingVerified ? "Live" : "Connecting Application",
+      routingActive: routingVerified,
+    };
+    if (!routingVerified) update.customDomainError = "DNS and SSL are active. BuildCustom is waiting for the app route to finish propagating.";
+  } else {
+    await removePublishedCustomHostname(claim.hostname).catch(() => undefined);
+  }
+  return updateDomainLifecycle(projectId, claim.hostname, {
+    cloudflareId: update.customDomainCloudflareId,
+    status: update.customDomainStatus,
+    sslStatus: update.customDomainSslStatus,
+    dnsRecords: update.customDomainDnsRecords,
+    error: update.customDomainError,
+    checkedAt: update.customDomainCheckedAt,
+    migrationState,
+  });
 }
 
 async function requireAuth(req: any, res: any): Promise<string | null> {
@@ -807,13 +871,107 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/projects/:id/runtime/custom-domain", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
-    return res.json(customDomainResponse(await storage.getRuntimeProjectLink(project.id)));
+    return res.json(await customDomainResponseWithApplication(project.id, await storage.getRuntimeProjectLink(project.id)));
   });
 
   app.get("/api/projects/:id/runtime/domains", async (req, res) => {
     const project = await requireProject(req, res);
     if (!project) return;
     return res.json(await listDomains(project.id));
+  });
+
+  app.post("/api/projects/:id/runtime/application-domain", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const hostname = normalizeCustomDomain(typeof req.body?.hostname === "string" ? req.body.hostname : "");
+      const link = await storage.getRuntimeProjectLink(project.id);
+      if (!link?.deploymentUrl || !link.subdomainSlug) {
+        return res.status(409).json({ code: "PROJECT_NOT_PUBLISHED", message: "Publish this project before connecting an app domain." });
+      }
+      const user = await storage.getUser(project.userId);
+      if (!getPlanEntitlement(user?.plan).managedCustomDomains) {
+        return res.status(403).json({ code: "MANAGED_CUSTOM_DOMAIN_REQUIRES_PAID_PLAN", message: "Custom domains are available on Launch, Pro, Agency, and Admin plans." });
+      }
+      const classification = validateApplicationHostname(hostname);
+      const result = await withCustomDomainLock(project.id, async () => {
+        const existing = await storage.getRuntimeCustomDomainClaim(hostname);
+        if (existing && existing.projectId !== project.id) {
+          throw new RuntimeAdapterError("That domain is already connected to another project.", "RUNTIME_UPSTREAM_ERROR", 409);
+        }
+        const claim = await storage.claimRuntimeApplicationDomain(project.id, hostname);
+        if (claim.cloudflareId) {
+          const currentHostname = await getCustomHostname(claim.cloudflareId);
+          return { domain: await persistApplicationDomain(project.id, claim, link.subdomainSlug!, currentHostname), created: false };
+        }
+        let cloudflareHostname: Awaited<ReturnType<typeof createCustomHostname>> | null = null;
+        try {
+          cloudflareHostname = await createCustomHostname(hostname);
+          const saved = await updateDomainLifecycle(project.id, hostname, {
+            cloudflareId: cloudflareHostname.id || null,
+            status: customDomainUpdate(cloudflareHostname).customDomainStatus,
+            sslStatus: customDomainUpdate(cloudflareHostname).customDomainSslStatus,
+            dnsRecords: customDomainUpdate(cloudflareHostname).customDomainDnsRecords,
+            error: customDomainUpdate(cloudflareHostname).customDomainError,
+            checkedAt: customDomainUpdate(cloudflareHostname).customDomainCheckedAt,
+          });
+          return { domain: await persistApplicationDomain(project.id, saved || claim, link.subdomainSlug!, cloudflareHostname), created: true };
+        } catch (error) {
+          if (cloudflareHostname?.id) await deleteCustomHostname(cloudflareHostname.id).catch(() => undefined);
+          await storage.releaseRuntimeApplicationDomain(project.id, hostname);
+          throw error;
+        }
+      });
+      return res.status(result.created ? 201 : 200).json({
+        ...(await customDomainResponseWithApplication(project.id, await storage.getRuntimeProjectLink(project.id))),
+      });
+    } catch (err: any) {
+      if (err?.message === "APPLICATION_DOMAIN_EXISTS") {
+        return res.status(409).json({ code: "APPLICATION_DOMAIN_EXISTS", message: "This project already has an app/login domain. Remove it before adding a different one." });
+      }
+      if (err?.message === "CUSTOM_DOMAIN_IN_USE") {
+        return res.status(409).json({ code: "CUSTOM_DOMAIN_IN_USE", message: "That domain is already connected to another project." });
+      }
+      if (err?.message === "CUSTOM_DOMAIN_ROLE_CONFLICT") {
+        return res.status(409).json({ code: "CUSTOM_DOMAIN_ROLE_CONFLICT", message: "That hostname is already used for a different domain purpose." });
+      }
+      return runtimeError(err, res);
+    }
+  });
+
+  app.post("/api/projects/:id/runtime/application-domain/refresh", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const result = await withCustomDomainLock(project.id, async () => {
+        const hostname = normalizeCustomDomain(typeof req.body?.hostname === "string" ? req.body.hostname : "");
+        const claim = await storage.getRuntimeCustomDomainClaim(hostname);
+        const link = await storage.getRuntimeProjectLink(project.id);
+        if (!claim || claim.projectId !== project.id || claim.purpose !== "application" || !claim.cloudflareId || !link?.subdomainSlug) {
+          return null;
+        }
+        const cloudflareHostname = await getCustomHostname(claim.cloudflareId);
+        return persistApplicationDomain(project.id, claim, link.subdomainSlug, cloudflareHostname);
+      });
+      if (!result) return res.status(404).json({ message: "No app domain is connected." });
+      return res.json({ appDomain: applicationDomainResponse(result) });
+    } catch (err) { return runtimeError(err, res); }
+  });
+
+  app.delete("/api/projects/:id/runtime/application-domain", async (req, res) => {
+    const project = await requireProject(req, res);
+    if (!project) return;
+    try {
+      const hostname = normalizeCustomDomain(typeof req.body?.hostname === "string" ? req.body.hostname : String(req.query.hostname || ""));
+      await withCustomDomainLock(project.id, async () => {
+        const claim = await storage.getRuntimeCustomDomainClaim(hostname);
+        if (!claim || claim.projectId !== project.id || claim.purpose !== "application") return;
+        await removePublishedCustomHostname(hostname).catch(() => undefined);
+        if (claim.cloudflareId) await deleteCustomHostname(claim.cloudflareId).catch(() => undefined);
+        await storage.releaseRuntimeApplicationDomain(project.id, hostname);
+      });
+      return res.status(204).end();
+    } catch (err) { return runtimeError(err, res); }
   });
 
   // Read-only discovery used by the safe apex migration wizard.

@@ -113,6 +113,9 @@ test("Cloudflare migration review shows the DNS checklist before nameserver setu
     );
 
     const hostnameInput = await screen.findByTestId("input-custom-domain");
+    assert.ok(screen.getByText("App/login domain"));
+    assert.ok(screen.getByText(/Add the CNAME record we provide/));
+    assert.ok(screen.getByTestId("input-app-domain"));
     fireEvent.change(hostnameInput, { target: { value: "example.com" } });
     fireEvent.click(screen.getByTestId("button-connect-domain"));
 

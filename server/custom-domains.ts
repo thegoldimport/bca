@@ -114,6 +114,18 @@ export function classifyHostname(value: string): { hostname: string; kind: Hostn
   return { hostname, kind, registrableDomain: registrable };
 }
 
+export function validateApplicationHostname(value: string) {
+  const classification = classifyHostname(value);
+  if (classification.kind !== "subdomain") {
+    throw new RuntimeAdapterError(
+      "App/login domains must be subdomains such as app.example.com.",
+      "RUNTIME_UPSTREAM_ERROR",
+      400,
+    );
+  }
+  return classification;
+}
+
 const DNS_ONLY_SERVICE_LABELS = new Set(["mail", "ftp", "cpanel", "webmail", "webdisk", "whm", "autodiscover", "autoconfig"]);
 const DNS_RECORD_TYPES = new Set(["A", "AAAA", "CAA", "CERT", "CNAME", "DS", "HTTPS", "LOC", "MX", "NAPTR", "NS", "PTR", "SOA", "SRV", "SSHFP", "SVCB", "TLSA", "TXT"]);
 const COMPARABLE_RECORD_TYPES = new Set(["A", "AAAA", "CAA", "CERT", "CNAME", "HTTPS", "LOC", "MX", "NAPTR", "PTR", "SRV", "SSHFP", "SVCB", "TLSA", "TXT"]);

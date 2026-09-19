@@ -39,6 +39,8 @@ export interface IStorage {
   getRuntimeCustomDomainClaim(hostname: string): Promise<RuntimeDomainMapping | undefined>;
   getRuntimeCustomDomains(projectId: number): Promise<RuntimeDomainMapping[]>;
   updateRuntimeCustomDomain(hostname: string, projectId: number, data: RuntimeDomainMappingUpdate): Promise<RuntimeDomainMapping | undefined>;
+  claimRuntimeApplicationDomain(projectId: number, hostname: string): Promise<RuntimeDomainMapping>;
+  releaseRuntimeApplicationDomain(projectId: number, hostname: string): Promise<void>;
   configureRuntimeCustomDomains(projectId: number, primary: string, secondary: string | null, migration: Record<string, unknown>): Promise<RuntimeProjectLink>;
   releaseRuntimeCustomDomainClaims(projectId: number): Promise<void>;
   claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink & { agentId: string }>;
@@ -164,6 +166,39 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(runtimeCustomDomainClaims.hostname, hostname), eq(runtimeCustomDomainClaims.projectId, projectId)))
       .returning();
     return updated;
+  }
+  async claimRuntimeApplicationDomain(projectId: number, hostname: string) {
+    return db.transaction(async (tx) => {
+      const existingForProject = await tx.select().from(runtimeCustomDomainClaims).where(and(
+        eq(runtimeCustomDomainClaims.projectId, projectId),
+        eq(runtimeCustomDomainClaims.purpose, "application"),
+      ));
+      if (existingForProject.some((claim) => claim.hostname !== hostname)) throw new Error("APPLICATION_DOMAIN_EXISTS");
+      await tx.insert(runtimeCustomDomainClaims).values({
+        hostname,
+        projectId,
+        role: "direct",
+        source: "application_domain",
+        purpose: "application",
+        hostnameKind: "subdomain",
+        isPrimary: false,
+        redirectTo: null,
+        migrationState: {},
+      }).onConflictDoNothing();
+      const [claim] = await tx.select().from(runtimeCustomDomainClaims)
+        .where(eq(runtimeCustomDomainClaims.hostname, hostname));
+      if (!claim || claim.projectId !== projectId) throw new Error("CUSTOM_DOMAIN_IN_USE");
+      if (claim.purpose !== "application" || claim.role !== "direct") throw new Error("CUSTOM_DOMAIN_ROLE_CONFLICT");
+      return claim;
+    });
+  }
+  async releaseRuntimeApplicationDomain(projectId: number, hostname: string) {
+    await db.delete(runtimeCustomDomainClaims).where(and(
+      eq(runtimeCustomDomainClaims.projectId, projectId),
+      eq(runtimeCustomDomainClaims.hostname, hostname),
+      eq(runtimeCustomDomainClaims.source, "application_domain"),
+      eq(runtimeCustomDomainClaims.purpose, "application"),
+    ));
   }
   async configureRuntimeCustomDomains(projectId: number, primary: string, secondary: string | null, migration: Record<string, unknown>) {
     return db.transaction(async (tx) => {

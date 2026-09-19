@@ -1757,6 +1757,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const [recoveryWizardMode, setRecoveryWizardMode] = useState<"resume" | "review">("resume");
   const [secondsUntilDomainCheck, setSecondsUntilDomainCheck] = useState(10);
   const [copiedDnsRecord, setCopiedDnsRecord] = useState("");
+  const [appDomainInput, setAppDomainInput] = useState("");
   const previousStatus = useRef<string | null>(null);
   const queryKey = ["custom-domain", projectId];
   const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
@@ -1768,20 +1769,34 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
     if (!res.ok) throw new Error(result.message || "Unable to update the custom domain.");
     return result;
   });
+  const updateAppDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/application-domain${suffix}`, {
+    method,
+    headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...authHeaders() },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  }).then(async (res) => {
+    const result = res.status === 204 ? {} : await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(result.message || "Unable to update the app/login domain.");
+    return result;
+  });
   const domainQuery = useQuery({
     queryKey,
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/runtime/custom-domain`, { headers: authHeaders() });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Unable to load domain settings.");
-      if (body.hostname && !["live", "error"].includes(body.status)) {
-        return updateDomain("POST", "/refresh");
-      }
-      return body;
+       let refreshed = body;
+       if (body.hostname && !["live", "error"].includes(body.status)) refreshed = await updateDomain("POST", "/refresh");
+       if (refreshed.appDomain?.hostname && !["live", "error"].includes(refreshed.appDomain.status)) {
+         const appRefresh = await updateAppDomain("POST", "/refresh", { hostname: refreshed.appDomain.hostname });
+         refreshed = { ...refreshed, ...appRefresh };
+       }
+       return refreshed;
     },
     refetchInterval: (query) => {
       const domain = query.state.data as any;
-      return domain?.hostname && !["live", "error"].includes(domain.status) ? 10_000 : false;
+       return (domain?.hostname && !["live", "error"].includes(domain.status))
+         || (domain?.appDomain?.hostname && !["live", "error"].includes(domain.appDomain.status))
+         ? 10_000 : false;
     },
   });
   const connect = useMutation({
@@ -1821,7 +1836,43 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const remove = useMutation({
     mutationFn: () => updateDomain("DELETE"),
     onSuccess: () => {
-      qc.setQueryData(queryKey, { hostname: "", status: null, sslStatus: null, dnsRecords: [], error: null, managedUrl: runtimeStatus?.deploymentUrl || "", canConnect: Boolean(runtimeStatus?.deploymentUrl) });
+      qc.setQueryData(queryKey, (existing: any) => ({
+        ...(existing || {}),
+        hostname: "",
+        status: null,
+        sslStatus: null,
+        dnsRecords: [],
+        error: null,
+        secondary: null,
+        migration: {},
+        managedUrl: runtimeStatus?.deploymentUrl || "",
+        canConnect: Boolean(runtimeStatus?.deploymentUrl),
+      }));
+      setMessage("");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const appConnect = useMutation({
+    mutationFn: () => updateAppDomain("POST", "", { hostname: (appDomainInput.trim() || suggestedAppDomain).trim() }),
+    onSuccess: (body) => {
+      qc.setQueryData(queryKey, (existing: any) => ({ ...(existing || {}), ...body }));
+      setAppDomainInput("");
+      setMessage("App/login domain saved. Add the CNAME shown below, then we’ll verify it automatically.");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const appRefresh = useMutation({
+    mutationFn: () => updateAppDomain("POST", "/refresh", { hostname: appDomain.hostname }),
+    onSuccess: (body) => {
+      qc.setQueryData(queryKey, (existing: any) => ({ ...(existing || {}), ...body }));
+      setMessage("");
+    },
+    onError: (error: Error) => setMessage(error.message),
+  });
+  const appRemove = useMutation({
+    mutationFn: () => updateAppDomain("DELETE", "", { hostname: appDomain.hostname }),
+    onSuccess: () => {
+      qc.setQueryData(queryKey, (existing: any) => ({ ...(existing || {}), appDomain: null }));
       setMessage("");
     },
     onError: (error: Error) => setMessage(error.message),
@@ -1829,6 +1880,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const domain = domainQuery.data || {};
   const status = domain.status ? DOMAIN_STATUS[domain.status] || DOMAIN_STATUS.verifying : null;
   const busy = connect.isPending || refresh.isPending || remove.isPending;
+  const appBusy = appConnect.isPending || appRefresh.isPending || appRemove.isPending;
   const managedUrl = domain.managedUrl || runtimeStatus?.deploymentUrl || "";
   const hostname = (domain.hostname || customDomain).toLowerCase();
   const normalizedHostname = hostname.trim().replace(/^https?:\/\//, "").replace(/\.$/, "").replace(/\/.*$/, "");
@@ -1864,6 +1916,10 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
     ? activeReplacementPlan
     : discovered;
   const connectionConflicts = dnsConflictsForRequiredRecords(connectionConflictSource, actionableDnsRecords);
+  const appDomain = domain.appDomain || null;
+  const appStatus = appDomain?.status ? DOMAIN_STATUS[appDomain.status] || DOMAIN_STATUS.verifying : null;
+  const appDnsRecords = Array.isArray(appDomain?.dnsRecords) ? appDomain.dnsRecords : [];
+  const suggestedAppDomain = registrableDomain ? `app.${registrableDomain}` : "";
   const activeCloudflareImportComparison = cloudflareImportComparison === undefined
     ? (savedInspectionHostname === normalizedHostname ? migration.cloudflareImportComparison : null)
     : cloudflareImportComparison;
@@ -1988,7 +2044,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
         <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Domains</h2>
         <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Your BuildCustom address stays active when you connect a custom domain.</p>
       </div>
-      <GlassCard>
+       <GlassCard>
         <h3 className={`font-semibold mb-2 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>BuildCustom address</h3>
         <div className={`flex items-center gap-3 p-3 rounded-xl mb-4 ${theme === "dark" ? "bg-white/5 border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
           <Globe size={16} className="text-cyan-400 shrink-0" />
@@ -1996,12 +2052,56 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
           {managedUrl && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">Live</span>}
         </div>
         {managedUrl && <div className="flex items-center gap-3"><CheckCircle2 size={14} className="text-emerald-400" /><span className={`text-xs ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>This address remains live after a custom domain is connected.</span></div>}
-      </GlassCard>
+       </GlassCard>
+       <GlassCard>
+         <div className="flex items-start justify-between gap-4">
+           <div>
+             <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>App/login domain</h3>
+             <p className={`mt-1 text-sm leading-5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Give customers a branded address for login and their dashboard, separate from your public website.</p>
+           </div>
+           {appStatus && <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${appStatus.tone}`}>{appStatus.label}</span>}
+         </div>
+         {!appDomain?.hostname ? (
+           <div className="mt-5">
+             <div className="flex flex-col gap-3 sm:flex-row">
+               <input value={appDomainInput} onChange={e => setAppDomainInput(e.target.value)} placeholder={suggestedAppDomain || "app.example.com"} disabled={!domain.canConnect || appBusy}
+                 className={`flex-1 px-4 py-2.5 rounded-xl border text-sm font-mono outline-none transition-colors disabled:opacity-50 ${theme === "dark" ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`} data-testid="input-app-domain" />
+               <button onClick={() => appConnect.mutate()} disabled={!domain.canConnect || !appDomainInput.trim() && !suggestedAppDomain || appBusy} className="px-4 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all disabled:opacity-50" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }} data-testid="button-connect-app-domain">{appConnect.isPending ? "Connecting…" : "Connect app domain"}</button>
+             </div>
+             <p className={`mt-3 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Use a subdomain such as <span className="font-mono">{suggestedAppDomain || "app.example.com"}</span>. Add the CNAME record we provide at your current DNS provider. This does not require changing nameservers.</p>
+           </div>
+         ) : (
+           <div className="mt-5 space-y-4">
+             <div className={`flex items-center gap-3 rounded-xl border p-3 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+               <Globe size={16} className="text-cyan-400 shrink-0" />
+               <a href={`https://${appDomain.hostname}`} target="_blank" rel="noreferrer" className={`min-w-0 flex-1 break-all font-mono text-sm ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{appDomain.hostname}</a>
+               <ExternalLink size={14} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
+             </div>
+             <p className={`text-xs leading-5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>{appStatus?.detail || "Your app/login hostname is being checked."} This is a direct app address; it does not redirect to the public website.</p>
+             {appDomain.error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{appDomain.error}</p>}
+             {appDnsRecords.length > 0 && (
+               <div>
+                 <p className={`mb-2 text-xs font-semibold ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>Add this CNAME at your DNS provider</p>
+                 <div className={`overflow-x-auto rounded-xl border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                   <table className="w-full text-xs"><thead className={theme === "dark" ? "bg-white/5 text-white/70" : "bg-gray-50 text-gray-700"}><tr>{["Type", "Name", "Value"].map(h => <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>)}</tr></thead>
+                     <tbody>{appDnsRecords.map((row: any, i: number) => <tr key={`${row.type}-${row.name}-${i}`} className={`border-t ${theme === "dark" ? "border-white/10 text-white/80" : "border-gray-200 bg-white text-gray-900"}`}><td className="px-3 py-3 align-top font-bold">{row.type}</td>{(["name", "value"] as const).map(kind => { const key = `app-${kind}-${row.type}-${row.name}-${i}`; const copied = copiedDnsRecord === key; return <td key={kind} className="max-w-[240px] px-3 py-3 align-top"><p className="break-all font-mono">{row[kind]}</p><button type="button" onClick={() => void copyRecord(String(row[kind] || ""), key)} className={`mt-1 inline-flex items-center gap-1 rounded px-1.5 py-1 font-semibold ${copied ? "text-emerald-500" : theme === "dark" ? "text-white/60 hover:bg-white/10" : "text-gray-600 hover:bg-gray-100"}`} aria-label={`Copy ${kind} for ${row.name}`}>{copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy {kind}</>}</button></td>; })}</tr>)}</tbody>
+                   </table>
+                 </div>
+               </div>
+             )}
+             {!["live", "error"].includes(appDomain.status) && <div className={`rounded-xl p-3 text-xs ${theme === "dark" ? "bg-white/5 text-white/60" : "bg-gray-50 text-gray-600"}`}><div className="flex items-center justify-between gap-2"><span className="font-semibold">Checking automatically every 10 seconds</span>{appDomain.checkedAt && <span>Last checked {new Date(appDomain.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>}</div></div>}
+             <div className="flex flex-wrap gap-3">
+               {appDomain.status !== "live" && <button onClick={() => appRefresh.mutate()} disabled={appBusy} className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}><RefreshCw size={14} className={appRefresh.isPending ? "animate-spin" : ""} /> Check again</button>}
+               <button onClick={() => { if (window.confirm(`Remove ${appDomain.hostname}? Your public website will stay connected.`)) appRemove.mutate(); }} disabled={appBusy} className="flex items-center gap-2 rounded-xl border border-red-400/25 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50"><Trash2 size={14} /> Remove app domain</button>
+             </div>
+           </div>
+         )}
+       </GlassCard>
       <GlassCard>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Custom domain</h3>
-            <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Connect one domain or subdomain that you own.</p>
+           <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Public website domain</h3>
+           <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Connect the public root domain or website hostname that visitors will see.</p>
           </div>
           {status && <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>}
         </div>

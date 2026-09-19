@@ -19,6 +19,7 @@ import {
   selectNameserverConsensus,
   validateExpectedNameservers,
   verifyCustomDomainRouting,
+  validateApplicationHostname,
 } from "../server/custom-domains";
 
 function dnsName(name: string) {
@@ -66,6 +67,16 @@ test("hostname classification follows the public suffix list", () => {
   assert.deepEqual(classifyHostname("example.co.uk"), { hostname: "example.co.uk", kind: "apex", registrableDomain: "example.co.uk" });
   assert.deepEqual(classifyHostname("www.example.co.uk"), { hostname: "www.example.co.uk", kind: "www", registrableDomain: "example.co.uk" });
   assert.deepEqual(classifyHostname("app.example.co.uk"), { hostname: "app.example.co.uk", kind: "subdomain", registrableDomain: "example.co.uk" });
+});
+
+test("application domains are restricted to direct subdomains", () => {
+  assert.deepEqual(validateApplicationHostname("app.example.co.uk"), {
+    hostname: "app.example.co.uk",
+    kind: "subdomain",
+    registrableDomain: "example.co.uk",
+  });
+  assert.throws(() => validateApplicationHostname("example.co.uk"), /must be subdomains/);
+  assert.throws(() => validateApplicationHostname("www.example.co.uk"), /must be subdomains/);
 });
 
 test("DNS replacement plan separates website conflicts, protected records, and ambiguous aliases", () => {
