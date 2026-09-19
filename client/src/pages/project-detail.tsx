@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1624,16 +1624,8 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
   const qc = useQueryClient();
   const [customDomain, setCustomDomain] = useState("");
   const [message, setMessage] = useState("");
+  const previousStatus = useRef<string | null>(null);
   const queryKey = ["custom-domain", projectId];
-  const domainQuery = useQuery({
-    queryKey,
-    queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/runtime/custom-domain`, { headers: authHeaders() });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "Unable to load domain settings.");
-      return body;
-    },
-  });
   const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
     method,
     headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...authHeaders() },
@@ -1642,6 +1634,22 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
     const result = res.status === 204 ? {} : await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(result.message || "Unable to update the custom domain.");
     return result;
+  });
+  const domainQuery = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/custom-domain`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load domain settings.");
+      if (body.hostname && !["live", "error"].includes(body.status)) {
+        return updateDomain("POST", "/refresh");
+      }
+      return body;
+    },
+    refetchInterval: (query) => {
+      const domain = query.state.data as any;
+      return domain?.hostname && !["live", "error"].includes(domain.status) ? 10_000 : false;
+    },
   });
   const connect = useMutation({
     mutationFn: () => updateDomain("POST", "", { hostname: customDomain }),
@@ -1668,11 +1676,17 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
     },
     onError: (error: Error) => setMessage(error.message),
   });
-  if (domainQuery.isLoading) return <div className={`h-72 animate-pulse rounded-2xl ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />;
   const domain = domainQuery.data || {};
   const status = domain.status ? DOMAIN_STATUS[domain.status] || DOMAIN_STATUS.verifying : null;
   const busy = connect.isPending || refresh.isPending || remove.isPending;
   const managedUrl = domain.managedUrl || runtimeStatus?.deploymentUrl || "";
+  useEffect(() => {
+    if (domain.status === previousStatus.current) return;
+    if (domain.status === "live") setMessage("Your custom domain is live.");
+    if (domain.status === "error") setMessage(domain.error || "The custom domain could not be connected.");
+    previousStatus.current = domain.status || null;
+  }, [domain.status, domain.error]);
+  if (domainQuery.isLoading) return <div className={`h-72 animate-pulse rounded-2xl ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />;
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
@@ -1712,13 +1726,19 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
           </div>
         ) : (
           <div className="mt-5 space-y-5">
-            <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
+            <div aria-live="polite" className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
               <div className="flex items-center gap-3">
                 <Globe size={16} className="text-purple-400" />
                 <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className={`min-w-0 flex-1 break-all font-mono text-sm ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{domain.hostname}</a>
                 <ExternalLink size={14} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
               </div>
               {status && <p className={`mt-3 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{status.detail}</p>}
+              {domain.status && !["live", "error"].includes(domain.status) && (
+                <p className={`mt-2 flex items-center gap-2 text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>
+                  <RefreshCw size={12} className={domainQuery.isFetching ? "animate-spin" : ""} />
+                  Checking automatically every 10 seconds
+                </p>
+              )}
               {domain.error && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{domain.error}</p>}
             </div>
             {domain.dnsRecords?.length > 0 && (
@@ -1747,7 +1767,7 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
             </div>
           </div>
         )}
-        {message && <p className="mt-4 text-xs text-red-400">{message}</p>}
+        {message && <p aria-live="polite" className={`mt-4 text-xs ${domain.status === "live" ? "text-emerald-400" : "text-red-400"}`}>{message}</p>}
       </GlassCard>
     </div>
   );
