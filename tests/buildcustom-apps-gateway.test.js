@@ -59,10 +59,16 @@ test("legacy plain and JSON route values both dispatch to their scripts", async 
 test("a verified custom hostname aliases the managed slug without changing managed routing", async () => {
   const reads = [];
   const routes = {
-    "hostname:www.customer-example.com": "project",
+    "hostname:www.customer-example.com": JSON.stringify({
+      slug: "project",
+      purpose: "application",
+      role: "direct",
+      primaryHostname: "customer-example.com",
+    }),
     project: JSON.stringify({ scriptName: "project-script", metadata: {} }),
   };
   let dispatchedScript;
+  let dispatchedHeaders;
   const env = {
     ROUTES: {
       async get(key) {
@@ -73,20 +79,30 @@ test("a verified custom hostname aliases the managed slug without changing manag
     DISPATCHER: {
       get(scriptName) {
         dispatchedScript = scriptName;
-        return { fetch: async () => new Response("same project", { headers: { "content-type": "text/plain" } }) };
+        return { fetch: async (request) => {
+          dispatchedHeaders = request.headers;
+          return new Response("same project", { headers: { "content-type": "text/plain" } });
+        } };
       },
     },
   };
 
-  const customResponse = await gateway.fetch(new Request("https://www.customer-example.com/"), env);
+  const customResponse = await gateway.fetch(new Request("https://www.customer-example.com/", {
+    headers: { "X-BuildCustom-Domain-Purpose": "spoofed" },
+  }), env);
   assert.equal(await customResponse.text(), "same project");
   assert.equal(dispatchedScript, "project-script");
   assert.deepEqual(reads, ["hostname:www.customer-example.com", "project"]);
+  assert.equal(dispatchedHeaders.get("X-BuildCustom-Hostname"), "www.customer-example.com");
+  assert.equal(dispatchedHeaders.get("X-BuildCustom-Domain-Purpose"), "application");
+  assert.equal(dispatchedHeaders.get("X-BuildCustom-Domain-Role"), "direct");
+  assert.equal(dispatchedHeaders.get("X-BuildCustom-Primary-Hostname"), "customer-example.com");
 
   reads.length = 0;
   const managedResponse = await gateway.fetch(new Request("https://project.apps.buildcustom.ai/"), env);
   assert.equal(await managedResponse.text(), "same project");
   assert.deepEqual(reads, ["project"]);
+  assert.equal(dispatchedHeaders.get("X-BuildCustom-Domain-Purpose"), null);
 });
 
 test("an unmapped custom hostname cannot reach a user Worker", async () => {
@@ -127,7 +143,14 @@ test("trusted managed route check verifies the custom-hostname alias", async () 
     ROUTES: { get: async (key) => routes[key] || null },
     DISPATCHER: { get: () => { throw new Error("must not dispatch"); } },
   });
-  assert.deepEqual(await response.json(), { ok: true, project: "project", redirectTo: null });
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    project: "project",
+    redirectTo: null,
+    purpose: null,
+    role: null,
+    primaryHostname: null,
+  });
   assert.equal(response.status, 200);
 });
 
@@ -142,7 +165,13 @@ test("secondary hostname redirects permanently to primary while preserving path 
   });
   assert.equal(response.status, 301);
   assert.equal(response.headers.get("location"), "https://customer.example/path/to/page?offer=1");
-  assert.deepEqual(hostnameRoute(routes["hostname:www.customer.example"]), { slug: "project", redirectTo: "customer.example" });
+  assert.deepEqual(hostnameRoute(routes["hostname:www.customer.example"]), {
+    slug: "project",
+    redirectTo: "customer.example",
+    purpose: null,
+    role: null,
+    primaryHostname: null,
+  });
 });
 
 test("a zone-wide SaaS route passes existing BuildCustom hosts through to their origin", async (t) => {

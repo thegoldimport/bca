@@ -29,11 +29,17 @@ export function routeConfig(raw) {
 export function hostnameRoute(raw) {
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.slug === "string") return { slug: parsed.slug, redirectTo: parsed.redirectTo || null };
+    if (parsed && typeof parsed.slug === "string") return {
+      slug: parsed.slug,
+      redirectTo: parsed.redirectTo || null,
+      purpose: parsed.purpose || null,
+      role: parsed.role || null,
+      primaryHostname: parsed.primaryHostname || null,
+    };
   } catch {
     // Existing hostname aliases contain only the slug.
   }
-  return { slug: raw, redirectTo: null };
+  return { slug: raw, redirectTo: null, purpose: null, role: null, primaryHostname: null };
 }
 
 export function metadataTags(metadata) {
@@ -70,7 +76,9 @@ export default {
       return fetch(request);
     }
     const managedSlug = hostname.endsWith(SUFFIX) ? hostname.slice(0, -SUFFIX.length) : null;
-    const hostnameConfig = managedSlug ? { slug: managedSlug, redirectTo: null } : hostnameRoute(await env.ROUTES.get(`hostname:${hostname}`));
+    const hostnameConfig = managedSlug
+      ? { slug: managedSlug, redirectTo: null, purpose: null, role: null, primaryHostname: null }
+      : hostnameRoute(await env.ROUTES.get(`hostname:${hostname}`));
     const slug = hostnameConfig.slug;
     if (typeof slug !== "string" || !SLUG.test(slug) || slug.includes(".")) return new Response("Not found", { status: 404 });
 
@@ -94,10 +102,17 @@ export default {
       const customHostname = (url.searchParams.get("hostname") || "").toLowerCase().replace(/\.$/, "");
       const mappedRoute = /^[a-z0-9.-]+$/.test(customHostname)
         ? hostnameRoute(await env.ROUTES.get(`hostname:${customHostname}`))
-        : { slug: null, redirectTo: null };
+        : { slug: null, redirectTo: null, purpose: null, role: null, primaryHostname: null };
       const mappedSlug = mappedRoute.slug;
       return Response.json(
-        { ok: mappedSlug === slug, project: mappedSlug === slug ? slug : null, redirectTo: mappedSlug === slug ? mappedRoute.redirectTo : null },
+        {
+          ok: mappedSlug === slug,
+          project: mappedSlug === slug ? slug : null,
+          redirectTo: mappedSlug === slug ? mappedRoute.redirectTo : null,
+          purpose: mappedSlug === slug ? mappedRoute.purpose : null,
+          role: mappedSlug === slug ? mappedRoute.role : null,
+          primaryHostname: mappedSlug === slug ? mappedRoute.primaryHostname : null,
+        },
         { status: mappedSlug === slug ? 200 : 404, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
       );
     }
@@ -130,7 +145,18 @@ export default {
       });
     }
 
-    const response = await env.DISPATCHER.get(scriptName).fetch(request);
+    const dispatchHeaders = new Headers(request.headers);
+    dispatchHeaders.delete("X-BuildCustom-Hostname");
+    dispatchHeaders.delete("X-BuildCustom-Domain-Purpose");
+    dispatchHeaders.delete("X-BuildCustom-Domain-Role");
+    dispatchHeaders.delete("X-BuildCustom-Primary-Hostname");
+    if (!managedSlug) {
+      dispatchHeaders.set("X-BuildCustom-Hostname", hostname);
+      if (hostnameConfig.purpose) dispatchHeaders.set("X-BuildCustom-Domain-Purpose", hostnameConfig.purpose);
+      if (hostnameConfig.role) dispatchHeaders.set("X-BuildCustom-Domain-Role", hostnameConfig.role);
+      if (hostnameConfig.primaryHostname) dispatchHeaders.set("X-BuildCustom-Primary-Hostname", hostnameConfig.primaryHostname);
+    }
+    const response = await env.DISPATCHER.get(scriptName).fetch(new Request(request, { headers: dispatchHeaders }));
     if (!response.headers.get("content-type")?.includes("text/html")) return response;
 
     const tags = metadataTags(metadata);

@@ -58,9 +58,36 @@ export async function ensureRuntimeSchema() {
       hostname text PRIMARY KEY,
       project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       role text NOT NULL CHECK (role IN ('primary', 'secondary')),
+      source text NOT NULL DEFAULT 'custom',
+      purpose text NOT NULL DEFAULT 'website',
+      hostname_kind text NOT NULL DEFAULT 'subdomain',
+      is_primary boolean NOT NULL DEFAULT false,
+      redirect_to text,
+      cloudflare_id text,
+      status text,
+      ssl_status text,
+      dns_records jsonb NOT NULL DEFAULT '[]'::jsonb,
+      error text,
+      checked_at timestamp,
+      migration_state jsonb NOT NULL DEFAULT '{}'::jsonb,
       created_at timestamp NOT NULL DEFAULT now()
     )
   `);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims DROP CONSTRAINT IF EXISTS runtime_custom_domain_claims_role_check`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'custom'`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'website'`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS hostname_kind text NOT NULL DEFAULT 'subdomain'`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS is_primary boolean NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS redirect_to text`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS cloudflare_id text`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS runtime_custom_domain_claims_cloudflare_id_unique ON runtime_custom_domain_claims (cloudflare_id) WHERE cloudflare_id IS NOT NULL`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS status text`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS ssl_status text`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS dns_records jsonb NOT NULL DEFAULT '[]'::jsonb`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS error text`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS checked_at timestamp`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS migration_state jsonb NOT NULL DEFAULT '{}'::jsonb`);
+  await db.execute(sql`ALTER TABLE runtime_custom_domain_claims ADD COLUMN IF NOT EXISTS updated_at timestamp NOT NULL DEFAULT now()`);
   await db.execute(sql`
     INSERT INTO runtime_custom_domain_claims (hostname, project_id, role)
     SELECT custom_domain, project_id, 'primary' FROM runtime_project_links WHERE custom_domain IS NOT NULL
@@ -70,6 +97,36 @@ export async function ensureRuntimeSchema() {
     INSERT INTO runtime_custom_domain_claims (hostname, project_id, role)
     SELECT custom_domain_secondary, project_id, 'secondary' FROM runtime_project_links WHERE custom_domain_secondary IS NOT NULL
     ON CONFLICT (hostname) DO NOTHING
+  `);
+  await db.execute(sql`
+    UPDATE runtime_custom_domain_claims claims SET
+      source = 'website_wizard',
+      role = CASE WHEN claims.hostname = links.custom_domain_secondary THEN 'redirect' ELSE 'primary' END,
+      purpose = CASE WHEN claims.hostname = links.custom_domain_secondary THEN 'redirect' ELSE 'website' END,
+      is_primary = claims.hostname = links.custom_domain,
+      redirect_to = CASE WHEN claims.hostname = links.custom_domain_secondary THEN links.custom_domain ELSE NULL END,
+      cloudflare_id = CASE WHEN claims.hostname = links.custom_domain_secondary THEN links.custom_domain_secondary_cloudflare_id ELSE links.custom_domain_cloudflare_id END,
+      status = CASE WHEN claims.hostname = links.custom_domain_secondary THEN links.custom_domain_secondary_status ELSE links.custom_domain_status END,
+      ssl_status = CASE WHEN claims.hostname = links.custom_domain_secondary THEN links.custom_domain_secondary_ssl_status ELSE links.custom_domain_ssl_status END,
+      dns_records = CASE WHEN claims.hostname = links.custom_domain_secondary THEN links.custom_domain_secondary_dns_records ELSE links.custom_domain_dns_records END,
+      error = CASE WHEN claims.hostname = links.custom_domain_secondary THEN links.custom_domain_secondary_error ELSE links.custom_domain_error END,
+      checked_at = CASE WHEN claims.hostname = links.custom_domain_secondary THEN links.custom_domain_secondary_checked_at ELSE links.custom_domain_checked_at END,
+      migration_state = links.custom_domain_migration_state,
+      hostname_kind = CASE
+        WHEN claims.hostname LIKE 'www.%' THEN 'www'
+        WHEN links.custom_domain_migration_state->>'registrableDomain' = claims.hostname THEN 'apex'
+        ELSE 'subdomain'
+      END,
+      updated_at = now()
+    FROM runtime_project_links links
+    WHERE claims.project_id = links.project_id
+      AND claims.source = 'custom'
+      AND (claims.hostname = links.custom_domain OR claims.hostname = links.custom_domain_secondary)
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS runtime_custom_domain_claims_one_primary_per_project
+    ON runtime_custom_domain_claims (project_id)
+    WHERE is_primary = true
   `);
   await db.execute(sql`
     DO $$

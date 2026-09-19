@@ -12,6 +12,9 @@ import {
 import { db } from "./db";
 import { eq, desc, count, isNull, isNotNull, and, or, inArray, notInArray } from "drizzle-orm";
 
+export type RuntimeDomainMapping = typeof runtimeCustomDomainClaims.$inferSelect;
+export type RuntimeDomainMappingUpdate = Partial<Omit<typeof runtimeCustomDomainClaims.$inferInsert, "hostname" | "projectId" | "createdAt">>;
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -33,7 +36,9 @@ export interface IStorage {
   getRuntimeProjectLink(projectId: number): Promise<RuntimeProjectLink | undefined>;
   getRuntimeProjectLinkBySubdomainSlug(subdomainSlug: string): Promise<RuntimeProjectLink | undefined>;
   getRuntimeProjectLinkByCustomDomain(customDomain: string): Promise<RuntimeProjectLink | undefined>;
-  getRuntimeCustomDomainClaim(hostname: string): Promise<{ hostname: string; projectId: number; role: string } | undefined>;
+  getRuntimeCustomDomainClaim(hostname: string): Promise<RuntimeDomainMapping | undefined>;
+  getRuntimeCustomDomains(projectId: number): Promise<RuntimeDomainMapping[]>;
+  updateRuntimeCustomDomain(hostname: string, projectId: number, data: RuntimeDomainMappingUpdate): Promise<RuntimeDomainMapping | undefined>;
   configureRuntimeCustomDomains(projectId: number, primary: string, secondary: string | null, migration: Record<string, unknown>): Promise<RuntimeProjectLink>;
   releaseRuntimeCustomDomainClaims(projectId: number): Promise<void>;
   claimRuntimeProjectLink(projectId: number, agentId: string): Promise<RuntimeProjectLink & { agentId: string }>;
@@ -148,21 +153,64 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select().from(runtimeCustomDomainClaims).where(eq(runtimeCustomDomainClaims.hostname, hostname));
     return result;
   }
+  async getRuntimeCustomDomains(projectId: number) {
+    return db.select().from(runtimeCustomDomainClaims)
+      .where(eq(runtimeCustomDomainClaims.projectId, projectId))
+      .orderBy(desc(runtimeCustomDomainClaims.isPrimary), runtimeCustomDomainClaims.hostname);
+  }
+  async updateRuntimeCustomDomain(hostname: string, projectId: number, data: RuntimeDomainMappingUpdate) {
+    const [updated] = await db.update(runtimeCustomDomainClaims)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(runtimeCustomDomainClaims.hostname, hostname), eq(runtimeCustomDomainClaims.projectId, projectId)))
+      .returning();
+    return updated;
+  }
   async configureRuntimeCustomDomains(projectId: number, primary: string, secondary: string | null, migration: Record<string, unknown>) {
     return db.transaction(async (tx) => {
-      const claims = [{ hostname: primary, projectId, role: "primary" }, ...(secondary ? [{ hostname: secondary, projectId, role: "secondary" }] : [])];
-      await tx.insert(runtimeCustomDomainClaims).values(claims).onConflictDoNothing();
+      const primaryKind = typeof migration.hostnameKind === "string" ? migration.hostnameKind : "subdomain";
+      const secondaryKind = secondary?.startsWith("www.") ? "www" : secondary ? "apex" : null;
+      const claims = [{
+        hostname: primary,
+        projectId,
+        role: "primary",
+        source: "website_wizard",
+        purpose: "website",
+        hostnameKind: primaryKind,
+        isPrimary: true,
+        redirectTo: null,
+        migrationState: migration,
+      }, ...(secondary ? [{
+        hostname: secondary,
+        projectId,
+        role: "redirect",
+        source: "website_wizard",
+        purpose: "redirect",
+        hostnameKind: secondaryKind!,
+        isPrimary: false,
+        redirectTo: primary,
+        migrationState: migration,
+      }] : [])];
+      await tx.insert(runtimeCustomDomainClaims)
+        .values(claims.map((claim) => ({ ...claim, isPrimary: false })))
+        .onConflictDoNothing();
       const storedClaims = await tx.select().from(runtimeCustomDomainClaims).where(inArray(runtimeCustomDomainClaims.hostname, claims.map((claim) => claim.hostname)));
       if (storedClaims.length !== claims.length || storedClaims.some((claim) => claim.projectId !== projectId)) {
         throw new Error("CUSTOM_DOMAIN_IN_USE");
       }
+      if (storedClaims.some((claim) => claim.source !== "website_wizard")) {
+        throw new Error("CUSTOM_DOMAIN_ROLE_CONFLICT");
+      }
+      await tx.update(runtimeCustomDomainClaims)
+        .set({ isPrimary: false, updatedAt: new Date() })
+        .where(eq(runtimeCustomDomainClaims.projectId, projectId));
       await tx.delete(runtimeCustomDomainClaims).where(and(
         eq(runtimeCustomDomainClaims.projectId, projectId),
+        eq(runtimeCustomDomainClaims.source, "website_wizard"),
         notInArray(runtimeCustomDomainClaims.hostname, claims.map((claim) => claim.hostname)),
       ));
       for (const claim of claims) {
         await tx.update(runtimeCustomDomainClaims)
-          .set({ role: claim.role })
+          .set({ ...claim, updatedAt: new Date() })
           .where(and(eq(runtimeCustomDomainClaims.hostname, claim.hostname), eq(runtimeCustomDomainClaims.projectId, projectId)));
       }
       const [updated] = await tx.update(runtimeProjectLinks).set({
@@ -175,7 +223,10 @@ export class DatabaseStorage implements IStorage {
     });
   }
   async releaseRuntimeCustomDomainClaims(projectId: number) {
-    await db.delete(runtimeCustomDomainClaims).where(eq(runtimeCustomDomainClaims.projectId, projectId));
+    await db.delete(runtimeCustomDomainClaims).where(and(
+      eq(runtimeCustomDomainClaims.projectId, projectId),
+      eq(runtimeCustomDomainClaims.source, "website_wizard"),
+    ));
   }
   async claimRuntimeProjectLink(projectId: number, agentId: string) {
     const existing = await this.getRuntimeProjectLink(projectId);

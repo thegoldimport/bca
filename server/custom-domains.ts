@@ -143,7 +143,12 @@ export function nameserversMatchExpected(current: string[], expected: string[]) 
     Array.from(expectedSet).every((value) => currentSet.has(value));
 }
 
-export async function verifyCustomDomainRouting(hostname: string, expectedSlug: string, expectedRedirectTo: string | null = null) {
+export async function verifyCustomDomainRouting(
+  hostname: string,
+  expectedSlug: string,
+  expectedRedirectTo: string | null = null,
+  expectedContext?: { purpose?: string | null; role?: string | null; primaryHostname?: string | null },
+) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -155,7 +160,14 @@ export async function verifyCustomDomainRouting(hostname: string, expectedSlug: 
     });
     if (!response.ok) return false;
     const body = await response.json().catch(() => null) as any;
-    return body?.ok === true && body?.project === expectedSlug && (body?.redirectTo || null) === expectedRedirectTo;
+    return body?.ok === true
+      && body?.project === expectedSlug
+      && (body?.redirectTo || null) === expectedRedirectTo
+      && (!expectedContext || (
+        (body?.purpose || null) === (expectedContext.purpose || null)
+        && (body?.role || null) === (expectedContext.role || null)
+        && (body?.primaryHostname || null) === (expectedContext.primaryHostname || null)
+      ));
   } catch {
     return false;
   } finally {

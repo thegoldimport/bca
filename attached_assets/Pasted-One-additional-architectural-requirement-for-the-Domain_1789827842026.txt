@@ -1,0 +1,67 @@
+One additional architectural requirement for the Domain Wizard:
+
+A BuildCustom project must support multiple custom hostnames, and those hostnames may have different roles within the same generated application.
+
+Example:
+
+buyermagnets.com = marketing website / primary public domain
+www.buyermagnets.com = redirect to buyermagnets.com
+app.buyermagnets.com = application/login/dashboard
+
+Future examples may include:
+
+docs.buyermagnets.com = documentation
+api.buyermagnets.com = API
+
+Do not architect Domains as if one project can only have one custom hostname.
+
+The domain model should support multiple hostname mappings per project and a role/purpose for each hostname.
+
+More importantly, domain management must eventually be exposed as authenticated BuildCustom platform actions/tools that the native VibeSDK/ThinkAgent can invoke.
+
+A user should eventually be able to tell the BuildCustom agent:
+
+“Make buyermagnets.com my main website and app.buyermagnets.com where users log into the app.”
+
+The agent should be able to configure the BuildCustom project/domain mappings and then guide the user through any DNS steps that require manual action.
+
+The AI agent must NOT directly manipulate Cloudflare infrastructure or database records. It should call the same authenticated BuildCustom domain service/actions used by the Domains UI.
+
+Design the boundary conceptually around actions such as:
+
+list_domains
+add_domain
+remove_domain
+verify_domain
+set_primary_domain
+set_domain_role
+get_dns_instructions
+check_domain_status
+
+Do not build unrelated agent functionality during this task, but make sure the Domain Wizard implementation does not prevent these actions from being exposed to ThinkAgent later.
+
+Also determine during planning how hostname roles should reach the generated application. For example, whether the BuildCustom gateway supplies trusted hostname/deployment context or whether the generated app simply routes based on the incoming Host header.
+
+Preserve the existing Workers for Platforms dispatch architecture and do not create an individual Worker route for every customer hostname.
+
+That gets us much closer to the real vision for BuildCustom.
+
+It's not merely “AI builds your app.” The agent can eventually operate the platform around the app too:
+
+“Publish this.”
+
+“Connect my domain.”
+
+“Put the dashboard at app.mycompany.com.”
+
+“Make this the primary domain.”
+
+“Create a staging version.”
+
+“Roll back yesterday's deployment.”
+
+“Add a database.”
+
+“Add Stripe.”
+
+The VibeSDK agent handles the customer's intent, while BuildCustom exposes controlled platform actions underneath it. That's the architecture we've been heading toward all along.
