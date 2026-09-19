@@ -503,7 +503,18 @@ function ProjectsPage() {
 
         <section className="mx-auto mt-auto w-full max-w-3xl pb-[6vh] pt-16">
           <div className="mb-6 text-center">
-            <img src={logoMark} alt="BuildCustom.Ai" className="mb-3 inline-block h-14 w-14 object-contain drop-shadow-[0_10px_18px_rgba(99,102,241,0.28)]" />
+            <video
+              poster={logoMark}
+              aria-label="BuildCustom.Ai animated cube"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              className="mb-3 inline-block h-14 w-14 object-contain drop-shadow-[0_10px_18px_rgba(99,102,241,0.28)]"
+            >
+              <source src="/spinning-cube-logo.webm" type="video/webm" />
+            </video>
             <h1 className={`font-display text-3xl font-bold tracking-tight sm:text-4xl ${theme === "dark" ? "text-white" : "text-gray-950"}`}>{firstName}, what are we building today?</h1>
             <p className={`mt-2 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Choose a starting point or describe your idea in your own words.</p>
           </div>
