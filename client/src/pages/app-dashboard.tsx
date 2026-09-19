@@ -11,6 +11,7 @@ import {
   Sun,
   Moon,
   Plus,
+  ArrowUp,
   Search,
   Bell,
   ChevronRight,
@@ -397,9 +398,12 @@ const PREVIEW_IMAGES: Record<string, any> = {
 
 function ProjectsPage() {
   const { theme } = useTheme();
-  const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [, navigate] = useLocation();
   const qc = useQueryClient();
+  const [starterPrompt, setStarterPrompt] = useState("");
+  const [starterPlanMode, setStarterPlanMode] = useState(false);
+  const [starterError, setStarterError] = useState("");
+  const starterInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
@@ -410,11 +414,35 @@ function ProjectsPage() {
     },
   });
 
-  const typeColors: Record<string, string> = {
-    website: "text-cyan-400", app: "text-purple-400", game: "text-pink-400", saas: "text-amber-400",
-  };
+  const starterSuggestions = [
+    { label: "Website", icon: Globe, prompt: "Build a modern website for " },
+    { label: "Mobile app", icon: Smartphone, prompt: "Create a mobile app that helps people " },
+    { label: "SaaS", icon: ShoppingBag, prompt: "Build a SaaS platform for " },
+    { label: "Game", icon: Gamepad2, prompt: "Create a fun browser game where " },
+    { label: "Dashboard", icon: BarChart3, prompt: "Build a dashboard that tracks " },
+    { label: "Marketplace", icon: Store, prompt: "Create a marketplace for " },
+  ];
+  const promptCompletions = [
+    "Build a modern website for a local service business with online booking",
+    "Build a modern website for a personal brand with a portfolio and contact form",
+    "Create a mobile app that helps people plan meals and build grocery lists",
+    "Create a mobile app that helps people track habits and stay accountable",
+    "Build a SaaS platform for managing client projects, invoices, and approvals",
+    "Build a SaaS platform for creating and scheduling social media content",
+    "Create a fun browser game where players solve daily word puzzles",
+    "Create a fun browser game where players run and grow a virtual business",
+    "Build a dashboard that tracks sales, customers, and monthly revenue",
+    "Build a dashboard that tracks marketing campaigns and conversion rates",
+    "Create a marketplace for local creators to sell handmade products",
+    "Create a marketplace for booking trusted home service professionals",
+  ];
+  const completion = starterPrompt
+    ? promptCompletions.find((item) => item.toLowerCase().startsWith(starterPrompt.toLowerCase()) && item.length > starterPrompt.length)
+    : undefined;
+  const completionSuffix = completion?.slice(starterPrompt.length) || "";
+
   const createProject = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ prompt, plan }: { prompt: string; plan: boolean }) => {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -422,179 +450,112 @@ function ProjectsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to create project");
-      return data;
+      return { project: data, prompt, plan };
     },
-    onSuccess: (project) => {
+    onSuccess: ({ project, prompt, plan }) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
+      sessionStorage.setItem(`buildcustom:first-prompt:${project.id}`, JSON.stringify({ prompt, plan }));
       navigate(`/app/editor/${project.id}`);
     },
+    onError: (error: Error) => setStarterError(error.message),
   });
+  const startProject = () => {
+    const prompt = starterPrompt.trim();
+    if (!prompt) {
+      starterInputRef.current?.focus();
+      return;
+    }
+    setStarterError("");
+    createProject.mutate({ prompt, plan: starterPlanMode });
+  };
+  const recentProjects = [...projects]
+    .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 6);
+  const firstName = getAppUser()?.username?.trim()?.split(/\s+/)[0] || "there";
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-brand-gradient">Projects</h1>
-          <p className={`mt-1 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
-            Build, manage, and deploy your creations
-          </p>
-        </div>
-        <button
-          onClick={() => createProject.mutate()}
-          disabled={createProject.isPending}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
-          style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 35%, #a855f7 65%, #ec4899 100%)" }}
-          data-testid="button-new-project"
-        >
-          <Plus size={18} />
-          {createProject.isPending ? "Starting..." : "New Project"}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          onClick={() => createProject.mutate()}
-          className={`rounded-2xl border-2 border-dashed p-8 flex flex-col items-center justify-center gap-4 cursor-pointer transition-colors min-h-[240px] ${
-            theme === "dark"
-              ? "border-white/20 hover:border-cyan-400/50 hover:bg-cyan-500/5"
-              : "border-gray-300 hover:border-cyan-400 hover:bg-cyan-50"
-          }`}
-          data-testid="card-create-project"
-        >
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${theme === "dark" ? "bg-white/10" : "bg-gray-100"}`}>
-            <Sparkles size={24} className="text-cyan-400" />
+    <div className={`relative min-h-[calc(100vh-64px)] overflow-hidden px-6 py-8 lg:px-10 ${theme === "dark" ? "bg-[#070711]" : "bg-[#f7f8fc]"}`}>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[45%] opacity-70" style={{ background: theme === "dark" ? "radial-gradient(ellipse at 50% 100%, rgba(236,72,153,.13), transparent 60%), radial-gradient(ellipse at 20% 100%, rgba(0,201,183,.10), transparent 50%)" : "radial-gradient(ellipse at 50% 100%, rgba(99,102,241,.10), transparent 60%)" }} />
+      <div className="relative mx-auto flex min-h-[calc(100vh-128px)] max-w-5xl flex-col">
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className={`text-xs font-semibold uppercase tracking-[0.16em] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Recent projects</h2>
+            {projects.length > 6 && <span className={`text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>Showing 6 of {projects.length}</span>}
           </div>
-          <div className="text-center">
-            <p className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Start from Scratch</p>
-            <p className={`text-sm mt-1 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Describe your idea and let AI build it</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {isLoading ? [1, 2, 3].map((item) => <div key={item} className={`h-[82px] animate-pulse rounded-2xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-white"}`} />) : recentProjects.map((project: any) => {
+              const IconComponent = PROJECT_TYPE_ICONS[project.type] || Globe;
+              const ageDays = Math.max(0, Math.floor((Date.now() - new Date(project.updatedAt).getTime()) / 86400000));
+              return (
+                <button key={project.id} onClick={() => navigate(`/app/project/${project.id}`)} className={`group flex min-w-0 items-center gap-3 rounded-2xl border p-3 text-left transition-all ${theme === "dark" ? "border-white/10 bg-white/[0.035] hover:border-cyan-400/30 hover:bg-white/[0.065]" : "border-gray-200 bg-white hover:border-cyan-300 hover:shadow-md"}`}>
+                  <div className={`h-14 w-16 shrink-0 overflow-hidden rounded-xl ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`}>
+                    <img src={project.previewImageUrl || PREVIEW_IMAGES[project.type] || previewPortfolio} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`truncate text-sm font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-900"}`}>{project.name}</p>
+                    <p className={`mt-1 flex items-center gap-1.5 text-[11px] ${theme === "dark" ? "text-white/35" : "text-gray-500"}`}><IconComponent size={11} /><span className="capitalize">{project.type}</span><span>·</span><span>{ageDays === 0 ? "today" : `${ageDays}d ago`}</span></p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        </motion.div>
+        </section>
 
-        {isLoading && (
-          [1, 2, 3].map(i => (
-            <div key={i} className={`rounded-2xl border h-64 animate-pulse ${theme === "dark" ? "bg-white/[0.03] border-white/10" : "bg-gray-100 border-gray-200"}`} />
-          ))
-        )}
+        <section className="mx-auto mt-auto w-full max-w-3xl pb-[6vh] pt-16">
+          <div className="mb-6 text-center">
+            <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-indigo-500 to-pink-500 text-white shadow-lg shadow-purple-500/20"><Sparkles size={20} /></div>
+            <h1 className={`font-display text-3xl font-bold tracking-tight sm:text-4xl ${theme === "dark" ? "text-white" : "text-gray-950"}`}>{firstName}, what are we building today?</h1>
+            <p className={`mt-2 text-sm ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Choose a starting point or describe your idea in your own words.</p>
+          </div>
 
-        {projects.map((project: any) => {
-          const IconComponent = PROJECT_TYPE_ICONS[project.type] || Globe;
-          const previewImg = PREVIEW_IMAGES[project.type] || previewPortfolio;
-          const isPublished = Boolean(project.deploymentUrl);
-          const iconColor = typeColors[project.type] || "text-cyan-400";
-          const updatedAgo = (() => {
-            const diff = Date.now() - new Date(project.updatedAt).getTime();
-            const mins = Math.floor(diff / 60000);
-            if (mins < 60) return `${mins}m ago`;
-            const hrs = Math.floor(mins / 60);
-            if (hrs < 24) return `${hrs}h ago`;
-            return `${Math.floor(hrs / 24)}d ago`;
-          })();
+          <div className="mb-3 flex flex-wrap justify-center gap-2">
+            {starterSuggestions.map((suggestion) => (
+              <button key={suggestion.label} onClick={() => { setStarterPrompt(suggestion.prompt); starterInputRef.current?.focus(); }} className={`flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-medium transition-all ${theme === "dark" ? "border-white/10 bg-white/5 text-white/60 hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-white" : "border-gray-200 bg-white text-gray-600 hover:border-cyan-300 hover:text-gray-900"}`}>
+                <suggestion.icon size={13} className="text-cyan-400" />{suggestion.label}
+              </button>
+            ))}
+          </div>
 
-          return (
-            <motion.div
-              key={project.id}
-              whileHover={{ scale: 1.02, y: -2 }}
-              onMouseEnter={() => setHoveredProject(String(project.id))}
-              onMouseLeave={() => setHoveredProject(null)}
-              onClick={() => navigate(`/app/project/${project.id}`)}
-              className={`rounded-2xl border cursor-pointer transition-all relative overflow-hidden flex flex-col ${
-                theme === "dark"
-                  ? "bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.06]"
-                  : "bg-white border-gray-200 hover:border-gray-300 hover:shadow-lg"
-              }`}
-              data-testid={`card-project-${project.id}`}
-            >
-              <div className="relative w-full h-40 overflow-hidden">
-                {project.previewImageUrl ? (
-                  <img src={project.previewImageUrl} alt={`${project.name} live project cover`} className="h-full w-full object-cover" />
-                ) : isPublished ? (
-                  <iframe
-                    src={project.deploymentUrl}
-                    title={`${project.name} live project cover`}
-                    loading="lazy"
-                    sandbox="allow-scripts allow-same-origin"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-0 top-0 h-[320px] w-[200%] origin-top-left scale-50 border-0 bg-white"
-                  />
-                ) : (
-                  <img src={previewImg} alt={project.name} className="w-full h-full object-cover" />
-                )}
-                <div className={`absolute inset-0 ${theme === "dark" ? "bg-gradient-to-t from-[#0a0a12] via-transparent to-transparent" : "bg-gradient-to-t from-white via-transparent to-transparent"}`} />
-                <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-medium backdrop-blur-md ${
-                  isPublished
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
-                    : project.status === "building"
-                    ? "bg-amber-500/20 text-amber-300 border border-amber-400/30"
-                    : "bg-white/10 text-white/70 border border-white/20"
-                }`}>
-                  {isPublished && "● "}
-                  {isPublished ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-                </span>
-              </div>
-
-              <div className="relative z-10 p-5 flex-1 flex flex-col">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                      theme === "dark" ? "bg-gradient-to-br from-cyan-500/20 to-purple-500/20" : "bg-gradient-to-br from-cyan-50 to-purple-50"
-                    }`}>
-                      <IconComponent size={18} className={iconColor} />
-                    </div>
-                    <div>
-                      <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{project.name}</h3>
-                      <p className={`text-xs capitalize ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{project.type}</p>
-                    </div>
-                  </div>
-                  <button
-                    className={`p-1.5 rounded-lg transition-colors ${theme === "dark" ? "hover:bg-white/10 text-white/40" : "hover:bg-gray-100 text-gray-400"}`}
-                    onClick={e => e.stopPropagation()}
-                    data-testid={`button-project-menu-${project.id}`}
-                  >
-                    <MoreHorizontal size={16} />
-                  </button>
+          <div className={`overflow-hidden rounded-2xl border shadow-2xl ${theme === "dark" ? "border-white/10 bg-[#11111d] shadow-black/30 focus-within:border-cyan-400/30" : "border-gray-200 bg-white shadow-indigo-100/60 focus-within:border-cyan-400"}`}>
+            <div className="relative min-h-[112px]">
+              {completionSuffix && (
+                <div aria-hidden="true" className={`pointer-events-none absolute inset-0 whitespace-pre-wrap px-5 py-4 text-base leading-7 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                  <span className="invisible">{starterPrompt}</span><span className={theme === "dark" ? "text-white/25" : "text-gray-300"}>{completionSuffix}</span>
                 </div>
-
-                <div className={`mt-3 pt-3 border-t flex items-center justify-between ${theme === "dark" ? "border-white/10" : "border-gray-100"}`}>
-                  <div className="flex items-center gap-1.5">
-                    <Clock size={13} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />
-                    <span className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{updatedAgo}</span>
-                  </div>
-                  <div className="flex items-center gap-0.5">
-                    {[
-                      { icon: History, label: "Version History", testId: `btn-history-${project.id}` },
-                      { icon: Terminal, label: "Console", testId: `btn-console-${project.id}` },
-                      { icon: FolderTree, label: "Files", testId: `btn-files-${project.id}` },
-                      { icon: Share2, label: "Share", testId: `btn-share-${project.id}` },
-                      { icon: Download, label: "Export", testId: `btn-export-${project.id}` },
-                    ].map((action) => (
-                      <button
-                        key={action.testId}
-                        title={action.label}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`p-1.5 rounded-lg transition-colors ${
-                          theme === "dark"
-                            ? "hover:bg-white/10 text-white/30 hover:text-white/70"
-                            : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                        }`}
-                        data-testid={action.testId}
-                      >
-                        <action.icon size={14} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {project.url && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <ExternalLink size={12} className="text-cyan-400/60" />
-                    <span className="text-xs text-cyan-400/80">{project.url}</span>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
+              )}
+              <textarea
+                ref={starterInputRef}
+                value={starterPrompt}
+                onChange={(event) => setStarterPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Tab" && completion) {
+                    event.preventDefault();
+                    setStarterPrompt(completion);
+                  } else if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    startProject();
+                  }
+                }}
+                placeholder="Describe what you want to build..."
+                rows={3}
+                className={`relative z-10 block min-h-[112px] w-full resize-none bg-transparent px-5 py-4 text-base leading-7 outline-none ${theme === "dark" ? "text-white placeholder:text-white/25" : "text-gray-900 placeholder:text-gray-400"}`}
+                data-testid="input-new-project-prompt"
+              />
+              {completionSuffix && <span className={`absolute bottom-2 right-4 z-20 rounded-md px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "bg-white/10 text-white/40" : "bg-gray-100 text-gray-500"}`}>Tab to complete</span>}
+            </div>
+            <div className={`flex items-center justify-between border-t px-3 py-2.5 ${theme === "dark" ? "border-white/10" : "border-gray-100"}`}>
+              <button onClick={() => setStarterPlanMode((current) => !current)} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${starterPlanMode ? "border-purple-400/50 bg-purple-400/15 text-purple-300" : theme === "dark" ? "border-white/10 text-white/45 hover:text-white/70" : "border-gray-200 text-gray-500 hover:text-gray-800"}`} aria-pressed={starterPlanMode} data-testid="button-new-project-plan">
+                <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${starterPlanMode ? "border-purple-400 bg-purple-400 text-white" : theme === "dark" ? "border-white/30" : "border-gray-300"}`}>{starterPlanMode && <Check size={10} />}</span>
+                Plan first
+              </button>
+              <button onClick={startProject} disabled={!starterPrompt.trim() || createProject.isPending} className="flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 via-indigo-500 to-pink-500 px-4 text-xs font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-30" data-testid="button-start-project">
+                {createProject.isPending ? "Starting…" : starterPlanMode ? "Start planning" : "Start building"} <ArrowUp size={14} />
+              </button>
+            </div>
+          </div>
+          {starterError && <p className="mt-3 text-center text-xs text-red-400">{starterError}</p>}
+          <p className={`mt-3 text-center text-[11px] ${theme === "dark" ? "text-white/25" : "text-gray-400"}`}>Press Enter to start · Shift + Enter for a new line</p>
+        </section>
       </div>
     </div>
   );
@@ -1112,13 +1073,14 @@ function EditorPage() {
     return () => window.clearInterval(poll);
   }, [publishing, projectId]);
 
-  const handleSend = async () => {
-    if (!chatInput.trim()) return;
+  const handleSend = async (promptOverride?: string, planOverride?: boolean) => {
+    const prompt = (promptOverride ?? chatInput).trim();
+    const activePlanMode = planOverride ?? planMode;
+    if (!prompt) return;
     if (!projectId) {
       setRuntimeError("Open Builder from a runtime-backed project to start an Agent session.");
       return;
     }
-    const prompt = chatInput.trim();
     setMessages((prev) => [
       ...prev,
       { role: "user" as const, content: prompt },
@@ -1130,7 +1092,7 @@ function EditorPage() {
     requestController.current = controller;
     setMessages((prev) => [
       ...prev,
-      { role: "assistant" as const, content: planMode ? "Agent is preparing a plan…" : "Agent is working on your request…" },
+      { role: "assistant" as const, content: activePlanMode ? "Agent is preparing a plan…" : "Agent is working on your request…" },
     ]);
     const imageContext = attachments.length
       ? `\n\nAttached images: ${attachments.map((image) => `${image.filename} (${image.mimeType}, ${image.size} bytes)`).join(", ")}`
@@ -1141,7 +1103,7 @@ function EditorPage() {
     const textFileContext = textContext.length
       ? `\n\nAttached file context:\n${textContext.map((file) => `--- ${file.filename} ---\n${file.content}`).join("\n").slice(0, 30000)}`
       : "";
-    const approvedPlanContext = !planMode && pendingPlan
+    const approvedPlanContext = !activePlanMode && pendingPlan
       ? `\n\nApproved implementation plan from Plan mode:\n${pendingPlan}\n\nFollow this approved plan while applying the user's request.`
       : "";
     const agentPrompt = `${prompt}${imageContext}${selectedContext}${textFileContext}${approvedPlanContext}`;
@@ -1149,7 +1111,7 @@ function EditorPage() {
       const response = await fetch(`/api/projects/${projectId}/runtime/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ message: agentPrompt, displayMessage: prompt, images: attachments, mode: planMode ? "plan" : "build" }),
+        body: JSON.stringify({ message: agentPrompt, displayMessage: prompt, images: attachments, mode: activePlanMode ? "plan" : "build" }),
         signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
@@ -1158,7 +1120,7 @@ function EditorPage() {
       }
       if (data.turn) setTurns((current) => [...current, data.turn]);
       setMessages([]);
-      if (planMode) {
+      if (activePlanMode) {
         setPendingPlan(data.message || "");
         setPlanMode(false);
       } else {
@@ -1167,7 +1129,7 @@ function EditorPage() {
       setAttachments([]);
       setTextContext([]);
       setSelectedElement(null);
-      if (planMode) return;
+      if (activePlanMode) return;
       const preview = await fetch(`/api/projects/${projectId}/runtime/previews`, {
         method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({}),
       });
@@ -1192,6 +1154,22 @@ function EditorPage() {
       setSending(false);
     }
   };
+
+  useEffect(() => {
+    if (!projectId) return;
+    const key = `buildcustom:first-prompt:${projectId}`;
+    const stored = sessionStorage.getItem(key);
+    if (!stored) return;
+    sessionStorage.removeItem(key);
+    try {
+      const starter = JSON.parse(stored);
+      if (typeof starter?.prompt === "string" && starter.prompt.trim()) {
+        void handleSend(starter.prompt, Boolean(starter.plan));
+      }
+    } catch {
+      // Leave the Builder ready for manual input if the handoff is malformed.
+    }
+  }, [projectId]);
 
   const restoreBuilderTurn = async (turn: RuntimeBuilderTurn) => {
     if (!projectId || !turn.commitHash || restoringTurnId !== null) return;
@@ -1744,7 +1722,7 @@ function EditorPage() {
               </button>
               ) : (
               <button
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
                 data-testid="button-send-chat"
               >
