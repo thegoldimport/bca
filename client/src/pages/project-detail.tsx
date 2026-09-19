@@ -1662,24 +1662,26 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
     },
   });
   const connect = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (options?: { forceCloudflare?: boolean }) => {
       const hostname = (customDomain || domain.hostname || "").trim();
+      const selectedStrategy = options?.forceCloudflare ? "cloudflare" : strategy;
       const configured = await updateDomain("POST", "/configure", {
         hostname,
-        strategy: strategy === "cloudflare" ? "customer_cloudflare" : "current_dns",
+        strategy: selectedStrategy === "cloudflare" ? "customer_cloudflare" : "current_dns",
         acknowledged,
-        ...((isApex || isWww) && strategy === "cloudflare" && registrableDomain ? {
+        ...((isApex || isWww) && selectedStrategy === "cloudflare" && registrableDomain ? {
           primaryHostname: primaryChoice === "root" ? registrableDomain : `www.${registrableDomain}`,
         } : {}),
-        ...(strategy === "cloudflare" ? { expectedNameservers: nameservers.map((value) => value.trim()) } : {}),
+        ...(selectedStrategy === "cloudflare" ? { expectedNameservers: nameservers.map((value) => value.trim()) } : {}),
       });
-      return strategy === "cloudflare"
+      return selectedStrategy === "cloudflare"
         ? configured
         : updateDomain("POST", "", { hostname });
     },
+    onMutate: () => setMessage("Saving nameservers…"),
     onSuccess: (body) => {
       qc.setQueryData(queryKey, body);
-      setMessage("");
+      setMessage("Nameservers saved. Checking for the change now.");
       setCustomDomain("");
       setStep("entry");
     },
@@ -1824,8 +1826,8 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                     <label className={`flex gap-3 rounded-xl border p-3 text-xs leading-5 ${theme === "dark" ? "border-white/10 text-white/60" : "border-gray-200 text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I reviewed Cloudflare’s scan and confirmed that my website and email records are present.</label>
                     <button onClick={() => setStep("nameservers")} disabled={!acknowledged} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>Continue to nameservers</button>
                   </div>
-                ) : <button onClick={() => { setMessage(""); connect.mutate(); }} disabled={busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Connecting…" : "Connect domain"}</button>}
-                {step === "nameservers" && <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}><p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Enter your two Cloudflare nameservers</p><p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Copy these from Cloudflare and replace your registrar’s nameservers. We will check when the change is active.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white placeholder-white/20" : "border-gray-200 bg-white text-gray-800"}`} />)}</div><button onClick={() => { setMessage(""); connect.mutate(); }} disabled={nameservers.some(ns => !ns.trim()) || busy} className="mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving setup…" : "Start verification"}</button></div>}
+                ) : <button onClick={() => { setMessage(""); connect.mutate(undefined); }} disabled={busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Connecting…" : "Connect domain"}</button>}
+                {step === "nameservers" && <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}><p className={`text-sm font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Enter your two Cloudflare nameservers</p><p className={`mt-1 text-xs leading-5 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Copy these from Cloudflare and replace your registrar’s nameservers. We will check when the change is active.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white placeholder-white/20" : "border-gray-200 bg-white text-gray-800"}`} />)}</div><button onClick={() => { setMessage(""); connect.mutate(undefined); }} disabled={nameservers.some(ns => !ns.trim()) || busy} className="mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving setup…" : "Start verification"}</button></div>}
               </div>
             )}
           </div>
@@ -1868,7 +1870,8 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                     {(migration.emailRiskFlags?.length || inventoryWarning) && <div className={`rounded-lg border px-3 py-2 text-xs leading-5 ${theme === "dark" ? "border-amber-400/20 bg-amber-400/10 text-amber-200" : "border-amber-300 bg-amber-50 text-amber-950"}`}>{migration.emailRiskFlags?.length > 0 && <p className="font-semibold">Email records detected: {migration.emailRiskFlags.join(", ").toUpperCase()}. Missing these records can interrupt email.</p>}{inventoryWarning && <p className={migration.emailRiskFlags?.length ? "mt-1" : ""}>{inventoryWarning}</p>}</div>}
                     <label className={`flex gap-3 text-xs leading-5 ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}><input type="checkbox" checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} className="mt-0.5 accent-cyan-400" />I reviewed Cloudflare’s scan and confirmed that my website and email records are present.</label>
                     <div className="grid gap-3 sm:grid-cols-2">{nameservers.map((ns, i) => <input key={i} value={ns} onChange={e => setNameservers(old => old.map((v, j) => j === i ? e.target.value : v))} placeholder={`Cloudflare nameserver ${i + 1}`} className={`rounded-xl border px-3 py-2 text-sm font-mono outline-none ${theme === "dark" ? "border-white/10 bg-white/5 text-white" : "border-gray-200 bg-white text-gray-800"}`} />)}</div>
-                    <button onClick={() => { setStrategy("cloudflare"); setMessage(""); connect.mutate(); }} disabled={!acknowledged || nameservers.some(ns => !ns.trim()) || busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving setup…" : "Start nameserver verification"}</button>
+                    <button type="button" onClick={() => connect.mutate({ forceCloudflare: true })} disabled={!acknowledged || nameservers.some(ns => !ns.trim()) || busy} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}>{connect.isPending ? "Saving nameservers…" : "Start nameserver verification"}</button>
+                    {message && <p aria-live="polite" className={`rounded-lg px-3 py-2 text-xs ${connect.isError ? "bg-red-500/10 text-red-500" : theme === "dark" ? "bg-white/5 text-white/65" : "bg-white text-gray-700"}`}>{message}</p>}
                   </div>
                 )}
               </div>

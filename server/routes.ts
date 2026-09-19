@@ -879,8 +879,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const primaryHostname = pairedHostnames ? requestedPrimary : hostname;
       const secondaryHostname = pairedHostnames ? (primaryHostname === rootHostname ? wwwHostname : rootHostname) : null;
-      if ((link?.customDomainCloudflareId || link?.customDomainSecondaryCloudflareId) &&
-          (link.customDomain !== primaryHostname || (link.customDomainSecondary || null) !== secondaryHostname)) {
+      const changesProvisionedPrimary = Boolean(link?.customDomainCloudflareId) && link.customDomain !== primaryHostname;
+      const changesProvisionedSecondary = Boolean(link?.customDomainSecondaryCloudflareId) &&
+        (link.customDomainSecondary || null) !== secondaryHostname;
+      if (changesProvisionedPrimary || changesProvisionedSecondary) {
         return res.status(409).json({ code: "REMOVE_DOMAIN_BEFORE_REBIND", message: "Remove the existing custom domain before changing the primary or secondary hostname." });
       }
       const hasCurrentInventory = prior.hostname === hostname && prior.dnsScannedAt && Array.isArray(prior.dnsInventory);
