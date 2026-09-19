@@ -129,7 +129,14 @@ test("route check identifies the expected project without dispatching user code"
     },
     DISPATCHER: { get: () => { dispatched = true; } },
   });
-  assert.deepEqual(await response.json(), { ok: true, project: "project" });
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    project: "project",
+    redirectTo: null,
+    purpose: null,
+    role: null,
+    primaryHostname: null,
+  });
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.equal(dispatched, false);
 });

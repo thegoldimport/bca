@@ -1881,6 +1881,9 @@ function DomainTab({ projectId, runtimeStatus }: { projectId: number; runtimeSta
                 <p className="font-semibold">Authoritative DNS migration</p>
                 <p className="mt-1">Expected: {(migration.expectedNameservers || []).join(" and ") || "Cloudflare nameservers not entered"}</p>
                 <p className="mt-1">Detected: {(migration.currentNameservers || []).join(", ") || "Checking current nameservers"}</p>
+                {migration.nameserverCheckSource === "parent_delegation" && migration.nameserversAuthoritative === true && (
+                  <p className="mt-2 font-medium text-emerald-500">Confirmed directly with the domain registry and Cloudflare DNS.</p>
+                )}
               </div>
             )}
             {domain.secondary && (

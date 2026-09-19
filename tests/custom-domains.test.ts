@@ -7,10 +7,49 @@ import {
   customDomainUpdate,
   domainLifecycle,
   normalizeCustomDomain,
+  nameserverActivationReady,
   nameserversMatchExpected,
+  parseNameserverDnsResponse,
+  routingStatusAfterVerification,
+  selectNameserverConsensus,
   validateExpectedNameservers,
   verifyCustomDomainRouting,
 } from "../server/custom-domains";
+
+function dnsName(name: string) {
+  return Buffer.concat([
+    ...name.split(".").map((label) => Buffer.concat([Buffer.from([label.length]), Buffer.from(label)])),
+    Buffer.from([0]),
+  ]);
+}
+
+function nameserverResponse(options: {
+  id?: number;
+  name?: string;
+  nameserver?: string;
+  flags?: number;
+  owner?: Buffer;
+  dataLength?: number;
+  target?: Buffer;
+}) {
+  const id = options.id ?? 0x1234;
+  const name = options.name ?? "example.com";
+  const nameserver = options.nameserver ?? "brad.ns.cloudflare.com";
+  const header = Buffer.alloc(12);
+  header.writeUInt16BE(id, 0);
+  header.writeUInt16BE(options.flags ?? 0x8400, 2);
+  header.writeUInt16BE(1, 4);
+  header.writeUInt16BE(1, 6);
+  const question = Buffer.concat([dnsName(name), Buffer.from([0, 2, 0, 1])]);
+  const owner = options.owner ?? Buffer.from([0xc0, 0x0c]);
+  const target = options.target ?? dnsName(nameserver);
+  const recordHeader = Buffer.alloc(10);
+  recordHeader.writeUInt16BE(2, 0);
+  recordHeader.writeUInt16BE(1, 2);
+  recordHeader.writeUInt32BE(300, 4);
+  recordHeader.writeUInt16BE(options.dataLength ?? target.length, 8);
+  return Buffer.concat([header, question, owner, recordHeader, target]);
+}
 
 test("custom domains are normalized and BuildCustom-owned hostnames are rejected", () => {
   assert.equal(normalizeCustomDomain("HTTPS://App.Example.COM/path"), "app.example.com");
@@ -38,6 +77,88 @@ test("authoritative nameservers must exactly match the expected Cloudflare pair"
   assert.equal(nameserversMatchExpected(expected, expected), true);
   assert.equal(nameserversMatchExpected([...expected, "ns1.legacy.example"], expected), false);
   assert.equal(nameserversMatchExpected([expected[0]], expected), false);
+});
+
+test("nameserver activation requires parent delegation and authoritative Cloudflare answers", () => {
+  const expected = ["brad.ns.cloudflare.com", "ollie.ns.cloudflare.com"];
+  assert.equal(nameserverActivationReady(expected, expected, true), true);
+  assert.equal(nameserverActivationReady(expected, expected, false), false);
+  assert.equal(nameserverActivationReady(["ns1.legacy.example", "ns2.legacy.example"], expected, true), false);
+});
+
+test("direct DNS parser accepts an exact compressed authoritative NS response", () => {
+  const packet = nameserverResponse({});
+  assert.deepEqual(parseNameserverDnsResponse(packet, { id: 0x1234, name: "example.com" }), {
+    authoritative: true,
+    nameservers: ["brad.ns.cloudflare.com"],
+  });
+});
+
+test("direct DNS parser rejects untrusted or malformed responses", () => {
+  assert.throws(
+    () => parseNameserverDnsResponse(nameserverResponse({}), { id: 0x4321, name: "example.com" }),
+    /Mismatched DNS response ID/,
+  );
+  assert.throws(
+    () => parseNameserverDnsResponse(nameserverResponse({ flags: 0x0400 }), { id: 0x1234, name: "example.com" }),
+    /not a response/,
+  );
+  assert.throws(
+    () => parseNameserverDnsResponse(nameserverResponse({ flags: 0x8600 }), { id: 0x1234, name: "example.com" }),
+    /Truncated UDP/,
+  );
+  assert.throws(
+    () => parseNameserverDnsResponse(nameserverResponse({ dataLength: 512 }), { id: 0x1234, name: "example.com" }),
+    /Truncated DNS record data/,
+  );
+  assert.throws(
+    () => parseNameserverDnsResponse(nameserverResponse({ owner: Buffer.from([0xc0, 0x1d]) }), { id: 0x1234, name: "example.com" }),
+    /compression loop/,
+  );
+});
+
+test("direct DNS parser ignores NS records for an unrelated owner", () => {
+  const packet = nameserverResponse({ owner: dnsName("other.example.com") });
+  assert.deepEqual(
+    parseNameserverDnsResponse(packet, { id: 0x1234, name: "example.com" }).nameservers,
+    [],
+  );
+});
+
+test("direct DNS parser enforces exact NS record framing", () => {
+  const target = dnsName("brad.ns.cloudflare.com");
+  assert.throws(
+    () => parseNameserverDnsResponse(
+      nameserverResponse({ target, dataLength: target.length - 2 }),
+      { id: 0x1234, name: "example.com" },
+    ),
+    /Invalid NS record data length/,
+  );
+  assert.throws(
+    () => parseNameserverDnsResponse(
+      nameserverResponse({ target: Buffer.concat([target, Buffer.from([0])]) }),
+      { id: 0x1234, name: "example.com" },
+    ),
+    /Invalid NS record data length/,
+  );
+  assert.deepEqual(
+    parseNameserverDnsResponse(
+      nameserverResponse({ target: Buffer.from([0xc0, 0x0c]) }),
+      { id: 0x1234, name: "example.com" },
+    ).nameservers,
+    ["example.com"],
+  );
+});
+
+test("parent delegation requires a unique strict consensus", () => {
+  assert.deepEqual(selectNameserverConsensus([
+    { nameservers: ["brad.ns.cloudflare.com", "ollie.ns.cloudflare.com"], count: 3 },
+    { nameservers: ["ns1.legacy.example", "ns2.legacy.example"], count: 1 },
+  ]), ["brad.ns.cloudflare.com", "ollie.ns.cloudflare.com"]);
+  assert.throws(() => selectNameserverConsensus([
+    { nameservers: ["brad.ns.cloudflare.com", "ollie.ns.cloudflare.com"], count: 2 },
+    { nameservers: ["ns1.legacy.example", "ns2.legacy.example"], count: 2 },
+  ]), /strict delegation consensus/);
 });
 
 test("Cloudflare states map to the customer domain lifecycle", () => {
@@ -128,15 +249,72 @@ test("missing Cloudflare for SaaS quota becomes a clear configuration error", as
   await assert.rejects(createCustomHostname("app.example.com"), /Cloudflare for SaaS is not enabled/);
 });
 
-test("routing verification requires the expected managed project slug", async (t) => {
+test("routing verification reaches the customer hostname and requires the expected project context", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = "";
+  let requestedInit: RequestInit | undefined;
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = String(input);
+    requestedInit = init;
+    return Response.json({
+      ok: true,
+      project: "test1",
+      redirectTo: null,
+      purpose: "website",
+      role: "primary",
+      primaryHostname: "buyermagnets.com",
+    });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  assert.equal(await verifyCustomDomainRouting("buyermagnets.com", "test1", null, {
+    purpose: "website",
+    role: "primary",
+    primaryHostname: "buyermagnets.com",
+  }), true);
+  const url = new URL(requestedUrl);
+  assert.equal(url.hostname, "buyermagnets.com");
+  assert.equal(url.pathname, "/_buildcustom/route-check");
+  assert.ok(url.searchParams.get("probe"));
+  assert.equal(requestedInit?.redirect, "manual");
+  assert.equal(new Headers(requestedInit?.headers).get("cache-control"), "no-cache");
+  assert.equal(await verifyCustomDomainRouting("buyermagnets.com", "another-project"), false);
+});
+
+test("routing verification keeps an old or unrelated customer site in connecting state", async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html>old site</html>", {
+    status: 200,
+    headers: { "content-type": "text/html" },
+  });
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const verified = await verifyCustomDomainRouting("buyermagnets.com", "test1");
+  assert.equal(verified, false);
+  assert.equal(routingStatusAfterVerification("live", verified), "connecting");
+  assert.equal(routingStatusAfterVerification("pending_dns", verified), "pending_dns");
+  assert.equal(routingStatusAfterVerification("live", true), "live");
+});
+
+test("secondary routing verification requires an exact path and query preserving 301", async (t) => {
   const originalFetch = globalThis.fetch;
   let requestedUrl = "";
   globalThis.fetch = async (input) => {
     requestedUrl = String(input);
-    return Response.json({ ok: true, project: "test1" });
+    const url = new URL(requestedUrl);
+    return new Response(null, {
+      status: 301,
+      headers: { Location: `https://buyermagnets.com${url.pathname}${url.search}` },
+    });
   };
   t.after(() => { globalThis.fetch = originalFetch; });
-  assert.equal(await verifyCustomDomainRouting("buyermagnets.com", "test1"), true);
-  assert.match(requestedUrl, /^https:\/\/test1\.apps\.buildcustom\.ai\/_buildcustom\/custom-host-route-check\?/);
-  assert.equal(await verifyCustomDomainRouting("buyermagnets.com", "another-project"), false);
+  assert.equal(await verifyCustomDomainRouting("www.buyermagnets.com", "test1", "buyermagnets.com"), true);
+  const url = new URL(requestedUrl);
+  assert.equal(url.hostname, "www.buyermagnets.com");
+  assert.match(url.pathname, /^\/_buildcustom\/route-check\/[a-f0-9]{16}$/);
+  assert.equal(url.searchParams.get("probe"), url.pathname.split("/").at(-1));
+
+  globalThis.fetch = async () => new Response(null, {
+    status: 301,
+    headers: { Location: "https://buyermagnets.com/wrong-path" },
+  });
+  assert.equal(await verifyCustomDomainRouting("www.buyermagnets.com", "test1", "buyermagnets.com"), false);
 });

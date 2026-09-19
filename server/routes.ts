@@ -31,8 +31,8 @@ import {
   classifyHostname,
   inspectPublicDns,
   validateExpectedNameservers,
-  authoritativeNameservers,
-  nameserversMatchExpected,
+  checkNameserverActivation,
+  routingStatusAfterVerification,
   verifyCustomDomainRouting,
 } from "./custom-domains";
 import {
@@ -188,8 +188,9 @@ async function persistVerifiedCustomDomain(projectId: number, hostname: string, 
     }
     const routing = await domainRoutingContext(projectId, hostname);
     await setPublishedCustomHostname(hostname, slug, undefined, routing || undefined);
-    if (!await verifyCustomDomainRouting(hostname, slug, null, routing || undefined)) {
-      update.customDomainStatus = "connecting" as any;
+    const routingVerified = await verifyCustomDomainRouting(hostname, slug, null, routing || undefined);
+    update.customDomainStatus = routingStatusAfterVerification(update.customDomainStatus, routingVerified) as any;
+    if (!routingVerified) {
       update.customDomainError = "DNS and SSL are active. BuildCustom is waiting for the project route to finish propagating.";
       migration = { ...migration, lifecycleLabel: "Connecting Website", routingActive: false };
     } else {
@@ -219,8 +220,9 @@ async function persistVerifiedSecondaryDomain(projectId: number, hostname: strin
   if (update.customDomainStatus === "live") {
     const routing = await domainRoutingContext(projectId, hostname);
     await setPublishedCustomHostname(hostname, slug, primaryHostname, routing || undefined);
-    if (!await verifyCustomDomainRouting(hostname, slug, primaryHostname, routing || undefined)) {
-      update.customDomainStatus = "connecting" as any;
+    const routingVerified = await verifyCustomDomainRouting(hostname, slug, primaryHostname, routing || undefined);
+    update.customDomainStatus = routingStatusAfterVerification(update.customDomainStatus, routingVerified) as any;
+    if (!routingVerified) {
       update.customDomainError = "DNS and SSL are active. BuildCustom is waiting for the redirect route to finish propagating.";
     }
   } else {
@@ -999,10 +1001,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const link = await storage.getRuntimeProjectLink(project.id);
       if (link?.customDomain && !link.customDomainCloudflareId && link.customDomainMigrationState?.expectedNameservers) {
         const expected = link.customDomainMigrationState.expectedNameservers as string[];
-        const currentNameservers = await authoritativeNameservers(link.customDomain);
-        const active = nameserversMatchExpected(currentNameservers, expected);
+        const nameserverCheck = await checkNameserverActivation(link.customDomain, expected);
+        const { currentNameservers, active } = nameserverCheck;
         const migration = {
           ...link.customDomainMigrationState, currentNameservers, nameserversActive: active,
+          nameserverCheckSource: nameserverCheck.checkSource,
+          nameserversAuthoritative: nameserverCheck.authoritativeActive,
           lifecycleLabel: active ? "Cloudflare DNS Active" : "Waiting for Nameservers",
           lastCheckedAt: new Date().toISOString(),
         };
@@ -1060,9 +1064,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const prior = link.customDomainMigrationState || {};
       let migration = { ...prior };
       if (Array.isArray(prior.expectedNameservers) && prior.expectedNameservers.length === 2) {
-        const currentNameservers = await authoritativeNameservers(link.customDomain);
-        const active = nameserversMatchExpected(currentNameservers, prior.expectedNameservers.map(String));
-        migration = { ...migration, currentNameservers, nameserversActive: active, lifecycleLabel: active ? "Cloudflare DNS Active" : "Waiting for Nameservers" };
+        const nameserverCheck = await checkNameserverActivation(link.customDomain, prior.expectedNameservers.map(String));
+        const { currentNameservers, active } = nameserverCheck;
+        migration = {
+          ...migration,
+          currentNameservers,
+          nameserversActive: active,
+          nameserverCheckSource: nameserverCheck.checkSource,
+          nameserversAuthoritative: nameserverCheck.authoritativeActive,
+          lifecycleLabel: active ? "Cloudflare DNS Active" : "Waiting for Nameservers",
+        };
       }
       let updated = await persistVerifiedCustomDomain(project.id, link.customDomain, link.subdomainSlug, cloudflareHostname, migration);
       if (updated.customDomainSecondary && migration.nameserversActive === true) {

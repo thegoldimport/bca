@@ -93,7 +93,14 @@ export default {
 
     if (url.pathname === "/_buildcustom/route-check") {
       return Response.json(
-        { ok: true, project: slug },
+        {
+          ok: true,
+          project: slug,
+          redirectTo: hostnameConfig.redirectTo,
+          purpose: hostnameConfig.purpose,
+          role: hostnameConfig.role,
+          primaryHostname: hostnameConfig.primaryHostname,
+        },
         { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
       );
     }
