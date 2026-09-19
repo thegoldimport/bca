@@ -2202,11 +2202,11 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                     )}
 
                     {recoveryStep.id === "connect" && (
-                      <div aria-live="polite" className={`rounded-xl border p-4 text-xs leading-5 ${connectionGuidance.kind === "action" ? "border-amber-400/30 bg-amber-400/10" : connectionGuidance.kind === "complete" ? "border-emerald-400/30 bg-emerald-400/10" : theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                      <div aria-live="polite" className={`rounded-xl border p-4 text-xs leading-5 ${connectionGuidance.kind === "action" ? theme === "dark" ? "border-amber-400/30 bg-amber-400/10 text-amber-100" : "border-amber-300 bg-amber-50 text-amber-950" : connectionGuidance.kind === "complete" ? theme === "dark" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100" : "border-emerald-300 bg-emerald-50 text-emerald-950" : theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
                         <div className="flex items-start gap-3">
                           {connectionGuidance.kind === "waiting" ? <RefreshCw size={18} className="mt-0.5 shrink-0 animate-spin text-cyan-400" /> : connectionGuidance.kind === "complete" ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-500" /> : connectionGuidance.kind === "action" ? <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-400" /> : <XCircle size={18} className="mt-0.5 shrink-0 text-red-400" />}
                           <div>
-                            <p className={`text-sm font-semibold ${connectionGuidance.kind === "action" ? "text-amber-300" : connectionGuidance.kind === "complete" ? "text-emerald-500" : theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{connectionGuidance.title}</p>
+                            <p className={`text-sm font-semibold ${connectionGuidance.kind === "action" ? theme === "dark" ? "text-amber-300" : "text-amber-900" : connectionGuidance.kind === "complete" ? theme === "dark" ? "text-emerald-300" : "text-emerald-900" : theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{connectionGuidance.title}</p>
                             {connectionGuidance.kind === "waiting" && <p className="mt-1">No action is needed right now. Keep this page open. DNS and security-certificate checks can take a few minutes, and we are checking automatically.</p>}
                             {connectionGuidance.kind === "action" && <p className="mt-1">Open Cloudflare, go to <strong>DNS → Records</strong>, and add each record exactly as shown. After that, come back here. You do not need to restart the wizard.</p>}
                             {connectionGuidance.kind === "complete" && <p className="mt-1">Your domain is secure and serving this project. Nothing else is required.</p>}
@@ -2217,10 +2217,10 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                         {connectionGuidance.kind === "action" && domain.dnsRecords?.length > 0 && (
                           <div className={`mt-4 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-black/20" : "border-amber-200 bg-white"}`}>
                             {domain.dnsRecords.map((record: any, index: number) => (
-                              <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_2rem] sm:items-center ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-100" : ""}`}>
-                                <span className="font-semibold">{record.type}</span>
-                                <span className="break-all font-mono">{record.name}</span>
-                                <span className="break-all font-mono">{record.value}</span>
+                              <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_2rem] sm:items-center ${theme === "dark" ? "text-white/80" : "text-gray-900"} ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-200" : ""}`}>
+                                <span className={`font-bold ${theme === "dark" ? "text-cyan-300" : "text-cyan-800"}`}>{record.type}</span>
+                                <span className="break-all font-mono font-medium">{record.name}</span>
+                                <span className="break-all font-mono font-medium">{record.value}</span>
                                 <button type="button" onClick={() => copyRecord(String(record.value || ""))} aria-label={`Copy value for ${record.name}`} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/50 hover:bg-white/10" : "text-gray-500 hover:bg-gray-100"}`}><Copy size={13} /></button>
                               </div>
                             ))}
