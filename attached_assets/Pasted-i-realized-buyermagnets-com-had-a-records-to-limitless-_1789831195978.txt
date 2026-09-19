@@ -1,0 +1,99 @@
+i realized buyermagnets.com had a records to limitless authority to dsiplay my old funnel. do I need to delete any of those records so the new tool can show on this test domain?
+
+Yes. Now that buyermagnets.com is actually using Cloudflare DNS, you're at the point where we can replace the old website routing with BuildCustom routing. Cloudflare supports a CNAME at the root through automatic apex CNAME flattening.
+
+From your screenshot, I can see two root A records for buyermagnets.com:
+
+209.124.93.170
+162.159.140.166
+
+Those are web-routing records. If the goal is for buyermagnets.com to show your new BuildCustom test app, we should not leave the old root A records competing with the new BuildCustom root mapping.
+
+But don't start deleting everything
+
+Most of the other records in your screenshot should remain because they support other services, especially email:
+
+mail.buyermagnets.com        A
+buyermagnets.com             MX → mail.buyermagnets.com
+buyermagnets.com             TXT/SPF
+_autodiscover._tcp           SRV
+_caldavs / _carddavs         SRV/TXT
+_acme-challenge              TXT
+cpanel.*
+webmail.*
+etc.
+
+Cloudflare notes that MX/TXT and other non-web records are separate from the A/AAAA/CNAME records used for web traffic.
+
+So do not delete your MX, mail, SPF, TXT, DKIM, DMARC, SRV, etc.
+
+The one other record I notice is:
+
+www.buyermagnets.com
+CNAME → sites.ludicrous.cloud
+
+That looks very likely to be part of your old Limitless Authority website routing. If we want www.buyermagnets.com to become part of the new BuildCustom setup too, that record will eventually need to be replaced as well.
+
+What I would do right now
+
+Since Replit is building the wizard specifically to make this safe, I wouldn't manually delete those A records yet.
+
+Have Replit detect exactly this scenario:
+
+Existing website detected at buyermagnets.com.
+
+Then the wizard should tell you something like:
+
+BuildCustom will replace these website records
+
+A @ → 209.124.93.170
+A @ → 162.159.140.166
+
+Your email and other DNS records will not be changed.
+
+Replace Website Records
+
+And for www:
+
+Existing website connection detected:
+
+CNAME www → sites.ludicrous.cloud
+
+Replace this connection with BuildCustom?
+
+That is exactly the experience your future customers are going to encounter, so buyermagnets.com is turning into a great real-world test case.
+
+Once those old root web records are removed/replaced, Cloudflare can use an apex CNAME for the root; apex CNAME flattening is automatic on Cloudflare plans.
+
+One thing I want Replit to be careful about
+
+That 162.159.140.166 address is in Cloudflare space, so I would not assume what created it merely from this screenshot. Have Replit inspect the zone and the existing BuildCustom custom-hostname state before touching either root record.
+
+I'd send Replit this before continuing:
+
+We have now moved buyermagnets.com DNS to Cloudflare successfully. The Cloudflare DNS zone currently contains existing website-routing records from the old site, including two apex A records for buyermagnets.com, and www.buyermagnets.com currently has a CNAME pointing to the old website provider.
+
+Do not delete or modify anything yet.
+
+As part of the Domain Wizard test, inspect these records and determine which records are specifically responsible for serving the old website versus records required for email or other services.
+
+The wizard should be capable of detecting existing web-routing records when a customer connects a domain and clearly telling them which records BuildCustom needs to replace.
+
+It must never broadly delete DNS records.
+
+For this test, show me the exact proposed DNS changes before applying them. Categorize them as:
+
+REPLACE FOR BUILDCUSTOM
+existing A/AAAA/CNAME records that conflict with BuildCustom web routing
+
+KEEP
+MX, mail, SPF, DKIM, DMARC, TXT verification, SRV, and unrelated service records
+
+REVIEW
+anything whose purpose cannot be determined safely
+
+Also inspect the current Cloudflare Custom Hostname/fallback/gateway configuration and tell me exactly what the new apex and www records should become for our existing BuildCustom architecture.
+
+Do not make the changes until I approve them.
+
+I would do that instead of manually deleting those records in Cloudflare right now. It lets us test the exact safety logic we want the BuildCustom wizard to have for real customers.
