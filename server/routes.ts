@@ -271,7 +271,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const userId = await requireAuth(req, res);
       if (!userId) return;
-      const parsed = insertProjectSchema.safeParse({ ...req.body, userId });
+      const requestedName = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      let name = requestedName;
+      if (!name) {
+        const existingProjects = await storage.getProjectsByUser(userId);
+        const usedNumbers = new Set(
+          existingProjects
+            .map((project) => project.name.match(/^Project(\d+)$/i)?.[1])
+            .filter(Boolean)
+            .map(Number),
+        );
+        let nextNumber = 1;
+        while (usedNumbers.has(nextNumber)) nextNumber += 1;
+        name = `Project${nextNumber}`;
+      }
+      const parsed = insertProjectSchema.safeParse({ ...req.body, name, userId });
       if (!parsed.success) return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
       const project = await storage.createProject(parsed.data);
       return res.status(201).json(project);

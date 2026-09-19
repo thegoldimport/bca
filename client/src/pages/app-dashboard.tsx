@@ -395,93 +395,11 @@ const PREVIEW_IMAGES: Record<string, any> = {
   website: previewPortfolio, app: previewFitness, game: previewGame, saas: previewEcommerce,
 };
 
-function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const { theme } = useTheme();
-  const qc = useQueryClient();
-  const [form, setForm] = useState({ name: "", type: "website", description: "" });
-  const [error, setError] = useState("");
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to create project");
-      return data;
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["projects"] }); onCreated(); },
-    onError: (err: any) => setError(err.message),
-  });
-  const createProject = () => {
-    if (!form.name.trim()) {
-      setError("Project name is required");
-      return;
-    }
-    mutation.mutate();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className={`relative w-full max-w-md rounded-2xl border p-6 z-10 ${
-          theme === "dark" ? "bg-[#0d0d1a] border-white/10" : "bg-white border-gray-200"
-        }`}
-      >
-        <h2 className={`text-xl font-display font-bold mb-6 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>New Project</h2>
-
-        <div className="space-y-4">
-          <div>
-            <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-600"}`}>Project Name</label>
-            <input
-              value={form.name}
-              onChange={e => setForm(form => ({ ...form, name: e.target.value }))}
-              onKeyDown={e => {
-                if (e.key === "Enter" && !mutation.isPending) createProject();
-              }}
-              placeholder="My Awesome Project"
-              autoFocus
-              className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none border transition-colors ${
-                theme === "dark"
-                  ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-cyan-400/50"
-                  : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-cyan-400"
-              }`}
-              data-testid="input-project-name"
-            />
-          </div>
-
-          {error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</p>}
-
-          <div className="flex gap-3 pt-2">
-            <button onClick={onClose} className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-              theme === "dark" ? "border-white/10 text-white/50 hover:text-white/80" : "border-gray-200 text-gray-600 hover:bg-gray-50"
-            }`}>Cancel</button>
-            <button
-              onClick={createProject}
-              disabled={mutation.isPending}
-              className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
-              style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
-              data-testid="button-create-project"
-            >
-              {mutation.isPending ? "Creating..." : "Create Project"}
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
 function ProjectsPage() {
   const { theme } = useTheme();
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
-  const [showNewProject, setShowNewProject] = useState(false);
   const [, navigate] = useLocation();
+  const qc = useQueryClient();
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
@@ -495,18 +413,25 @@ function ProjectsPage() {
   const typeColors: Record<string, string> = {
     website: "text-cyan-400", app: "text-purple-400", game: "text-pink-400", saas: "text-amber-400",
   };
+  const createProject = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ type: "website", description: "" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to create project");
+      return data;
+    },
+    onSuccess: (project) => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      navigate(`/app/editor/${project.id}`);
+    },
+  });
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      {showNewProject && (
-        <AnimatePresence>
-          <NewProjectModal
-            onClose={() => setShowNewProject(false)}
-            onCreated={() => setShowNewProject(false)}
-          />
-        </AnimatePresence>
-      )}
-
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-brand-gradient">Projects</h1>
@@ -515,20 +440,21 @@ function ProjectsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowNewProject(true)}
+          onClick={() => createProject.mutate()}
+          disabled={createProject.isPending}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 transition-all shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
           style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 35%, #a855f7 65%, #ec4899 100%)" }}
           data-testid="button-new-project"
         >
           <Plus size={18} />
-          New Project
+          {createProject.isPending ? "Starting..." : "New Project"}
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         <motion.div
           whileHover={{ scale: 1.02 }}
-          onClick={() => setShowNewProject(true)}
+          onClick={() => createProject.mutate()}
           className={`rounded-2xl border-2 border-dashed p-8 flex flex-col items-center justify-center gap-4 cursor-pointer transition-colors min-h-[240px] ${
             theme === "dark"
               ? "border-white/20 hover:border-cyan-400/50 hover:bg-cyan-500/5"
@@ -1575,7 +1501,35 @@ function EditorPage() {
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {runtimeError && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{runtimeError}</div>}
-          {!turns.length && !messages.length && !runtimeError && <div className={`rounded-2xl px-4 py-3 text-sm ${theme === "dark" ? "bg-white/5 text-white/60 border border-white/10" : "bg-gray-100 text-gray-600 border border-gray-200"}`}>Agent is ready. Describe what you want to build.</div>}
+          {!turns.length && !messages.length && !runtimeError && (
+            <div className={`rounded-2xl border px-4 py-4 ${theme === "dark" ? "bg-white/5 border-white/10" : "bg-gray-100 border-gray-200"}`}>
+              <p className={`text-sm font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>What do you want to build?</p>
+              <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Describe your idea, or start with one of these:</p>
+              <div className="mt-3 flex flex-col gap-2">
+                {[
+                  "Build a landing page for my business",
+                  "Create an online store",
+                  "Make a dashboard for tracking data",
+                  "Build a booking website",
+                ].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => {
+                      setChatInput(suggestion);
+                      window.setTimeout(() => textareaRef.current?.focus(), 0);
+                    }}
+                    className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                      theme === "dark"
+                        ? "border-white/10 text-white/65 hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-white"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-cyan-400 hover:text-gray-900"
+                    }`}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {turns.map((turn) => (
             <div key={turn.id} className="space-y-3" data-testid={`builder-turn-${turn.id}`}>
               <div className="flex justify-end">
