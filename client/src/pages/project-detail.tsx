@@ -14,7 +14,7 @@ import {
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders } from "@/lib/auth";
 import { getDomain } from "tldts";
-import { domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
+import { domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
   website: new URL("../assets/preview-portfolio.jpg", import.meta.url).href,
   app: new URL("../assets/preview-fitness.jpg", import.meta.url).href,
@@ -1755,6 +1755,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const [recoveryWizardOpen, setRecoveryWizardOpen] = useState(false);
   const [recoveryWizardStep, setRecoveryWizardStep] = useState(0);
   const [recoveryWizardMode, setRecoveryWizardMode] = useState<"resume" | "review">("resume");
+  const [secondsUntilDomainCheck, setSecondsUntilDomainCheck] = useState(10);
   const previousStatus = useRef<string | null>(null);
   const queryKey = ["custom-domain", projectId];
   const updateDomain = (method: "POST" | "DELETE", suffix = "", body?: any) => fetch(`/api/projects/${projectId}/runtime/custom-domain${suffix}`, {
@@ -1836,6 +1837,7 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
   const migration = domain.migration || {};
   const recoveryProgress = domainWizardProgress(migration, domain.status);
   const recoveryStep = recoveryProgress.steps[recoveryWizardStep] || recoveryProgress.steps[0];
+  const connectionGuidance = domainConnectionGuidance(domain.status, Array.isArray(domain.dnsRecords) ? domain.dnsRecords.length : 0);
   const recoveryStepAllowsChanges = domainWizardStepAllowsChanges(
     recoveryWizardMode,
     recoveryWizardStep,
@@ -1955,6 +1957,14 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
     if (domain.status === "error") setMessage(domain.error || "The custom domain could not be connected.");
     previousStatus.current = domain.status || null;
   }, [domain.status, domain.error]);
+  useEffect(() => {
+    if (!domain.hostname || ["live", "error"].includes(domain.status)) return;
+    setSecondsUntilDomainCheck(10);
+    const timer = window.setInterval(() => {
+      setSecondsUntilDomainCheck((seconds) => seconds <= 1 ? 10 : seconds - 1);
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [domain.hostname, domain.status, domainQuery.dataUpdatedAt]);
   if (domainQuery.isLoading) return <div className={`h-72 animate-pulse rounded-2xl ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />;
   return (
     <div className="space-y-6 max-w-2xl">
@@ -2192,11 +2202,43 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
                     )}
 
                     {recoveryStep.id === "connect" && (
-                      <div className={`rounded-xl border p-4 text-xs leading-5 ${theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
-                        <p className={`font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>BuildCustom is checking the final connection</p>
-                        <p className="mt-1">{domain.status === "live" ? "Your domain is connected, secure, and serving this project." : "You do not need to create the setup again. We are checking the saved domain, its security certificate, and the website connection."}</p>
-                        {status && <p className={`mt-2 font-semibold ${domain.status === "live" ? "text-emerald-500" : "text-cyan-400"}`}>Current status: {status.label}</p>}
-                        {domain.status !== "live" && recoveryStepAllowsChanges && <button type="button" onClick={() => refresh.mutate()} disabled={busy} className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 text-gray-700"}`}><RefreshCw size={13} className={refresh.isPending ? "animate-spin" : ""} /> Check connection now</button>}
+                      <div aria-live="polite" className={`rounded-xl border p-4 text-xs leading-5 ${connectionGuidance.kind === "action" ? "border-amber-400/30 bg-amber-400/10" : connectionGuidance.kind === "complete" ? "border-emerald-400/30 bg-emerald-400/10" : theme === "dark" ? "border-white/10 bg-black/20 text-white/55" : "border-gray-200 bg-white text-gray-600"}`}>
+                        <div className="flex items-start gap-3">
+                          {connectionGuidance.kind === "waiting" ? <RefreshCw size={18} className="mt-0.5 shrink-0 animate-spin text-cyan-400" /> : connectionGuidance.kind === "complete" ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-500" /> : connectionGuidance.kind === "action" ? <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-400" /> : <XCircle size={18} className="mt-0.5 shrink-0 text-red-400" />}
+                          <div>
+                            <p className={`text-sm font-semibold ${connectionGuidance.kind === "action" ? "text-amber-300" : connectionGuidance.kind === "complete" ? "text-emerald-500" : theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{connectionGuidance.title}</p>
+                            {connectionGuidance.kind === "waiting" && <p className="mt-1">No action is needed right now. Keep this page open. DNS and security-certificate checks can take a few minutes, and we are checking automatically.</p>}
+                            {connectionGuidance.kind === "action" && <p className="mt-1">Open Cloudflare, go to <strong>DNS → Records</strong>, and add each record exactly as shown. After that, come back here. You do not need to restart the wizard.</p>}
+                            {connectionGuidance.kind === "complete" && <p className="mt-1">Your domain is secure and serving this project. Nothing else is required.</p>}
+                            {connectionGuidance.kind === "error" && <p className="mt-1">{domain.error || "Review the error above, then check the connection again."}</p>}
+                          </div>
+                        </div>
+
+                        {connectionGuidance.kind === "action" && domain.dnsRecords?.length > 0 && (
+                          <div className={`mt-4 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-black/20" : "border-amber-200 bg-white"}`}>
+                            {domain.dnsRecords.map((record: any, index: number) => (
+                              <div key={`guide-record-${record.type}-${record.name}-${index}`} className={`grid gap-2 p-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.3fr)_2rem] sm:items-center ${index ? theme === "dark" ? "border-t border-white/10" : "border-t border-gray-100" : ""}`}>
+                                <span className="font-semibold">{record.type}</span>
+                                <span className="break-all font-mono">{record.name}</span>
+                                <span className="break-all font-mono">{record.value}</span>
+                                <button type="button" onClick={() => copyRecord(String(record.value || ""))} aria-label={`Copy value for ${record.name}`} className={`rounded-lg p-2 ${theme === "dark" ? "text-white/50 hover:bg-white/10" : "text-gray-500 hover:bg-gray-100"}`}><Copy size={13} /></button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {!["live", "error"].includes(domain.status) && (
+                          <div className={`mt-4 rounded-xl p-3 ${theme === "dark" ? "bg-white/5" : "bg-white/70"}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-semibold">{connectionGuidance.kind === "action" ? "We will detect the records automatically" : "Automatic connection check is running"}</span>
+                              <span className={theme === "dark" ? "text-white/40" : "text-gray-500"}>Next check in {secondsUntilDomainCheck}s</span>
+                            </div>
+                            <div className={`mt-2 h-1.5 overflow-hidden rounded-full ${theme === "dark" ? "bg-white/10" : "bg-gray-200"}`}><div className="h-full rounded-full bg-cyan-400 transition-[width] duration-1000" style={{ width: `${Math.max(4, ((10 - secondsUntilDomainCheck) / 10) * 100)}%` }} /></div>
+                            {domainQuery.dataUpdatedAt > 0 && <p className={`mt-2 ${theme === "dark" ? "text-white/35" : "text-gray-500"}`}>Last checked at {new Date(domainQuery.dataUpdatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}.</p>}
+                          </div>
+                        )}
+
+                        {domain.status !== "live" && recoveryStepAllowsChanges && <button type="button" onClick={() => refresh.mutate()} disabled={busy} className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-semibold disabled:opacity-50 ${theme === "dark" ? "border-white/10 text-white/70" : "border-gray-200 bg-white text-gray-700"}`}><RefreshCw size={13} className={refresh.isPending ? "animate-spin" : ""} /> Check now</button>}
                         {recoveryWizardMode === "review" && <p className={`mt-3 rounded-lg px-3 py-2 ${theme === "dark" ? "bg-white/5 text-white/45" : "bg-gray-50 text-gray-500"}`}>Review mode only shows the saved status. It will not restart verification.</p>}
                       </div>
                     )}

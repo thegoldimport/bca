@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "../client/src/lib/domain-dns-plan";
+import { domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "../client/src/lib/domain-dns-plan";
 
 test("a DNS checklist is shown only for the hostname that was inspected", () => {
   const localPlan = { records: [{ name: "first-example.com", action: "replace" }] };
@@ -60,4 +60,13 @@ test("reviewing from step one is read-only while resume changes only the unfinis
   assert.equal(domainWizardStepAllowsChanges("resume", 2, 3, true), false);
   assert.equal(domainWizardStepAllowsChanges("resume", 3, 3, false), true);
   assert.equal(domainWizardStepAllowsChanges("resume", 4, 3, false), false);
+});
+
+test("connection guidance tells customers whether to act or wait", () => {
+  assert.equal(domainConnectionGuidance("pending_dns", 2).kind, "action");
+  assert.equal(domainConnectionGuidance("verifying", 0).kind, "waiting");
+  assert.equal(domainConnectionGuidance("ssl_provisioning", 0).waitForAutomaticCheck, true);
+  assert.equal(domainConnectionGuidance("connecting", 0).kind, "waiting");
+  assert.equal(domainConnectionGuidance("live", 0).kind, "complete");
+  assert.equal(domainConnectionGuidance("error", 0).kind, "error");
 });

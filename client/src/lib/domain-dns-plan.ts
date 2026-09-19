@@ -60,3 +60,16 @@ export function domainWizardStepAllowsChanges(
 ) {
   return mode === "resume" && stepIndex === currentIndex && !stepComplete;
 }
+
+export function domainConnectionGuidance(status: string | null | undefined, dnsRecordCount: number) {
+  if (status === "live") {
+    return { kind: "complete" as const, title: "Your website is connected", waitForAutomaticCheck: false };
+  }
+  if (status === "error") {
+    return { kind: "error" as const, title: "The connection needs attention", waitForAutomaticCheck: false };
+  }
+  if (status === "pending_dns" && dnsRecordCount > 0) {
+    return { kind: "action" as const, title: "Add the records below in Cloudflare", waitForAutomaticCheck: false };
+  }
+  return { kind: "waiting" as const, title: "Sit tight while we finish checking", waitForAutomaticCheck: true };
+}
