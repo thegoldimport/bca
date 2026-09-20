@@ -14,3 +14,4 @@
 - [Custom-domain Live gate](custom-domain-live-gate.md) — verify traffic through the customer hostname itself before exposing a domain as Live.
 - [DNS import comparisons](dns-import-comparisons.md) — keep customer-provided Cloudflare imports read-only, source-labeled, and invalidated when either input changes.
 - [Migration snapshot compatibility](migration-snapshot-compatibility.md) — recovery guidance must work from older inventory-only snapshots, not assume newer derived fields exist.
+- [Cloudflare control-plane migration](cloudflare-control-plane-migration.md) — move only the control plane; preserve VibeSDK and publishing, with a hard post-canary Cloudflare-only rollback boundary.

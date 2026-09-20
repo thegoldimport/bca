@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "_JDnROYj4KX8_BjJ39cZO"
+uri = "file://docs/cloudflare-control-plane-migration-audit.md"
+type = "text"
+title = "BuildCustom Cloudflare Control-Plane Migration Audit"
+description = "The complete 26-section, read-only migration design covering architecture, data, authentication, VibeSDK, publishing, domains, staging, cutover, rollback, and Replit-independence acceptance checks."
+logical_id = "195f1237-d571-452f-ae09-5a9c119c704a"
+content_hash = "sha256:437f492d08420066d9b46d7eaad50ad7eec401c0a0efad2f3956ab1210c53ca2"
+size = 85354
+mtime_ms = 1789925102786
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/195f1237-d571-452f-ae09-5a9c119c704a/aace8b0a-ff41-4db2-92d0-d3f8f5a0d155"
+storage_version_token = "1789925162895608"
+content_type = "text/markdown"
