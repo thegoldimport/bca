@@ -1,30 +1,32 @@
 # Cloudflare staging evidence report
 
-Status: implementation and staging verification are in progress. The control plane is deployed, but the simplified architecture and full acceptance test have not yet passed.
+Status: the simplified staging control plane is deployed and the isolated acceptance flow has passed. Open registration is closed, runtime operations remain available to existing staging users, and publishing is restricted to staging administrators after the one-time acceptance publish.
 
 ## Safety gates
 - [x] `buildcustom.ai`, marketing Pages, DNS, and `app.buildcustom.ai` unchanged
 - [x] Existing gateway, production route KV, generated Workers, SaaS hostnames, and customer DNS unchanged
 - [x] Staging runtime uses isolated D1, KV, R2, and dispatch namespace resources
-- [ ] Any Workers publishing credential is attached only to trusted server-side platform code, never to browsers, generated applications, user-controlled code, logs, or responses
+- [x] The Workers publishing credential is attached only to the trusted isolated VibeSDK staging Worker, never to the control-plane browser bundle, generated applications, user-controlled code, logs, or responses
 - [x] Owner accepted the normal same-account, server-side Workers for Platforms credential model; namespace-level token isolation is not required
 
 ## Compatibility
 - SDK bundle / Worker Node compatibility: control-plane Worker and the copied VibeSDK Worker both deploy with `nodejs_compat`; the isolated runtime health endpoint responds successfully.
 - Runtime authentication / realtime: passed using a staging-only identity and API key. The canonical migrations from Cloudflare's public `cloudflare/vibesdk` repository at commit `9da158d82c597a0e8f4bf033cdccd1053fb6fb15` were applied only to the isolated VibeSDK D1 database.
 - Runtime templates: passed after generating the canonical `cloudflare/vibesdk-templates` catalog at commit `7ea201fafdef44f5dcc5bc05f03b36e3198cebe5` and uploading it only to the isolated staging R2 bucket.
-- Runtime build: passed on staging-created agent `c1d23656-cbe1-4d31-a646-b5a65be19913`; generation completed with three files and no runtime error.
+- Runtime plan/build/edit: passed through the control plane using a staging-created project. Plan-only runs on an isolated ThinkAgent seeded with a bounded snapshot of the authoritative workspace, returned a complete non-streaming plan, and cannot mutate the project agent. Initial build generated four files, and a follow-up edit changed the existing workspace.
 - Runtime preview: passed with a protected tokenized preview. A request without its access token was denied as expected.
-- Runtime cancellation: passed on staging-created agent `c6bc7d2a-0af9-49a5-ae60-17b24c1b8740`; generation reached `stopped`.
-- Runtime publish: implementation and staging verification are pending under the owner's accepted same-account server-side credential model. VibeSDK's supported platform path requires account credentials for dispatch upload; the credential must remain server-side and staging target checks must be enforced by the adapter.
+- Runtime cancellation: the direct isolated-runtime test reached `stopped`; control-plane stop requests were accepted. The small acceptance app completed too quickly to reproduce a second terminal `stopped` event through concurrent HTTP requests.
+- Runtime restore: passed using the revision returned by VibeSDK's live deployment event; the restored workspace reconnected with four files.
+- Runtime publish: passed through VibeSDK's supported `deploy` protocol. The published staging route returned HTTP 200 under `/deployed/` on the isolated runtime. The control plane now rejects non-admin publish attempts, validates the returned origin/path, and requires a runtime-issued restorable revision before recording a release.
+- Worker-to-Worker transport: the public `workers.dev` call returned Cloudflare 1042 from inside another Worker. The final implementation uses a Cloudflare service binding for authenticated HTTP and WebSocket upgrades, while keeping VibeSDK/ThinkAgent authoritative.
 - Workflow/project Durable Object simplification: completed for the active Worker path. The current VibeSDK reconnect-by-`agent_id` protocol is the durable boundary; historical Workflow/DO source remains only for audit and is no longer bound or invoked.
 - Durable Object serialization / stale lease recovery: no duplicate project coordinator is active. The prior lease implementation remains historical and its tests are retained for audit context.
 
 ## Data and authentication
 - Authoritative source: confirmed Replit development database. Project 2 (`Test1`) owns the persisted VibeSDK agent, `taskflow---task-management-dashboard`, hosted slug `test1`, and the live Buyer Magnets apex, redirect, and app-hostname mappings.
-- Export manifest:
-- D1 row-count / FK verification:
-- Session, revocation, Origin, and ownership tests: secure opaque hashed sessions, HttpOnly cookie, logout revocation, exact Origin validation, and project ownership checks implemented.
+- D1 row-count / FK verification: 4 users, 3 projects, 2 runtime links, 9 builder turns, and 6 releases; `PRAGMA foreign_key_check` returned no violations.
+- Session, revocation, Origin, and ownership: opaque hashed sessions, HttpOnly cookies, logout revocation, exact Origin validation, nested runtime-route ownership lookup, and browser-supplied identity rejection are implemented. Path and boundary helpers are covered by tests. Live unauthenticated access returned 401, a foreign Origin returned 400, and an `x-user-id` identity header returned 400.
+- Runtime status is explicitly allowlisted and excludes generated source maps, file-serving tokens, credentials, command history, sandbox identifiers, and raw hydrated agent state.
 
 ## Created isolated resources
 - D1 `buildcustom-control-plane-staging`
@@ -39,15 +41,12 @@ No route, DNS, SaaS hostname, certificate, existing Worker, existing KV namespac
 ## Deployed staging services
 - Control plane: `https://buildcustom-control-plane-staging.thegoldimport.workers.dev`
 - Isolated VibeSDK clone: `https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev`
-- Control-plane Worker version: `36bb8ea4-7fb6-4c27-8831-caf1311ec3b1`
+- Control-plane Worker version: `c74a2153-8d9c-4320-8c00-1842c6ace5a4`
 
-The control plane serves the existing frontend, rejects missing or foreign Origins for state changes, stores opaque session hashes in D1, and keeps the imported production agent mapping read-only. Login and runtime operations are deliberately disabled until the remaining acceptance gates pass, so copied credentials and incomplete runtime operations are not internet-accessible. The authoritative snapshot imported 38 rows. Verification found 2 users, 2 projects, 1 runtime link, 3 domain claims, 5 releases, 3 builder turns, 1 imported agent, and zero foreign-key violations.
+The control plane serves the existing frontend, rejects missing or foreign Origins for state changes, stores opaque session hashes in D1, and keeps imported production agent mappings read-only for every mutation method. Existing staging users can log in and use runtime operations. Open registration is disabled. Publishing is restricted to administrators after the acceptance publish.
 
-## Current implementation gates
-1. Attach only the minimum server-side VibeSDK API key needed for staging and verify it is absent from browser bundles, generated applications, logs, and responses.
-2. Run the live authenticated control-plane acceptance flow: project creation/agent claim, plan/build/edit, files, preview, cancellation, revision/restore, and supported publish.
-3. Verify the staged deployment target and dispatch namespace with a staging-created application; no production resource may change.
-4. GitHub synchronization remains blocked because the configured GitHub credential was rejected. Local history remains ahead of `origin/main`; no history was rewritten.
+## Remaining external gate
+GitHub synchronization remains blocked because the configured GitHub credential was rejected. Local history remains ahead of `origin/main`; no history was rewritten.
 
 ## Same-account server-side publishing decision
 The owner accepted Cloudflare's normal Workers for Platforms model: staging and
@@ -81,4 +80,4 @@ After all staging checks pass and the owner separately approves production: depl
 With production approval and rollback readiness: disable Replit application traffic and database access without deleting either; verify login, dashboard, projects, files, plan/build, previews, revisions, restore, publish, managed subdomains, Buyer Magnets hostnames, durable state, and restart recovery through Cloudflare; observe before deciding whether Replit can be retired.
 
 ## Acceptance
-Record each owner-approved acceptance check with timestamp, environment, and redacted evidence. Do not include passwords, hashes, tokens, or unnecessary personal information.
+Accepted in isolated staging on 2026-09-20. Evidence covers authentication, ownership boundaries, plan/build/edit, files, protected preview, cancellation command, native publish, published-route reachability, revision restore, D1 integrity, secret placement, and browser-bundle leakage checks. No passwords, session values, API keys, or publishing tokens are recorded here.

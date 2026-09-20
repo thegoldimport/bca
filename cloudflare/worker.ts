@@ -1,7 +1,12 @@
 import bcrypt from "bcryptjs";
 import { assertOrigin, createSession, expiredSessionCookie, resolveSession, revokeSession, sessionCookie } from "./staging/auth";
 import { assertStagingEnvironment, assertSafeStagingTarget } from "./staging/boundary";
+import { ProjectOperationDO } from "./staging/project-do";
 import { createVibeSdkAdapter, VibeSdkAdapterError, type VibeSdkImage } from "./staging/vibesdk-adapter";
+
+// Cloudflare requires the historical class export while its staging namespace exists.
+// It has no active binding and is not used by the simplified control plane.
+export { ProjectOperationDO };
 
 export type Env = {
   DB: D1Database;
@@ -11,10 +16,12 @@ export type Env = {
   STAGING_RUNTIME_URL: string;
   VIBESDK_RUNTIME_URL?: string;
   VIBESDK_API_KEY?: string;
+  VIBESDK_RUNTIME: Fetcher;
   STAGING_ROUTE_KV_ID: string;
   STAGING_DISPATCH_NAMESPACE: string;
   STAGING_ALLOWED_ORIGIN: string;
   STAGING_LOGIN_ENABLED: string;
+  STAGING_REGISTRATION_ENABLED?: string;
   RUNTIME_OPERATIONS_ENABLED: string;
 };
 
@@ -61,6 +68,10 @@ function safePath(value: string | null): string {
   if (!value || value.includes("..") || value.startsWith("/") || value.includes("\\")) throw new Error("A safe file path is required");
   return value;
 }
+export function projectIdFromPath(pathname: string): number | null {
+  const match = pathname.match(/^\/api\/projects\/(\d+)(?:\/|$)/);
+  return match ? Number(match[1]) : null;
+}
 function runtimeError(error: unknown): Response {
   if (error instanceof VibeSdkAdapterError) return json({ message: error.message, code: error.code }, { status: error.status });
   return json({ message: error instanceof Error ? error.message : "Request failed" }, { status: 400 });
@@ -78,6 +89,7 @@ export default {
 
       if (url.pathname === "/api/auth/register" && request.method === "POST") {
         if (env.STAGING_LOGIN_ENABLED !== "true") return json({ message: "Staging login is disabled until acceptance testing is authorized." }, { status: 503 });
+        if (env.STAGING_REGISTRATION_ENABLED !== "true") return json({ message: "Staging registration is closed." }, { status: 403 });
         if (!rateLimit(`register:${request.headers.get("CF-Connecting-IP") || "unknown"}`, 5)) return json({ message: "Too many registration attempts." }, { status: 429 });
         const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
         const name = typeof input.name === "string" ? input.name.trim() : "";
@@ -92,7 +104,7 @@ export default {
         if (env.STAGING_LOGIN_ENABLED !== "true") return json({ message: "Staging login is disabled until acceptance testing is authorized." }, { status: 503 });
         if (!rateLimit(`login:${request.headers.get("CF-Connecting-IP") || "unknown"}`, 10)) return json({ message: "Too many login attempts." }, { status: 429 });
         const identity = String(input.email || input.username || "").trim().toLowerCase();
-        const user = await env.DB.prepare("SELECT * FROM users WHERE email=? OR username=?").bind(identity, identity).first<any>();
+        const user = await env.DB.prepare("SELECT * FROM users WHERE email=? OR lower(username)=?").bind(identity, identity).first<any>();
         if (!user || typeof input.password !== "string" || !(await bcrypt.compare(input.password, user.password))) return json({ message: "Invalid email or password" }, { status: 401 });
         const token = await createSession(env.DB, user);
         return json(publicUser(user), { headers: { "Set-Cookie": sessionCookie(token) } });
@@ -128,7 +140,7 @@ export default {
       }
 
       const projectMatch = url.pathname.match(/^\/api\/projects\/(\d+)$/);
-      const projectId = projectMatch ? Number(projectMatch[1]) : null;
+      const projectId = projectIdFromPath(url.pathname);
       const project = projectId === null ? null : await env.DB.prepare("SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id WHERE p.id=? AND p.user_id=?").bind(projectId, user.id).first<any>();
       const projectList = async () => (await env.DB.prepare("SELECT p.*,l.agent_id,l.preview_url,l.deployment_url FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC").bind(user.id).all()).results;
       if (url.pathname === "/api/projects" && request.method === "GET") return json(await projectList());
@@ -157,9 +169,20 @@ export default {
         const runtimeProject = project?.id === id ? { id: project.id, name: project.name, type: project.type, description: project.description, agentId: project.agent_id } : null;
         if (!runtimeProject) return json({ message: "Project not found" }, { status: 404 });
         if (env.RUNTIME_OPERATIONS_ENABLED !== "true" && ["messages", "previews", "stop", "deployments", "turns"].some((name) => runtimeMatch[2].startsWith(name))) return json({ message: "Isolated VibeSDK compatibility gate has not passed." }, { status: 503 });
-        const adapter = createVibeSdkAdapter({ VIBESDK_RUNTIME_URL: env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL, VIBESDK_API_KEY: env.VIBESDK_API_KEY });
+        const adapter = createVibeSdkAdapter({
+          VIBESDK_RUNTIME_URL: env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL,
+          VIBESDK_API_KEY: env.VIBESDK_API_KEY,
+          VIBESDK_RUNTIME: env.VIBESDK_RUNTIME,
+        });
         const operation = runtimeMatch[2];
-        const readOnly = operation === "status" || operation === "files" || operation === "files/content" || operation === "turns" || operation === "publishing-settings" || operation === "releases";
+        const readOnly = request.method === "GET" && (
+          operation === "status"
+          || operation === "files"
+          || operation === "files/content"
+          || operation === "turns"
+          || operation === "publishing-settings"
+          || operation === "releases"
+        );
         if (!readOnly && project.agent_is_imported) return json({ message: "IMPORTED_AGENT_READ_ONLY" }, { status: 409 });
         if (!readOnly && !rateLimit(`runtime:${user.id}:${id}`, 30, 60_000)) return json({ message: "Too many runtime mutations." }, { status: 429 });
         if (operation === "status" && request.method === "GET") {
@@ -187,12 +210,16 @@ export default {
           const images = imageInput(input.images);
           if (images.reduce((sum, image) => sum + (image.size || 0), 0) > 8_000_000) return json({ message: "Image attachments must be 8 MB or less in total" }, { status: 400 });
           let active = runtimeProject;
+          let initialGeneration = false;
           if (!active.agentId) {
             const created = await adapter.create(active, message, images);
             const claimed = await env.DB.prepare("INSERT INTO runtime_project_links(project_id,agent_id,agent_is_imported) VALUES(?,?,0) ON CONFLICT(project_id) DO UPDATE SET agent_id=COALESCE(runtime_project_links.agent_id,excluded.agent_id) RETURNING agent_id,agent_is_imported").bind(id, created.agentId).first<any>();
             active = { ...active, agentId: claimed?.agent_id || created.agentId };
+            initialGeneration = active.agentId === created.agentId;
           }
-          const result = input.mode === "plan" ? await adapter.plan(active, message, images) : await adapter.build(active, message, images);
+          const result = input.mode === "plan"
+            ? await adapter.plan(active, message, images)
+            : await adapter.build(active, message, images, initialGeneration);
           const turn = await env.DB.prepare("INSERT INTO runtime_builder_turns(project_id,mode,prompt,response,changed_files,commit_hash,activity) VALUES(?,?,?,?,?,?,?) RETURNING *").bind(id, input.mode === "plan" ? "plan" : "build", typeof input.displayMessage === "string" ? input.displayMessage : message, result.message, JSON.stringify(result.changedFiles || []), result.commitHash || null, JSON.stringify(result.activity || [])).first();
           return json({ ...result, turn });
         }
@@ -203,8 +230,15 @@ export default {
         }
         if (operation === "stop" && request.method === "POST") return json(await adapter.stop(runtimeProject));
         if (operation === "deployments" && request.method === "POST") {
+          if (user.role !== "admin") return json({ message: "Staging publish requires an administrator." }, { status: 403 });
           const result = await adapter.deploy(runtimeProject);
-          const commit = result.commitHash || `deploy-${Date.now()}`;
+          const deploymentUrl = new URL(result.url);
+          const runtimeUrl = new URL(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
+          if (deploymentUrl.origin !== runtimeUrl.origin || !deploymentUrl.pathname.startsWith("/deployed/")) {
+            throw new VibeSdkAdapterError("VibeSDK returned a deployment outside the isolated staging runtime.", "RUNTIME_UPSTREAM_ERROR");
+          }
+          if (!result.commitHash) throw new VibeSdkAdapterError("VibeSDK did not return a restorable deployment revision.", "RUNTIME_UPSTREAM_ERROR");
+          const commit = result.commitHash;
           const settings = await env.DB.prepare("SELECT * FROM runtime_project_links WHERE project_id=?").bind(id).first<any>();
           const slug = settings?.subdomain_slug || cleanSlug(project.name);
           const release = await env.DB.prepare("INSERT INTO runtime_releases(project_id,commit_hash,deployment_url) VALUES(?,?,?) RETURNING *").bind(id, commit, result.url).first();

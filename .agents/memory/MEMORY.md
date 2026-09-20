@@ -1,5 +1,5 @@
 - [Direct Gemini routing](direct-gemini-routing.md) — direct ThinkAgent calls need Google model IDs and must preserve provider Authorization.
-- [Workers for Platforms URLs](workers-for-platforms-urls.md) — route dispatch scripts through the staging worker path when nested workers.dev hosts lack TLS.
+- [Workers for Platforms URLs](workers-for-platforms-urls.md) — route public dispatch URLs through staging and use service bindings for Worker-to-Worker HTTP/WebSockets.
 - [Embedded staging previews](embedded-staging-previews.md) — BuildCustom iframe previews require partitioned cross-site cookies and a rebuilt worker bundle before deploy.
 - [Plan approval gate](plan-approval-gate.md) — Plan uses the same ThinkAgent model with all tools disabled; only an approved follow-up may build.
 - [Published release restores](published-release-restores.md) — restore old releases forward into Development; Production changes only through a new approved publish.
