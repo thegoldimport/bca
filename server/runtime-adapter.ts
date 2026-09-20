@@ -33,6 +33,17 @@ export class RuntimeAdapterError extends Error {
 const sessions = new Map<number, BuildSession>();
 const operationQueues = new Map<number, Promise<void>>();
 
+export function buildCompletionSynopsis(response: unknown, changedFiles: Array<string | { path: string }>) {
+  const message = typeof response === "string" ? response.trim() : "";
+  if (message && message !== "Agent completed the request.") return message;
+  const filePaths = changedFiles.map((file) => typeof file === "string" ? file : file.path);
+  const visibleFiles = filePaths.slice(0, 3);
+  const changedSummary = visibleFiles.length
+    ? ` Updated ${visibleFiles.join(", ")}${filePaths.length > visibleFiles.length ? ` and ${filePaths.length - visibleFiles.length} more file${filePaths.length - visibleFiles.length === 1 ? "" : "s"}` : ""}.`
+    : "";
+  return `Completed your request.${changedSummary}`;
+}
+
 async function withProjectLock<T>(projectId: number, operation: () => Promise<T>): Promise<T> {
   const previous = operationQueues.get(projectId) || Promise.resolve();
   let release!: () => void;
@@ -365,9 +376,7 @@ export const runtimeAdapter = {
         }
         const completedState = session.state.get() as any;
         const finalResponse = completedState.lastConversationResponse;
-        const responseMessage = typeof finalResponse?.message === "string" && finalResponse.message.trim()
-          ? finalResponse.message.trim()
-          : "Agent completed the request.";
+        const responseMessage = buildCompletionSynopsis(finalResponse?.message, changedFiles);
         return {
         agentId: session.agentId,
         message: responseMessage,

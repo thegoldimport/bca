@@ -871,6 +871,7 @@ function EditorPage() {
   const [voiceError, setVoiceError] = useState("");
   const [attachments, setAttachments] = useState<ComposerImage[]>([]);
   const [textContext, setTextContext] = useState<{ id: string; filename: string; content: string }[]>([]);
+  const [isDraggingAttachment, setIsDraggingAttachment] = useState(false);
   const [selectorEnabled, setSelectorEnabled] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const requestController = useRef<AbortController | null>(null);
@@ -948,9 +949,7 @@ function EditorPage() {
     reader.readAsDataURL(file);
   });
 
-  const handleAttachmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(event.target.files || []);
-    event.target.value = "";
+  const addAttachmentFiles = async (selected: File[]) => {
     if (selected.length > 4) {
       setVoiceError("Attach no more than 4 files at a time.");
       return;
@@ -963,7 +962,13 @@ function EditorPage() {
       setVoiceError("Images must be 4 MB or less.");
       return;
     }
-    if (imageFiles.reduce((total, file) => total + file.size, 0) > 8_000_000) {
+    const incomingIds = new Set(imageFiles.map((file) => `${file.name}-${file.lastModified}-${file.size}`));
+    const retainedImages = attachments.filter((item) => !incomingIds.has(item.id));
+    if (retainedImages.length + imageFiles.length > 4) {
+      setVoiceError("Attach no more than 4 images at a time.");
+      return;
+    }
+    if (retainedImages.reduce((total, file) => total + file.size, 0) + imageFiles.reduce((total, file) => total + file.size, 0) > 8_000_000) {
       setVoiceError("Image attachments must be 8 MB or less in total.");
       return;
     }
@@ -984,10 +989,24 @@ function EditorPage() {
       setTextContext((current) => [...current.filter((item) => !contexts.some((next) => next.id === item.id)), ...contexts]);
       if (selected.some((file) => !imageFiles.includes(file) && !textFiles.includes(file))) {
         setVoiceError("Some files were skipped. Attach PNG, JPEG, WebP, or text/code files.");
+      } else {
+        setVoiceError("");
       }
     } catch (error: any) {
       setVoiceError(error.message || "Could not read the attachment.");
     }
+  };
+  const handleAttachmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files || []);
+    event.target.value = "";
+    await addAttachmentFiles(selected);
+  };
+  const handleAttachmentDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingAttachment(false);
+    const dropped = Array.from(event.dataTransfer.files || []);
+    if (dropped.length) await addAttachmentFiles(dropped);
   };
 
   const removeAttachment = (id: string) => setAttachments((current) => current.filter((item) => item.id !== id));
@@ -1626,9 +1645,33 @@ function EditorPage() {
           )}
         </div>
 
-        <div className={`p-4 border-t ${
-          theme === "dark" ? "border-white/10" : "border-gray-200"
-        }`}>
+        <div
+          className={`relative p-4 border-t transition-colors ${
+            isDraggingAttachment
+              ? theme === "dark" ? "border-cyan-400 bg-cyan-400/10" : "border-cyan-500 bg-cyan-50"
+              : theme === "dark" ? "border-white/10" : "border-gray-200"
+          }`}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            if (Array.from(event.dataTransfer.items || []).some((item) => item.kind === "file")) setIsDraggingAttachment(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDraggingAttachment(false);
+          }}
+          onDrop={handleAttachmentDrop}
+          data-testid="editor-chat-dropzone"
+        >
+          {isDraggingAttachment && (
+            <div className={`pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-xl border-2 border-dashed text-sm font-semibold ${
+              theme === "dark" ? "border-cyan-300 bg-[#101522]/95 text-cyan-200" : "border-cyan-500 bg-white/95 text-cyan-700"
+            }`} data-testid="editor-chat-drop-overlay">
+              Drop images to attach
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"
