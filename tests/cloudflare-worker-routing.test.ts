@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { projectIdFromPath } from "../cloudflare/worker";
+import { projectIdFromPath, serializeProject, serializeRelease, serializeTurn } from "../cloudflare/worker";
 
 test("extracts project ownership IDs from project and nested runtime routes", () => {
   assert.equal(projectIdFromPath("/api/projects/42"), 42);
@@ -12,4 +12,18 @@ test("does not treat unrelated or malformed paths as project routes", () => {
   assert.equal(projectIdFromPath("/api/projects"), null);
   assert.equal(projectIdFromPath("/api/projects/not-a-number/runtime/status"), null);
   assert.equal(projectIdFromPath("/api/projects/42evil"), null);
+});
+
+test("serializes D1 project rows to the frontend contract", () => {
+  const result = serializeProject({ id: 3, user_id: "u", name: "Demo", type: "website", status: "draft", description: "", framework: "React", url: null, created_at: "c", updated_at: "u", agent_id: "a", preview_url: "p", deployment_url: "d" });
+  assert.deepEqual(result, { id: 3, userId: "u", name: "Demo", type: "website", status: "draft", description: "", framework: "React", url: null, createdAt: "c", updatedAt: "u", agentId: "a", previewUrl: "p", deploymentUrl: "d" });
+});
+
+test("serializes turn JSON columns and release names", () => {
+  assert.deepEqual(serializeTurn({ id: 1, project_id: 3, mode: "build", prompt: "p", response: "r", changed_files: '[{\"path\":\"a\"}]', activity: "[]", commit_hash: "abc", created_at: "now" }), {
+    id: 1, projectId: 3, mode: "build", prompt: "p", response: "r", changedFiles: [{ path: "a" }], activity: [], commitHash: "abc", createdAt: "now",
+  });
+  assert.deepEqual(serializeRelease({ id: 2, project_id: 3, commit_hash: "def", deployment_url: "https://example.test", created_at: "now" }), {
+    id: 2, projectId: 3, commitHash: "def", deploymentUrl: "https://example.test", createdAt: "now",
+  });
 });

@@ -27,6 +27,7 @@ Status: the simplified staging control plane is deployed and the isolated accept
 - D1 row-count / FK verification: 4 users, 3 projects, 2 runtime links, 9 builder turns, and 6 releases; `PRAGMA foreign_key_check` returned no violations.
 - Session, revocation, Origin, and ownership: opaque hashed sessions, HttpOnly cookies, logout revocation, exact Origin validation, nested runtime-route ownership lookup, and browser-supplied identity rejection are implemented. Path and boundary helpers are covered by tests. Live unauthenticated access returned 401, a foreign Origin returned 400, and an `x-user-id` identity header returned 400.
 - Runtime status is explicitly allowlisted and excludes generated source maps, file-serving tokens, credentials, command history, sandbox identifiers, and raw hydrated agent state.
+- Frontend response compatibility: live project, turn-history, and release-history responses use camelCase fields; turn `changedFiles` and `activity` are decoded arrays rather than D1 JSON strings.
 
 ## Created isolated resources
 - D1 `buildcustom-control-plane-staging`
@@ -41,7 +42,7 @@ No route, DNS, SaaS hostname, certificate, existing Worker, existing KV namespac
 ## Deployed staging services
 - Control plane: `https://buildcustom-control-plane-staging.thegoldimport.workers.dev`
 - Isolated VibeSDK clone: `https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev`
-- Control-plane Worker version: `c74a2153-8d9c-4320-8c00-1842c6ace5a4`
+- Control-plane Worker version: `e400faec-54b6-44eb-9738-91db997b92b4`
 
 The control plane serves the existing frontend, rejects missing or foreign Origins for state changes, stores opaque session hashes in D1, and keeps imported production agent mappings read-only for every mutation method. Existing staging users can log in and use runtime operations. Open registration is disabled. Publishing is restricted to administrators after the acceptance publish.
 

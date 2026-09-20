@@ -30,6 +30,49 @@ const reservedSlugs = new Set(["www", "api", "app", "apps", "admin", "billing", 
 const json = (data: unknown, init: ResponseInit = {}) => Response.json(data, { headers: { "Cache-Control": "no-store", ...init.headers }, ...init });
 const readBody = async (request: Request) => await request.json().catch(() => ({})) as Record<string, unknown>;
 const publicUser = (row: any) => ({ id: row.id, username: row.username, email: row.email, plan: row.plan || "free", role: row.role, createdAt: row.created_at || row.createdAt });
+const jsonArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+export const serializeProject = (row: any) => ({
+  id: row.id,
+  userId: row.user_id ?? row.userId,
+  name: row.name,
+  type: row.type,
+  status: row.status,
+  description: row.description,
+  framework: row.framework,
+  url: row.url,
+  createdAt: row.created_at ?? row.createdAt,
+  updatedAt: row.updated_at ?? row.updatedAt,
+  agentId: row.agent_id ?? row.agentId ?? null,
+  previewUrl: row.preview_url ?? row.previewUrl ?? null,
+  deploymentUrl: row.deployment_url ?? row.deploymentUrl ?? null,
+});
+export const serializeTurn = (row: any) => ({
+  id: row.id,
+  projectId: row.project_id ?? row.projectId,
+  mode: row.mode,
+  prompt: row.prompt,
+  response: row.response,
+  changedFiles: jsonArray(row.changed_files ?? row.changedFiles),
+  activity: jsonArray(row.activity),
+  commitHash: row.commit_hash ?? row.commitHash ?? null,
+  createdAt: row.created_at ?? row.createdAt,
+});
+export const serializeRelease = (row: any) => ({
+  id: row.id,
+  projectId: row.project_id ?? row.projectId,
+  commitHash: row.commit_hash ?? row.commitHash,
+  deploymentUrl: row.deployment_url ?? row.deploymentUrl,
+  createdAt: row.created_at ?? row.createdAt,
+});
 
 function rateLimit(key: string, limit: number, windowMs = 60_000): boolean {
   const now = Date.now();
@@ -142,21 +185,21 @@ export default {
       const projectMatch = url.pathname.match(/^\/api\/projects\/(\d+)$/);
       const projectId = projectIdFromPath(url.pathname);
       const project = projectId === null ? null : await env.DB.prepare("SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id WHERE p.id=? AND p.user_id=?").bind(projectId, user.id).first<any>();
-      const projectList = async () => (await env.DB.prepare("SELECT p.*,l.agent_id,l.preview_url,l.deployment_url FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC").bind(user.id).all()).results;
+      const projectList = async () => (await env.DB.prepare("SELECT p.*,l.agent_id,l.preview_url,l.deployment_url FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC").bind(user.id).all()).results.map(serializeProject);
       if (url.pathname === "/api/projects" && request.method === "GET") return json(await projectList());
       if (url.pathname === "/api/projects" && request.method === "POST") {
         const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM projects WHERE user_id=?").bind(user.id).first<any>();
         const details = projectInput(input, `Project${Number(count?.count || 0) + 1}`);
         const result = await env.DB.prepare("INSERT INTO projects(user_id,name,type,description,framework) VALUES(?,?,?,?,?)").bind(user.id, details.name, details.type, details.description, "React + TailwindCSS").run();
         const created = await env.DB.prepare("SELECT * FROM projects WHERE id=?").bind(result.meta.last_row_id).first();
-        return json(created, { status: 201 });
+        return json(serializeProject(created), { status: 201 });
       }
       if (projectId !== null && !project) return json({ message: "Project not found" }, { status: 404 });
-      if (project && request.method === "GET" && projectMatch) return json(project);
+      if (project && request.method === "GET" && projectMatch) return json(serializeProject(project));
       if (project && request.method === "PUT" && projectMatch) {
         const details = projectInput(input, project.name);
         await env.DB.prepare("UPDATE projects SET name=?,type=?,description=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(details.name, details.type, details.description, project.id, user.id).run();
-        return json(await env.DB.prepare("SELECT * FROM projects WHERE id=?").bind(project.id).first());
+        return json(serializeProject(await env.DB.prepare("SELECT * FROM projects WHERE id=?").bind(project.id).first()));
       }
       if (project && request.method === "DELETE" && projectMatch) {
         await env.DB.prepare("DELETE FROM projects WHERE id=? AND user_id=?").bind(project.id, user.id).run();
@@ -191,7 +234,7 @@ export default {
         }
         if (operation === "files" && request.method === "GET") return json(await adapter.files(runtimeProject));
         if (operation === "files/content" && request.method === "GET") return json(await adapter.fileContent(runtimeProject, safePath(url.searchParams.get("path"))));
-        if (operation === "turns" && request.method === "GET") return json({ turns: (await env.DB.prepare("SELECT * FROM runtime_builder_turns WHERE project_id=? ORDER BY created_at ASC").bind(id).all()).results });
+        if (operation === "turns" && request.method === "GET") return json({ turns: (await env.DB.prepare("SELECT * FROM runtime_builder_turns WHERE project_id=? ORDER BY created_at ASC").bind(id).all()).results.map(serializeTurn) });
         if (operation === "publishing-settings" && request.method === "GET") return json({ subdomainSlug: project.subdomain_slug || cleanSlug(project.name), hostingProvider: project.hosting_provider === "custom" ? "custom" : "buildcustom", customDomain: project.custom_domain || "", customOrigin: project.custom_origin || "" });
         if (operation === "publishing-settings" && request.method === "PUT") {
           const slug = cleanSlug(input.subdomainSlug);
@@ -202,7 +245,7 @@ export default {
           await env.DB.prepare("INSERT INTO runtime_project_links(project_id,subdomain_slug,hosting_provider,custom_domain,custom_origin) VALUES(?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET subdomain_slug=excluded.subdomain_slug,hosting_provider=excluded.hosting_provider,custom_domain=excluded.custom_domain,custom_origin=excluded.custom_origin,updated_at=datetime('now')").bind(id, slug, hostingProvider === "custom" ? "custom" : "cloudflare", customDomain || null, customOrigin || null).run();
           return json({ subdomainSlug: slug, hostingProvider, customDomain, customOrigin });
         }
-        if (operation === "releases" && request.method === "GET") return json({ releases: (await env.DB.prepare("SELECT * FROM runtime_releases WHERE project_id=? ORDER BY created_at DESC").bind(id).all()).results });
+        if (operation === "releases" && request.method === "GET") return json({ releases: (await env.DB.prepare("SELECT * FROM runtime_releases WHERE project_id=? ORDER BY created_at DESC").bind(id).all()).results.map(serializeRelease) });
         if (operation === "messages" && request.method === "POST") {
           const message = typeof input.message === "string" ? input.message.trim() : "";
           if (!message || message.length > 30_000) return json({ message: "A message between 1 and 30,000 characters is required" }, { status: 400 });
@@ -221,7 +264,7 @@ export default {
             ? await adapter.plan(active, message, images)
             : await adapter.build(active, message, images, initialGeneration);
           const turn = await env.DB.prepare("INSERT INTO runtime_builder_turns(project_id,mode,prompt,response,changed_files,commit_hash,activity) VALUES(?,?,?,?,?,?,?) RETURNING *").bind(id, input.mode === "plan" ? "plan" : "build", typeof input.displayMessage === "string" ? input.displayMessage : message, result.message, JSON.stringify(result.changedFiles || []), result.commitHash || null, JSON.stringify(result.activity || [])).first();
-          return json({ ...result, turn });
+          return json({ ...result, turn: serializeTurn(turn) });
         }
         if (operation === "previews" && request.method === "POST") {
           const result = await adapter.preview(runtimeProject);
@@ -243,7 +286,7 @@ export default {
           const slug = settings?.subdomain_slug || cleanSlug(project.name);
           const release = await env.DB.prepare("INSERT INTO runtime_releases(project_id,commit_hash,deployment_url) VALUES(?,?,?) RETURNING *").bind(id, commit, result.url).first();
           await env.DB.prepare("UPDATE runtime_project_links SET deployment_url=?,deployment_origin_url=?,deployment_script_name=?,subdomain_slug=?,updated_at=datetime('now') WHERE project_id=?").bind(result.url, result.url, result.workersUrl || null, slug, id).run();
-          return json({ ...result, url: result.url, originUrl: result.url, release }, { status: 201 });
+          return json({ ...result, url: result.url, originUrl: result.url, release: serializeRelease(release) }, { status: 201 });
         }
         const turnRestore = operation.match(/^turns\/(\d+)\/restore$/);
         if (turnRestore && request.method === "POST") {
@@ -251,7 +294,7 @@ export default {
           if (!turn?.commit_hash) return json({ message: "Restorable checkpoint not found" }, { status: 404 });
           const result = await adapter.restore(runtimeProject, turn.commit_hash);
           await env.DB.prepare("UPDATE runtime_project_links SET preview_url=?,updated_at=datetime('now') WHERE project_id=?").bind(result.previewUrl, id).run();
-          return json({ ...result, turn });
+          return json({ ...result, turn: serializeTurn(turn) });
         }
         const releaseRestore = operation.match(/^releases\/(\d+)\/restore$/);
         if (releaseRestore && request.method === "POST") {
@@ -259,7 +302,7 @@ export default {
           if (!release) return json({ message: "Release not found" }, { status: 404 });
           const result = await adapter.restore(runtimeProject, release.commit_hash);
           await env.DB.prepare("UPDATE runtime_project_links SET preview_url=?,updated_at=datetime('now') WHERE project_id=?").bind(result.previewUrl, id).run();
-          return json({ ...result, release });
+          return json({ ...result, release: serializeRelease(release) });
         }
       }
       if (url.pathname.startsWith("/api/")) return json({ message: "Not found" }, { status: 404 });
