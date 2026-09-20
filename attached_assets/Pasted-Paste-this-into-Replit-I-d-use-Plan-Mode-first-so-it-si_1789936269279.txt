@@ -1,0 +1,668 @@
+Paste this into Replit. I’d use **Plan Mode first** so it simplifies the architecture before making any more changes.
+
+```text
+I want to reset the architectural principle for this migration before we continue.
+
+The goal is now very simple:
+
+CLOUDFLARE'S OFFICIAL VIBE-CODING ARCHITECTURE
++
+THE MINIMUM BUILDCUSTOM SAAS LAYER NECESSARY TO TURN IT INTO OUR PRODUCT.
+
+Do not over-engineer infrastructure that Cloudflare or VibeSDK already provides.
+
+BuildCustom is a SaaS product similar in concept to Replit: users create accounts, create multiple projects, talk to an AI coding agent, build/edit applications conversationally, preview them, publish them, attach domains, and eventually give those generated applications their own databases/auth/storage.
+
+Cloudflare/VibeSDK should provide as much of the underlying app-building infrastructure as they are designed to provide.
+
+BuildCustom should primarily provide the SaaS/product layer around that infrastructure.
+
+==================================================
+CORE ARCHITECTURAL PRINCIPLE
+==================================================
+
+Use Cloudflare's current official AI Vibe Coding Platform reference architecture and the current VibeSDK architecture as the DEFAULT.
+
+Do not create BuildCustom-specific infrastructure when Cloudflare/VibeSDK already has a supported mechanism for the same capability.
+
+Before adding or keeping a custom architectural component, ask:
+
+"Does current Cloudflare or VibeSDK already solve this?"
+
+If YES:
+Use the official Cloudflare/VibeSDK mechanism.
+
+If NO:
+Implement the smallest BuildCustom-specific layer necessary.
+
+We want:
+
+Cloudflare/VibeSDK
++
+minimum BuildCustom SaaS layer
+
+NOT:
+
+Cloudflare/VibeSDK
++
+a second custom infrastructure platform that duplicates Cloudflare/VibeSDK.
+
+==================================================
+THE INTENDED RESPONSIBILITY BOUNDARY
+==================================================
+
+CLOUDFLARE / VIBESDK SHOULD OWN AS MUCH AS POSSIBLE OF:
+
+- ThinkAgent / native coding agent
+- AI generation
+- agent runtime
+- project workspace
+- generated application files
+- code execution
+- Sandbox where required
+- preview infrastructure
+- revision/artifact infrastructure where already provided
+- generated application deployment
+- Workers for Platforms
+- User Workers
+- dispatch namespaces
+- dynamic dispatch
+- generated-app isolation
+- Cloudflare bindings
+- D1/KV/R2/DO/etc. for generated applications
+- infrastructure primitives already provided by VibeSDK
+- platform deployment mechanisms already implemented by VibeSDK
+
+Do not duplicate these inside BuildCustom unless there is a demonstrated gap.
+
+BUILDCUSTOM SHOULD OWN:
+
+- BuildCustom users
+- secure BuildCustom authentication
+- sessions
+- accounts
+- projects
+- project ownership
+- project → VibeSDK agent/workspace mapping
+- plans
+- credits
+- billing later
+- permissions
+- usage/entitlements
+- BuildCustom dashboard
+- BuildCustom builder UX
+- deployment metadata needed by BuildCustom
+- domain-management UX
+- project/domain ownership
+- templates/modes
+- account/settings UX
+- platform-level audit/security where required
+
+Think of BuildCustom as the SaaS/control plane around Cloudflare's vibe-coding platform infrastructure.
+
+==================================================
+REFERENCE FLOW
+==================================================
+
+The conceptual architecture should remain approximately:
+
+User
+↓
+app.buildcustom.ai
+↓
+BuildCustom SaaS/control plane
+↓
+VibeSDK / ThinkAgent
+↓
+Cloudflare-supported workspace/execution/preview architecture
+↓
+Workers for Platforms
+↓
+User Worker
+↓
+BuildCustom dispatch/gateway
+↓
+xyz.apps.buildcustom.ai
+OR
+customer-owned custom domain
+
+Do not insert additional layers unless they solve a real requirement not already solved by Cloudflare/VibeSDK.
+
+==================================================
+WORKERS FOR PLATFORMS MODEL
+==================================================
+
+Follow Cloudflare's recommended Workers for Platforms model unless our product requirements make that impossible.
+
+Use the existing Cloudflare account.
+
+A second Cloudflare account is NOT required.
+
+Use separate dispatch namespaces for staging and production.
+
+Conceptually:
+
+Cloudflare account
+│
+├── staging dispatch namespace
+│   └── staging-generated User Workers
+│
+└── production dispatch namespace
+    └── production customer User Workers
+
+Do NOT create one dispatch namespace per customer.
+
+Generated customer applications should remain individual User Workers inside the appropriate dispatch namespace.
+
+Use Cloudflare's normal platform deployment model.
+
+A server-side Cloudflare credential used by the trusted platform backend to publish User Workers is acceptable.
+
+We previously imposed a stricter requirement that the staging credential must be technically incapable of modifying production Workers.
+
+REMOVE THAT REQUIREMENT.
+
+Cloudflare's current permission model does not provide namespace-level API-token isolation for Workers Scripts Write.
+
+We accept Cloudflare's normal recommended model.
+
+However:
+
+- credentials must remain server-side
+- credentials must never reach browsers
+- credentials must never reach generated apps
+- credentials must never reach user-controlled code
+- credentials must never be exposed in logs/responses
+- permissions should still be minimized to what the platform requires
+
+Do not build a complex security architecture solely to compensate for namespace-level token scoping that Cloudflare itself does not currently provide.
+
+==================================================
+RE-EVALUATE THE PROPOSED PUBLISH BROKER
+==================================================
+
+Do NOT automatically build the previously proposed custom publish broker.
+
+First inspect how current VibeSDK officially performs Workers for Platforms deployment.
+
+If VibeSDK's supported deployment path already performs the required platform publishing safely from trusted server-side infrastructure:
+
+USE IT.
+
+Do not wrap it with another custom deployment system merely because our previous prompt requested one.
+
+If a small adapter is genuinely required to connect BuildCustom to VibeSDK's supported publishing mechanism, implement only that adapter.
+
+No generic Cloudflare API proxy.
+
+No duplicate deployment engine.
+
+No second publishing platform.
+
+==================================================
+RE-EVALUATE WORKFLOWS + DURABLE OBJECT COORDINATION
+==================================================
+
+Our existing Replit application used:
+
+- long-running HTTP requests
+- process-memory Maps
+- Promise queues
+- in-memory VibeSDK session references
+
+Those Replit-specific patterns obviously cannot become production dependencies.
+
+However, do NOT automatically replace them with a large custom:
+
+Workflow
++
+Durable Object
++
+operation ledger
++
+queue
++
+orchestration system
+
+unless those components are actually required.
+
+First inspect CURRENT VibeSDK and Cloudflare capabilities.
+
+Determine what VibeSDK already provides for:
+
+- durable agent sessions
+- reconnecting via agent_id
+- serialization
+- long-running generation
+- cancellation
+- revisions
+- preview state
+- deployment state
+- recovery
+
+If VibeSDK already owns durable agent/workspace state, keep it there.
+
+Use a Durable Object only if BuildCustom genuinely needs project-level coordination that VibeSDK does not provide.
+
+Use Cloudflare Workflows only if BuildCustom genuinely needs durable orchestration that cannot safely be handled by the normal VibeSDK/Cloudflare architecture.
+
+If they are needed, use them.
+
+If they are not needed, remove them.
+
+The goal is not "fewest Cloudflare products."
+
+The goal is "no duplicated infrastructure."
+
+==================================================
+DO NOT CREATE A SECOND AGENT
+==================================================
+
+The native BuildCustom coding agent is VibeSDK's ThinkAgent/runtime branded and presented as BuildCustom.
+
+Do not create:
+
+BuildCustom Agent
+→ VibeSDK Agent
+
+There should not be two AI reasoning loops.
+
+The intended model is:
+
+BuildCustom UI
+→ authenticated BuildCustom platform actions
+→ VibeSDK/ThinkAgent
+
+ThinkAgent remains the actual coding agent.
+
+Later, external agents such as Claude Code, Codex, Gemini, Hermes, etc. may access BuildCustom platform capabilities through MCP/API/CLI.
+
+That is future work.
+
+Do not build it now.
+
+==================================================
+BUILDCUSTOM CONTROL PLANE
+==================================================
+
+BuildCustom itself still needs a real SaaS control plane because Cloudflare does not know our business/product concepts.
+
+The control plane needs to know things such as:
+
+User Justin
+→ owns Project A
+→ Project A maps to VibeSDK agent/workspace X
+→ Project A has deployment Y
+→ Project A has hosted slug Z
+→ Project A owns custom domains A/B/C
+
+That belongs to BuildCustom.
+
+Prefer a simple Cloudflare-native implementation:
+
+app.buildcustom.ai
+→ BuildCustom Worker + Static Assets
+→ D1 for BuildCustom relational control-plane data
+
+Add R2 only where binary/object storage is actually required.
+
+Add DO/Workflow only where demonstrated necessary.
+
+Do not create unnecessary microservices.
+
+==================================================
+AUTHENTICATION
+==================================================
+
+The secure BuildCustom authentication changes remain REQUIRED.
+
+This is not optional architectural complexity.
+
+The old Replit model:
+
+localStorage user
++
+x-user-id
++
+server trusts supplied user identity
+
+must NOT become production.
+
+Continue with:
+
+- server-validated sessions
+- opaque session tokens
+- hashed session token stored server-side
+- HttpOnly cookie
+- Secure
+- SameSite=Lax
+- logout/revocation
+- server-side identity resolution
+- DB-based roles
+- ownership enforcement
+- project authorization
+- domain authorization
+- deployment authorization
+- appropriate rate limiting
+- appropriate Origin validation
+
+Remove/reject x-user-id for authenticated production APIs.
+
+Remove legacy/default admin-password behavior.
+
+This is BuildCustom SaaS functionality Cloudflare/VibeSDK does not replace.
+
+==================================================
+DATABASE RESPONSIBILITIES
+==================================================
+
+BuildCustom's D1 database is for the BUILDCUSTOM CONTROL PLANE.
+
+Examples:
+
+- users
+- sessions
+- projects
+- project/VibeSDK mappings
+- plans
+- permissions
+- deployment metadata
+- domain metadata
+- BuildCustom settings
+
+Do not store generated project source files in BuildCustom D1 if VibeSDK already owns them.
+
+Do not duplicate VibeSDK workspace state.
+
+Generated CUSTOMER APPLICATION databases are a separate concept.
+
+Later, a generated app may have:
+
+User Worker A
+→ D1 A
+
+User Worker B
+→ D1 B
+
+and potentially its own:
+
+- KV
+- R2
+- Durable Objects
+- Queues
+- Workflows
+
+using Cloudflare bindings.
+
+That is future generated-app infrastructure.
+
+Do NOT build customer-app database/auth provisioning during this migration.
+
+==================================================
+EXISTING WORKING INFRASTRUCTURE
+==================================================
+
+Do not rebuild or disturb working infrastructure without a demonstrated reason.
+
+Protect:
+
+- existing VibeSDK runtime
+- ThinkAgent
+- SpaceDO
+- Artifacts/workspaces
+- existing previews
+- Workers for Platforms
+- existing generated applications
+- existing gateway
+- existing route KV
+- *.apps.buildcustom.ai
+- existing dispatch architecture
+- existing custom domains
+- existing Cloudflare for SaaS hostnames
+- existing SSL
+- buyermagnets.com
+- www.buyermagnets.com
+- app.buyermagnets.com
+- buildcustom.ai sales page
+
+buildcustom.ai currently serves the existing sales/marketing page.
+
+LEAVE IT ALONE.
+
+app.buildcustom.ai currently does not host the BuildCustom application.
+
+Eventually:
+
+app.buildcustom.ai
+→ permanent Cloudflare-native BuildCustom SaaS/control plane
+
+Do NOT attach app.buildcustom.ai yet.
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+GitHub should become the canonical BuildCustom source.
+
+Replit is currently a development environment, not the desired production runtime.
+
+Preserve the work already completed.
+
+Do not discard good migration work simply because we are simplifying the architecture.
+
+Specifically preserve:
+
+- secure auth work
+- D1 migration work
+- Cloudflare Worker compatibility work
+- VibeSDK compatibility findings
+- preview tests
+- cancellation tests
+- staging resource work that still matches the simplified architecture
+
+Remove only unnecessary duplication/complexity.
+
+The GitHub authentication/synchronization problem is separate.
+
+Do not lose local commits.
+
+Report exactly what owner action is required to restore GitHub synchronization.
+
+==================================================
+AUTHORITATIVE DATA
+==================================================
+
+Continue using the authoritative-data conclusion from the previous audit.
+
+The current Replit development database appears to contain the actual active BuildCustom state, whereas the database labeled production is old/empty.
+
+Verify using our real active test projects before final migration.
+
+Preserve:
+
+- user IDs
+- project IDs
+- agent_id
+- deployment identifiers
+- hosted slugs
+- domain mappings
+- Cloudflare custom-hostname IDs
+- releases/revisions metadata that BuildCustom needs
+
+Do not recreate existing VibeSDK workspaces unnecessarily.
+
+Imported BuildCustom projects should reconnect to existing VibeSDK state where supported.
+
+==================================================
+WHAT I WANT YOU TO DO RIGHT NOW
+==================================================
+
+Before continuing implementation, perform a short architectural simplification review against:
+
+1. Cloudflare's CURRENT official AI Vibe Coding Platform reference architecture
+2. Cloudflare's CURRENT Workers for Platforms recommendations
+3. the CURRENT VibeSDK implementation we are actually using
+
+Use the installed/current implementation and current official documentation as the source of truth, not assumptions from our older prompts.
+
+Classify every major component into ONE of these categories:
+
+A. OFFICIAL CLOUDFLARE/VIBESDK
+Use as designed.
+
+B. REQUIRED BUILDCUSTOM SAAS LAYER
+We legitimately need to build this ourselves.
+
+C. REQUIRED ADAPTER
+Cloudflare/VibeSDK solves the infrastructure problem but BuildCustom needs a small integration layer.
+
+D. UNNECESSARY DUPLICATION
+Remove/simplify.
+
+Specifically review:
+
+- ThinkAgent
+- SpaceDO
+- Artifacts/workspaces
+- Sandbox
+- preview
+- revision/history
+- generated-app deployment
+- Workers for Platforms
+- dispatch namespaces
+- gateway/dynamic dispatch
+- route KV
+- Cloudflare for SaaS/custom domains
+- BuildCustom control-plane Worker
+- D1
+- R2
+- BuildCustom auth
+- BuildCustom project ownership
+- project → agent mapping
+- Workflow
+- BuildCustom Durable Object
+- operation ledger
+- mutation ledger
+- custom queues
+- custom publish broker
+- deployment adapter
+- session caching
+- any duplicated project-file storage
+
+==================================================
+THEN SIMPLIFY
+==================================================
+
+After the review, simplify the staging implementation to the smallest architecture that:
+
+1. follows Cloudflare/VibeSDK's official architecture,
+
+2. provides the BuildCustom SaaS functionality Cloudflare does not provide,
+
+3. removes Replit runtime dependencies,
+
+4. preserves secure authentication/ownership,
+
+5. preserves existing working customer-app infrastructure,
+
+6. allows BuildCustom users to build/edit/preview/publish apps,
+
+7. leaves a clean future path for generated-app D1/auth/storage,
+
+8. does not create duplicate agent/runtime/deployment infrastructure.
+
+Do not preserve complexity merely because we already implemented it if the official Cloudflare/VibeSDK architecture makes it unnecessary.
+
+But do not remove working infrastructure merely for aesthetic simplicity.
+
+Make evidence-based decisions.
+
+==================================================
+STAGING MODEL
+==================================================
+
+Use our EXISTING Cloudflare account.
+
+Do not require a second Cloudflare account.
+
+Use separate staging and production resources/namespaces where Cloudflare recommends them.
+
+A server-side Cloudflare publishing credential following Cloudflare's supported platform deployment model is acceptable.
+
+Continue staging without touching:
+
+- buildcustom.ai
+- app.buildcustom.ai
+- production DNS
+- existing production customer apps
+- existing customer domains
+
+Use staging-only generated apps for destructive deployment tests.
+
+==================================================
+SUCCESSFUL END STATE
+==================================================
+
+The architecture should be understandable this simply:
+
+BUILDCUSTOM SAAS
+Users / Auth / Projects / Plans / Ownership / UX
+                  ↓
+            VibeSDK
+ThinkAgent / Workspace / Generation / Execution / Preview
+                  ↓
+      Workers for Platforms
+Generated isolated customer applications
+                  ↓
+     Cloudflare platform services
+D1 / KV / R2 / Domains / SSL / Routing as required
+
+
+In other words:
+
+"CLOUDFLARE'S VIBE-CODING ARCHITECTURE + THE MINIMUM BUILDCUSTOM SAAS LAYER NECESSARY TO TURN IT INTO OUR PRODUCT."
+
+That is the architectural north star.
+
+==================================================
+STOP POINT
+==================================================
+
+Proceed with:
+
+1. architectural simplification review,
+2. removal/simplification of unnecessary custom infrastructure,
+3. completion of the Cloudflare staging control plane,
+4. staging testing using the simplified architecture.
+
+Do NOT launch app.buildcustom.ai yet.
+
+Do NOT modify buildcustom.ai.
+
+Do NOT shut down Replit yet.
+
+Do NOT build generated-app customer databases/auth yet.
+
+Do NOT add Stripe unless required for existing functionality.
+
+Do NOT add external agents/MCP yet.
+
+When the simplified Cloudflare staging environment passes the available acceptance tests, STOP and report:
+
+1. final architecture,
+2. which components are pure Cloudflare/VibeSDK,
+3. which components are BuildCustom SaaS,
+4. which custom components were removed,
+5. which adapters remain and why,
+6. whether Workflow is actually required,
+7. whether a BuildCustom project Durable Object is actually required,
+8. how publishing now works,
+9. how the Cloudflare publishing credential is secured,
+10. staging test results,
+11. D1/auth status,
+12. GitHub sync status,
+13. remaining blockers,
+14. exact next steps to make app.buildcustom.ai the real production BuildCustom application.
+
+Do not perform the production launch until I approve it.
+```
