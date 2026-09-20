@@ -47,6 +47,27 @@ The control plane serves the existing frontend, rejects missing or foreign Origi
 3. Port the remaining Express project/files/settings routes to the Cloudflare Worker. The current deployed Worker implements sessions and gated asynchronous operation endpoints, but the full dashboard API is not yet available.
 4. GitHub synchronization remains blocked because the configured GitHub credential was rejected. Local history remains ahead of `origin/main`; no history was rewritten.
 
+## Restricted publish broker feasibility
+No broker was implemented because Cloudflare's current permission model cannot enforce the required resource boundary.
+
+VibeSDK's platform publish path performs:
+
+1. `POST /accounts/{account_id}/workers/dispatch/namespaces/{namespace}/scripts/{script_name}/assets-upload-session` when static assets exist.
+2. `POST /accounts/{account_id}/workers/assets/upload?base64=true` with the short-lived upload JWT returned by the first call.
+3. `PUT /accounts/{account_id}/workers/dispatch/namespaces/{namespace}/scripts/{script_name}` with the Worker module, bindings, assets token, and optional Durable Object migration.
+
+The dispatch script upload and asset-session APIs require `Workers Scripts Write` (`Workers Scripts Edit` in the API-token permission list). Cloudflare documents this as an account-scoped permission under `com.cloudflare.api.account`. API-token resource selectors can restrict the account, but Cloudflare does not expose a dispatch-namespace or script-name resource scope for this permission.
+
+A broker could validate the namespace and script name before forwarding these calls, but the credential held by that broker would still be accepted by Cloudflare for other Worker scripts in the same account. A broker bug, request-smuggling issue, or credential compromise could therefore modify protected production Workers. This is an application allowlist, not a technically enforced Cloudflare credential boundary, and it does not meet the owner's requirement.
+
+Safe options are:
+
+- place staging publishing in a separate Cloudflare account containing no protected production resources, then give the broker `Workers Scripts Write` only in that account;
+- wait for Cloudflare to offer namespace- or script-scoped Workers write credentials; or
+- explicitly weaken the hard boundary, which was not authorized.
+
+The existing account-level token was not attached to the staging control plane, Workflow, Durable Object, VibeSDK Worker, browser, generated application, or any broker.
+
 ## R2 decision
 The largest current control-plane binary field is a 93,443-byte preview image. It is safe for the present small D1 staging copy, so no control-plane R2 bucket was created. The R2 bucket listed above belongs only to the isolated VibeSDK template/runtime clone.
 

@@ -11,6 +11,6 @@ An isolated VibeSDK Worker clone needs the canonical public D1 migrations and te
 
 VibeSDK platform publishing currently requires an account ID and Cloudflare API token even when the Worker has an isolated dispatch namespace binding.
 
-**Why:** Build, realtime state, preview, and cancellation worked without the token, but platform publish explicitly rejected the missing account credentials. The available token could mutate protected account resources and therefore could not satisfy a hard staging boundary.
+**Why:** Build, realtime state, preview, and cancellation worked without the token, but platform publish explicitly rejected the missing account credentials. Its dispatch upload calls require account-scoped Workers Scripts Write; Cloudflare exposes no dispatch-namespace or script-name token resource scope. The available token could mutate protected account resources and therefore could not satisfy a hard staging boundary.
 
-**How to apply:** Do not attach a broad production-capable token merely to complete a staging publish test. Require an owner-approved credential boundary or change the publishing architecture first.
+**How to apply:** Do not treat a broker allowlist as a credential boundary when the broker token remains account-wide. Use a separate staging-only Cloudflare account, wait for namespace-scoped credentials, or obtain explicit approval to weaken the boundary.
