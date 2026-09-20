@@ -639,7 +639,6 @@ function PreviewMockup({ device }: { device: "desktop" | "tablet" | "mobile" }) 
   );
 }
 
-type RuntimeFile = { path: string; name?: string; size?: number; type?: string };
 type RuntimeRelease = { id: number; commitHash: string; deploymentUrl: string; createdAt: string };
 type RuntimeBuilderTurn = {
   id: number;
@@ -685,21 +684,9 @@ function BuildActivity({
       return body;
     },
   });
-  const filesQuery = useQuery({
-    queryKey: ["runtime-files", projectId],
-    enabled: !!projectId,
-    refetchInterval: isBuilding ? 1500 : 10000,
-    queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/runtime/files`, { headers: authHeaders() });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "Workspace files unavailable.");
-      return body.files as RuntimeFile[];
-    },
-  });
   const state = statusQuery.data?.state || {};
   const generation = state.generation || {};
   const generationStatus = generation.status || (isBuilding ? "running" : "idle");
-  const files = filesQuery.data || [];
   const latestTool = state.lastConversationResponse?.tool;
   const activePath = state.currentFile || latestTool?.args?.path;
   const summary = statusQuery.isError
@@ -707,8 +694,8 @@ function BuildActivity({
     : isBuilding
       ? activePath
         ? `${latestTool?.status === "success" ? "Updated" : "Writing"} ${activePath}`
-        : `${files.length || statusQuery.data?.files || 0} files · Planning changes`
-      : `${files.length || statusQuery.data?.files || 0} files · ${generationStatus}`;
+        : `${statusQuery.data?.files || 0} files · Planning changes`
+      : `${statusQuery.data?.files || 0} files · ${generationStatus}`;
 
   useEffect(() => {
     if (!isBuilding) return;
@@ -723,24 +710,6 @@ function BuildActivity({
     if (!next) return;
     setSteps((current) => current[current.length - 1] === next ? current : [...current.slice(-9), next]);
   }, [isBuilding, activePath, state.lastConversationResponse, summary]);
-
-  const showFile = async (path: string) => {
-    if (openFile === path) {
-      setOpenFile(null);
-      return;
-    }
-    setOpenFile(path);
-    setLoadingFile(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(path)}`, { headers: authHeaders() });
-      const body = await res.json().catch(() => ({}));
-      setFileContent(res.ok ? body.content : "Unable to read this file.");
-    } catch {
-      setFileContent("Unable to read this file.");
-    } finally {
-      setLoadingFile(false);
-    }
-  };
 
   useEffect(() => {
     if (!isBuilding || !activePath || openFile === activePath) return;
@@ -797,26 +766,6 @@ function BuildActivity({
                 {loadingFile ? "Loading current code…" : fileContent}
               </pre>
             </div>
-          )}
-          {files.length > 0 ? (
-            <div className="space-y-1">
-              {files.map((file) => (
-                <div key={file.path}>
-                  <button onClick={() => showFile(file.path)} className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${theme === "dark" ? "text-white/65 hover:bg-white/5" : "text-gray-600 hover:bg-white"}`} data-testid={`button-file-${file.path}`}>
-                    <FileCode2 size={13} className="text-cyan-400 shrink-0" />
-                    <span className="truncate flex-1 font-mono">{file.path}</span>
-                    <span className="text-[10px] opacity-40">{file.size ? `${Math.ceil(file.size / 1024)}kb` : ""}</span>
-                  </button>
-                  {openFile === file.path && (
-                    <pre className={`mt-1 max-h-40 overflow-auto rounded-lg p-2 text-[10px] leading-relaxed ${theme === "dark" ? "bg-black/30 text-white/55" : "bg-white text-gray-500 border border-gray-100"}`}>
-                      {loadingFile ? "Loading file…" : fileContent}
-                    </pre>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className={`text-[11px] py-2 ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>Files will appear here as the Agent writes them.</div>
           )}
         </div>
       )}
@@ -1578,17 +1527,17 @@ function EditorPage() {
                   {turn.prompt}
                 </div>
               </div>
-              <div className="flex justify-start">
+              {turn.mode !== "build" && <div className="flex justify-start">
                 <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
                   theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
-                }`}>
+                }`} data-testid={`builder-turn-plan-response-${turn.id}`}>
                   {turn.response}
                 </div>
-              </div>
+              </div>}
               {turn.mode === "build" && (
                 <details className={`group rounded-xl border ${
                   theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"
-                }`}>
+                }`} data-testid={`builder-turn-checkpoint-${turn.id}`}>
                   <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5">
                     <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-400/15 text-emerald-400"><Check size={13} /></div>
                     <div className="min-w-0 flex-1">
@@ -1661,6 +1610,13 @@ function EditorPage() {
                   </div>
                 </details>
               )}
+              {turn.mode === "build" && <div className="flex justify-start">
+                <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
+                  theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
+                }`} data-testid={`builder-turn-build-response-${turn.id}`}>
+                  {turn.response}
+                </div>
+              </div>}
             </div>
           ))}
           {messages.map((msg, i) => (

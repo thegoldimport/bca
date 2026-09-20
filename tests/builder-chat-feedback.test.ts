@@ -54,3 +54,15 @@ test("Builder chat follows assistant responses and live activity", () => {
   assert.match(source, /new MutationObserver\(\(\) => scrollChatToBottom\("smooth"\)\)/);
   assert.match(source, /observer\.observe\(chat, \{ childList: true, subtree: true, characterData: true \}\)/);
 });
+
+test("Builder progress omits the workspace inventory and puts checkpoints before build replies", () => {
+  const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /queryKey: \["runtime-files", projectId\]/);
+  assert.doesNotMatch(source, /data-testid=\{`button-file-\$\{file\.path\}`\}/);
+  assert.match(source, /Loading current code…/);
+  const checkpoint = source.indexOf("builder-turn-checkpoint-");
+  const buildResponse = source.indexOf("builder-turn-build-response-");
+  assert.ok(checkpoint >= 0);
+  assert.ok(buildResponse > checkpoint);
+  assert.match(source, /builder-turn-plan-response-/);
+});
