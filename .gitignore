@@ -1,4 +1,6 @@
 node_modules
+control-plane-export*.json
+control-plane-import*.sql
 dist
 .DS_Store
 server/public

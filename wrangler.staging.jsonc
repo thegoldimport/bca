@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buildcustom-control-plane-staging",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-09-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": { "directory": "./dist/public", "not_found_handling": "single-page-application" },
+  "d1_databases": [{ "binding": "DB", "database_name": "buildcustom-control-plane-staging", "database_id": "6a0ee5f4-9077-4ccf-a585-a2afb3daf734", "migrations_dir": "migrations/d1" }],
+  "kv_namespaces": [{ "binding": "STAGING_ROUTES", "id": "e5e119fa2abc4c26a8c027e0d8a8d82c" }],
+  "durable_objects": { "bindings": [{ "name": "PROJECT_OP", "class_name": "ProjectOperationDO" }] },
+  "workflows": [{ "name": "RUNTIME_WORKFLOW", "binding": "RUNTIME_WORKFLOW", "class_name": "RuntimeOperationWorkflow" }],
+  "observability": { "enabled": true },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectOperationDO"] }],
+  "vars": {
+    "ENVIRONMENT": "staging",
+    "STAGING_RUNTIME_URL": "https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev",
+    "STAGING_ROUTE_KV_ID": "e5e119fa2abc4c26a8c027e0d8a8d82c",
+    "STAGING_DISPATCH_NAMESPACE": "buildcustom-vibesdk-migration-staging",
+    "STAGING_ALLOWED_ORIGIN": "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
+    "STAGING_LOGIN_ENABLED": "false",
+    "RUNTIME_OPERATIONS_ENABLED": "false"
+  }
+}
