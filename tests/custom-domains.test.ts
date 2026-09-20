@@ -70,13 +70,15 @@ test("hostname classification follows the public suffix list", () => {
 });
 
 test("application domains are restricted to direct subdomains", () => {
-  assert.deepEqual(validateApplicationHostname("app.example.co.uk"), {
-    hostname: "app.example.co.uk",
-    kind: "subdomain",
-    registrableDomain: "example.co.uk",
-  });
-  assert.throws(() => validateApplicationHostname("example.co.uk"), /must be subdomains/);
-  assert.throws(() => validateApplicationHostname("www.example.co.uk"), /must be subdomains/);
+  for (const prefix of ["app", "apps", "data", "docs"]) {
+    assert.deepEqual(validateApplicationHostname(`${prefix}.example.co.uk`), {
+      hostname: `${prefix}.example.co.uk`,
+      kind: "subdomain",
+      registrableDomain: "example.co.uk",
+    });
+  }
+  assert.throws(() => validateApplicationHostname("example.co.uk"), /must use a prefix/);
+  assert.throws(() => validateApplicationHostname("www.example.co.uk"), /must use a prefix/);
 });
 
 test("DNS replacement plan separates website conflicts, protected records, and ambiguous aliases", () => {

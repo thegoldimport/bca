@@ -118,7 +118,7 @@ export function validateApplicationHostname(value: string) {
   const classification = classifyHostname(value);
   if (classification.kind !== "subdomain") {
     throw new RuntimeAdapterError(
-      "App/login domains must be subdomains such as app.example.com.",
+      "Custom sub-domains must use a prefix such as app.example.com or docs.example.com.",
       "RUNTIME_UPSTREAM_ERROR",
       400,
     );

@@ -169,11 +169,6 @@ export class DatabaseStorage implements IStorage {
   }
   async claimRuntimeApplicationDomain(projectId: number, hostname: string) {
     return db.transaction(async (tx) => {
-      const existingForProject = await tx.select().from(runtimeCustomDomainClaims).where(and(
-        eq(runtimeCustomDomainClaims.projectId, projectId),
-        eq(runtimeCustomDomainClaims.purpose, "application"),
-      ));
-      if (existingForProject.some((claim) => claim.hostname !== hostname)) throw new Error("APPLICATION_DOMAIN_EXISTS");
       await tx.insert(runtimeCustomDomainClaims).values({
         hostname,
         projectId,

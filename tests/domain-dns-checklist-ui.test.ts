@@ -72,6 +72,10 @@ test("Cloudflare migration review shows the DNS checklist before nameserver setu
       managedUrl: "https://project.buildcustom.app",
       canConnect: true,
       migration: {},
+      appDomains: [
+        { hostname: "app.example.com", status: "live", dnsRecords: [] },
+        { hostname: "docs.example.com", status: "live", dnsRecords: [] },
+      ],
     }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -113,9 +117,16 @@ test("Cloudflare migration review shows the DNS checklist before nameserver setu
     );
 
     const hostnameInput = await screen.findByTestId("input-custom-domain");
-    assert.ok(screen.getByText("App/login domain"));
-    assert.ok(screen.getByText(/Add the CNAME record we provide/));
+    const subdomainsSection = screen.getByTestId("custom-subdomains-section");
+    assert.ok(within(subdomainsSection).getByText("Custom sub-domains"));
+    assert.ok(within(subdomainsSection).getByText(/Add as many direct addresses as you need/));
     assert.ok(screen.getByTestId("input-app-domain"));
+    assert.ok(within(subdomainsSection).getByText("app.example.com"));
+    assert.ok(within(subdomainsSection).getByText("docs.example.com"));
+    assert.equal(
+      subdomainsSection.closest(".rounded-2xl"),
+      screen.getByText("Public website domain").closest(".rounded-2xl"),
+    );
     fireEvent.change(hostnameInput, { target: { value: "example.com" } });
     fireEvent.click(screen.getByTestId("button-connect-domain"));
 

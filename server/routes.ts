@@ -181,10 +181,13 @@ function applicationDomainResponse(domain: any) {
 
 async function customDomainResponseWithApplication(projectId: number, link: any) {
   const domains = await storage.getRuntimeCustomDomains(projectId);
+  const appDomains = domains
+    .filter((domain) => domain.purpose === "application" && domain.role === "direct")
+    .map(applicationDomainResponse);
   return {
     ...customDomainResponse(link),
-    appDomain: applicationDomainResponse(domains.find((domain) =>
-      domain.purpose === "application" && domain.role === "direct")),
+    appDomains,
+    appDomain: appDomains[0] || null,
   };
 }
 
@@ -926,9 +929,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ...(await customDomainResponseWithApplication(project.id, await storage.getRuntimeProjectLink(project.id))),
       });
     } catch (err: any) {
-      if (err?.message === "APPLICATION_DOMAIN_EXISTS") {
-        return res.status(409).json({ code: "APPLICATION_DOMAIN_EXISTS", message: "This project already has an app/login domain. Remove it before adding a different one." });
-      }
       if (err?.message === "CUSTOM_DOMAIN_IN_USE") {
         return res.status(409).json({ code: "CUSTOM_DOMAIN_IN_USE", message: "That domain is already connected to another project." });
       }
@@ -953,8 +953,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const cloudflareHostname = await getCustomHostname(claim.cloudflareId);
         return persistApplicationDomain(project.id, claim, link.subdomainSlug, cloudflareHostname);
       });
-      if (!result) return res.status(404).json({ message: "No app domain is connected." });
-      return res.json({ appDomain: applicationDomainResponse(result) });
+      if (!result) return res.status(404).json({ message: "No custom sub-domain is connected." });
+      return res.json(await customDomainResponseWithApplication(project.id, await storage.getRuntimeProjectLink(project.id)));
     } catch (err) { return runtimeError(err, res); }
   });
 
