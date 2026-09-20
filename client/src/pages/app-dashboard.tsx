@@ -879,6 +879,7 @@ function EditorPage() {
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -905,6 +906,27 @@ function EditorPage() {
     textarea.style.height = `${Math.max(nextHeight, 40)}px`;
     textarea.style.overflowY = textarea.scrollHeight > 220 ? "auto" : "hidden";
   }, [chatInput]);
+
+  const scrollChatToBottom = (behavior: ScrollBehavior = "smooth") => {
+    window.requestAnimationFrame(() => {
+      const chat = chatScrollRef.current;
+      if (chat) chat.scrollTo({ top: chat.scrollHeight, behavior });
+    });
+  };
+
+  useEffect(() => {
+    if (chatCollapsed) return;
+    scrollChatToBottom(turns.length ? "smooth" : "auto");
+  }, [turns.length, messages.length, messages.at(-1)?.content, runtimeError, sending, chatCollapsed]);
+
+  useEffect(() => {
+    if (chatCollapsed) return;
+    const chat = chatScrollRef.current;
+    if (!chat) return;
+    const observer = new MutationObserver(() => scrollChatToBottom("smooth"));
+    observer.observe(chat, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [chatCollapsed]);
 
   const toggleSelector = () => {
     const enabled = !selectorEnabled;
@@ -1518,7 +1540,7 @@ function EditorPage() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="builder-chat-scroll">
           {runtimeError && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{runtimeError}</div>}
           {!turns.length && !messages.length && !runtimeError && (
             <div className={`rounded-2xl border px-4 py-4 ${theme === "dark" ? "bg-white/5 border-white/10" : "bg-gray-100 border-gray-200"}`}>

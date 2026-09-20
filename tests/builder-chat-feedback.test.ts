@@ -44,3 +44,13 @@ test("Builder composer renders removable thumbnails with an expanded preview", (
   assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /setPreviewAttachmentId\(\(current\) => current === id \? null : current\)/);
 });
+
+test("Builder chat follows assistant responses and live activity", () => {
+  const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
+  assert.match(source, /const chatScrollRef = useRef<HTMLDivElement \| null>\(null\)/);
+  assert.match(source, /data-testid="builder-chat-scroll"/);
+  assert.match(source, /chat\.scrollTo\(\{ top: chat\.scrollHeight, behavior \}\)/);
+  assert.match(source, /\[turns\.length, messages\.length, messages\.at\(-1\)\?\.content, runtimeError, sending, chatCollapsed\]/);
+  assert.match(source, /new MutationObserver\(\(\) => scrollChatToBottom\("smooth"\)\)/);
+  assert.match(source, /observer\.observe\(chat, \{ childList: true, subtree: true, characterData: true \}\)/);
+});
