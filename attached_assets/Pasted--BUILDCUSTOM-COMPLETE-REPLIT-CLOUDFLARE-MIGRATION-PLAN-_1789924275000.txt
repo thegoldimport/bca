@@ -1,0 +1,1469 @@
+# BUILDCUSTOM COMPLETE REPLIT → CLOUDFLARE MIGRATION
+## PLAN MODE ONLY — DO NOT IMPLEMENT ANYTHING YET
+
+We have reached an important milestone with BuildCustom.
+
+BuildCustom is an AI software-building platform similar conceptually to Replit:
+users describe what they want to build, our native AI coding agent builds it,
+they preview it, edit it conversationally, publish it, and host it through
+BuildCustom.
+
+Our native BuildCustom coding agent/runtime is the current Cloudflare VibeSDK
+agent/runtime, branded as BuildCustom.
+
+We are NOT building a second AI agent around VibeSDK.
+
+VibeSDK/ThinkAgent is the native coding agent.
+
+BuildCustom owns the product/control plane around it:
+- users
+- authentication
+- projects
+- permissions
+- billing
+- usage
+- project metadata
+- domains
+- deployments
+- platform actions
+- UI/UX
+- future customer database provisioning
+- future storage provisioning
+- future external agent/API/MCP access
+
+Cloudflare/VibeSDK owns the underlying coding/runtime infrastructure:
+- ThinkAgent
+- SpaceDO
+- workspace/files
+- Cloudflare Artifacts/revision history
+- code execution
+- Dynamic Worker previews
+- sandbox/container execution where required
+- Workers for Platforms deployment
+- generated application runtime
+
+==================================================
+WHAT HAS ALREADY BEEN PROVEN
+==================================================
+
+Do not rebuild or replace these systems merely because we are migrating
+BuildCustom itself.
+
+We have successfully proven:
+
+1. A user can create a BuildCustom project.
+
+2. The BuildCustom UI can communicate with the current VibeSDK/ThinkAgent
+   runtime.
+
+3. ThinkAgent can generate a real application.
+
+4. Real project/workspace files exist.
+
+5. Conversational edits can modify the same application.
+
+6. Real previews work.
+
+7. Revision/history functionality works.
+
+8. A generated application can be published.
+
+9. Published applications run through our Cloudflare / Workers for Platforms
+   infrastructure.
+
+10. Published applications receive BuildCustom-hosted subdomains.
+
+11. Published applications continue working independently of the Replit
+    development environment.
+
+12. Favicons/social images/static assets work on published applications.
+
+13. Cloudflare for SaaS custom domains work.
+
+14. A real customer-owned domain was successfully connected:
+
+    buyermagnets.com
+
+15. We moved authoritative DNS for that test domain to Cloudflare without
+    transferring domain registration.
+
+16. Existing important DNS/email records were preserved.
+
+17. The naked/root domain works using Cloudflare DNS/apex CNAME flattening.
+
+18. SSL works on the customer domain.
+
+19. www.buyermagnets.com correctly redirects to the root domain.
+
+20. Multiple hostnames/subdomains have also been successfully tested.
+
+This means the application-generation and hosting architecture is working.
+
+DO NOT REARCHITECT THESE WORKING SYSTEMS WITHOUT A SPECIFIC TECHNICAL REASON.
+
+==================================================
+WHY WE ARE DOING THIS MIGRATION NOW
+==================================================
+
+BuildCustom itself was originally developed on Replit.
+
+Replit has been useful as our development environment, but it must NOT remain
+a production infrastructure dependency.
+
+Before we continue building full-stack functionality for generated customer
+applications, including:
+
+- databases
+- customer authentication
+- signup/login
+- persistent application data
+- file storage
+- secrets
+- queues
+- additional Cloudflare bindings
+
+we want BuildCustom itself completely migrated to Cloudflare.
+
+The purpose of this phase is:
+
+TURN REPLIT OFF AND BUILDCUSTOM STILL WORKS.
+
+That is the primary acceptance criterion.
+
+When this migration is complete:
+
+- BuildCustom's production frontend must not depend on Replit.
+- BuildCustom's production API must not depend on Replit.
+- BuildCustom's production database must not depend on Replit.
+- BuildCustom authentication must not depend on Replit.
+- BuildCustom sessions must not depend on Replit.
+- BuildCustom project metadata must not depend on Replit.
+- BuildCustom domain metadata must not depend on Replit.
+- BuildCustom deployment metadata must not depend on Replit.
+- BuildCustom secrets must not depend on Replit.
+- BuildCustom's VibeSDK integration must not depend on Replit.
+- BuildCustom's generated application hosting must not depend on Replit.
+- Existing published applications must not depend on Replit.
+- Existing custom domains must not depend on Replit.
+- BuildCustom must continue functioning if the Replit deployment is completely
+  stopped.
+
+Replit may remain temporarily useful as a DEVELOPMENT ENVIRONMENT while we
+finish the migration.
+
+It must no longer be production infrastructure.
+
+==================================================
+IMPORTANT: PLAN MODE ONLY
+==================================================
+
+DO NOT IMPLEMENT THE MIGRATION YET.
+
+DO NOT CREATE NEW CLOUDFLARE RESOURCES YET.
+
+DO NOT DELETE ANYTHING.
+
+DO NOT MODIFY PRODUCTION DNS.
+
+DO NOT MIGRATE DATA YET.
+
+DO NOT CHANGE AUTHENTICATION YET.
+
+DO NOT CHANGE THE CURRENT WORKING VIBESDK RUNTIME.
+
+DO NOT CHANGE WORKERS FOR PLATFORMS.
+
+DO NOT MODIFY THE WORKING CUSTOM DOMAIN SYSTEM.
+
+DO NOT MODIFY TEST1.
+
+DO NOT BUILD CUSTOMER DATABASES YET.
+
+DO NOT BUILD CUSTOMER LOGIN/AUTH YET.
+
+DO NOT START A LARGE REFACTOR.
+
+Your first task is to perform a comprehensive READ-ONLY migration audit and
+return the exact migration plan.
+
+==================================================
+TARGET ARCHITECTURE
+==================================================
+
+The intended high-level production architecture is:
+
+                       buildcustom.ai
+                             |
+                             v
+                    CLOUDFLARE EDGE
+                             |
+              +--------------+--------------+
+              |                             |
+              v                             v
+        Marketing Site              app.buildcustom.ai
+                                            |
+                                            v
+                                BUILDCUSTOM CONTROL PLANE
+                                            |
+                  +-------------------------+-------------------------+
+                  |                         |                         |
+                  v                         v                         v
+             Auth/Users                 Projects                Platform API
+                  |                         |                         |
+                  +-------------------------+-------------------------+
+                                            |
+                                            v
+                                  PLATFORM ACTION LAYER
+                                            |
+                    +-----------------------+-----------------------+
+                    |                       |                       |
+                    v                       v                       v
+                VibeSDK                Deployment               Domains
+                Adapter                  Adapter                 Service
+                    |                       |                       |
+                    v                       v                       v
+               ThinkAgent           Workers for             Cloudflare
+                SpaceDO              Platforms                for SaaS
+               Artifacts                  |
+                    |                     |
+                    +----------+----------+
+                               |
+                               v
+                       CUSTOMER APPLICATIONS
+                               |
+             +-----------------+-----------------+
+             |                                   |
+             v                                   v
+      BuildCustom domain                  Custom domain
+      *.apps.buildcustom.ai               customer.com
+
+
+The exact Cloudflare service split should be determined from the CURRENT
+working implementation and current Cloudflare best practices.
+
+Do not create unnecessary microservices simply to match this diagram.
+
+==================================================
+ARCHITECTURAL PRINCIPLE
+==================================================
+
+There are TWO different classes of applications.
+
+1. BUILDCUSTOM ITSELF
+
+This is the platform/control plane.
+
+It includes:
+
+- BuildCustom dashboard
+- authentication
+- user accounts
+- project management
+- billing
+- domains
+- deployments
+- agent sessions
+- permissions
+- platform API
+- platform actions
+- administrative state
+
+2. CUSTOMER-GENERATED APPLICATIONS
+
+These are apps generated by BuildCustom users.
+
+They run through the existing Workers for Platforms architecture.
+
+DO NOT MIX THEIR DATABASES OR SECURITY BOUNDARIES.
+
+BuildCustom's control-plane database is NOT the same thing as databases that
+will later be provisioned for customer applications.
+
+==================================================
+CURRENT VIBESDK ARCHITECTURE
+==================================================
+
+Inspect the actual current deployed implementation and source before making
+assumptions.
+
+Our intended architecture uses the current VibeSDK concepts including:
+
+- ThinkAgent
+- SpaceDO
+- Cloudflare Artifacts
+- Dynamic Worker previews / Worker Loader
+- Durable Objects
+- D1 where appropriate
+- R2 where appropriate
+- KV where appropriate
+- Cloudflare Sandbox/Containers where required
+- Workers for Platforms for permanent generated applications
+
+Do NOT resurrect an older VibeSDK architecture simply because legacy
+Cloudflare resources still exist.
+
+Legacy Cloudflare resources may still be present from previous versions.
+
+Treat unknown/legacy resources as READ ONLY until their purpose is proven.
+
+==================================================
+NATIVE AGENT ARCHITECTURE
+==================================================
+
+This is extremely important.
+
+Do NOT build:
+
+BuildCustom Agent
+    ->
+VibeSDK Agent
+    ->
+runtime
+
+The current VibeSDK/ThinkAgent IS the native BuildCustom coding agent.
+
+The desired architecture is:
+
+BuildCustom UI
+      |
+      v
+BuildCustom authenticated platform API
+      |
+      v
+VibeSDK adapter / platform actions
+      |
+      v
+ThinkAgent + SpaceDO + current VibeSDK runtime
+
+Future external agents such as Claude Code, Codex, Hermes, OpenClaw, etc.
+should eventually access BuildCustom capabilities through authenticated
+platform actions/API/MCP/CLI.
+
+They should not need to talk through another AI agent.
+
+Do not build those external integrations during this migration.
+
+Just preserve the architecture needed for them later.
+
+==================================================
+SOURCE OF TRUTH / DEVELOPMENT WORKFLOW
+==================================================
+
+Inspect the current Git/repository/deployment workflow.
+
+The desired long-term state is:
+
+Git repository
+      |
+      +--> development branch
+      |
+      +--> preview/staging
+      |
+      +--> tests
+      |
+      +--> approval
+      |
+      v
+Cloudflare production deployment
+
+Replit should NOT be the canonical copy of BuildCustom source code.
+
+If GitHub is already the canonical repository, confirm it.
+
+If it is not, explain exactly what must change.
+
+Do not push or rewrite Git history during Plan Mode.
+
+Eventually we should be able to develop BuildCustom using:
+
+- local development
+- Claude Code
+- Codex
+- another coding agent
+- potentially BuildCustom's own owner/developer agent
+
+without production depending on Replit.
+
+==================================================
+AUDIT EVERY REPLIT DEPENDENCY
+==================================================
+
+Search the ENTIRE BuildCustom repository and runtime configuration.
+
+Identify every place where BuildCustom currently depends on Replit.
+
+Do not assume we know them all.
+
+Audit at minimum:
+
+FRONTEND
+- frontend hosting
+- static assets
+- environment variables
+- frontend API base URLs
+- websocket URLs
+- Replit-specific URLs
+- Replit domains
+- preview URLs
+
+SERVER
+- Express or other server runtime
+- API routes
+- middleware
+- websocket servers
+- streaming endpoints
+- long-running requests
+- background jobs
+- scheduled jobs
+- file system assumptions
+- process memory assumptions
+- local disk assumptions
+- Node-only dependencies
+
+DATABASE
+- Replit Postgres
+- connection strings
+- ORM
+- Drizzle configuration
+- migrations
+- schema
+- indexes
+- transactions
+- foreign keys
+- database-specific SQL
+- JSON columns
+- generated IDs
+- timestamps
+- data volumes
+- existing records
+
+AUTHENTICATION
+- login
+- registration
+- password hashing
+- cookies
+- localStorage
+- sessions
+- user identification
+- x-user-id or equivalent
+- CSRF
+- CORS
+- password reset
+- email verification
+- OAuth if any
+- admin authentication
+
+SESSIONS
+- browser sessions
+- server sessions
+- agent sessions
+- websocket sessions
+- temporary state
+
+PROJECTS
+- project records
+- project ownership
+- project metadata
+- workspace identifiers
+- VibeSDK identifiers
+- deployment identifiers
+
+AGENT
+- ThinkAgent integration
+- VibeSDK SDK usage
+- WebSocket protocol
+- streaming
+- reconnect logic
+- workspace mapping
+- conversation history
+- revisions
+
+DEPLOYMENTS
+- deployment records
+- generated Worker IDs
+- dispatch namespace
+- preview URLs
+- production URLs
+- BuildCustom-hosted domains
+
+DOMAINS
+- custom hostname records
+- Cloudflare hostname IDs
+- SSL status
+- DNS verification
+- domain roles
+- primary domain
+- redirects
+- gateway hostname mappings
+
+FILES
+- uploads
+- generated assets
+- avatars
+- project assets
+- temporary files
+- any files stored on Replit disk
+
+SECRETS
+- Cloudflare API credentials
+- Gemini/API provider credentials
+- Stripe credentials
+- webhook secrets
+- encryption keys
+- session secrets
+- other provider credentials
+
+BILLING
+- Stripe integration
+- checkout
+- subscriptions
+- webhooks
+- entitlement checks
+- plan data
+- usage data
+
+JOBS
+- cron
+- queues
+- retries
+- scheduled autoblogging
+- asynchronous jobs
+- anything using timers/process loops
+
+OBSERVABILITY
+- logs
+- errors
+- deployment logs
+- agent logs
+- audit events
+
+OTHER
+- anything referencing:
+  replit
+  repl.co
+  replit.app
+  REPLIT_
+  DATABASE_URL
+  localhost assumptions
+  persistent filesystem paths
+  Node process state
+
+Return a COMPLETE dependency inventory.
+
+==================================================
+MAP EVERY REPLIT DEPENDENCY TO CLOUDFLARE
+==================================================
+
+For every dependency found, recommend the appropriate Cloudflare-native
+replacement.
+
+Candidates may include:
+
+Cloudflare Workers
+Cloudflare Workers Assets
+Cloudflare D1
+Cloudflare Durable Objects
+Cloudflare R2
+Cloudflare KV
+Cloudflare Queues
+Cloudflare Workflows
+Cloudflare Cron Triggers
+Cloudflare Secrets
+Cloudflare Service Bindings
+Cloudflare Analytics Engine
+Cloudflare Workers for Platforms
+Cloudflare for SaaS
+Cloudflare Sandbox SDK
+Cloudflare Containers
+Cloudflare Artifacts
+Cloudflare Worker Loader
+
+Do NOT use a Cloudflare service merely because it exists.
+
+Choose the simplest appropriate service.
+
+==================================================
+CONTROL-PLANE DATABASE
+==================================================
+
+We currently have application metadata/state that may live in Replit
+Postgres.
+
+Determine whether BuildCustom's control-plane relational data should migrate
+to Cloudflare D1.
+
+Expected control-plane entities may include:
+
+users
+sessions
+projects
+project_members
+agent_sessions
+revisions
+previews
+deployments
+domains
+domain_mappings
+subscriptions
+usage
+entitlements
+audit_events
+settings
+
+These are examples.
+
+Inspect the real schema first.
+
+Do not invent duplicate tables when existing equivalents already exist.
+
+Return:
+
+1. Existing Postgres schema.
+2. Row counts.
+3. approximate data size.
+4. relationships.
+5. indexes.
+6. constraints.
+7. Postgres-specific features.
+8. migration compatibility with D1/SQLite.
+9. proposed D1 schema.
+10. required schema changes.
+11. data transformation requirements.
+12. migration risks.
+
+We need to preserve existing IDs whenever practical because they may map to:
+
+VibeSDK workspaces
+Cloudflare deployments
+domains
+revisions
+external resources
+
+Do not casually regenerate IDs.
+
+==================================================
+AUTHENTICATION MUST BE FIXED
+==================================================
+
+Previous inspection found that BuildCustom's early authentication model used
+weak patterns such as client/localStorage user identity and x-user-id style
+identification.
+
+That is NOT acceptable for production.
+
+The migration must include a production-grade server-validated authentication
+boundary.
+
+Inspect what exists NOW rather than assuming the old implementation remains
+unchanged.
+
+Recommend the simplest secure Cloudflare-compatible architecture.
+
+Requirements:
+
+- server-validated identity
+- secure session handling
+- HttpOnly cookies where appropriate
+- Secure
+- SameSite
+- session expiration
+- logout/invalidation
+- authorization on every protected API
+- project ownership validation
+- domain ownership validation
+- deployment ownership validation
+- agent/workspace ownership validation
+- CSRF strategy where necessary
+- rate limiting where appropriate
+- no trusted user IDs supplied by the browser
+- no secrets exposed client-side
+
+Do NOT implement customer-generated-app authentication yet.
+
+This authentication is for BUILDCUSTOM USERS accessing BUILDCUSTOM.
+
+==================================================
+STORAGE STRATEGY
+==================================================
+
+Determine what belongs where.
+
+Conceptually:
+
+D1:
+structured BuildCustom control-plane relational data
+
+Durable Objects:
+state requiring strong coordination / realtime session state where appropriate
+
+R2:
+large durable objects/files/assets where appropriate
+
+KV:
+high-read configuration/cache/mappings where eventual consistency is
+acceptable
+
+Artifacts:
+VibeSDK workspace/revision/git history where currently intended
+
+Do not duplicate VibeSDK state into BuildCustom D1 unless BuildCustom actually
+needs metadata/reference records.
+
+We do NOT want two competing sources of truth for workspace files.
+
+==================================================
+PROJECT / WORKSPACE MAPPING
+==================================================
+
+Define exactly how a BuildCustom project maps to:
+
+BuildCustom project ID
+VibeSDK workspace/SpaceDO
+ThinkAgent session
+revision
+preview
+published deployment
+Workers for Platforms user Worker
+BuildCustom-hosted hostname
+custom hostname(s)
+
+The mapping must survive the Replit migration.
+
+Existing working projects must not become orphaned.
+
+==================================================
+STREAMING / WEBSOCKETS
+==================================================
+
+Inspect how BuildCustom currently communicates with ThinkAgent.
+
+Determine:
+
+- HTTP endpoints
+- WebSocket endpoints
+- streaming protocol
+- session initialization
+- authentication
+- reconnection
+- cancellation
+- error handling
+
+Design the Cloudflare-hosted equivalent.
+
+Do not replace the VibeSDK protocol unnecessarily.
+
+Preserve compatibility with the current VibeSDK SDK/protocol.
+
+==================================================
+DOMAIN SYSTEM
+==================================================
+
+The domain system is now WORKING.
+
+Treat it as protected infrastructure.
+
+We have proven:
+
+- BuildCustom-hosted domains
+- Cloudflare for SaaS
+- custom hostnames
+- SSL
+- Cloudflare DNS migration
+- root/apex domains through CNAME flattening
+- www redirects
+- multiple hostnames/subdomains
+
+Preserve all existing domain mappings and Cloudflare IDs.
+
+BuildCustom projects must continue supporting multiple hostname mappings such
+as:
+
+buyermagnets.com
+    -> marketing/root
+
+www.buyermagnets.com
+    -> redirect to root
+
+app.buyermagnets.com
+    -> application/login/dashboard
+
+Future examples:
+
+docs.customer.com
+api.customer.com
+
+The migration must NOT require customers to reconnect their domains.
+
+Existing custom domains must remain live throughout migration if possible.
+
+==================================================
+WORKERS FOR PLATFORMS
+==================================================
+
+Preserve the existing working Workers for Platforms architecture.
+
+Inspect:
+
+- dispatch namespace
+- dispatch Worker
+- user Workers
+- deployment naming
+- hostname routing
+- bindings
+- staging vs production
+- deployment metadata
+
+Do not create a dispatch namespace per customer.
+
+Do not move generated customer applications into the BuildCustom control-plane
+Worker.
+
+Customer-generated code must remain isolated from BuildCustom itself.
+
+==================================================
+CUSTOMER DATABASES — NOT YET
+==================================================
+
+Do NOT implement customer-generated application databases in this migration.
+
+However, make sure the architecture does not prevent them.
+
+After this migration we intend to test something like:
+
+"Add user signup/login and a persistent database to Test1."
+
+At that point BuildCustom should eventually be capable of provisioning an
+isolated resource such as a D1 database for a generated application and
+attaching it to the application's Worker through Workers for Platforms.
+
+But NOT NOW.
+
+For this migration:
+
+- no Test1 database
+- no Test1 auth
+- no customer D1 provisioning
+- no customer R2 provisioning
+- no automatic schema-generation system
+
+Just make sure the platform boundary allows this later.
+
+==================================================
+SECRETS
+==================================================
+
+Inventory every production secret currently stored in Replit.
+
+Do not print secret VALUES in the plan.
+
+Only list secret NAMES/purposes.
+
+Determine where each secret should live on Cloudflare.
+
+Examples:
+
+Cloudflare management credentials
+Gemini/model provider credentials
+Stripe secret
+Stripe webhook secret
+session/encryption secret
+email provider credentials
+
+No production secret should remain required from Replit after cutover.
+
+No production secret should be shipped to the browser.
+
+==================================================
+BACKGROUND JOBS
+==================================================
+
+Inspect all background/scheduled functionality.
+
+Some historical BuildCustom features may include things such as:
+
+autoblogging
+scheduled publishing
+SEO jobs
+deployment polling
+domain verification
+SSL polling
+
+Determine whether each feature:
+
+A. is currently active and must migrate
+B. is legacy/dead code
+C. should be temporarily disabled
+D. should use Cron/Queues/Workflows
+E. does not need migration
+
+Do not automatically migrate dead features.
+
+==================================================
+STRIPE / BILLING
+==================================================
+
+Inspect existing billing implementation.
+
+If Stripe exists, identify:
+
+- checkout endpoints
+- customer IDs
+- subscription IDs
+- webhook endpoint
+- webhook verification
+- plan mapping
+- entitlement logic
+
+Plan how the Stripe webhook endpoint moves from Replit to Cloudflare without
+losing events.
+
+Do not change pricing or billing behavior during infrastructure migration.
+
+==================================================
+MIGRATION STRATEGY
+==================================================
+
+This must NOT be a big-bang rewrite.
+
+Design an incremental migration.
+
+The general desired pattern is:
+
+CURRENT
+Replit BuildCustom
+        +
+Cloudflare VibeSDK/runtime/hosting
+
+        ↓
+
+STAGING
+Cloudflare BuildCustom staging control plane
+        +
+existing Cloudflare VibeSDK/runtime/hosting
+
+        ↓
+
+DATA MIGRATION
+Replit production state
+        ->
+Cloudflare production state
+
+        ↓
+
+SHADOW/VERIFICATION
+Compare old/new behavior
+
+        ↓
+
+CUTOVER
+app.buildcustom.ai
+        ->
+Cloudflare BuildCustom
+
+        ↓
+
+VERIFY
+
+        ↓
+
+STOP REPLIT PRODUCTION
+
+        ↓
+
+VERIFY AGAIN
+
+Do not choose exact sequencing blindly.
+
+Return the safest concrete sequence based on the actual repository.
+
+==================================================
+STAGING FIRST
+==================================================
+
+Create a migration design with a fully isolated BuildCustom staging
+environment before production cutover.
+
+Staging must not accidentally:
+
+- mutate production domains
+- deploy over production customer apps
+- write production billing data
+- send production emails
+- claim production custom hostnames
+- overwrite production project metadata
+
+Determine which resources should be shared and which must be isolated.
+
+Prefer isolated control-plane state.
+
+==================================================
+DATA MIGRATION
+==================================================
+
+Design a repeatable data migration.
+
+We need:
+
+pre-migration backup
+schema migration
+data export
+transformation
+import
+verification
+row-count comparison
+referential integrity verification
+ID preservation
+rollback
+
+If dual-write is necessary, explain why.
+
+If a short maintenance window is simpler and safer at our current scale,
+say so.
+
+Do not add complex zero-downtime infrastructure if the current data volume
+does not justify it.
+
+==================================================
+DNS CUTOVER
+==================================================
+
+Eventually:
+
+app.buildcustom.ai
+
+must point to the Cloudflare-hosted BuildCustom control plane.
+
+Do not modify DNS in Plan Mode.
+
+Plan:
+
+current DNS
+new target
+TTL considerations
+certificate state
+rollback target
+verification steps
+
+The marketing domain:
+
+buildcustom.ai
+
+may be handled separately depending on the current implementation.
+
+Inspect it.
+
+Do not assume both domains need to move simultaneously.
+
+==================================================
+ROLLBACK MUST BE DESIGNED FIRST
+==================================================
+
+Before production migration we need a rollback procedure.
+
+We must be able to recover from:
+
+Cloudflare Worker deployment failure
+D1 migration failure
+authentication failure
+agent connection failure
+WebSocket failure
+domain API failure
+Stripe webhook failure
+project mapping failure
+unexpected runtime errors
+
+Specify exactly what would be rolled back and what data could have changed.
+
+Do not destroy the Replit production environment immediately after cutover.
+
+Keep it available temporarily as rollback infrastructure until Cloudflare
+production is proven.
+
+==================================================
+OBSERVABILITY
+==================================================
+
+Before cutover, BuildCustom needs enough visibility to diagnose failures.
+
+Recommend the minimum useful observability for:
+
+BuildCustom API errors
+authentication failures
+ThinkAgent connection errors
+preview failures
+deployment failures
+domain failures
+Workers for Platforms dispatch failures
+Stripe webhook failures
+D1 errors
+
+Avoid building an enormous observability platform during migration.
+
+==================================================
+SECURITY AUDIT
+==================================================
+
+Perform a migration-focused security review.
+
+Specifically inspect:
+
+authentication
+authorization
+IDOR risks
+project ownership
+deployment ownership
+domain ownership
+agent/workspace ownership
+Cloudflare management APIs
+secret handling
+webhooks
+CORS
+CSRF
+rate limiting
+open redirects
+user-generated code boundaries
+dispatch routing
+cross-tenant access
+
+Generated customer code must never have access to BuildCustom control-plane
+credentials.
+
+One customer must never be able to access another customer's:
+
+projects
+workspaces
+previews
+deployments
+domains
+future resources
+
+==================================================
+LEGACY CLOUDFLARE RESOURCES
+==================================================
+
+We have historical Cloudflare resources from previous VibeSDK experiments.
+
+DO NOT DELETE THEM DURING THIS MIGRATION.
+
+Inventory them.
+
+For every resource classify:
+
+ACTIVE — currently required
+
+STAGING — currently required for staging
+
+LEGACY — appears unused but preserve for now
+
+UNKNOWN — purpose needs investigation
+
+Potential resources may include:
+
+Workers
+D1 databases
+Durable Object namespaces
+R2 buckets
+KV namespaces
+Containers
+Workers for Platforms namespaces
+dispatch Workers
+custom hostnames
+routes
+DNS records
+
+Do not assume a resource is unused simply because its dashboard appears empty.
+
+==================================================
+DO NOT BREAK THE WORKING SYSTEM
+==================================================
+
+These are protected until proven otherwise:
+
+current VibeSDK runtime
+ThinkAgent
+SpaceDO
+Artifacts
+current previews
+current published applications
+Workers for Platforms
+current dispatch routing
+BuildCustom subdomains
+custom domains
+buyermagnets.com
+www redirect
+SSL/custom-hostname lifecycle
+
+The migration should wrap/move the BUILDCUSTOM CONTROL PLANE around these
+working systems rather than rebuilding them.
+
+==================================================
+DEFINITION OF REPLIT INDEPENDENCE
+==================================================
+
+This phase is complete only when we can:
+
+1. Stop the Replit production deployment.
+
+2. Disable access from production to Replit Postgres.
+
+3. Remove Replit production environment variables from the runtime path.
+
+4. Visit app.buildcustom.ai.
+
+5. Sign in.
+
+6. See existing BuildCustom projects.
+
+7. Create a new project.
+
+8. Talk to the native BuildCustom/ThinkAgent.
+
+9. Generate an application.
+
+10. See real files.
+
+11. Preview the application.
+
+12. Make a conversational edit.
+
+13. See a new revision.
+
+14. Publish the application.
+
+15. Visit the BuildCustom-hosted production URL.
+
+16. Visit an existing custom domain.
+
+17. Confirm buyermagnets.com still works.
+
+18. Confirm its www redirect still works.
+
+19. Confirm multi-hostname routing still works.
+
+20. Log out and back in.
+
+21. Confirm user/project ownership enforcement.
+
+22. Confirm Stripe/billing still works if currently active.
+
+23. Confirm no browser request or server request requires a Replit hostname.
+
+24. Confirm no production database request goes to Replit.
+
+25. Confirm no production secret must exist in Replit.
+
+26. Confirm existing generated apps remain live.
+
+27. Confirm existing custom domains did not require reconnection.
+
+28. Confirm the Cloudflare-hosted BuildCustom platform can continue operating
+    indefinitely with the Replit production deployment OFF.
+
+==================================================
+AFTER THIS MIGRATION — NOT PART OF THIS TASK
+==================================================
+
+Once this migration is proven, our next major test will be full-stack
+generated applications.
+
+For example:
+
+"Add signup/login, user accounts, a dashboard and persistent data to Test1."
+
+That future phase will test:
+
+customer database provisioning
+customer auth
+isolated D1
+schema/migrations
+bindings
+persistent application data
+potential R2 storage
+secrets
+resource lifecycle
+
+DO NOT implement those things during this migration.
+
+First make BuildCustom itself Cloudflare-native.
+
+==================================================
+PLAN MODE DELIVERABLE
+==================================================
+
+Return ONE comprehensive migration document.
+
+Organize it into these sections:
+
+1. EXECUTIVE SUMMARY
+   - current architecture
+   - target architecture
+   - major migration risks
+
+2. CURRENT REPLIT DEPENDENCY INVENTORY
+   - every runtime dependency on Replit
+   - exact files/modules responsible
+
+3. CURRENT CLOUDFLARE INVENTORY
+   - active resources
+   - staging resources
+   - legacy resources
+   - unknown resources
+
+4. SOURCE CONTROL / DEPLOYMENT WORKFLOW
+   - current source of truth
+   - recommended source of truth
+   - staging/production deployment workflow
+
+5. TARGET CLOUDFLARE ARCHITECTURE
+   - Worker(s)
+   - Assets
+   - D1
+   - Durable Objects
+   - KV
+   - R2
+   - service bindings
+   - VibeSDK
+   - Workers for Platforms
+   - domains
+   - secrets
+   - only use services actually needed
+
+6. CONTROL-PLANE DATABASE MIGRATION
+   - existing schema
+   - proposed D1 schema
+   - compatibility issues
+   - data migration method
+   - ID preservation
+
+7. AUTHENTICATION MIGRATION
+   - current security model
+   - vulnerabilities
+   - target model
+   - session strategy
+   - authorization boundaries
+
+8. VIBESDK / THINKAGENT INTEGRATION
+   - current integration
+   - target integration
+   - WebSocket/streaming architecture
+   - project/workspace/session mapping
+   - what remains unchanged
+
+9. DEPLOYMENT / WORKERS FOR PLATFORMS
+   - current flow
+   - target flow
+   - what remains unchanged
+
+10. CUSTOM DOMAINS
+   - current working implementation
+   - metadata that must migrate
+   - Cloudflare IDs/mappings that must survive
+   - why customers will not need to reconnect domains
+
+11. FILES / STORAGE
+   - current Replit filesystem dependencies
+   - Cloudflare replacements
+
+12. BACKGROUND JOBS
+   - active
+   - legacy
+   - migration target
+
+13. SECRETS
+   - secret NAMES only
+   - current location
+   - target location
+
+14. BILLING
+   - current Stripe architecture
+   - Cloudflare migration plan
+
+15. SECURITY
+   - current issues
+   - fixes required before production cutover
+
+16. OBSERVABILITY
+   - minimum required logging/monitoring
+
+17. STAGING MIGRATION
+   - exact steps in order
+
+18. DATA MIGRATION
+   - exact steps in order
+   - verification
+   - rollback
+
+19. PRODUCTION CUTOVER
+   - exact steps in order
+
+20. REPLIT SHUTDOWN TEST
+   - exact test procedure
+
+21. ROLLBACK PLAN
+   - exact procedure
+
+22. POST-MIGRATION CLEANUP
+   - what can eventually be removed
+   - what should remain temporarily
+   - do NOT delete legacy resources yet
+
+23. FILE-BY-FILE IMPLEMENTATION PLAN
+   - files to modify
+   - files to create
+   - files to leave untouched
+
+24. CLOUDFLARE RESOURCE PLAN
+   - resources to reuse
+   - resources to create
+   - resources to leave untouched
+
+25. MANUAL ACTIONS REQUIRED FROM ME
+   - credentials
+   - dashboard actions
+   - DNS actions
+   - approvals
+   - anything Replit cannot safely do itself
+
+26. FINAL ACCEPTANCE CHECKLIST
+   - checkbox list proving complete Replit independence
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+Do not implement anything.
+
+Do not optimize unrelated code.
+
+Do not redesign the BuildCustom UI.
+
+Do not build new customer features.
+
+Do not create customer databases.
+
+Do not build customer authentication.
+
+Do not delete legacy resources.
+
+Do not modify production DNS.
+
+Do not change existing customer domains.
+
+Do not replace the working VibeSDK architecture.
+
+Inspect first.
+
+The goal is NOT "deploy some of BuildCustom to Cloudflare."
+
+The goal is:
+
+BUILDCUSTOM'S ENTIRE PRODUCTION CONTROL PLANE OPERATES ON CLOUDFLARE,
+WHILE THE EXISTING WORKING VIBESDK + WORKERS FOR PLATFORMS CUSTOMER-APP
+INFRASTRUCTURE CONTINUES TO WORK EXACTLY AS IT DOES NOW.
+
+AND:
+
+IF THE REPLIT PRODUCTION ENVIRONMENT DISAPPEARS COMPLETELY,
+BUILDCUSTOM AND ALL EXISTING CUSTOMER APPLICATIONS CONTINUE TO FUNCTION.
+
+Return the migration plan and wait for my approval before making any changes.
