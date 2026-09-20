@@ -870,6 +870,7 @@ function EditorPage() {
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [attachments, setAttachments] = useState<ComposerImage[]>([]);
+  const [previewAttachmentId, setPreviewAttachmentId] = useState<string | null>(null);
   const [textContext, setTextContext] = useState<{ id: string; filename: string; content: string }[]>([]);
   const [isDraggingAttachment, setIsDraggingAttachment] = useState(false);
   const [selectorEnabled, setSelectorEnabled] = useState(false);
@@ -1009,8 +1010,21 @@ function EditorPage() {
     if (dropped.length) await addAttachmentFiles(dropped);
   };
 
-  const removeAttachment = (id: string) => setAttachments((current) => current.filter((item) => item.id !== id));
+  const removeAttachment = (id: string) => {
+    setAttachments((current) => current.filter((item) => item.id !== id));
+    setPreviewAttachmentId((current) => current === id ? null : current);
+  };
   const removeTextContext = (id: string) => setTextContext((current) => current.filter((item) => item.id !== id));
+  const previewAttachment = attachments.find((item) => item.id === previewAttachmentId) || null;
+
+  useEffect(() => {
+    if (!previewAttachment) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreviewAttachmentId(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [previewAttachment]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -1672,6 +1686,47 @@ function EditorPage() {
               Drop images to attach
             </div>
           )}
+          {previewAttachment && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-5 backdrop-blur-sm"
+              onClick={() => setPreviewAttachmentId(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Preview ${previewAttachment.filename}`}
+              data-testid="image-attachment-preview"
+            >
+              <div className="relative flex max-h-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#0b0b14] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3">
+                  <p className="min-w-0 truncate text-sm font-semibold text-white">{previewAttachment.filename}</p>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(previewAttachment.id)}
+                      className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/15"
+                      aria-label={`Remove ${previewAttachment.filename} from attachments`}
+                    >
+                      Remove attachment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewAttachmentId(null)}
+                      className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+                      aria-label="Close image preview"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex min-h-0 items-center justify-center overflow-auto p-4">
+                  <img
+                    src={`data:${previewAttachment.mimeType};base64,${previewAttachment.base64Data}`}
+                    alt={previewAttachment.filename}
+                    className="max-h-[78vh] max-w-full object-contain"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -1681,40 +1736,65 @@ function EditorPage() {
             onChange={handleAttachmentChange}
             data-testid="input-editor-attachments"
           />
-          {(attachments.length > 0 || textContext.length > 0 || selectedElement || pendingPlan) && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {attachments.map((file) => (
-                <span key={file.id} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-200" : "border-cyan-200 bg-cyan-50 text-cyan-700"}`}>
-                  <Image size={11} /> {file.filename}
-                  <button onClick={() => removeAttachment(file.id)} aria-label={`Remove ${file.filename}`} className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
-                </span>
-              ))}
-              {textContext.map((file) => (
-                <span key={file.id} className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-purple-400/20 bg-purple-400/10 text-purple-200" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
-                  <FileText size={11} /> {file.filename}
-                  <button onClick={() => removeTextContext(file.id)} aria-label={`Remove ${file.filename}`} className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
-                </span>
-              ))}
-              {selectedElement && (
-                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-pink-400/20 bg-pink-400/10 text-pink-200" : "border-pink-200 bg-pink-50 text-pink-700"}`}>
-                  <Code2 size={11} /> Element selected
-                  <button onClick={() => setSelectedElement(null)} aria-label="Remove selected element" className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
-                </span>
-              )}
-              {pendingPlan && (
-                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${theme === "dark" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-                  <Check size={11} /> Plan ready for next build
-                  <button onClick={() => setPendingPlan("")} aria-label="Remove approved plan" className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
-                </span>
-              )}
-            </div>
-          )}
           {voiceError && <p className="mb-2 text-[11px] text-amber-400">{voiceError}</p>}
           <div className={`p-3 rounded-xl ${
             theme === "dark"
               ? "bg-white/5 border border-white/10"
               : "bg-gray-100 border border-gray-200"
           }`}>
+            {(attachments.length > 0 || textContext.length > 0 || selectedElement || pendingPlan) && (
+              <div className="mb-2 flex max-h-32 flex-wrap gap-2 overflow-y-auto" data-testid="composer-attachment-previews">
+                {attachments.map((file) => (
+                  <div key={file.id} className="group relative h-16 w-20 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewAttachmentId(file.id)}
+                      className={`h-full w-full overflow-hidden rounded-lg border text-left transition ${
+                        theme === "dark" ? "border-white/15 bg-black/30 hover:border-cyan-300/60" : "border-gray-300 bg-white hover:border-cyan-500"
+                      }`}
+                      aria-label={`Preview ${file.filename}`}
+                      data-testid={`preview-attachment-${file.id}`}
+                    >
+                      <img
+                        src={`data:${file.mimeType};base64,${file.base64Data}`}
+                        alt=""
+                        className="h-11 w-full object-cover"
+                      />
+                      <span className={`block truncate px-1 py-0.5 text-[9px] ${theme === "dark" ? "text-white/65" : "text-gray-600"}`}>{file.filename}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        removeAttachment(file.id);
+                      }}
+                      aria-label={`Remove ${file.filename}`}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-white/30 bg-black/85 text-white shadow hover:bg-red-500"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+                {textContext.map((file) => (
+                  <span key={file.id} className={`inline-flex h-fit items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-purple-400/20 bg-purple-400/10 text-purple-200" : "border-purple-200 bg-purple-50 text-purple-700"}`}>
+                    <FileText size={11} /> {file.filename}
+                    <button onClick={() => removeTextContext(file.id)} aria-label={`Remove ${file.filename}`} className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
+                  </span>
+                ))}
+                {selectedElement && (
+                  <span className={`inline-flex h-fit items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${theme === "dark" ? "border-pink-400/20 bg-pink-400/10 text-pink-200" : "border-pink-200 bg-pink-50 text-pink-700"}`}>
+                    <Code2 size={11} /> Element selected
+                    <button onClick={() => setSelectedElement(null)} aria-label="Remove selected element" className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
+                  </span>
+                )}
+                {pendingPlan && (
+                  <span className={`inline-flex h-fit items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${theme === "dark" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                    <Check size={11} /> Plan ready for next build
+                    <button onClick={() => setPendingPlan("")} aria-label="Remove approved plan" className="ml-0.5 opacity-60 hover:opacity-100"><X size={11} /></button>
+                  </span>
+                )}
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               value={chatInput}

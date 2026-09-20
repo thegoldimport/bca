@@ -32,3 +32,15 @@ test("Builder composer exposes a shared picker and drop attachment path", () => 
   assert.match(source, /await addAttachmentFiles\(dropped\)/);
   assert.match(source, /retainedImages\.length \+ imageFiles\.length > 4/);
 });
+
+test("Builder composer renders removable thumbnails with an expanded preview", () => {
+  const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
+  assert.match(source, /data-testid="composer-attachment-previews"/);
+  assert.match(source, /data-testid=\{`preview-attachment-\$\{file\.id\}`\}/);
+  assert.match(source, /setPreviewAttachmentId\(file\.id\)/);
+  assert.match(source, /data-testid="image-attachment-preview"/);
+  assert.match(source, /aria-label=\{`Remove \$\{file\.filename\}`\}/);
+  assert.match(source, /aria-label=\{`Remove \$\{previewAttachment\.filename\} from attachments`\}/);
+  assert.match(source, /event\.key === "Escape"/);
+  assert.match(source, /setPreviewAttachmentId\(\(current\) => current === id \? null : current\)/);
+});
