@@ -1,4 +1,4 @@
-export type SessionUser = { id: string; username: string; email: string; role: string };
+export type SessionUser = { id: string; username: string; email: string; role: string; plan?: string; created_at?: string };
 export const SESSION_COOKIE = "__Host-bc_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -46,7 +46,7 @@ export async function resolveSession(db: D1Database, request: Request): Promise<
   const token = parseCookie(request.headers.get("Cookie"));
   if (!token) return null;
   const row = await db.prepare(
-    "SELECT u.id,u.username,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime('now')",
+    "SELECT u.id,u.username,u.email,u.role,u.plan,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime('now')",
   ).bind(await sha256(token)).first<SessionUser>();
   return row || null;
 }

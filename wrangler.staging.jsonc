@@ -8,13 +8,13 @@
   "assets": { "directory": "./dist/public", "not_found_handling": "single-page-application" },
   "d1_databases": [{ "binding": "DB", "database_name": "buildcustom-control-plane-staging", "database_id": "6a0ee5f4-9077-4ccf-a585-a2afb3daf734", "migrations_dir": "migrations/d1" }],
   "kv_namespaces": [{ "binding": "STAGING_ROUTES", "id": "e5e119fa2abc4c26a8c027e0d8a8d82c" }],
-  "durable_objects": { "bindings": [{ "name": "PROJECT_OP", "class_name": "ProjectOperationDO" }] },
-  "workflows": [{ "name": "RUNTIME_WORKFLOW", "binding": "RUNTIME_WORKFLOW", "class_name": "RuntimeOperationWorkflow" }],
   "observability": { "enabled": true },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectOperationDO"] }],
+  // Historical cloudflare/staging/project-do.ts and workflow.ts remain for audit only;
+  // the simplified Worker does not bind or invoke them.
   "vars": {
     "ENVIRONMENT": "staging",
     "STAGING_RUNTIME_URL": "https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev",
+    "VIBESDK_RUNTIME_URL": "https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev",
     "STAGING_ROUTE_KV_ID": "e5e119fa2abc4c26a8c027e0d8a8d82c",
     "STAGING_DISPATCH_NAMESPACE": "buildcustom-vibesdk-migration-staging",
     "STAGING_ALLOWED_ORIGIN": "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
