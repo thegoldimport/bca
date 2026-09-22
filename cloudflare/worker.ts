@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { assertOrigin, createSession, expiredSessionCookie, resolveSession, revokeSession, sessionCookie } from "./staging/auth";
-import { assertStagingEnvironment, assertSafeStagingTarget } from "./staging/boundary";
+import { assertControlPlaneEnvironment, assertSafeStagingTarget } from "./staging/boundary";
 import { ProjectOperationDO } from "./staging/project-do";
 import { createVibeSdkAdapter, VibeSdkAdapterError, type VibeSdkImage } from "./staging/vibesdk-adapter";
 
@@ -20,6 +20,9 @@ export type Env = {
   STAGING_ROUTE_KV_ID: string;
   STAGING_DISPATCH_NAMESPACE: string;
   STAGING_ALLOWED_ORIGIN: string;
+  CONTROL_PLANE_ALLOWED_ORIGIN?: string;
+  CONTROL_PLANE_ROUTE_KV_ID?: string;
+  CONTROL_PLANE_DISPATCH_NAMESPACE?: string;
   STAGING_LOGIN_ENABLED: string;
   STAGING_REGISTRATION_ENABLED?: string;
   RUNTIME_OPERATIONS_ENABLED: string;
@@ -124,9 +127,9 @@ function runtimeError(error: unknown): Response {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
-      assertStagingEnvironment(env);
+      assertControlPlaneEnvironment(env);
       assertSafeStagingTarget(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
-      assertOrigin(request, env.STAGING_ALLOWED_ORIGIN);
+      assertOrigin(request, env.CONTROL_PLANE_ALLOWED_ORIGIN || env.STAGING_ALLOWED_ORIGIN);
       const url = new URL(request.url);
       const input = (request.method === "GET" || request.method === "HEAD") ? {} : await readBody(request);
       if (request.headers.has("x-user-id")) return json({ message: "Browser-supplied identity is not accepted." }, { status: 400 });

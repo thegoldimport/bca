@@ -14,6 +14,7 @@
     "cloudflare:build-import": "tsx scripts/build-d1-import.ts",
     "cloudflare:verify-d1": "tsx scripts/verify-d1.ts",
     "cloudflare:build": "PUBLIC_APP_URL=https://buildcustom-control-plane-staging.thegoldimport.workers.dev vite build && wrangler deploy --dry-run --config wrangler.staging.jsonc",
+    "cloudflare:build:production": "PUBLIC_APP_URL=https://buildcustom-control-plane-production.thegoldimport.workers.dev vite build && wrangler deploy --dry-run --config wrangler.production.jsonc",
     "cloudflare:check": "npm run check && npm run test && npm run cloudflare:build",
     "db:push": "drizzle-kit push"
   },

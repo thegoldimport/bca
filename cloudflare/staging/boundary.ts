@@ -4,6 +4,8 @@ export type StagingEnv = {
   STAGING_ROUTE_KV_ID?: string;
   STAGING_DISPATCH_NAMESPACE?: string;
   STAGING_ALLOWED_PROJECT_IDS?: string;
+  CONTROL_PLANE_ROUTE_KV_ID?: string;
+  CONTROL_PLANE_DISPATCH_NAMESPACE?: string;
   VIBESDK_RUNTIME_URL?: string;
 };
 
@@ -34,6 +36,24 @@ export function assertStagingEnvironment(env: StagingEnv): void {
   }
   for (const host of PROTECTED_HOSTS) {
     if (runtime.includes(host)) throw new Error("PRODUCTION_RUNTIME_HOST_REJECTED");
+  }
+}
+
+export function assertControlPlaneEnvironment(env: StagingEnv): void {
+  if (env.ENVIRONMENT === "staging") {
+    assertStagingEnvironment(env);
+    return;
+  }
+  if (env.ENVIRONMENT !== "production") throw new Error("CONTROL_PLANE_ENVIRONMENT_REQUIRED");
+  const runtime = env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL || "";
+  if (!/^https:\/\/buildcustom-vibesdk-staging\.[a-z0-9-]+\.workers\.dev$/i.test(runtime)) {
+    throw new Error("PRODUCTION_RUNTIME_URL_REQUIRED");
+  }
+  if (env.CONTROL_PLANE_ROUTE_KV_ID !== "d6e19823343e46d3965ad167775afb30") {
+    throw new Error("PRODUCTION_ROUTE_KV_REQUIRED");
+  }
+  if (env.CONTROL_PLANE_DISPATCH_NAMESPACE !== "buildcustom-vibesdk-staging") {
+    throw new Error("PRODUCTION_DISPATCH_REQUIRED");
   }
 }
 
