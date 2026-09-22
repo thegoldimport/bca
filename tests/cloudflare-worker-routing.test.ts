@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canPublishInStaging, projectIdFromPath, serializeProject, serializeRelease, serializeTurn, serializeUser } from "../cloudflare/worker";
+import { canPublishInStaging, isReadOnlyRuntimeOperation, projectIdFromPath, serializeProject, serializeRelease, serializeTurn, serializeUser } from "../cloudflare/worker";
 import { authHeaders } from "../client/src/lib/auth";
 
 test("extracts project ownership IDs from project and nested runtime routes", () => {
@@ -34,6 +34,16 @@ test("only the canonical super administrator role can publish staging projects",
   assert.equal(canPublishInStaging("user"), false);
   assert.equal(canPublishInStaging("admin"), false);
   assert.equal(canPublishInStaging(undefined), false);
+});
+
+test("the closed runtime gate allows reads but blocks mutations and restores", () => {
+  for (const operation of ["status", "files", "files/content", "turns", "publishing-settings", "releases"]) {
+    assert.equal(isReadOnlyRuntimeOperation("GET", operation), true);
+  }
+  for (const operation of ["messages", "previews", "stop", "deployments", "turns/4/restore", "releases/6/restore"]) {
+    assert.equal(isReadOnlyRuntimeOperation("POST", operation), false);
+  }
+  assert.equal(isReadOnlyRuntimeOperation("PUT", "publishing-settings"), false);
 });
 
 test("browser authentication relies only on the secure session cookie", () => {

@@ -77,6 +77,14 @@ export const serializeRelease = (row: any) => ({
   createdAt: row.created_at ?? row.createdAt,
 });
 export const canPublishInStaging = (role: unknown): boolean => role === "super_admin";
+export const isReadOnlyRuntimeOperation = (method: string, operation: string): boolean => method === "GET" && (
+  operation === "status"
+  || operation === "files"
+  || operation === "files/content"
+  || operation === "turns"
+  || operation === "publishing-settings"
+  || operation === "releases"
+);
 
 function rateLimit(key: string, limit: number, windowMs = 60_000): boolean {
   const now = Date.now();
@@ -215,21 +223,14 @@ export default {
         const id = Number(runtimeMatch[1]);
         const runtimeProject = project?.id === id ? { id: project.id, name: project.name, type: project.type, description: project.description, agentId: project.agent_id } : null;
         if (!runtimeProject) return json({ message: "Project not found" }, { status: 404 });
-        if (env.RUNTIME_OPERATIONS_ENABLED !== "true" && ["messages", "previews", "stop", "deployments", "turns"].some((name) => runtimeMatch[2].startsWith(name))) return json({ message: "Isolated VibeSDK compatibility gate has not passed." }, { status: 503 });
+        const operation = runtimeMatch[2];
+        const readOnly = isReadOnlyRuntimeOperation(request.method, operation);
+        if (env.RUNTIME_OPERATIONS_ENABLED !== "true" && !readOnly) return json({ message: "Isolated VibeSDK compatibility gate has not passed." }, { status: 503 });
         const adapter = createVibeSdkAdapter({
           VIBESDK_RUNTIME_URL: env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL,
           VIBESDK_API_KEY: env.VIBESDK_API_KEY,
           VIBESDK_RUNTIME: env.VIBESDK_RUNTIME,
         });
-        const operation = runtimeMatch[2];
-        const readOnly = request.method === "GET" && (
-          operation === "status"
-          || operation === "files"
-          || operation === "files/content"
-          || operation === "turns"
-          || operation === "publishing-settings"
-          || operation === "releases"
-        );
         if (!readOnly && project.agent_is_imported) return json({ message: "IMPORTED_AGENT_READ_ONLY" }, { status: 409 });
         if (!readOnly && !rateLimit(`runtime:${user.id}:${id}`, 30, 60_000)) return json({ message: "Too many runtime mutations." }, { status: 429 });
         if (operation === "status" && request.method === "GET") {
