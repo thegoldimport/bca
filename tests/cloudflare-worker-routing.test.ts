@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { projectIdFromPath, serializeProject, serializeRelease, serializeTurn } from "../cloudflare/worker";
+import { canPublishInStaging, projectIdFromPath, serializeProject, serializeRelease, serializeTurn, serializeUser } from "../cloudflare/worker";
+import { authHeaders } from "../client/src/lib/auth";
 
 test("extracts project ownership IDs from project and nested runtime routes", () => {
   assert.equal(projectIdFromPath("/api/projects/42"), 42);
@@ -25,5 +26,22 @@ test("serializes turn JSON columns and release names", () => {
   });
   assert.deepEqual(serializeRelease({ id: 2, project_id: 3, commit_hash: "def", deployment_url: "https://example.test", created_at: "now" }), {
     id: 2, projectId: 3, commitHash: "def", deploymentUrl: "https://example.test", createdAt: "now",
+  });
+});
+
+test("only the canonical super administrator role can publish staging projects", () => {
+  assert.equal(canPublishInStaging("super_admin"), true);
+  assert.equal(canPublishInStaging("user"), false);
+  assert.equal(canPublishInStaging("admin"), false);
+  assert.equal(canPublishInStaging(undefined), false);
+});
+
+test("browser authentication relies only on the secure session cookie", () => {
+  assert.deepEqual(authHeaders(), {});
+});
+
+test("serializes every user response to the canonical camelCase contract", () => {
+  assert.deepEqual(serializeUser({ id: "u", username: "User", email: "u@example.test", plan: "free", role: "user", created_at: "now" }), {
+    id: "u", username: "User", email: "u@example.test", plan: "free", role: "user", createdAt: "now",
   });
 });

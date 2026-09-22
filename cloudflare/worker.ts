@@ -29,7 +29,7 @@ const attempts = new Map<string, { count: number; reset: number }>();
 const reservedSlugs = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers"]);
 const json = (data: unknown, init: ResponseInit = {}) => Response.json(data, { headers: { "Cache-Control": "no-store", ...init.headers }, ...init });
 const readBody = async (request: Request) => await request.json().catch(() => ({})) as Record<string, unknown>;
-const publicUser = (row: any) => ({ id: row.id, username: row.username, email: row.email, plan: row.plan || "free", role: row.role, createdAt: row.created_at || row.createdAt });
+export const serializeUser = (row: any) => ({ id: row.id, username: row.username, email: row.email, plan: row.plan || "free", role: row.role, createdAt: row.created_at || row.createdAt });
 const jsonArray = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value;
   if (typeof value !== "string") return [];
@@ -73,6 +73,7 @@ export const serializeRelease = (row: any) => ({
   deploymentUrl: row.deployment_url ?? row.deploymentUrl,
   createdAt: row.created_at ?? row.createdAt,
 });
+export const canPublishInStaging = (role: unknown): boolean => role === "super_admin";
 
 function rateLimit(key: string, limit: number, windowMs = 60_000): boolean {
   const now = Date.now();
@@ -141,7 +142,7 @@ export default {
         if (await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first()) return json({ message: "An account with this email already exists" }, { status: 409 });
         const user = { id: crypto.randomUUID(), username: name.slice(0, 120), email, password: await bcrypt.hash(password, 10) };
         await env.DB.prepare("INSERT INTO users(id,username,email,password) VALUES(?,?,?,?)").bind(user.id, user.username, user.email, user.password).run();
-        return json(publicUser(user), { status: 201 });
+        return json(serializeUser(user), { status: 201 });
       }
       if (url.pathname === "/api/auth/login" && request.method === "POST") {
         if (env.STAGING_LOGIN_ENABLED !== "true") return json({ message: "Staging login is disabled until acceptance testing is authorized." }, { status: 503 });
@@ -150,11 +151,11 @@ export default {
         const user = await env.DB.prepare("SELECT * FROM users WHERE email=? OR lower(username)=?").bind(identity, identity).first<any>();
         if (!user || typeof input.password !== "string" || !(await bcrypt.compare(input.password, user.password))) return json({ message: "Invalid email or password" }, { status: 401 });
         const token = await createSession(env.DB, user);
-        return json(publicUser(user), { headers: { "Set-Cookie": sessionCookie(token) } });
+        return json(serializeUser(user), { headers: { "Set-Cookie": sessionCookie(token) } });
       }
       if (url.pathname === "/api/auth/me" && request.method === "GET") {
         const session = await resolveSession(env.DB, request);
-        return json(session ? { ...session, plan: session.plan || "free", createdAt: session.created_at } : null);
+        return json(session ? serializeUser(session) : null);
       }
       if (url.pathname === "/api/auth/logout" && request.method === "POST") {
         await revokeSession(env.DB, request);
@@ -172,7 +173,7 @@ export default {
         if (!name && !email) return json({ message: "Nothing to update" }, { status: 400 });
         if (email && await env.DB.prepare("SELECT id FROM users WHERE email=? AND id!=?").bind(email, user.id).first()) return json({ message: "Email already in use" }, { status: 409 });
         await env.DB.prepare("UPDATE users SET username=COALESCE(NULLIF(?,''),username),email=COALESCE(NULLIF(?,''),email) WHERE id=?").bind(name, email, user.id).run();
-        return json(await env.DB.prepare("SELECT id,username,email,plan,role,created_at FROM users WHERE id=?").bind(user.id).first());
+        return json(serializeUser(await env.DB.prepare("SELECT id,username,email,plan,role,created_at FROM users WHERE id=?").bind(user.id).first()));
       }
       if (url.pathname === "/api/auth/password" && request.method === "PUT") {
         if (typeof input.currentPassword !== "string" || typeof input.newPassword !== "string" || input.newPassword.length < 6) return json({ message: "Current and new passwords are required; new password must be at least 6 characters." }, { status: 400 });
@@ -273,7 +274,7 @@ export default {
         }
         if (operation === "stop" && request.method === "POST") return json(await adapter.stop(runtimeProject));
         if (operation === "deployments" && request.method === "POST") {
-          if (user.role !== "admin") return json({ message: "Staging publish requires an administrator." }, { status: 403 });
+          if (!canPublishInStaging(user.role)) return json({ message: "Staging publish requires a super administrator." }, { status: 403 });
           const result = await adapter.deploy(runtimeProject);
           const deploymentUrl = new URL(result.url);
           const runtimeUrl = new URL(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);

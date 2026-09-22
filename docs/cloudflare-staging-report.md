@@ -1,6 +1,6 @@
 # Cloudflare staging evidence report
 
-Status: the simplified staging control plane is deployed and the isolated acceptance flow has passed. Open registration is closed, runtime operations remain available to existing staging users, and publishing is restricted to staging administrators after the one-time acceptance publish.
+Status: the simplified staging control plane is deployed and the isolated acceptance flow has passed. Open registration is closed, runtime operations remain available to existing staging users, and publishing is restricted to the canonical `super_admin` role after the one-time acceptance publish.
 
 ## Safety gates
 - [x] `buildcustom.ai`, marketing Pages, DNS, and `app.buildcustom.ai` unchanged
@@ -25,9 +25,10 @@ Status: the simplified staging control plane is deployed and the isolated accept
 ## Data and authentication
 - Authoritative source: confirmed Replit development database. Project 2 (`Test1`) owns the persisted VibeSDK agent, `taskflow---task-management-dashboard`, hosted slug `test1`, and the live Buyer Magnets apex, redirect, and app-hostname mappings.
 - D1 row-count / FK verification: 4 users, 3 projects, 2 runtime links, 9 builder turns, and 6 releases; `PRAGMA foreign_key_check` returned no violations.
-- Session, revocation, Origin, and ownership: opaque hashed sessions, HttpOnly cookies, logout revocation, exact Origin validation, nested runtime-route ownership lookup, and browser-supplied identity rejection are implemented. Path and boundary helpers are covered by tests. Live unauthenticated access returned 401, a foreign Origin returned 400, and an `x-user-id` identity header returned 400.
+- Session, revocation, Origin, and ownership: opaque hashed sessions, HttpOnly cookies, logout revocation, exact Origin validation, nested runtime-route ownership lookup, and browser-supplied identity rejection are implemented. The browser no longer sends the legacy `x-user-id` header and relies only on the secure session cookie. Path and boundary helpers are covered by tests. Live unauthenticated access returned 401, a foreign Origin returned 400, and an injected `x-user-id` identity header returned 400.
 - Runtime status is explicitly allowlisted and excludes generated source maps, file-serving tokens, credentials, command history, sandbox identifiers, and raw hydrated agent state.
 - Frontend response compatibility: live project, turn-history, and release-history responses use camelCase fields; turn `changedFiles` and `activity` are decoded arrays rather than D1 JSON strings.
+- Canonical role check: a temporary hashed staging session confirmed `super_admin` passed the publish role gate to downstream agent validation, while an ordinary user received HTTP 403. The temporary session rows and project were removed immediately.
 
 ## Created isolated resources
 - D1 `buildcustom-control-plane-staging`
@@ -42,9 +43,9 @@ No route, DNS, SaaS hostname, certificate, existing Worker, existing KV namespac
 ## Deployed staging services
 - Control plane: `https://buildcustom-control-plane-staging.thegoldimport.workers.dev`
 - Isolated VibeSDK clone: `https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev`
-- Control-plane Worker version: `e400faec-54b6-44eb-9738-91db997b92b4`
+- Control-plane Worker version: `b1521315-534f-4336-86af-23d9fdd9dffe`
 
-The control plane serves the existing frontend, rejects missing or foreign Origins for state changes, stores opaque session hashes in D1, and keeps imported production agent mappings read-only for every mutation method. Existing staging users can log in and use runtime operations. Open registration is disabled. Publishing is restricted to administrators after the acceptance publish.
+The control plane serves the existing frontend, rejects missing or foreign Origins for state changes, stores opaque session hashes in D1, and keeps imported production agent mappings read-only for every mutation method. Existing staging users can log in and use runtime operations. Open registration is disabled. Publishing is restricted to `super_admin` after the acceptance publish.
 
 ## Remaining external gate
 GitHub synchronization remains blocked because the configured GitHub credential was rejected. Local history remains ahead of `origin/main`; no history was rewritten.
@@ -81,4 +82,4 @@ After all staging checks pass and the owner separately approves production: depl
 With production approval and rollback readiness: disable Replit application traffic and database access without deleting either; verify login, dashboard, projects, files, plan/build, previews, revisions, restore, publish, managed subdomains, Buyer Magnets hostnames, durable state, and restart recovery through Cloudflare; observe before deciding whether Replit can be retired.
 
 ## Acceptance
-Accepted in isolated staging on 2026-09-20. Evidence covers authentication, ownership boundaries, plan/build/edit, files, protected preview, cancellation command, native publish, published-route reachability, revision restore, D1 integrity, secret placement, and browser-bundle leakage checks. No passwords, session values, API keys, or publishing tokens are recorded here.
+Accepted in isolated staging on 2026-09-20, with final response-contract and canonical-role verification on 2026-09-22. Evidence covers authentication, ownership boundaries, plan/build/edit, files, protected preview, cancellation command, native publish, published-route reachability, revision restore, D1 integrity, secret placement, browser-bundle leakage, frontend response shapes, and publish-role enforcement. No passwords, session values, API keys, or publishing tokens are recorded here.

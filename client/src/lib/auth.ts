@@ -28,6 +28,5 @@ export function clearAppUser() {
 }
 
 export function authHeaders(): Record<string, string> {
-  const user = getAppUser();
-  return user ? { "x-user-id": user.id } : {};
+  return {};
 }
