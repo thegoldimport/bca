@@ -16,3 +16,4 @@
 - [Migration snapshot compatibility](migration-snapshot-compatibility.md) — recovery guidance must work from older inventory-only snapshots, not assume newer derived fields exist.
 - [Cloudflare control-plane migration](cloudflare-control-plane-migration.md) — move only the control plane; preserve VibeSDK and publishing, with a hard post-canary Cloudflare-only rollback boundary.
 - [Isolated VibeSDK bootstrap](isolated-vibesdk-bootstrap.md) — Worker bundles omit D1/templates, and platform publish still demands an account-level Cloudflare token.
+- [Production VibeSDK transport gate](production-vibesdk-transport-gate.md) — active workspaces live on a historically named Worker that lacks the isolated adapter transport.
