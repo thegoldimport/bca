@@ -1,0 +1,265 @@
+Proceed with Task #57 to resolve the single remaining production blocker.
+
+The objective is NOT to migrate, replace, recreate, or redesign the existing VibeSDK runtime.
+
+The objective is ONLY to add the minimum authenticated HTTP/WebSocket transport required for the already-approved BuildCustom narrow adapter to communicate with the EXISTING active VibeSDK Worker.
+
+The existing active Worker is buildcustom-vibesdk-staging despite its historical name. Treat it as PROTECTED PRODUCTION INFRASTRUCTURE.
+
+It currently owns the real VibeSDK runtime state, workspaces, agent IDs, generated applications and deployment infrastructure.
+
+==================================================
+HARD REQUIREMENT: ADDITIVE CHANGE ONLY
+
+Preserve the existing Worker and all existing bindings/resources.
+
+Do NOT:
+
+create replacement ThinkAgents
+create replacement SpaceDO workspaces
+change Durable Object namespace identities
+migrate existing workspace state
+regenerate agent IDs
+recreate generated applications
+change the production dispatch namespace
+replace the deployment architecture
+modify customer domains
+modify *.apps.buildcustom.ai
+modify buildcustom.ai
+attach app.buildcustom.ai
+rename production resources
+create a second AI agent
+add Workflow orchestration
+add a BuildCustom project Durable Object
+add a publish broker
+
+The desired change should conceptually be:
+
+EXISTING VIBESDK WORKER
+
+BEFORE:
+
+VibeSDK frontend/runtime
+
+ThinkAgent
+SpaceDO
+existing workspaces
+existing deployment system
+
+AFTER:
+
+EXACT SAME THING
++
+authenticated service-binding HTTP/WebSocket transport
+
+Nothing more.
+
+==================================================
+FIRST: INSPECT BEFORE MODIFYING
+
+Before making any production change, inspect the exact source/configuration/version currently deployed for buildcustom-vibesdk-staging.
+
+Compare it against the staging VibeSDK Worker where the authenticated adapter transport already passed Task #53.
+
+Determine the MINIMUM code/configuration difference required to expose the same proven transport on the protected production VibeSDK Worker.
+
+Specifically identify:
+
+HTTP transport endpoints required by the BuildCustom adapter.
+WebSocket upgrade path required by the adapter.
+authentication contract.
+required secret/binding.
+any routing changes.
+whether any VibeSDK runtime code must change at all.
+
+Prefer porting the EXACT transport implementation already proven in Task #53 rather than designing another transport.
+
+==================================================
+PRESERVE ALL CLOUDFLARE RESOURCE IDENTITIES
+
+Before deployment, capture and compare the existing Worker's complete relevant binding/resource configuration.
+
+The deployment must preserve existing:
+
+Durable Object bindings
+Durable Object namespace identities
+D1 bindings
+KV bindings
+R2 bindings
+Workers for Platforms bindings
+dispatch namespace configuration
+service bindings
+secrets required by VibeSDK
+compatibility settings
+routes
+other runtime bindings
+
+Adding the new transport authentication secret/binding is acceptable.
+
+Accidentally creating fresh Durable Object namespaces or replacing existing runtime resources is NOT acceptable.
+
+==================================================
+AUTHENTICATION
+
+The new transport must NOT become a public unauthenticated VibeSDK control API.
+
+It is intended for trusted BuildCustom control-plane → VibeSDK communication.
+
+Reuse the authenticated transport contract already proven in staging wherever possible.
+
+The authentication secret must remain server-side.
+
+It must never reach:
+
+browsers
+generated applications
+prompts
+user-controlled code
+API responses
+logs
+==================================================
+SAFE DEPLOYMENT / ROLLBACK
+
+Before modifying the active Worker:
+
+record the currently deployed Worker version
+record current bindings
+record rollback information
+verify the previous Worker version can be restored
+
+Make the smallest possible deployment.
+
+Do NOT perform unrelated cleanup/refactoring.
+
+After deployment, immediately verify the existing VibeSDK frontend/runtime still responds normally before testing BuildCustom.
+
+If the deployment changes or loses an existing binding/resource identity, STOP and rollback.
+
+==================================================
+TEST EXISTING WORKSPACE FIRST
+
+Once transport is available, connect the production BuildCustom control plane to the existing VibeSDK runtime using the preserved imported agent_id.
+
+Do NOT create a replacement agent/workspace merely because reconnection fails.
+
+Test in this order:
+
+authenticated runtime health/connectivity
+reconnect existing agent_id
+list existing workspace files
+retrieve file contents
+verify existing revision/history state
+verify protected preview access
+
+These initial checks should be READ-ONLY wherever possible.
+
+If the existing agent/workspace cannot reconnect, STOP and diagnose before performing mutations.
+
+==================================================
+THEN RUN SAFE RUNTIME CANARIES
+
+After existing workspace reconnection is proven, run the remaining production canaries using a safe/dedicated project where mutation is acceptable:
+
+Plan Mode and verify no authoritative mutation
+conversational edit
+preview
+revision creation
+restore
+cancellation
+reconnect after cancellation
+native VibeSDK publish
+verify generated application returns HTTP 200
+
+Continue using VibeSDK's native deployment path.
+
+Do not create an alternate deployment engine.
+
+==================================================
+VERIFY NOTHING ELSE BROKE
+
+After the transport deployment verify:
+
+existing generated applications still return normally
+existing *.apps.buildcustom.ai routing works
+existing custom domains work
+Buyer Magnets root domain works
+Buyer Magnets www behavior remains correct
+app.buyermagnets.com remains correct
+existing VibeSDK workspaces remain accessible
+no existing agent IDs changed
+no Durable Object namespaces changed
+no customer Worker was recreated unnecessarily
+==================================================
+THEN RUN THE REPLIT-INDEPENDENCE TEST
+
+If all production runtime canaries pass, proceed with the previously documented SAFE Replit-independence test.
+
+Stop/disable only the Replit application runtime temporarily.
+
+Do NOT delete:
+
+the Repl
+Replit database
+Replit files
+backups
+
+Then prove the Cloudflare production system independently supports:
+
+login
+sessions
+dashboard
+projects
+ownership
+existing agent reconnection
+files
+Plan Mode
+conversational edits
+previews
+revisions
+restore
+cancellation
+publishing
+generated app HTTP access
+hosted subdomain routing
+existing custom-domain routing
+D1 persistence
+
+Confirm through logs/configuration that no production request, callback, database connection, asset or runtime operation reaches Replit.
+
+Restore the Replit development runtime afterward.
+
+Do NOT retire/delete Replit yet.
+
+==================================================
+STOP BEFORE APP.BUILDCUSTOM.AI
+
+Even if everything passes:
+
+DO NOT attach app.buildcustom.ai.
+
+DO NOT modify buildcustom.ai.
+
+DO NOT begin the Stripe/auth/credits finishing phase yet.
+
+Stop and give me a final report containing:
+
+exact VibeSDK transport change made,
+previous and new Worker versions,
+confirmation existing bindings/DO namespaces/resources were preserved,
+existing agent/workspace reconnection result,
+file/revision/preview results,
+Plan/edit/cancellation/restore results,
+native publish result,
+generated-app result,
+existing customer-app/domain regression results,
+Replit-independence test result,
+confirmation of any remaining Replit runtime dependency,
+rollback status,
+any remaining blocker,
+final readiness for attaching app.buildcustom.ai.
+
+Do not perform the public cutover until I approve it.
+
+The architectural principle remains:
+
+Cloudflare/VibeSDK's vibe-coding architecture + the minimum BuildCustom SaaS layer necessary to turn it into our product.
