@@ -1,0 +1,69 @@
+Continue from the exact current state of Task #53. Do NOT restart the migration, discard the completed staging work, or redesign working components simply because of this message.
+
+First finish resolving the current deployment/propagation issue and verify whether the active Cloudflare Worker version is serving the new explicit camelCase serializers for projects, turns, releases, and users.
+
+Verify the live staging API responses directly after confirming the active Worker deployment/version. Do not make additional code changes merely because an older Worker version was temporarily still serving traffic.
+
+Once the current response-contract issue is conclusively resolved, rerun the relevant staging acceptance tests and completion review.
+
+There is also one architectural principle I want applied to the FINAL review:
+
+Cloudflare's official vibe-coding architecture + the minimum BuildCustom SaaS layer necessary to turn it into our product.
+
+BuildCustom is a multi-user SaaS around VibeSDK/Cloudflare. We need our own users, secure authentication, sessions, projects, ownership, plans/credits/billing later, project-to-VibeSDK mappings, domain UX, deployment metadata, permissions and dashboard.
+
+But we should NOT duplicate infrastructure that current Cloudflare/VibeSDK already provides.
+
+During the final review, compare what Task #53 actually implemented against the current VibeSDK and Cloudflare Workers for Platforms architecture.
+
+In particular review any custom:
+
+publish broker/service
+Workflow orchestration
+BuildCustom project Durable Object
+operation/mutation ledger
+queues
+session caching
+duplicated workspace/file storage
+deployment abstraction
+preview abstraction
+revision abstraction
+
+Do NOT remove something simply because it is custom. Keep it if it solves a real BuildCustom SaaS requirement or a demonstrated runtime limitation.
+
+But if current VibeSDK/Cloudflare already provides the same capability reliably, prefer the official mechanism and remove unnecessary duplication.
+
+The responsibility boundary should generally be:
+
+BuildCustom owns: users, authentication, sessions, projects, ownership, plans/credits, permissions, BuildCustom UI, project-to-VibeSDK mappings, BuildCustom deployment/domain metadata and product/business logic.
+
+Cloudflare/VibeSDK owns: ThinkAgent, coding-agent runtime, workspaces/files, execution, previews, revisions/artifacts where supported, generated-app deployment, Workers for Platforms, User Workers, dispatch infrastructure and generated-app Cloudflare resources.
+
+Do NOT create a second AI agent layer.
+
+Use our existing Cloudflare account. A second Cloudflare account is NOT required.
+
+Separate staging and production dispatch namespaces/resources inside the same account are acceptable. A trusted server-side Cloudflare publishing credential following Cloudflare's supported platform model is acceptable even though Workers Scripts Write cannot currently be scoped to a single dispatch namespace. Keep that credential completely server-side and inaccessible to browsers, generated apps and user-controlled code.
+
+Preserve all security fixes already completed in Task #53. Do NOT weaken authentication, ownership checks, admin restrictions, secret redaction, Plan Mode isolation, cancellation correctness, WebSocket cleanup or staging/production protections merely for architectural simplicity.
+
+Do NOT modify buildcustom.ai, app.buildcustom.ai, production DNS, existing production customer applications or existing customer custom domains yet.
+
+After the camelCase/deployment issue is resolved and staging review passes, STOP before production launch and give me a concise final report containing:
+
+what Task #53 successfully completed,
+final staging acceptance-test results,
+the final simplified architecture,
+which pieces are native Cloudflare/VibeSDK,
+which pieces are required BuildCustom SaaS functionality,
+which custom adapters remain and exactly why,
+anything that was removed as unnecessary duplication,
+whether Workflow is actually necessary and why,
+whether the BuildCustom Durable Object is actually necessary and why,
+exactly how publishing works,
+authentication/D1 status,
+GitHub synchronization status,
+any remaining blockers,
+and the exact next steps required before we can make app.buildcustom.ai the real production BuildCustom application.
+
+Do not perform the production cutover until I approve it.
