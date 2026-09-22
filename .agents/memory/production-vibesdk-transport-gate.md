@@ -14,3 +14,9 @@ VibeSDK forward restore currently updates and redeploys the target tree in `Spac
 **Why:** The restore canary returned the requested commit and a working restored preview, while subsequent authenticated file reads still showed the pre-restore edited files. A post-rollback `get_conversation_state` produced no fresh state frame.
 
 **How to apply:** Keep runtime mutations gated off until restore updates ThinkAgent hydration or exposes a documented authoritative refresh operation. Require restored file hashes and a subsequent edit from the restored state before cutover.
+
+The current upstream restore path reports SpaceDO deployment before refreshing the ThinkAgent file projection. Its existing file-manager Git synchronization reads legacy agent-local Git, not SpaceDO, so it is not a safe refresh operation. An isolated attempt to return a SpaceDO snapshot with rollback remained unsafe because consistency-sensitive reads and an alternate HTTP deploy path bypassed the workspace mutation boundary.
+
+**Why:** Repeated isolated patch reviews found that a correct restore result alone cannot guarantee a coherent observed tree when other SpaceDO operations can interleave with checkout/reconciliation, and deploy paths do not share the same materialization behavior.
+
+**How to apply:** Before deploying a restore fix, unify coherent workspace reads and writes under the same SpaceDO serialization boundary and bring HTTP/RPC deploy semantics into alignment. Test the real SpaceDO method composition, both restore entry points, reconnect, and edit-after-restore in isolation; do not treat unit-only hydration tests as acceptance.

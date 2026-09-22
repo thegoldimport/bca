@@ -1,0 +1,445 @@
+Task #57 is approved.
+
+The transport architecture is now proven and should NOT be redesigned.
+
+The production VibeSDK Worker did not require a deployment, the existing agent/workspace successfully reconnected, generation/edit/preview/publish passed, existing applications/domains were unaffected, and the Replit-off test proved the Cloudflare architecture is substantially independent of Replit.
+
+There is now ONE remaining blocker before the app.buildcustom.ai cutover:
+
+VIBESDK RESTORE STATE CONSISTENCY.
+
+Focus exclusively on resolving and proving this issue.
+
+==================================================
+CURRENT DEFECT
+==================================================
+
+The observed restore behavior is:
+
+1. VibeSDK accepts the requested historical commit.
+2. SpaceDO restores the target revision correctly.
+3. The restored preview is deployed correctly.
+4. The returned commit matches the requested revision.
+5. But subsequent authenticated BuildCustom file reads still return the PRE-RESTORE files from ThinkAgent.state.generatedFilesMap.
+
+Therefore:
+
+SpaceDO authoritative workspace
+!=
+ThinkAgent hydrated/generatedFilesMap state
+
+This is unsafe because BuildCustom could display stale files or a subsequent edit could operate from inconsistent state.
+
+Runtime mutations must remain DISABLED until this is resolved and verified.
+
+==================================================
+FIRST: DETERMINE THE INTENDED VIBESDK BEHAVIOR
+==================================================
+
+Before implementing a workaround, inspect the CURRENT VibeSDK source and restore architecture.
+
+Trace the complete restore path:
+
+BuildCustom restore request
+→ VibeSDK restore handler
+→ ThinkAgent
+→ SpaceDO
+→ revision/artifact restore
+→ generatedFilesMap/state hydration
+→ subsequent file reads
+→ subsequent generation/edit context
+
+Determine:
+
+1. What component is intended to be authoritative for workspace files after restore?
+
+2. Is ThinkAgent.state.generatedFilesMap intended to be:
+   - authoritative state,
+   - a cache/mirror of SpaceDO,
+   - generated UI state,
+   - or something else?
+
+3. Is there already an official VibeSDK operation that refreshes/re-hydrates ThinkAgent from SpaceDO after restore?
+
+4. Is there an existing method used during reconnect, initialization, generation, revision switching, or workspace hydration that should also be called after restore?
+
+5. Is this a bug in the current VibeSDK restore implementation rather than something BuildCustom should compensate for?
+
+6. Does the current VibeSDK repository contain a newer fix or intended implementation for this exact synchronization path?
+
+Prefer fixing the problem at the correct VibeSDK state boundary rather than adding BuildCustom-specific synchronization hacks.
+
+==================================================
+DO NOT CREATE ANOTHER SOURCE OF TRUTH
+==================================================
+
+Do NOT solve this by introducing:
+
+- duplicate BuildCustom workspace storage
+- another database copy of generated files
+- another Durable Object
+- Workflow orchestration
+- an operation ledger
+- a second revision system
+- a second restore implementation
+- BuildCustom-maintained generatedFilesMap
+- manual copying of entire projects into D1
+
+There must remain ONE coherent VibeSDK workspace/revision architecture.
+
+BuildCustom should consume that architecture rather than becoming responsible for synchronizing multiple copies of the generated application.
+
+==================================================
+PREFER THE SMALLEST CORRECT FIX
+==================================================
+
+If inspection shows that ThinkAgent should refresh its generatedFilesMap from the restored SpaceDO tree after restore, implement the smallest correct synchronization at that boundary.
+
+Conceptually, if appropriate:
+
+restore SpaceDO revision
+        ↓
+confirm target commit
+        ↓
+rehydrate ThinkAgent file state
+        ↓
+emit authoritative updated state
+        ↓
+BuildCustom receives restored files
+        ↓
+future edits start from restored state
+
+Do not assume this exact implementation is correct until the source confirms it.
+
+Use the architecture VibeSDK itself expects.
+
+==================================================
+IMPORTANT: DO NOT MODIFY PRODUCTION FIRST
+==================================================
+
+Reproduce and fix the defect in an isolated environment/canary first.
+
+Do NOT experiment against the preserved imported production workspace.
+
+Use a disposable project.
+
+Create a deterministic test such as:
+
+REVISION A:
+file contains:
+RESTORE_TEST_A
+
+REVISION B:
+same file contains:
+RESTORE_TEST_B
+
+Then:
+
+1. restore Revision A
+2. verify SpaceDO tree/hash
+3. verify preview contains A
+4. verify ThinkAgent/file API returns A
+5. verify conversation/runtime state reports A
+6. perform a NEW edit starting from A
+7. verify the edit operates on A rather than stale B
+8. verify resulting revision is derived from restored A state
+
+The test must prove actual CONTENT/HASH consistency, not merely that the restore API returned success.
+
+==================================================
+TEST BOTH RESTORE ENTRY POINTS
+==================================================
+
+Task #57 mentions both turn restore and release restore.
+
+Verify both if they use separate code paths:
+
+- turn/revision restore
+- release restore
+
+Both must result in the same authoritative synchronized workspace state.
+
+If they ultimately share one restore primitive, add regression coverage at the shared boundary plus API-level coverage for both entry points.
+
+==================================================
+RECONNECT TEST
+==================================================
+
+After successful restore:
+
+1. disconnect the BuildCustom adapter/session
+2. reconnect using the SAME agent_id
+3. retrieve files again
+4. confirm restored hashes/content remain correct
+5. confirm no stale generatedFilesMap returns after reconnect
+
+Then restart/redeploy the BuildCustom control-plane Worker if useful and repeat the read.
+
+The restored state must survive client/session/control-plane lifecycle changes.
+
+==================================================
+SUBSEQUENT EDIT TEST IS REQUIRED
+==================================================
+
+This is critical.
+
+After restoring A from B, issue a conversational edit whose result depends on the restored A content.
+
+Verify the coding agent receives/operates on A.
+
+The test should be constructed so it would clearly fail or produce a different result if the agent were secretly using stale B.
+
+Then verify:
+
+SpaceDO
+ThinkAgent file state
+BuildCustom file API
+preview
+new revision
+
+all agree.
+
+==================================================
+CANCELLATION REGRESSION
+==================================================
+
+Because cancellation was not repeated during the previous Replit-off interval, rerun it after the restore fix.
+
+Verify:
+
+- generation begins
+- cancellation requested
+- generation_stopped acknowledged
+- terminal state correct
+- reconnect correct
+- workspace remains consistent
+- subsequent operation works
+
+==================================================
+PRODUCTION CHANGE SAFETY
+==================================================
+
+If the correct fix requires changing the protected VibeSDK Worker:
+
+STOP BEFORE DEPLOYMENT and first report:
+
+- exact defect
+- exact source location
+- exact proposed change
+- why the change belongs in VibeSDK
+- whether Durable Object migrations are involved
+- whether any binding changes are involved
+- whether existing namespaces remain unchanged
+- rollback procedure
+- isolated test evidence
+
+If the fix is purely in the BuildCustom adapter/control plane and does NOT create duplicate state or mask a VibeSDK bug, explain why that is architecturally correct before production deployment.
+
+Do not casually patch the protected Worker.
+
+==================================================
+PRESERVE TASK #57 TRANSPORT
+==================================================
+
+Do not change the now-working production transport architecture.
+
+Preserve:
+
+BuildCustom production control plane
+→ Cloudflare service binding
+→ API-key exchange
+→ authenticated HTTP/WebSocket transport
+→ existing VibeSDK Worker
+
+Do not rotate/change the dedicated API key unless required for security.
+
+Do not expose it.
+
+==================================================
+PRESERVE ALL EXISTING INFRASTRUCTURE
+==================================================
+
+Do not recreate or change:
+
+- existing agent IDs
+- existing workspaces
+- THINK_DO namespace
+- SPACE_DO namespace
+- CodeGenObject namespace
+- Sandbox namespace
+- DORateLimitStore namespace
+- UserSecretsStore namespace
+- VibeSDK D1
+- VibeSDK KV
+- R2 templates
+- production dispatch namespace
+- customer Workers
+- *.apps.buildcustom.ai routing
+- customer domains
+- buildcustom.ai
+
+app.buildcustom.ai must remain unattached.
+
+==================================================
+RUNTIME MUTATION GATE
+==================================================
+
+Keep the current final gated control-plane version as the safety baseline.
+
+The known rollback-safe version is:
+
+a7e0b81b-c017-4fab-a753-380ccf5b9332
+
+Do NOT use the historical pre-Task-57 control-plane version as a rollback target.
+
+Keep runtime mutations disabled while investigating/fixing restore.
+
+Only temporarily enable mutations in the isolated/canary environment needed for testing.
+
+Do not enable public production mutations until restore consistency passes.
+
+==================================================
+AFTER THE FIX: FULL RUNTIME ACCEPTANCE
+==================================================
+
+Once restore consistency passes in isolation and any required production change has been safely reviewed/applied, rerun the complete production runtime acceptance:
+
+- existing agent reconnection
+- file listing
+- file retrieval
+- Plan Mode
+- Plan Mode non-mutation
+- conversational edit
+- protected preview
+- revision creation
+- turn/revision restore
+- release restore
+- restored file hash verification
+- edit after restore
+- cancellation
+- reconnect after cancellation
+- native VibeSDK publish
+- generated application HTTP 200
+- existing application regression
+- existing domain regression
+
+==================================================
+THEN REPEAT COMPLETE REPLIT-OFF TEST
+==================================================
+
+Only after ALL runtime operations pass:
+
+Stop the Replit application workflow again without deleting anything.
+
+While Replit is stopped, repeat the COMPLETE acceptance checklist, including the two previously incomplete items:
+
+- restore
+- cancellation
+
+Verify:
+
+- frontend
+- authentication
+- sessions
+- dashboard
+- projects
+- ownership
+- existing-agent reconnection
+- files
+- Plan Mode
+- edit
+- preview
+- revisions
+- restore
+- EDIT AFTER RESTORE
+- cancellation
+- reconnect
+- publish
+- generated application
+- managed subdomain
+- existing custom domains
+- D1 persistence
+
+Confirm no production runtime request reaches Replit.
+
+Then restore the Replit development workflow.
+
+Do NOT retire Replit yet.
+
+==================================================
+STOP BEFORE PUBLIC CUTOVER
+==================================================
+
+Even if everything passes:
+
+DO NOT attach app.buildcustom.ai.
+
+DO NOT begin Stripe/billing/credits/auth finishing work yet.
+
+DO NOT modify buildcustom.ai.
+
+STOP and report:
+
+1. Root cause of the restore inconsistency.
+
+2. Which component is authoritative for workspace files.
+
+3. Exact fix implemented.
+
+4. Whether VibeSDK itself changed.
+
+5. VibeSDK Worker version before/after, if applicable.
+
+6. Confirmation all existing DO namespaces/bindings/resources remained unchanged.
+
+7. Deterministic A → B → restore A hash/content test results.
+
+8. Turn/revision restore results.
+
+9. Release restore results.
+
+10. Reconnect-after-restore results.
+
+11. Edit-after-restore results.
+
+12. Cancellation results.
+
+13. Native publish result.
+
+14. Existing app/domain regression results.
+
+15. Complete Replit-off test result.
+
+16. Confirmation of zero remaining Replit runtime dependencies.
+
+17. Current safe rollback version/procedure.
+
+18. Any remaining blocker.
+
+19. Final readiness for app.buildcustom.ai cutover.
+
+Do not perform public cutover without explicit approval.
+
+==================================================
+NORTH STAR
+==================================================
+
+Do not broaden this task.
+
+We are not redesigning BuildCustom.
+
+We are fixing one consistency defect in the existing VibeSDK restore lifecycle so that:
+
+SpaceDO workspace
+=
+ThinkAgent hydrated state
+=
+BuildCustom file reads
+=
+preview
+=
+next coding-agent edit
+
+after a restore.
+
+Once that invariant is proven and the complete Replit-off test passes, stop for owner approval.
