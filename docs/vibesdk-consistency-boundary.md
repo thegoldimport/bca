@@ -58,6 +58,28 @@ On the second isolated run, commit A was `0c2d24b25b12213419364c067e0f33dc4b91f0
 
 Per the owner's stop rule, no consistency fix or further canary was attempted. Because the test Worker exposed a short-lived public test endpoint, it and its three new DO namespaces were deleted after evidence capture; Cloudflare confirmed the Worker no longer exists and no matching namespaces remain. No protected Worker, namespace, control-plane gate, or `app.buildcustom.ai` route was changed. The remaining prerequisite is a safely isolated **full** unmodified candidate lifecycle with independently verified A/B commit contents and a successful authoritative restore before testing ThinkAgent hydration or editing.
 
+## Normal-application isolated attempt
+
+The owner then authorized a fully initialized, disposable VibeSDK test using normal registration, API-key exchange, agent creation, WebSocket transport, and Think generation. The unchanged public candidate remained `9da158d82c597a0e8f4bf033cdccd1053fb6fb15`, with its pinned compatibility date and dependencies. A separate test-only Wrangler config pointed the candidate's **normal `worker/index.ts`** at fresh resources, with no production binding, route, domain, account-wide Cloudflare token in the Worker, or application-source change. Cloudflare denied creation of a separate Artifacts namespace (feature gate 10004), so this attempt used VibeSDK's normal SQL-backed SpaceDO option rather than sharing the protected Artifacts backend.
+
+| Disposable resource | Identity |
+| --- | --- |
+| Worker | `vibesdk-real-restore-20260923`; last secret-change version `56df7a4d-4c82-4cb4-b3cc-91df21d49ab2` |
+| D1 with candidate migrations | `vibesdk-real-restore-20260923-db`, `de53d7bd-903a-4805-a442-3be1b59e3c74` |
+| KV | `vibesdk-real-restore-20260923-kv`, `0d5006d4993a4ffe86a4d0d507b87774` |
+| R2 templates bucket | `vibesdk-real-restore-20260923-templates` (unused on the Think path) |
+| Dispatch namespace | `vibesdk-real-restore-20260923-dispatch` (no customer Worker published) |
+| AI Gateway | `vibesdk-real-restore-20260923` |
+| Container application | `vibesdk-real-restore-20260923-userappsandboxservice`, `a03f395e-7b16-4366-a01d-2f63cb899254`; uniquely tagged image `64ab60ba` |
+| Host, rate limiter, sandbox, secrets DO namespaces | `b5331372b700448cbff677529e38d59b`, `59c8fae509ca4d37b50bf95916d5ebcb`, `0380b8bc4c3540df9377c47fa3468775`, `b27775ded5c843c8b96a0707fc23e8eb` |
+| SpaceDO, ThinkAgent namespaces | `80dcaed0a77c49638b981eb672726cfc`, `20fd320e7e2147798b5ac167639f651e` |
+
+The test Worker passed the normal health endpoint. Two disposable test users registered using the normal CSRF-protected authentication API and created isolated API keys. The first SDK attempt incorrectly used `AgenticClient`, which requests VibeSDK's **legacy `agentic` behavior**, not the current Think behavior: template catalog lookup failed, and SDK retries consumed that user's three app-creation slots. No agent was created in that attempt. For the actual Think test, the general VibeSDK client explicitly requested `behaviorType: "think"` with retries disabled, matching the normal browser app feature. It created agent `41146538-41a9-4c19-b09d-52d634835cdd`, connected by the normal ticketed WebSocket, and reached the real child ThinkAgent chat RPC. The model call for `google-ai-studio/gemini-3.6-flash` returned **HTTP 400 Bad Request**. The transport emitted an error and then `generation_complete`; that event did not mean generation succeeded. Normal authenticated reconnect showed **zero files** and no `restore-marker.txt` or `RESTORE_REAL_A`.
+
+**Hard gate and classification: NOT REPRODUCED (initial generation blocked).** No committed A blob/hash exists; B, the pre-restore A/B SpaceDO tree, normal restore, post-restore SpaceDO state, Think-versus-Space comparison, authenticated BuildCustom adapter reads, and next edit were **not attempted**. A WebSocket reconnect worked but returned zero files. The gateway's exact 400 cause was not established. No SpaceDO restore defect or ThinkAgent stale-state defect is proved by this attempt. Do not infer success from the `generation_complete` frame. The required next prerequisite remains successful **real Think generation** followed by independently verified committed A and B before any restore.
+
+After stopping at the A gate, the public test Worker, all six test DO namespaces, D1, KV, R2, dispatch namespace, AI Gateway, container application, and its uniquely tagged image were deleted. Cloudflare confirmed no test-named DO namespaces, Worker, D1, KV, R2, dispatch namespace, gateway, container application, or image remain. The protected Worker and control-plane versions, runtime mutation gate, and `app.buildcustom.ai` attachment were not changed.
+
 ## Operation map
 
 | Operation | Entry point | Reads from | Writes to | Current synchronization | Materialization |

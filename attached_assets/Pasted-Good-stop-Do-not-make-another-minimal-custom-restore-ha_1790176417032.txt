@@ -1,0 +1,307 @@
+Good stop. Do not make another minimal/custom restore harness.
+
+The previous disposable test did not satisfy the prerequisite for the central regression because it could not independently establish that SpaceDO successfully restored to A, and it bypassed normal VibeSDK application initialization by injecting host file state.
+
+We are now at risk of spending more time debugging test harnesses than debugging VibeSDK.
+
+The next task is therefore:
+
+Reproduce the defect using a fully initialized disposable VibeSDK application lifecycle, as close as possible to the real Task #57 path, rather than another synthetic SpaceDO adapter.
+
+Production remains frozen and unchanged.
+
+==================================================
+
+DO NOT BUILD ANOTHER CUSTOM WORKSPACE MODEL
+==================================================
+
+Do not manually inject A/B file maps.
+
+Do not create a custom restore implementation.
+
+Do not simulate ThinkAgent state.
+
+Do not manually manufacture Git state unless that is exactly what the normal VibeSDK lifecycle does.
+
+Do not patch VibeSDK.
+
+Use VibeSDK itself to create:
+
+the agent
+workspace
+initial files
+edits
+revisions
+restore
+reads
+reconnect
+==================================================
+2. REUSE THE KNOWN-GOOD TASK #57 LIFECYCLE
+
+Review the exact procedure that previously succeeded during Task #57:
+
+disposable canary project creation
+initial generation
+conversational edit
+revision creation
+protected preview
+restore invocation
+BuildCustom file reads
+
+That real lifecycle already produced the original observation:
+
+SpaceDO restored/deployed requested revision
+
+while:
+
+ThinkAgent generatedFilesMap still exposed pre-restore files
+
+Reproduce THAT environment/path in isolation.
+
+Do not invent a different lifecycle merely because it is easier to test.
+
+==================================================
+3. CREATE A FULLY ISOLATED VIBESDK STACK
+
+Create disposable Cloudflare resources sufficient to run the normal VibeSDK candidate application.
+
+It is acceptable for this test stack to require more resources than the previous minimal Worker if those resources are required by normal VibeSDK initialization.
+
+They must be newly created and isolated from production.
+
+Do not bind to production:
+
+DO namespaces
+D1
+KV
+R2
+dispatch namespace
+workspaces
+agents
+customer Workers
+
+Use test-specific names.
+
+==================================================
+4. USE THE NORMAL VIBESDK API/AGENT FLOW
+
+Through the same normal VibeSDK APIs/protocol used by BuildCustom:
+
+Create a disposable project/agent.
+
+Ask the real ThinkAgent to create a deterministic file containing:
+
+RESTORE_REAL_A
+
+Confirm it through:
+
+normal authenticated file read
+SpaceDO authoritative read where independently available
+preview if available
+
+Record Revision A and its actual committed blob/hash.
+
+Then use a REAL conversational edit through ThinkAgent to change it to:
+
+RESTORE_REAL_B
+
+and create a B-only file.
+
+Confirm B independently and record Revision B.
+
+==================================================
+5. PROVE A AND B BEFORE RESTORE
+
+This is a hard gate.
+
+Before invoking restore, independently establish:
+
+Revision A contains A.
+
+Revision B contains B.
+
+Do not proceed merely because revision IDs exist.
+
+Use the most authoritative underlying revision/artifact/Git representation available in normal VibeSDK.
+
+Record hashes/content.
+
+If A and B cannot be independently proven, STOP.
+
+==================================================
+6. RESTORE USING THE NORMAL PRODUCT PATH
+
+Restore B → A using the SAME restore operation exposed through the normal VibeSDK/BuildCustom lifecycle.
+
+Do not use a custom test-only rollback implementation.
+
+==================================================
+7. PROVE SPACEDO FIRST
+
+Immediately after restore, determine independently whether SpaceDO actually contains A.
+
+This is another hard gate.
+
+Require:
+
+main test file = RESTORE_REAL_A
+B-only file absent
+authoritative hashes match A
+
+If SpaceDO still contains B:
+
+STOP.
+
+That means the defect is earlier/deeper than stale ThinkAgent hydration.
+
+Classify it as a SpaceDO restore failure and do not continue to ThinkAgent comparison.
+
+==================================================
+8. ONLY THEN COMPARE THINKAGENT
+
+If and only if SpaceDO is independently proven to be A:
+
+inspect:
+
+ThinkAgent generatedFilesMap
+normal authenticated BuildCustom-style file reads
+conversation state
+
+If those return B while SpaceDO returns A, we have reproduced the central stale-state defect.
+
+==================================================
+9. RECONNECT
+
+Disconnect normally.
+
+Reconnect using the same agent ID through the real transport.
+
+Read the files again.
+
+Determine whether reconnect:
+
+correctly hydrates A
+or resurrects/preserves stale B
+==================================================
+10. NEXT EDIT
+
+If SpaceDO=A and ThinkAgent behavior can be tested safely, perform a real conversational edit whose result reveals whether the coding agent starts from A or B.
+
+For example, instruct it to append something specifically to the existing marker without replacing the marker.
+
+Determine whether resulting C derives from:
+
+A or B.
+
+==================================================
+11. NO FIX YET
+
+This remains a reproduction task.
+
+Do not patch the candidate.
+
+Do not modify production.
+
+We first need to determine which of these is actually true:
+
+A)
+
+SpaceDO restores correctly but ThinkAgent remains stale
+
+or
+
+B)
+
+SpaceDO restore itself is inconsistent
+
+or
+
+C)
+
+both.
+
+==================================================
+12. DO NOT EXPAND INTO EVERY CONCURRENCY TEST YET
+
+For this task, prioritize establishing the fundamental restore lifecycle.
+
+Do NOT spend time yet on:
+
+cancellation fencing
+HTTP/RPC parity
+every concurrent-read case
+every concurrent-write case
+
+We already know those require eventual testing.
+
+First establish:
+
+A → B → restore A
+
+correctly and independently.
+
+==================================================
+13. CLEANUP
+
+After evidence is collected, delete disposable public/test resources that are no longer needed unless retaining them is necessary for the next isolated fix.
+
+Never delete or modify production resources.
+
+==================================================
+STOP AND REPORT
+
+Report only:
+
+isolated resources created
+exact candidate source
+confirmation normal VibeSDK initialization was used
+A committed content/hash
+B committed content/hash
+pre-restore SpaceDO state
+restore operation/result
+post-restore SpaceDO content/hash
+whether SpaceDO definitively restored to A
+post-restore ThinkAgent state
+post-restore BuildCustom-style file-read state
+reconnect result
+next-edit result, if the SpaceDO gate passed
+classification:
+
+SPACEDO RESTORE DEFECT
+
+THINKAGENT STALE-STATE DEFECT
+
+BOTH
+
+or
+
+NOT REPRODUCED
+
+whether we now have sufficient evidence to begin a fix
+
+Do not implement the fix.
+
+Do not request production deployment.
+
+Do not attach app.buildcustom.ai.
+
+==================================================
+MOST IMPORTANT RULE
+
+No more conclusions from synthetic state.
+
+We need the normal VibeSDK lifecycle to prove:
+
+committed A
+     ↓
+real ThinkAgent edit
+     ↓
+committed B
+     ↓
+normal restore A
+     ↓
+independently verify SpaceDO
+     ↓
+THEN inspect ThinkAgent
+
+Until SpaceDO is independently proven to contain A after restore, do not call anything a ThinkAgent stale-state defect.
