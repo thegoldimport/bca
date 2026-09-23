@@ -10,7 +10,33 @@ A fresh, unmodified checkout of public upstream `main` was made at `/tmp/vibesdk
 
 The protected Worker version `8522e70c-27f4-4ef3-a46a-80edbd308490` was uploaded via Wrangler. Its version metadata does not identify a Git commit. The downloaded production and migration-staging bundles have the same recorded ETag, which proves bundle equality between those Workers, not source-revision provenance. The staging migration used database migrations from the above public commit, but that does not establish which source commit built the Worker. The downloaded bundle has module paths but no embedded Git SHA. Therefore the **exact production source revision remains unverified**.
 
-Per the owner’s stop condition, no dependency installation, typecheck, baseline unit/integration tests, build, or new regression-test/implementation work was performed on the candidate checkout. Baseline test counts and failures are **not available**. Recover a build manifest, source revision annotation, or reproducible artifact comparison establishing source provenance before continuing.
+The missing source-to-bundle link is a **production compatibility gate**, not a reason to claim the isolated public checkout is unusable. Current public upstream `main` still points to this same commit; no later upstream fix was found on `main`. The candidate's `SpaceDO.rollbackToCommit`, Think rollback/state handling, HTTP/RPC deploy paths and child-turn cancellation all match the observed defect shape, but this does **not** establish production source identity.
+
+The unmodified candidate was installed using `bun install --frozen-lockfile` in both the repository root and its separately locked `sdk/` package. Both lockfiles remained unchanged. Results:
+
+| Unmodified candidate check | Result |
+| --- | --- |
+| Repository TypeScript | passed |
+| Repository existing tests | 40 files passed; 474 tests passed, 1 skipped |
+| Repository build | passed; chunk-size warning only |
+| Nested SDK build | passed |
+| Nested SDK unit tests | 40 passed |
+| Live SDK integration tests | **blocked**, not passed: its test module throws during collection without `VIBESDK_API_KEY`; no isolated test key was supplied and the test defaults to an external service |
+
+Only test files/configuration were added to the isolated checkout after these baseline checks; **no VibeSDK implementation was changed**. `space/test/durable-object-composition.regression.test.ts` runs against actual `SpaceDO` methods and the test Worker’s SQL backend. On the unmodified candidate, it reports 2 expected failures and 2 passes:
+
+| Regression | Baseline classification | Evidence/limit |
+| --- | --- | --- |
+| Failed restore commit must not report success | **REPRODUCES** | Expected rejection after injected commit failure; rollback instead resolved successfully and called deploy |
+| Concurrent restore/edit must not lose edit | **REPRODUCES** | Barrier forced edit during restore; final file was `new` instead of `edited` |
+| Concurrent restore/read must not expose a mixed tree | **DOES NOT REPRODUCE in this harness** | The exercised SQL-backed read returned a coherent old or new pair; this does not establish coverage of all read paths or Artifacts backend |
+| HTTP/RPC deploy parity | **CANNOT FULLY TEST here** | Both returned failure without a LOADER binding; successful materialization and distinct error conditions were not compared |
+| Think stale files, reconnect and next edit | **CANNOT TEST in pinned local harness** | Real Think import fails because pinned Vitest/Miniflare lacks the `cloudflare:workers` named `exports` binding; switching test-only dates cannot exceed its runtime ceiling |
+| Think cancellation fence and persistence failure | **CANNOT TEST in pinned local harness** | Same missing runtime binding; no child-turn assertions ran |
+
+A test-only real-Think Worker/DO harness was attempted. Pinned Vitest/Miniflare refused its import before test collection. A local-only Wrangler alternative could not bundle VibeSDK's `?raw` Markdown skill imports without the repository's Vite pipeline; it was stopped without contacting or modifying Cloudflare. These are **harness failures**, not passing or failing Think regressions.
+
+The central ThinkAgent stale-file defect has therefore **not** been reproduced by an executable regression against the candidate. Per the owner’s sequence, **do not write another fix or deploy to isolated Cloudflare yet**. First make the real Think/SpaceDO test harness executable, then run the central B → A → read/edit/reconnect test against this unmodified checkout. Separately, recover a build manifest, source revision annotation, or reproducible artifact comparison before any protected-Worker deployment.
 
 ## Operation map
 

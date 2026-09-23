@@ -1,0 +1,245 @@
+Good stop. Do NOT claim that commit 9da158d82c597a0e8f4bf033cdccd1053fb6fb15 is the exact production source revision.
+
+However, I want to distinguish:
+
+A. establishing an executable VibeSDK development baseline and reproducing/fixing the defect
+
+from
+
+B. proving compatibility with the protected production artifact before any production deployment.
+
+The missing source-to-bundle link is a hard requirement for B, but it should not automatically prevent A.
+
+Production remains frozen:
+
+VibeSDK Worker 8522e70c-27f4-4ef3-a46a-80edbd308490
+control plane a7e0b81b-c017-4fab-a753-380ccf5b9332
+runtime mutations disabled
+app.buildcustom.ai unattached
+
+Do not change any of those.
+
+==================================================
+
+FIRST TRY TO RECOVER THE SOURCE-TO-BUNDLE LINK
+==================================================
+
+Before proceeding with the candidate baseline, make one bounded read-only attempt to identify the actual source used for the deployed VibeSDK artifact.
+
+Inspect available:
+
+local Git history/worktrees
+GitHub history
+Replit project history/configuration
+Wrangler configuration
+deployment scripts
+build logs if available
+package/build metadata
+source maps if present
+Worker deployment metadata
+CI/deployment records
+comments/docs/project notes that identify the VibeSDK revision used when the current Worker was deployed
+
+Do not spend this task indefinitely searching.
+
+If a trustworthy source commit/build manifest is found, use it as the baseline and document the evidence.
+
+If not, explicitly retain:
+
+EXACT PRODUCTION SOURCE REVISION = UNKNOWN
+
+and proceed ONLY with the isolated development-baseline work below.
+
+==================================================
+2. ESTABLISH A CANDIDATE DEVELOPMENT BASELINE
+
+Use the clean public VibeSDK checkout at:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+only as:
+
+CANDIDATE EXECUTABLE DEVELOPMENT BASELINE
+
+Do NOT call it the production baseline unless independently proven.
+
+Use its declared/pinned tooling and lockfile:
+
+bun.lock
+Bun 1.3.6 where appropriate
+Node 22.22.0 / repository-supported Node 22+
+
+Install dependencies without casually upgrading them.
+
+Then establish whether the UNMODIFIED candidate can:
+
+typecheck
+run its existing tests
+run relevant integration tests
+build successfully
+
+Record all baseline results.
+
+==================================================
+3. VERIFY THE CANDIDATE CONTAINS THE SAME DEFECT SHAPE
+
+Before writing a fix, inspect whether this candidate contains the same relevant architecture already observed in the deployed artifact/source investigation:
+
+SpaceDO authoritative workspace
+ThinkCodingBehavior.rollbackToCommit
+ThinkAgent generatedFilesMap
+restore lifecycle
+HTTP deploy path
+RPC deploy path
+child ThinkAgent cancellation behavior
+
+If the candidate architecture materially differs from the production behavior we traced, STOP and report that the candidate is not suitable.
+
+If it matches the relevant defect shape, continue.
+
+==================================================
+4. WRITE REGRESSION TESTS BEFORE ANOTHER FIX
+
+Turn the known defects into executable tests.
+
+At minimum:
+
+failed restore/commit must fail closed
+restore B → A then read must return A
+restore B → A then next edit must operate on A
+concurrent restore/read cannot expose intermediate authoritative state
+concurrent restore/edit cannot allow stale child writes after restore completion
+cancellation must fence the child ThinkAgent from later authoritative mutation
+reconnect after restore must hydrate A
+HTTP and RPC deploy must materialize equivalent authoritative state
+commit/persistence failures must propagate
+==================================================
+5. RUN THOSE TESTS AGAINST THE UNMODIFIED CANDIDATE
+
+This is important.
+
+Do not fix anything yet.
+
+Run the new regressions against unmodified 9da158d....
+
+We want executable evidence showing which known defects reproduce.
+
+Classify each regression:
+
+REPRODUCES
+DOES NOT REPRODUCE
+CANNOT TEST
+
+with the reason.
+
+If the central restore/ThinkAgent consistency defect does NOT reproduce on this candidate, STOP. Do not develop a fix against the wrong source baseline.
+
+==================================================
+6. CHECK CURRENT UPSTREAM
+
+Compare the candidate against current VibeSDK upstream.
+
+Determine whether upstream has subsequently changed/fixed:
+
+restore
+SpaceDO consistency
+generatedFilesMap hydration
+cancellation fencing
+HTTP/RPC deploy parity
+error propagation
+
+If upstream already has an appropriate fix, prefer evaluating/backporting that fix rather than inventing ours.
+
+==================================================
+7. ONLY THEN DEVELOP AN ISOLATED FIX
+
+If:
+
+the candidate is executable,
+its architecture matches the relevant production defect shape,
+and the defects reproduce,
+
+then develop the smallest VibeSDK-native fix against the candidate.
+
+Keep:
+
+SpaceDO = sole authoritative workspace
+
+Do not add BuildCustom orchestration, duplicate storage, another DO, Workflow, operation ledger, second revision system, or external locking service.
+
+==================================================
+8. EXECUTABLE VALIDATION
+
+Require:
+
+repository typecheck
+existing tests
+new regression tests
+integration tests
+build
+
+Then prove:
+
+A → B → restore A → read A → reconnect A → edit from A → C
+
+plus:
+
+restore/read concurrency
+restore/edit concurrency
+cancellation fencing
+forced commit failure
+forced persistence failure
+HTTP deploy
+RPC deploy
+==================================================
+9. ISOLATED CLOUDFLARE CANARY
+
+If executable validation passes, deploy ONLY to disposable isolated Cloudflare VibeSDK resources.
+
+Do not deploy to the protected Worker.
+
+Run the same end-to-end tests using real Durable Object behavior.
+
+Then perform the independent architecture review.
+
+==================================================
+10. PRODUCTION COMPATIBILITY REMAINS A SEPARATE GATE
+
+Even if the candidate fix passes every test and isolated Cloudflare canary:
+
+DO NOT modify the protected production Worker.
+
+Because the exact production source revision is currently unknown, production deployment requires a separate compatibility review.
+
+At that point determine the safest way to establish that the proposed changes apply cleanly to the protected artifact/source lineage.
+
+If we still cannot establish a sufficiently trustworthy relationship between the tested source and production artifact, STOP and present options rather than deploying.
+
+==================================================
+STOP AND REPORT
+
+Stop after the isolated development/canary work and report:
+
+whether the exact production source revision was recovered,
+evidence if recovered,
+candidate baseline typecheck/test/build results,
+whether candidate architecture matches the observed production defect shape,
+regression tests added,
+which defects reproduced against unmodified candidate,
+current-upstream findings,
+exact fix developed, if applicable,
+full executable test results,
+deterministic restore/edit results,
+concurrency/cancellation results,
+isolated Cloudflare canary results,
+independent architecture review result,
+whether the tested source can be safely related to production,
+what remains necessary before protected-Worker deployment.
+
+Do not deploy to production.
+
+The key distinction is:
+
+We do not need to pretend the candidate commit built production in order to use it to reproduce and solve a VibeSDK defect in isolation.
+
+But we DO need trustworthy compatibility evidence before applying that solution to the protected production Worker.

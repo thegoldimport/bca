@@ -32,3 +32,9 @@ The matching downloaded bundle ETags for protected production and isolated stagi
 **Why:** The protected Worker’s Cloudflare version metadata identifies a Wrangler upload but contains no Git commit. A candidate clean checkout can be made from upstream, yet running tests against it cannot establish a baseline for the protected Worker until source identity is proved.
 
 **How to apply:** Before another restore patch, recover trusted source-to-bundle provenance (build manifest/commit annotation or a reproducible artifact match). Do not treat public `main`, a staging D1 migration commit, or matching production/staging ETags as proof of the production source commit.
+
+An unknown production source commit is a hard gate for protected-Worker deployment, **not** for reproducing and developing an isolated fix against a clearly labeled candidate checkout. Keep those gates separate.
+
+**Why:** The owner explicitly distinguished executable candidate-baseline work from later production compatibility proof. The public candidate can run its pinned Bun/Node unit/type/build checks even while the production source-to-bundle link remains unknown.
+
+**How to apply:** Reproduce the central Think/SpaceDO stale-state defect with an executable test against the unmodified candidate before implementing another fix. Treat pinned Vitest/Miniflare's missing `cloudflare:workers` named `exports` binding as a test-harness gap, not evidence that the defect is fixed or absent.
