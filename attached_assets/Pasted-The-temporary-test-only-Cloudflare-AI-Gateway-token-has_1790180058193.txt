@@ -1,0 +1,430 @@
+The temporary test-only Cloudflare AI Gateway token has now been securely added to Replit Secrets as:
+
+VIBESDK_TEST_AI_GATEWAY_TOKEN
+
+Do not print, reveal, log, commit, or return its value.
+
+We are ready to perform the isolated baseline generation test.
+
+This task is intentionally narrow.
+
+GOAL:
+
+Prove that the UNMODIFIED VibeSDK candidate can perform one normal end-to-end generation through the documented VibeSDK lifecycle when the disposable environment is correctly authenticated.
+
+Do NOT investigate restore yet.
+Do NOT write a consistency fix.
+Do NOT modify VibeSDK source.
+Do NOT modify production.
+
+==================================================
+1. PRODUCTION REMAINS FROZEN
+==================================================
+
+Do not modify:
+
+Protected VibeSDK Worker:
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+Production control plane:
+a7e0b81b-c017-4fab-a753-380ccf5b9332
+
+Keep:
+
+RUNTIME_OPERATIONS_ENABLED=false
+
+Do not attach:
+
+app.buildcustom.ai
+
+Do not modify any production:
+
+- Workers
+- Durable Object namespaces
+- D1
+- KV
+- R2
+- dispatch namespaces
+- AI Gateways
+- containers
+- agents
+- workspaces
+- customer apps
+- domains
+- secrets
+
+==================================================
+2. USE THE UNMODIFIED CANDIDATE
+==================================================
+
+Candidate development baseline:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Remember:
+
+EXACT PRODUCTION SOURCE REVISION = UNKNOWN.
+
+This is our candidate development baseline, not a claimed production revision.
+
+Do not change:
+
+- VibeSDK source
+- dependencies
+- lockfiles
+- Agents implementation
+- model-routing implementation
+- SpaceDO
+- ThinkAgent
+- restore logic
+
+==================================================
+3. CREATE A NORMAL DISPOSABLE VIBESDK ENVIRONMENT
+==================================================
+
+Recreate the minimum isolated resources required to run VibeSDK through its NORMAL documented application lifecycle.
+
+Use disposable/test-specific resource names.
+
+Do not build another custom SpaceDO or ThinkAgent harness.
+
+Use the normal VibeSDK:
+
+registration
+→ agent creation
+→ ticketed WebSocket
+→ ThinkAgent
+→ model request
+→ workspace/files
+
+Do not manually inject files or agent state.
+
+All disposable state must remain isolated from production.
+
+==================================================
+4. USE THE NEW TEST AI GATEWAY TOKEN
+==================================================
+
+The secure Replit secret:
+
+VIBESDK_TEST_AI_GATEWAY_TOKEN
+
+contains the new temporary Cloudflare token with only:
+
+Account → AI Gateway → Run
+
+Map this secret ONLY into the disposable VibeSDK Worker as the environment secret expected by the candidate:
+
+CLOUDFLARE_AI_GATEWAY_TOKEN
+
+Do NOT:
+
+- replace any production secret
+- modify any protected Worker secret
+- rename the Replit secret globally
+- expose its value
+- print it
+- commit it
+- put it into Wrangler configuration as plaintext
+
+The mapping exists only for the disposable test deployment.
+
+==================================================
+5. PROVIDER AUTHENTICATION
+==================================================
+
+The previous investigation established that this candidate expects separate provider authentication for this path.
+
+Use the existing securely stored Google AI Studio provider credential available to the test environment if appropriate.
+
+Do not expose its value.
+
+Do NOT store the Google provider key inside AI Gateway for this test.
+
+The intended flow is:
+
+ThinkAgent
+→ OpenAI-compatible client
+→ ordinary fetch
+→ disposable AI Gateway
+→ cf-aig-authorization using the TEST Run token
+→ provider Authorization using Google provider credential
+→ Gemini
+
+Before running generation, verify that both authentication mechanisms are present in the disposable environment WITHOUT displaying their values.
+
+==================================================
+6. RUN ONE BASELINE GENERATION
+==================================================
+
+Through VibeSDK's normal API/agent lifecycle, create a real ThinkAgent and issue exactly one simple task:
+
+Create a single index.html file containing exactly:
+
+BASELINE_GENERATION_OK
+
+Do not create B.
+
+Do not restore anything.
+
+==================================================
+7. CAPTURE THE MODEL RESULT
+==================================================
+
+Verify the model call itself succeeds.
+
+PASS requires:
+
+- no HTTP 400
+- no provider authentication failure
+- no AI Gateway authentication failure
+- no VibeSDK generation error
+
+If it fails, capture only the sanitized:
+
+- component
+- HTTP status
+- error type
+- error code
+- error message
+
+Never expose credentials.
+
+If the model call fails:
+
+STOP.
+
+Do not attempt restore.
+Do not patch VibeSDK.
+
+==================================================
+8. FILE EXISTENCE GATE
+==================================================
+
+Do NOT treat generation_complete as proof of success.
+
+After generation, use VibeSDK's normal authenticated file-reading mechanism.
+
+PASS requires:
+
+index.html exists
+
+AND its persisted contents contain:
+
+BASELINE_GENERATION_OK
+
+If not:
+
+STOP.
+
+==================================================
+9. PERSISTENCE GATE
+==================================================
+
+Verify the file exists in VibeSDK's authoritative normal workspace/persistence mechanism.
+
+Record where appropriate:
+
+- agent ID
+- workspace/project identifier
+- file path
+- content
+- file hash
+- commit/revision identifier if the normal lifecycle produces one
+
+Do not manually create a revision merely to satisfy this gate.
+
+We need evidence that the normal VibeSDK lifecycle persisted A.
+
+==================================================
+10. RECONNECT GATE
+==================================================
+
+Disconnect normally.
+
+Reconnect through the normal ticketed VibeSDK transport using the SAME agent ID.
+
+Read the files again through the normal authenticated mechanism.
+
+PASS requires:
+
+index.html still exists
+
+AND still contains:
+
+BASELINE_GENERATION_OK
+
+This proves the result is not merely transient agent state.
+
+==================================================
+11. AUTHORITATIVE A
+==================================================
+
+If all previous gates pass, classify this state as:
+
+A
+
+Record the strongest normal evidence available for A:
+
+- agent ID
+- file path
+- persisted content
+- file hash
+- commit/revision ID if applicable
+
+A must have been generated by the real ThinkAgent and persisted by VibeSDK.
+
+Do not manually inject A.
+
+==================================================
+12. CHECK THE PREVIOUS 400 HYPOTHESIS
+==================================================
+
+If generation now succeeds, compare this run against the previous failed run.
+
+Determine whether the new test AI Gateway token is sufficient evidence that the previous missing gateway authentication was the cause of the HTTP 400.
+
+Be precise:
+
+If the only material change relevant to the model request was adding valid gateway authentication and the same request now succeeds, classify the previous cause as strongly supported.
+
+Do not claim absolute proof if other material configuration changed.
+
+==================================================
+13. generation_complete OBSERVATION
+==================================================
+
+We previously established from candidate source that generation_complete is emitted during cleanup even after a generation error.
+
+Do not fix that behavior in this task.
+
+Simply confirm BuildCustom must not interpret:
+
+generation_complete
+
+alone as successful generation.
+
+Success should require absence of the relevant error plus valid resulting/persisted state.
+
+Record this as a future integration requirement.
+
+==================================================
+14. HARD STOP AT A
+==================================================
+
+If A is successfully proven:
+
+STOP.
+
+Do NOT:
+
+- create B
+- test restore
+- modify rollbackToCommit
+- modify generatedFilesMap
+- modify SpaceDO
+- test cancellation
+- test concurrency
+- modify HTTP/RPC deploy
+- write a consistency fix
+- deploy to production
+- enable runtime mutations
+- attach app.buildcustom.ai
+
+The next task will separately test:
+
+A
+→ real ThinkAgent edit
+→ B
+→ normal restore A
+→ independently verify SpaceDO
+→ compare ThinkAgent state
+
+But DO NOT perform that now.
+
+==================================================
+15. CLEANUP
+==================================================
+
+After collecting the required evidence, delete disposable Cloudflare runtime resources created solely for this test if they are not needed to preserve evidence.
+
+Do NOT delete the temporary AI Gateway token yet.
+
+Do NOT delete or modify any production resource.
+
+We will revoke the temporary token ourselves after the isolated VibeSDK investigation is finished.
+
+==================================================
+16. REPORT
+==================================================
+
+Return a concise report containing:
+
+1. Disposable resources created.
+
+2. Confirmation they were isolated from production.
+
+3. Candidate commit tested.
+
+4. Confirmation VibeSDK source/dependencies remained unchanged.
+
+5. Confirmation test gateway authentication was present without exposing it.
+
+6. Confirmation provider authentication was present without exposing it.
+
+7. Model-call result.
+
+8. Whether the previous HTTP 400 occurred again.
+
+9. ThinkAgent generation result.
+
+10. index.html authenticated read result.
+
+11. Persistence result.
+
+12. Reconnect result.
+
+13. A content/hash/revision evidence.
+
+14. Whether adding the test gateway authentication explains the previous 400.
+
+15. generation_complete integration implication.
+
+16. Cleanup performed.
+
+17. Final classification:
+
+BASELINE A PROVEN
+
+or
+
+BASELINE A NOT PROVEN
+
+18. If BASELINE A PROVEN, state:
+
+READY FOR ISOLATED A → B → RESTORE A REPRODUCTION
+
+Do not proceed with that reproduction until I explicitly approve it.
+
+==================================================
+NORTH STAR
+==================================================
+
+Stay on Cloudflare/VibeSDK's normal documented path.
+
+No synthetic state.
+No custom restore harness.
+No VibeSDK patch.
+
+For this task, success means only:
+
+prompt
+→ real VibeSDK
+→ real ThinkAgent
+→ successful model request
+→ index.html
+→ persisted BASELINE_GENERATION_OK
+→ reconnect
+→ same file
+
+Nothing more.
