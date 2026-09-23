@@ -1,0 +1,467 @@
+We now have executable reproduction of a concrete VibeSDK defect through
+the NORMAL VibeSDK lifecycle.
+
+Classification from the unmodified candidate:
+
+SPACEDO RESTORE DEFECT REPRODUCED
+
+Candidate:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+The exact production source revision remains UNKNOWN.
+
+The reproduced states were:
+
+REVISION A
+commit:
+3343ac2a5063bb50a31c67b2822c9fcba745f08b
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+
+REVISION B
+commit:
+c3fbd1226bb3552b76ffe2fb6a16086d15a66929
+
+index.html = RESTORE_REAL_B
+a-only.txt = absent
+b-only.txt = B_ONLY
+
+
+NORMAL rollback_to_commit(A) RESULT
+new forward commit:
+d2f97c061000a46d22d177beb291be2f7286f814
+
+parent = B
+
+committed tree:
+
+index.html = RESTORE_REAL_B      WRONG
+a-only.txt = A_ONLY              CORRECT
+b-only.txt = absent              CORRECT
+
+VibeSDK also returned:
+
+deployment_failed: Build failed
+
+Therefore the authoritative restore itself did NOT reproduce A.
+
+Do not investigate ThinkAgent stale hydration yet.
+
+The next task is:
+
+TRACE THE EXACT ROOT CAUSE OF THIS PARTIAL RESTORE, WRITE A FAILING
+REGRESSION TEST FOR IT, THEN IMPLEMENT THE SMALLEST VIBESDK-NATIVE FIX.
+
+Production remains frozen.
+
+==================================================
+1. PRESERVE THE PROVEN BASELINE
+==================================================
+
+Do not modify production.
+
+Do not deploy to the protected VibeSDK Worker.
+
+Do not enable runtime mutations.
+
+Do not attach app.buildcustom.ai.
+
+Keep the temporary test credential secure.
+
+Work only against an isolated checkout of:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Before modifying implementation code, preserve the existing baseline test
+results.
+
+==================================================
+2. TRACE THE NORMAL RESTORE PATH
+==================================================
+
+Trace the exact execution path initiated by:
+
+rollback_to_commit(A)
+
+through every relevant layer until the new forward commit is created.
+
+Document:
+
+request
+→ ThinkCodingBehavior / restore handler
+→ SpaceDO restore operation
+→ Git/revision lookup
+→ target tree retrieval
+→ working tree mutation
+→ file writes
+→ file deletions
+→ persistence
+→ forward commit creation
+→ preview/deployment
+
+Use actual candidate source.
+
+Do not reason from the old synthetic harness.
+
+==================================================
+3. EXPLAIN THE MIXED TREE
+==================================================
+
+The central question is:
+
+WHY did restoring A from B correctly:
+
+- restore a-only.txt
+- delete b-only.txt
+
+but FAIL to replace:
+
+index.html B → A?
+
+Trace the exact data structures and operations responsible for:
+
+A. files existing in both revisions whose CONTENT changed
+
+B. files added between revisions
+
+C. files deleted between revisions
+
+This pattern is highly informative.
+
+The restore appears capable of handling presence/absence changes while
+failing to restore changed content for a path existing in both A and B.
+
+Do not assume that is the cause.
+
+Prove it from source and executable behavior.
+
+Inspect whether restore is:
+
+- calculating only added/deleted paths
+- incorrectly diffing trees
+- using current workspace contents for overlapping paths
+- applying target files in the wrong order
+- merging instead of replacing
+- reading target commit contents incorrectly
+- allowing stale workspace state to overwrite restored contents
+- creating the forward commit before all writes settle
+- affected by asynchronous write ordering
+- or something else
+
+==================================================
+4. SEPARATE RESTORE FROM DEPLOYMENT
+==================================================
+
+The restore produced an incorrect committed tree AND deployment failed.
+
+Determine ordering.
+
+Specifically establish:
+
+Did the incorrect mixed commit exist BEFORE deployment began?
+
+If YES:
+
+the primary restore defect is independent of deployment failure.
+
+Then separately determine why deployment failed, but do not allow the
+deployment investigation to obscure the restore bug.
+
+If deployment failure somehow caused workspace rollback/mutation, prove
+that from execution evidence.
+
+==================================================
+5. WRITE THE REGRESSION TEST BEFORE THE FIX
+==================================================
+
+Create an executable regression test representing exactly the proven case:
+
+A:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+B:
+
+index.html = RESTORE_REAL_B
+a-only.txt = absent
+b-only.txt = B_ONLY
+
+Restore:
+
+B → A
+
+Expected:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+The test must inspect the resulting AUTHORITATIVE committed/workspace
+tree.
+
+It must NOT use ThinkAgent generatedFilesMap as its oracle.
+
+Run it against the UNMODIFIED candidate.
+
+It must reproduce/fail for the same semantic reason observed in the real
+Cloudflare run.
+
+If the regression test does NOT fail against the unmodified candidate:
+
+STOP.
+
+Do not write a fix.
+
+==================================================
+6. ADD SMALL RESTORE-MATRIX COVERAGE
+==================================================
+
+Once the exact reproduction test fails correctly, add focused cases for:
+
+1. existing file content A → B → restore A
+2. added file → restore removes it
+3. deleted file → restore recreates it
+4. multiple changed existing files
+5. nested-path changed file
+6. binary/non-text file only if the normal restore path supports it
+
+Keep this focused.
+
+Do not expand into the entire concurrency investigation yet.
+
+==================================================
+7. IMPLEMENT THE SMALLEST NATIVE FIX
+==================================================
+
+Only after the regression fails correctly:
+
+Implement the smallest fix in VibeSDK's existing restore/workspace
+architecture.
+
+Requirements:
+
+SpaceDO remains the authoritative workspace.
+
+Do not add:
+
+- another Durable Object
+- Workflow
+- external lock service
+- BuildCustom restore orchestration
+- duplicate workspace storage
+- another revision system
+- operation ledger
+- second agent
+- custom Git service
+
+The desired semantic is simple:
+
+RESTORE(targetRevision)
+
+must make the authoritative workspace/tree equivalent to targetRevision
+before the new forward restore commit is considered successful.
+
+For every tracked path:
+
+- target content must match target revision
+- target-only files must exist
+- current-only files must be removed
+
+Do not merge target and current state accidentally.
+
+==================================================
+8. FAIL CLOSED
+==================================================
+
+While touching this restore path, ensure its existing success semantics
+do not falsely report success.
+
+At minimum:
+
+If target revision retrieval fails:
+RESTORE FAILS.
+
+If workspace mutation fails:
+RESTORE FAILS.
+
+If persistence/commit fails:
+RESTORE FAILS.
+
+If the resulting authoritative tree does not represent the requested
+target:
+RESTORE MUST NOT REPORT SUCCESS.
+
+Do not redesign the entire mutation system in this task.
+
+==================================================
+9. RUN LOCAL EXECUTABLE VALIDATION
+==================================================
+
+Run:
+
+- repository typecheck
+- existing repository tests
+- nested SDK tests
+- new restore regression
+- restore matrix tests
+- repository build
+
+Then prove locally:
+
+A
+→ B
+→ restore A
+→ authoritative tree = A
+
+including:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+Report exact test counts.
+
+==================================================
+10. REAL CLOUDFLARE CANARY
+==================================================
+
+ONLY after all local validation passes:
+
+Create a fresh disposable isolated VibeSDK environment using the same
+configuration pattern that successfully proved the baseline and the
+restore defect.
+
+Use the real lifecycle again:
+
+real ThinkAgent generates A
+→ verify/reconnect A
+→ real ThinkAgent edits to B
+→ verify/reconnect B
+→ normal rollback_to_commit(A)
+→ inspect authoritative committed tree
+
+PASS requires:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+AND the resulting normal restore commit/tree is equivalent to A.
+
+Do not use ThinkAgent state as the authoritative restore oracle.
+
+==================================================
+11. ONLY AFTER AUTHORITATIVE RESTORE PASSES, CHECK THINKAGENT
+==================================================
+
+If and only if the fixed candidate conclusively restores SpaceDO/tree to
+A:
+
+Then inspect:
+
+- existing ThinkAgent/session-visible files
+- fresh ticketed reconnect
+- normal authenticated BuildCustom-style reads
+
+This is where we finally test the previously suspected stale-state issue.
+
+Possible outcomes:
+
+A. SpaceDO=A and ThinkAgent=A
+
+The restore fix may have resolved the observed problem completely.
+
+B. SpaceDO=A and ThinkAgent=B
+
+Now we have independently reproduced a SECOND defect:
+
+THINKAGENT STALE-STATE DEFECT
+
+Do not automatically fix that second defect during this task.
+
+Record it and stop for review.
+
+==================================================
+12. DEPLOYMENT RESULT
+==================================================
+
+Also record whether the fixed restore's normal preview/deployment succeeds.
+
+If authoritative restore succeeds but deployment still fails:
+
+treat deployment failure as a separate defect.
+
+Do not contaminate the restore fix with unrelated deployment changes.
+
+==================================================
+13. CLEANUP
+==================================================
+
+Delete disposable runtime resources after collecting evidence.
+
+Do not revoke VIBESDK_TEST_AI_GATEWAY_TOKEN yet.
+
+Do not touch production.
+
+==================================================
+14. STOP AND REPORT
+==================================================
+
+Report:
+
+1. exact restore call path
+2. proven root cause of the mixed tree
+3. whether mixed commit existed before deployment
+4. reason deployment failed, if established
+5. regression test added
+6. proof it failed against unmodified candidate
+7. restore matrix tests
+8. exact implementation change
+9. why this is the smallest VibeSDK-native fix
+10. typecheck result
+11. existing test results
+12. new test results
+13. build result
+14. real Cloudflare A state
+15. real Cloudflare B state
+16. real Cloudflare restored state
+17. whether authoritative restored tree exactly equals A
+18. existing ThinkAgent state after successful restore, if reached
+19. fresh reconnect state after successful restore, if reached
+20. preview/deployment result
+21. any second defect discovered
+22. disposable-resource cleanup
+23. independent assessment of whether the fix preserves VibeSDK's intended
+    architecture
+
+STOP BEFORE PRODUCTION.
+
+Do not deploy the patch to the protected Worker.
+
+Do not enable runtime mutations.
+
+Do not attach app.buildcustom.ai.
+
+==================================================
+SUCCESS CRITERION
+==================================================
+
+The first success criterion is no longer about ThinkAgent.
+
+It is simply:
+
+TREE(A)
+→ edit
+→ TREE(B)
+→ restore(A)
+→ TREE(A)
+
+exactly.
+
+Only after that works do we ask whether ThinkAgent sees A.

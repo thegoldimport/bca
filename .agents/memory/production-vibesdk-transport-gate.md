@@ -15,6 +15,12 @@ An earlier protected-runtime canary appeared to restore a preview while subseque
 
 **How to apply:** Keep runtime mutations gated off. First prove every file in the authoritative post-restore commit matches A, including absences and deletions; a forward commit named "rollback" or a restored preview is not enough. Only then compare Think/session state, reconnect, and a subsequent edit. Do not generalize isolated candidate behavior to the protected runtime whose exact source revision is unknown.
 
+In an isolated fixed-candidate canary, a new forward restore commit's **entire committed tree** exactly matched A, but both the existing ThinkAgent file view and a fresh ticketed reconnect still returned B. This separately demonstrates stale Think hydration after a correct authoritative restore in that candidate, not in the protected runtime.
+
+**Why:** Earlier tests could not distinguish a mixed SpaceDO tree from stale Think files. Comparing the complete A and forward-restore Git trees before reading either Think session finally separated the two failures. The restore's preview build also failed, so a successful preview is not necessary to observe this stale file projection.
+
+**How to apply:** Treat Think hydration/reconnect as its own approved task after the SpaceDO tree gate. Do not fold a Think fix into an authoritative restore correction or assume a production rollout is safe from this isolated result.
+
 The current upstream restore path reports SpaceDO deployment before refreshing the ThinkAgent file projection. Its existing file-manager Git synchronization reads legacy agent-local Git, not SpaceDO, so it is not a safe refresh operation. An isolated attempt to return a SpaceDO snapshot with rollback remained unsafe because consistency-sensitive reads and an alternate HTTP deploy path bypassed the workspace mutation boundary.
 
 **Why:** Repeated isolated patch reviews found that a correct restore result alone cannot guarantee a coherent observed tree when other SpaceDO operations can interleave with checkout/reconciliation, and deploy paths do not share the same materialization behavior.

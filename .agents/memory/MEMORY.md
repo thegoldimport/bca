@@ -18,5 +18,6 @@
 - [Migration snapshot compatibility](migration-snapshot-compatibility.md) — recovery guidance must work from older inventory-only snapshots, not assume newer derived fields exist.
 - [Cloudflare control-plane migration](cloudflare-control-plane-migration.md) — move only the control plane; preserve VibeSDK and publishing, with a hard post-canary Cloudflare-only rollback boundary.
 - [Isolated VibeSDK bootstrap](isolated-vibesdk-bootstrap.md) — Worker bundles omit D1/templates, and platform publish still demands an account-level Cloudflare token.
-- [Production VibeSDK transport gate](production-vibesdk-transport-gate.md) — transport was already deployed; distinguish prior stale Think observations from independent proof of restored SpaceDO trees.
+- [Production VibeSDK transport gate](production-vibesdk-transport-gate.md) — isolated exact restore proves Think files can stay stale; production source remains unknown.
+- [Isolated VibeSDK bundle identity](isolated-vibesdk-bundle-identity.md) — a test checkout can silently bundle the untouched workspace package through shared node_modules; inspect dry-run output.
 - [Cloudflare container sizing](cloudflare-container-sizing.md) — container validation requires enough memory per vCPU and caps disk relative to memory.
