@@ -20,3 +20,9 @@ The current upstream restore path reports SpaceDO deployment before refreshing t
 **Why:** Repeated isolated patch reviews found that a correct restore result alone cannot guarantee a coherent observed tree when other SpaceDO operations can interleave with checkout/reconciliation, and deploy paths do not share the same materialization behavior.
 
 **How to apply:** Before deploying a restore fix, unify coherent workspace reads and writes under the same SpaceDO serialization boundary and bring HTTP/RPC deploy semantics into alignment. Test the real SpaceDO method composition, both restore entry points, reconnect, and edit-after-restore in isolation; do not treat unit-only hydration tests as acceptance.
+
+Cancellation needs separate attention: ThinkAgent chat runs in a child Durable Object while the host's generation ownership is in memory. A host reset/reconnect can lose the guard while a child turn continues. A restore is not safe merely because the host reports idle; the child turn needs an effective cancel/fence before the restored tree is declared current.
+
+**Why:** Isolated source review found that host cancellation does not propagate an abort to the child ThinkAgent turn, and a failed restore commit can otherwise be followed by a deployed older branch while the host advertises restored files.
+
+**How to apply:** Treat child-turn ownership and fail-closed commit/deploy verification as prerequisites for the restore canary. Do not use a generatedFilesMap refresh alone as proof of workspace consistency.

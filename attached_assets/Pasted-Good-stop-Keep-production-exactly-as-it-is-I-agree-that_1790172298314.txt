@@ -1,0 +1,354 @@
+Good stop. Keep production exactly as it is.
+
+I agree that this is now a VibeSDK consistency-boundary issue rather than a BuildCustom adapter issue.
+
+Proceed with an ISOLATED VIBESDK CONSISTENCY task only.
+
+Do NOT deploy anything to the protected production VibeSDK Worker.
+
+Do NOT enable production runtime mutations.
+
+Do NOT attach app.buildcustom.ai.
+
+The objective is to establish and prove one coherent VibeSDK workspace consistency boundary using the existing SpaceDO lifecycle, without adding a BuildCustom orchestration layer.
+
+==================================================
+ARCHITECTURAL INVARIANT
+
+We now know:
+
+SpaceDO owns the authoritative workspace.
+
+Therefore after ANY consistency-sensitive workspace mutation, especially restore:
+
+authoritative SpaceDO tree
+=
+ThinkAgent-visible file state
+=
+BuildCustom file reads
+=
+preview/deploy materialization
+=
+next coding-agent edit input
+
+That invariant must hold before the operation is considered complete.
+
+Do not solve only the stale generatedFilesMap symptom.
+
+==================================================
+FIRST DEFINE THE ACTUAL CONSISTENCY BOUNDARY
+
+Trace every operation that can READ or MUTATE the authoritative workspace.
+
+At minimum inspect:
+
+generation writes
+conversational edits
+direct file writes if supported
+SpaceDO file reads
+ThinkAgent file hydration
+generatedFilesMap
+revision creation
+turn restore
+release restore
+preview materialization
+HTTP deploy path
+RPC deploy path
+reconnect/hydration
+cancellation
+
+Produce a concise internal map showing:
+
+operation
+→ entry point
+→ reads from
+→ writes to
+→ synchronization mechanism
+→ materialization path
+
+Identify every path capable of bypassing the authoritative SpaceDO mutation/read boundary.
+
+==================================================
+SPACE DO SHOULD REMAIN THE AUTHORITY
+
+Do not introduce another source of truth.
+
+Do NOT add:
+
+BuildCustom workspace storage
+BuildCustom file synchronization
+another Durable Object
+Workflow orchestration
+operation ledger
+mutation ledger
+duplicate Git repository
+second revision system
+external locking service
+
+If serialization is required, prefer SpaceDO's existing Durable Object execution/lifecycle semantics.
+
+Determine the smallest change that makes SpaceDO itself provide the consistency guarantees required by VibeSDK.
+
+==================================================
+ADDRESS THE FOUR FAILED-REVIEW ISSUES EXPLICITLY
+
+The next candidate must explicitly resolve:
+
+RPC response fields disagreeing with actual result.
+Commit/restore errors potentially being hidden.
+Persistence errors potentially being suppressed.
+Restore serialization not covering concurrent writes and consistency-sensitive reads.
+
+Do not rely on optimistic success responses.
+
+If persistence, commit, restore, hydration or deployment fails, the caller must receive an actual failure.
+
+==================================================
+ALIGN HTTP AND RPC DEPLOY
+
+Investigate why HTTP and RPC deploy paths have different workspace materialization semantics.
+
+There should not be two subtly different interpretations of "deploy this workspace."
+
+Determine whether both can safely use one shared authoritative SpaceDO materialization primitive.
+
+Prefer:
+
+HTTP deploy ─┐
+             ├→ shared authoritative SpaceDO materialization/deploy path
+RPC deploy ──┘
+
+rather than maintaining two independent workspace snapshots.
+
+Do not remove an existing public/API path merely for convenience if it is legitimately used elsewhere.
+
+==================================================
+READ CONSISTENCY MATTERS TOO
+
+The previous candidate protected restore mutation but allowed consistency-sensitive reads to bypass the lock/boundary.
+
+Fixing writes alone is insufficient.
+
+During a restore, callers must not be able to observe an intermediate workspace and treat it as authoritative.
+
+Determine how this should work using Durable Object semantics.
+
+The desired external behavior is effectively:
+
+BEFORE RESTORE
+everyone sees revision B
+
+RESTORE A IN PROGRESS
+no caller can observe a half-A / half-B authoritative state
+
+RESTORE COMPLETE
+everyone sees revision A
+
+The implementation does not need to literally use a lock if SpaceDO/DO serialization provides a cleaner native mechanism.
+
+==================================================
+THINKAGENT GENERATEDFILESMAP
+
+We have established that generatedFilesMap is stale after SpaceDO restore.
+
+Determine whether it should:
+
+A. be synchronously rehydrated from SpaceDO after authoritative mutation,
+
+B. become a derived/cache-only representation that can be invalidated,
+
+C. stop being used for authoritative BuildCustom file reads,
+
+or
+
+D. follow another existing VibeSDK lifecycle already intended by the architecture.
+
+Choose based on the current VibeSDK design, not on what is easiest for BuildCustom.
+
+BuildCustom should never mistake stale ThinkAgent cache/state for the authoritative workspace.
+
+==================================================
+ERROR SEMANTICS
+
+Restore must not report success merely because one stage succeeded.
+
+Define what constitutes successful completion.
+
+Conceptually it should require all required authoritative stages to succeed, such as:
+
+restore requested
+→ authoritative tree restored
+→ state persisted
+→ derived state refreshed/invalidated
+→ requested revision confirmed
+→ materialization/preview completed where required
+→ authoritative result returned
+
+If a required stage fails, propagate the failure.
+
+Do not swallow commit/persistence/deployment errors.
+
+==================================================
+CONCURRENCY TESTS
+
+Unit hydration tests are not sufficient.
+
+Add isolated integration tests for races such as:
+
+restore + file read
+restore + edit
+restore + deploy
+restore + reconnect
+restore + cancellation
+
+We need to prove callers cannot receive or operate on an intermediate/stale authoritative tree.
+
+==================================================
+DETERMINISTIC END-TO-END TEST
+
+On a disposable isolated project:
+
+Create Revision A with unmistakable state:
+
+RESTORE_TEST_A
+
+Create Revision B:
+
+RESTORE_TEST_B
+
+Capture hashes for both.
+
+Restore A from B.
+
+Then verify:
+
+restore response identifies A
+SpaceDO authoritative hashes equal A
+authenticated file reads equal A
+ThinkAgent-visible state equals A
+preview equals A
+HTTP deployment materializes A
+RPC deployment materializes A
+reconnect still returns A
+
+Then issue an edit that is deliberately dependent on A.
+
+Verify the next coding-agent operation demonstrably received A rather than B.
+
+Verify resulting Revision C is derived from A.
+
+==================================================
+TEST BOTH RESTORE FAMILIES
+
+Verify:
+
+turn/revision restore
+release restore
+
+Both must converge on the same authoritative workspace lifecycle.
+
+==================================================
+CANCELLATION
+
+Rerun cancellation against the corrected consistency model.
+
+Verify cancellation cannot leave:
+
+SpaceDO
+ThinkAgent state
+preview state
+revision state
+
+disagreeing about the current authoritative workspace.
+
+==================================================
+DO NOT PATCH PRODUCTION YET
+
+You may modify an isolated VibeSDK checkout/runtime and disposable isolated Cloudflare resources as necessary to prove the architecture.
+
+You may NOT deploy the candidate to the protected production VibeSDK Worker during this task.
+
+The protected Worker must remain:
+
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+The production safety control plane must remain:
+
+a7e0b81b-c017-4fab-a753-380ccf5b9332
+
+with:
+
+RUNTIME_OPERATIONS_ENABLED=false
+
+==================================================
+ARCHITECTURE REVIEW BEFORE PRODUCTION
+
+Do not stop at passing tests.
+
+Once an isolated candidate passes, perform another architecture review specifically asking:
+
+Is SpaceDO still the sole authoritative workspace?
+Can any read bypass consistency guarantees?
+Can any write bypass them?
+Can HTTP deploy bypass them?
+Can RPC deploy bypass them?
+Can errors be suppressed?
+Can restore report success prematurely?
+Can a concurrent edit race restore?
+Can reconnect resurrect stale ThinkAgent state?
+Does the fix require a new orchestration layer?
+
+The answer to the last question should preferably remain NO.
+
+==================================================
+STOP FOR OWNER APPROVAL
+
+If and only if the isolated implementation and architecture review pass, STOP BEFORE modifying the protected VibeSDK Worker.
+
+Give me:
+
+root cause,
+exact consistency model,
+all workspace read paths discovered,
+all workspace mutation paths discovered,
+bypasses found,
+exact source changes proposed,
+how ThinkAgent state is synchronized/invalidated,
+how HTTP/RPC deploy semantics were unified,
+how persistence/commit errors propagate,
+concurrency test results,
+deterministic A → B → restore A → edit → C results,
+turn restore results,
+release restore results,
+reconnect results,
+cancellation results,
+isolated architecture-review result,
+whether any DO migration is required,
+whether any binding/resource change is required,
+exact protected-Worker deployment procedure,
+exact rollback procedure,
+expected impact on existing workspaces/apps,
+production Worker version that would change.
+
+Do NOT deploy the protected VibeSDK Worker until I explicitly approve it.
+
+==================================================
+NORTH STAR
+
+This should remain a VibeSDK workspace-consistency correction, not new BuildCustom infrastructure.
+
+The invariant we need to prove is:
+
+SpaceDO authoritative workspace
+=
+ThinkAgent-visible workspace
+=
+BuildCustom file reads
+=
+preview/deploy materialization
+=
+next coding-agent edit context
+
+after restore and under concurrent operations.
+
+Solve that using the smallest coherent change inside VibeSDK's existing lifecycle.
