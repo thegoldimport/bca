@@ -1,0 +1,541 @@
+BASELINE A has now been proven through the normal VibeSDK lifecycle.
+
+We are approved to perform the NEXT SEPARATE TEST ONLY:
+
+A
+→ real ThinkAgent edit
+→ B
+→ normal VibeSDK restore to A
+→ verify authoritative post-restore state
+→ compare ThinkAgent/session state
+→ reconnect
+→ optionally perform one diagnostic edit if the restore gate passes
+
+This remains a REPRODUCTION task.
+
+DO NOT WRITE A FIX.
+
+==================================================
+1. KEEP PRODUCTION FROZEN
+==================================================
+
+Do not modify:
+
+Protected VibeSDK Worker:
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+Production control plane:
+a7e0b81b-c017-4fab-a753-380ccf5b9332
+
+Keep:
+
+RUNTIME_OPERATIONS_ENABLED=false
+
+Do not attach:
+
+app.buildcustom.ai
+
+Do not modify production resources, credentials, agents, workspaces,
+domains, Workers, DO namespaces, D1, KV, R2, dispatch namespaces,
+containers, or customer applications.
+
+==================================================
+2. USE THE SAME PROVEN BASELINE
+==================================================
+
+Candidate:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Exact production source revision remains UNKNOWN.
+
+Do not change:
+
+- VibeSDK source
+- dependencies
+- lockfiles
+- ThinkAgent
+- SpaceDO
+- rollbackToCommit
+- generatedFilesMap
+- model routing
+- restore behavior
+
+Use the same disposable configuration pattern that successfully produced
+BASELINE A.
+
+Use:
+
+VIBESDK_TEST_AI_GATEWAY_TOKEN
+
+only as the disposable Worker's:
+
+CLOUDFLARE_AI_GATEWAY_TOKEN
+
+Never expose its value.
+
+Use the same safe provider-authentication approach from the successful
+baseline.
+
+==================================================
+3. RECREATE A THROUGH THE REAL THINKAGENT
+==================================================
+
+Because the previous disposable environment was deleted, generate a new
+A through the normal lifecycle.
+
+Create a real ThinkAgent through:
+
+registration
+→ agent creation
+→ ticketed WebSocket
+→ normal ThinkAgent generation
+
+Ask it to create:
+
+index.html
+
+containing exactly:
+
+RESTORE_REAL_A
+
+Also create:
+
+a-only.txt
+
+containing exactly:
+
+A_ONLY
+
+Verify through the normal authenticated SDK/file-read path:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+
+Reconnect using the same agent ID and verify both again.
+
+Capture every normal authoritative identifier available:
+
+- agent ID
+- workspace/project identifier
+- file hashes
+- revision identifier
+- commit SHA if exposed
+- SpaceDO commit evidence
+
+Call this:
+
+REVISION A
+
+HARD GATE:
+
+Do not proceed unless A is genuinely generated, persisted, and survives
+a fresh reconnect.
+
+==================================================
+4. CREATE B THROUGH A REAL THINKAGENT EDIT
+==================================================
+
+Using the SAME agent/workspace and a REAL conversational ThinkAgent edit,
+instruct the agent:
+
+Change index.html so its entire content is exactly:
+
+RESTORE_REAL_B
+
+Delete:
+
+a-only.txt
+
+Create:
+
+b-only.txt
+
+containing exactly:
+
+B_ONLY
+
+Do not manually inject these files.
+
+The change must happen through the normal ThinkAgent editing lifecycle.
+
+Verify through normal authenticated reads:
+
+index.html = RESTORE_REAL_B
+a-only.txt = absent
+b-only.txt = B_ONLY
+
+Reconnect and verify B again.
+
+Capture all normal revision/commit/hash evidence available.
+
+Call this:
+
+REVISION B
+
+HARD GATE:
+
+Do not proceed unless B is genuinely persisted and distinguishable from A.
+
+==================================================
+5. PROVE THE A AND B REVISION IDENTITIES
+==================================================
+
+Before restoring anything, establish the strongest available evidence
+that the normal revision/history system contains distinct A and B states.
+
+At minimum we need a normal revision identifier/commit reference for A
+that the actual restore operation accepts.
+
+Where possible record:
+
+A:
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+B:
+index.html = RESTORE_REAL_B
+a-only.txt = absent
+b-only.txt = B_ONLY
+
+Do not create synthetic Git state.
+
+Do not manually modify SpaceDO.
+
+If the normal lifecycle does not provide enough information to target A
+through the real restore operation:
+
+STOP.
+
+==================================================
+6. RESTORE B → A USING THE NORMAL VIBESDK PATH
+==================================================
+
+Invoke restore using the same normal restore operation that BuildCustom
+would call.
+
+Target REVISION A.
+
+Do not:
+
+- call a custom test rollback implementation
+- manually checkout Git
+- manually inject A
+- manually mutate SpaceDO
+- modify ThinkAgent state
+
+Capture the complete sanitized restore result.
+
+Record:
+
+- requested revision
+- returned revision/commit
+- restore status
+- deployment/preview result if normal restore performs one
+- errors/warnings
+
+==================================================
+7. FIRST QUESTION: DID THE AUTHORITATIVE WORKSPACE RESTORE?
+==================================================
+
+Before drawing ANY conclusion about ThinkAgent stale state, establish the
+strongest independent post-restore workspace evidence available.
+
+Expected A:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+Use normal SpaceDO/workspace/revision mechanisms where available.
+
+Do NOT use ThinkAgent generatedFilesMap as the authoritative proof for
+this gate.
+
+Use logs, commit/revision information, SpaceDO operations, deployment
+state, or other normal authoritative evidence available from VibeSDK.
+
+CLASSIFY:
+
+SPACEDO_RESTORED_TO_A = YES / NO / UNPROVEN
+
+If NO:
+
+STOP the ThinkAgent stale-state test.
+
+Classify the primary reproduction as:
+
+SPACEDO RESTORE DEFECT
+
+Do not write a fix.
+
+If UNPROVEN:
+
+STOP.
+
+Do not claim a ThinkAgent stale-state defect.
+
+If YES:
+
+continue.
+
+==================================================
+8. SECOND QUESTION: WHAT DOES THE EXISTING THINKAGENT SEE?
+==================================================
+
+ONLY if:
+
+SPACEDO_RESTORED_TO_A = YES
+
+read files through the existing ThinkAgent/session-facing normal
+BuildCustom/VibeSDK path.
+
+Expected:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+Record what it actually returns.
+
+If SpaceDO=A but the existing ThinkAgent returns B:
+
+THIS REPRODUCES THE CENTRAL STALE-STATE DEFECT.
+
+Specifically record whether:
+
+generatedFilesMap/session-visible state = B
+
+while:
+
+authoritative SpaceDO/workspace = A
+
+Do not fix it.
+
+==================================================
+9. THIRD QUESTION: WHAT HAPPENS AFTER A FRESH RECONNECT?
+==================================================
+
+Close the existing connection normally.
+
+Obtain a fresh ticket.
+
+Reconnect to the SAME agent ID.
+
+Read the files again.
+
+Classify:
+
+RECONNECT = A
+
+or
+
+RECONNECT = B
+
+or
+
+RECONNECT = OTHER/ERROR
+
+This tells us whether reconnect correctly rehydrates authoritative
+workspace state or preserves/resurrects stale agent-local state.
+
+==================================================
+10. OPTIONAL NEXT-EDIT DIAGNOSTIC
+==================================================
+
+Perform this ONLY if:
+
+- A restore was conclusively successful at the authoritative workspace
+  layer
+- the environment remains healthy
+- a normal conversational edit is safe
+
+Ask the real ThinkAgent:
+
+Append exactly:
+
+EDIT_AFTER_RESTORE
+
+to the existing index.html without replacing its existing content.
+
+Then inspect the result.
+
+If it becomes:
+
+RESTORE_REAL_A
+EDIT_AFTER_RESTORE
+
+the edit started from A.
+
+If it becomes:
+
+RESTORE_REAL_B
+EDIT_AFTER_RESTORE
+
+the edit started from stale B.
+
+Capture the resulting workspace/session state.
+
+Do not perform additional edits.
+
+==================================================
+11. DO NOT EXPAND SCOPE
+==================================================
+
+Do NOT investigate yet:
+
+- cancellation fencing
+- restore/edit races
+- restore/read races
+- HTTP/RPC deployment parity
+- forced commit failures
+- persistence failure injection
+- broader concurrency
+
+We already have local evidence for some of those.
+
+This task answers ONE architectural question first:
+
+Does normal VibeSDK produce:
+
+AUTHORITATIVE WORKSPACE = A
+
+while
+
+THINKAGENT = B
+
+after a real B → restore A?
+
+==================================================
+12. CLASSIFICATION
+==================================================
+
+At the end classify the result as exactly one of:
+
+A. THINKAGENT STALE-STATE DEFECT REPRODUCED
+
+Meaning:
+
+authoritative workspace conclusively restored to A,
+but ThinkAgent/session state remained B.
+
+B. SPACEDO RESTORE DEFECT REPRODUCED
+
+Meaning:
+
+the authoritative workspace itself failed to restore to A.
+
+C. BOTH
+
+Only if there is independent evidence for both distinct failures.
+
+D. RESTORE SUCCESSFUL / STALE STATE NOT REPRODUCED
+
+Meaning:
+
+workspace=A and ThinkAgent/session/reconnect=A.
+
+E. INCONCLUSIVE
+
+Meaning:
+
+the authoritative post-restore workspace state could not be independently
+established.
+
+Do not force the result into one of the defect categories if evidence is
+insufficient.
+
+==================================================
+13. CLEANUP
+==================================================
+
+After collecting all evidence:
+
+Delete disposable runtime resources created solely for this test.
+
+Do NOT revoke:
+
+VIBESDK_TEST_AI_GATEWAY_TOKEN
+
+yet.
+
+We may need it for the eventual fixed-candidate canary.
+
+Do not touch production resources.
+
+==================================================
+14. REPORT
+==================================================
+
+Report:
+
+1. Candidate commit.
+
+2. Disposable resources created.
+
+3. Confirmation production remained untouched.
+
+4. A:
+   - file contents
+   - hashes
+   - revision/commit evidence
+
+5. B:
+   - file contents
+   - hashes
+   - revision/commit evidence
+
+6. Restore target.
+
+7. Restore API/result.
+
+8. Authoritative workspace state immediately after restore.
+
+9. SPACEDO_RESTORED_TO_A = YES / NO / UNPROVEN.
+
+10. Existing ThinkAgent/session state after restore.
+
+11. Fresh reconnect state.
+
+12. Next-edit result if performed.
+
+13. Exact classification from Section 12.
+
+14. Whether the original Task #57 behavior has now been independently
+reproduced through the normal VibeSDK lifecycle.
+
+15. Whether there is now sufficient executable evidence to begin
+designing the smallest VibeSDK-native fix.
+
+16. Cleanup performed.
+
+STOP after the report.
+
+Do not implement a fix.
+
+Do not deploy to production.
+
+Do not enable runtime mutations.
+
+Do not attach app.buildcustom.ai.
+
+==================================================
+NORTH STAR
+==================================================
+
+We finally have a trustworthy normal VibeSDK test environment.
+
+Keep this test equally boring and real:
+
+real A
+→ real ThinkAgent edit
+→ real B
+→ real VibeSDK restore A
+→ prove authoritative state
+→ compare ThinkAgent
+→ reconnect
+
+No synthetic state.
+No custom restore harness.
+No patch.

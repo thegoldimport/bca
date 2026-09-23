@@ -114,6 +114,29 @@ The disposable gateway's five model log entries all report **HTTP 200**, `succes
 
 After recording the evidence, the disposable Worker, its six DO namespaces, D1 database, KV namespace, R2 bucket, dispatch namespace, gateway, container application, and uniquely tagged container image were deleted. Read-only follow-up checks found no remaining test Worker, DO namespace, database, KV namespace, bucket, dispatch namespace, gateway, or container application. This **removes the live A workspace**; any subsequent isolated A → B test must generate A again through the normal lifecycle. The owner-supplied temporary Run token was **not revoked or modified**. No protected VibeSDK Worker, production control plane, production data resource, runtime-mutation gate, or `app.buildcustom.ai` attachment was changed.
 
+## Authorized normal A → B → restore A reproduction
+
+The owner separately approved a reproduction-only A/B/restore test. The same pinned candidate ran unchanged from `worker/index.ts` on a newly isolated `vibesdk-restore-ab-20260923` Worker. Fresh D1 (with canonical migrations), KV, R2, dispatch, authenticated AI Gateway, container application, and six DO namespaces were test-only. Only the temporary gateway Run token, existing Google provider credential, and a newly generated test JWT secret were installed in the test Worker; the protected Cloudflare management token was not installed there.
+
+Normal CSRF-protected registration and API-key exchange created test agent `19d3f475-d777-425d-91a9-7203d13a77e7`, then the ticketed WebSocket drove a real ThinkAgent generation and one conversational edit. Both were read through the normal authenticated SDK, survived a fresh ticketed reconnect, and were **independently verified** from SpaceDO's committed Git object store through the owner's normal authenticated Git-over-HTTP endpoint:
+
+| State | Commit SHA | `index.html` | `a-only.txt` | `b-only.txt` |
+| --- | --- | --- | --- | --- |
+| A | `3343ac2a5063bb50a31c67b2822c9fcba745f08b` | `RESTORE_REAL_A` (`30e7fb9a7fd2e70f6305ca6772928fc2ecf80553ad7fe7fb133628392af0b78d`) | `A_ONLY` (`c33d995981a17948c7a52eb8bda3e14714ceba0a533fc3c7e9575087f1355835`) | absent |
+| B | `c3fbd1226bb3552b76ffe2fb6a16086d15a66929` | `RESTORE_REAL_B` (`ba9a8434004a4e49563d3bc285f05a14981e980349ecd9b7b4a59d040a168cc4`) | absent | `B_ONLY` (`9142aee8d2f579124f882900898153a905ec931349466d58f3d14f57f0cdc2b7`) |
+
+After verifying A remained in history and B was current, the same owner-authenticated socket sent the exact normal BuildCustom-style request `{ "type": "rollback_to_commit", "commitHash": "3343ac2a5063bb50a31c67b2822c9fcba745f08b" }`. The socket returned **`deployment_failed: Build failed`**, with no successful deployment/preview result. A fresh authenticated Git fetch then observed forward commit `d2f97c061000a46d22d177beb291be2f7286f814`, parent B, message `rollback: restore 3343ac2a`. Its committed tree was **mixed**, not A:
+
+| Authoritative post-restore Git tree | Content |
+| --- | --- |
+| `index.html` | **`RESTORE_REAL_B`** (still B; SHA `ba9a8434004a4e49563d3bc285f05a14981e980349ecd9b7b4a59d040a168cc4`) |
+| `a-only.txt` | `A_ONLY` (restored from A) |
+| `b-only.txt` | absent (removed from B) |
+
+**SPACEDO_RESTORED_TO_A = NO. Classification: SPACEDO RESTORE DEFECT REPRODUCED** in the normal unmodified candidate lifecycle. The commit tree provides independent authoritative evidence beyond the ThinkAgent file projection. The deployment failure is a separate observed result; its root cause was not investigated here. Because the authoritative restore gate failed, **no post-restore ThinkAgent/session comparison, fresh reconnect, or next edit was performed**. The original SpaceDO=A / ThinkAgent=B stale-state behavior was **not** independently reproduced in this test, and no ThinkAgent-hydration conclusion is warranted. This is sufficient executable evidence to start *designing* a narrowly scoped SpaceDO restore correction, not to implement or deploy one; production-source identity and stronger failure/concurrency validation remain separate gates.
+
+After capturing the revision evidence, the isolated Worker, its six DO namespaces, D1 database, KV namespace, R2 bucket, dispatch namespace, authenticated AI Gateway, container application, and test-tagged container image were deleted. Read-only API checks found no remaining test Worker, DO namespace, database, KV namespace, bucket, dispatch namespace, gateway, or container application; the image registry no longer listed the test tag. The temporary Run token was not revoked. No production Worker, control plane, credential, resource, agent, domain, runtime-mutation gate, or `app.buildcustom.ai` attachment was changed.
+
 ## Operation map
 
 | Operation | Entry point | Reads from | Writes to | Current synchronization | Materialization |

@@ -9,11 +9,11 @@ The active BuildCustom VibeSDK runtime uses a historical staging-style resource 
 
 **How to apply:** Do not deploy or replace the production runtime merely to expose transport. Preserve its Worker version, bindings, Durable Object namespaces, and existing API keys. Add or revoke only the dedicated control-plane API-key record and secret when transport access changes.
 
-VibeSDK forward restore currently updates and redeploys the target tree in `SpaceDO` but does not refresh `ThinkAgent.state.generatedFilesMap`; reconnecting through the adapter therefore returns stale files.
+An earlier protected-runtime canary appeared to restore a preview while subsequent authenticated reads from `ThinkAgent.state.generatedFilesMap` stayed stale. That result alone does **not** establish the exact authoritative SpaceDO Git tree after restore. A later isolated normal lifecycle test of the pinned public candidate produced a mixed forward-restore commit: one file remained at B while another returned to A, and deployment failed.
 
-**Why:** The restore canary returned the requested commit and a working restored preview, while subsequent authenticated file reads still showed the pre-restore edited files. A post-rollback `get_conversation_state` produced no fresh state frame.
+**Why:** The earlier canary returned the requested commit and a working preview, while authenticated file reads still showed the pre-restore edited files. A post-rollback `get_conversation_state` produced no fresh state frame. The later real A/B/restore test independently fetched the candidate's committed Git tree and found it was not A, so the Think stale-state defect could not be classified in that test.
 
-**How to apply:** Keep runtime mutations gated off until restore updates ThinkAgent hydration or exposes a documented authoritative refresh operation. Require restored file hashes and a subsequent edit from the restored state before cutover.
+**How to apply:** Keep runtime mutations gated off. First prove every file in the authoritative post-restore commit matches A, including absences and deletions; a forward commit named "rollback" or a restored preview is not enough. Only then compare Think/session state, reconnect, and a subsequent edit. Do not generalize isolated candidate behavior to the protected runtime whose exact source revision is unknown.
 
 The current upstream restore path reports SpaceDO deployment before refreshing the ThinkAgent file projection. Its existing file-manager Git synchronization reads legacy agent-local Git, not SpaceDO, so it is not a safe refresh operation. An isolated attempt to return a SpaceDO snapshot with rollback remained unsafe because consistency-sensitive reads and an alternate HTTP deploy path bypassed the workspace mutation boundary.
 
@@ -37,7 +37,7 @@ An unknown production source commit is a hard gate for protected-Worker deployme
 
 **Why:** The owner explicitly distinguished executable candidate-baseline work from later production compatibility proof. The public candidate can run its pinned Bun/Node unit/type/build checks even while the production source-to-bundle link remains unknown.
 
-**How to apply:** Reproduce the central Think/SpaceDO stale-state defect with an executable test against the unmodified candidate before implementing another fix. Treat pinned Vitest/Miniflare's missing `cloudflare:workers` named `exports` binding as a test-harness gap, not evidence that the defect is fixed or absent.
+**How to apply:** Use executable tests against the unmodified candidate to establish whether SpaceDO itself restores before investigating a Think/SpaceDO stale-state defect. Treat pinned Vitest/Miniflare's missing `cloudflare:workers` named `exports` binding as a test-harness gap, not evidence that a defect is fixed or absent.
 
 A disposable Cloudflare Worker with only host/Think/Space Durable Object bindings can start the real classes, but a test adapter that skips normal initialization and injects the host file map is not a full ThinkAgent lifecycle. Never label a B/B result after restore as proof of stale Think hydration.
 
