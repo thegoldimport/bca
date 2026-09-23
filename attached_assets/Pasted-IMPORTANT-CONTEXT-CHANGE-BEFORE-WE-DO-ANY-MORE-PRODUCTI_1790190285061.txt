@@ -1,0 +1,426 @@
+IMPORTANT CONTEXT CHANGE BEFORE WE DO ANY MORE PRODUCTION-COMPATIBILITY WORK:
+
+BuildCustom has NOT been meaningfully published to production in a long time.
+
+Almost everything we have been actively building and updating is in the CURRENT REPLIT DEVELOPMENT ENVIRONMENT.
+
+There is not really a live production BuildCustom application with meaningful customer traffic that we are trying to surgically preserve.
+
+The current development version is effectively the product we are trying to move off Replit and make production.
+
+This changes the migration goal.
+
+STOP treating the old protected VibeSDK Worker as if its exact historical source code must be preserved at all costs.
+
+STOP source archaeology for now.
+
+DO NOT deploy or change anything yet.
+
+We need to reassess what actually needs to be preserved before continuing.
+
+==================================================
+THE ACTUAL GOAL
+==================================================
+
+Our real goal is:
+
+CURRENT BUILDCUSTOM DEVELOPMENT VERSION
+→ move completely off Replit
+→ Cloudflare-native BuildCustom
+→ app.buildcustom.ai
+→ Replit can eventually be deleted with ZERO effect on BuildCustom
+
+The current Replit development environment contains the newest BuildCustom work.
+
+The old deployed Cloudflare/VibeSDK Worker may simply be an older deployment from during development.
+
+We do NOT need to preserve obsolete deployed code merely because it exists.
+
+What we DO need to preserve is any current data, projects, agents, workspaces, infrastructure, or configuration that actually matters.
+
+==================================================
+1. IDENTIFY THE CURRENT AUTHORITATIVE CODE
+==================================================
+
+Determine what currently represents the newest/authoritative source for:
+
+- BuildCustom frontend
+- BuildCustom backend/control plane
+- BuildCustom dashboard
+- BuildCustom project APIs
+- BuildCustom ↔ VibeSDK integration
+- VibeSDK source currently being used/developed
+- the verified SpaceDO restore fix
+- the verified ThinkAgent synchronization fix
+
+Identify exactly which repository/checkouts should become the canonical source going forward.
+
+Do not assume the old protected Worker source is canonical.
+
+==================================================
+2. IDENTIFY THE CURRENT AUTHORITATIVE DATA
+==================================================
+
+Determine what data is currently authoritative for:
+
+- users
+- projects
+- project ownership
+- project → VibeSDK agent mappings
+- releases
+- domains
+- deployment metadata
+- other BuildCustom control-plane metadata
+
+We previously established that the Replit DEVELOPMENT PostgreSQL database appeared to be authoritative and imported that data into the new Cloudflare D1 control-plane database.
+
+Verify whether that remains correct.
+
+Compare enough metadata/counts/IDs to determine whether the Cloudflare D1 import currently represents the authoritative development data.
+
+Do NOT mutate either database.
+
+==================================================
+3. INVENTORY EXISTING VIBESDK STATE
+==================================================
+
+This is the most important question.
+
+Determine what currently exists inside the VibeSDK Durable Object/runtime infrastructure.
+
+Identify:
+
+- number of agents
+- number of workspaces
+- BuildCustom projects mapped to those agents
+- which agents/workspaces correspond to current development projects
+- which are disposable tests
+- whether any represent real external customer data
+- whether any contain work we actually need to preserve
+- whether any can safely be recreated
+
+Do not unnecessarily dump private project contents.
+
+We mainly need IDs, relationships, counts, age/activity, and preservation requirements.
+
+Classify existing VibeSDK state as:
+
+MUST PRESERVE
+SHOULD PRESERVE
+DISPOSABLE
+UNKNOWN
+
+==================================================
+4. REASSESS THE OLD PROTECTED WORKER
+==================================================
+
+Protected Worker:
+
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+We already know its exact historical source provenance is ambiguous.
+
+Given the new context, determine what we ACTUALLY need from this Worker.
+
+Separate:
+
+A. CODE that still matters
+
+B. PERSISTENT STATE that still matters
+
+C. CLOUDFLARE INFRASTRUCTURE that still matters
+
+D. obsolete development/deployment artifacts we do NOT need to preserve
+
+Do not assume its code must remain our production baseline.
+
+==================================================
+5. PRESERVE THE TWO VERIFIED FIXES
+==================================================
+
+We have now independently reproduced and fixed two actual VibeSDK defects:
+
+1. SpaceDO restore correctness
+2. ThinkAgent post-restore synchronization
+
+These fixes have passed:
+
+- local regressions
+- repository tests
+- SDK tests
+- typecheck
+- build
+- real isolated Cloudflare canaries
+- A → B → restore A
+- authoritative tree = A
+- existing session = A
+- fresh reconnect = A
+- next edit starts from A
+- valid preview A → B → restored A all HTTP 200
+
+FREEZE THESE FIXES.
+
+Do not modify them during this reassessment.
+
+They should be considered part of the candidate VibeSDK code we want going forward unless evidence shows otherwise.
+
+==================================================
+6. INVENTORY CLOUDFLARE INFRASTRUCTURE
+==================================================
+
+Determine which existing Cloudflare resources actually need to survive the migration.
+
+Review:
+
+- VibeSDK Worker
+- control-plane Worker
+- Durable Object namespaces
+- D1 databases
+- KV
+- R2
+- dispatch namespaces
+- Workers for Platforms
+- generated-app infrastructure
+- custom-domain gateway
+- domain routing
+- containers
+- AI Gateway
+- service bindings
+- secrets/configuration
+- preview infrastructure
+
+Classify each as:
+
+KEEP AS-IS
+KEEP BUT UPDATE CODE
+RECREATE
+DISPOSABLE
+UNKNOWN
+
+Be especially careful with resources containing persistent state.
+
+==================================================
+7. ANSWER THE CENTRAL QUESTION
+==================================================
+
+Given that BuildCustom is still effectively in development and there is
+not meaningful live production traffic to preserve:
+
+DO WE ACTUALLY NEED SOURCE-LEVEL COMPATIBILITY WITH THE OLD PROTECTED
+WORKER?
+
+Or can we instead make:
+
+CURRENT AUTHORITATIVE DEVELOPMENT CODE
++
+CURRENT AUTHORITATIVE DEVELOPMENT DATA
++
+THE TWO VERIFIED VIBESDK FIXES
++
+THE EXISTING CLOUDFLARE INFRASTRUCTURE/STATE WE ACTUALLY NEED
+
+become the NEW production baseline?
+
+If compatibility with the old Worker is still required, identify EXACTLY
+what persistent state creates that requirement.
+
+Do not answer based on caution alone.
+
+Base it on the actual state inventory.
+
+==================================================
+8. DETERMINE WHETHER WE CAN SIMPLIFY FURTHER
+==================================================
+
+If the existing VibeSDK agents/workspaces are merely our own development/test data and are safely disposable, explicitly say so.
+
+In that case evaluate whether the cleanest path is:
+
+current BuildCustom dev source
++
+verified VibeSDK candidate/fixes
++
+Cloudflare-native control plane
++
+fresh VibeSDK runtime resources where appropriate
+
+instead of attempting an in-place upgrade of old development runtime state.
+
+However:
+
+DO NOT recreate anything yet.
+
+We are only deciding architecture.
+
+==================================================
+9. REMEMBER THE APPROVED ARCHITECTURE
+==================================================
+
+Do not redesign BuildCustom.
+
+Our intended architecture remains:
+
+BUILDCUSTOM OWNS:
+
+- users
+- auth
+- sessions
+- projects
+- ownership
+- permissions
+- project → agent mapping
+- dashboard APIs
+- deployment/release metadata
+- domain metadata
+- future plans/billing/credits/usage
+
+CLOUDFLARE / VIBESDK OWNS:
+
+- ThinkAgent
+- SpaceDO
+- workspaces
+- files
+- execution
+- previews
+- revisions
+- restore
+- generated-app deployment
+- Workers for Platforms
+- generated-app runtime resources
+
+BuildCustom uses a narrow authenticated adapter/service-binding layer.
+
+Do NOT add:
+
+- custom publish broker
+- BuildCustom project Durable Object
+- operation ledger
+- duplicate workspace/file storage
+- competing revision system
+- second AI coding agent
+- unnecessary orchestration
+
+North star:
+
+Cloudflare's VibeSDK architecture
++
+the minimum BuildCustom SaaS/control-plane layer necessary to turn it
+into our product.
+
+==================================================
+10. TARGET DOMAINS
+==================================================
+
+Remember:
+
+buildcustom.ai
+= marketing site
+= leave alone for now
+
+app.buildcustom.ai
+= logged-in BuildCustom dashboard/builder
+= has NOT been our production Replit application
+= should become the first real production home of the Cloudflare-native
+  BuildCustom application
+
+Generated previews/apps remain on separate hostnames/infrastructure.
+
+Do NOT attach app.buildcustom.ai yet.
+
+==================================================
+11. REASSESS THE MIGRATION PLAN
+==================================================
+
+Based on the actual state you find, propose the SIMPLEST safe migration from:
+
+CURRENT REPLIT DEVELOPMENT
+
+to:
+
+CLOUDFLARE-NATIVE BUILDCUSTOM
+
+The end state must satisfy:
+
+1. BuildCustom frontend runs from Cloudflare.
+
+2. BuildCustom control plane runs from Cloudflare.
+
+3. Authoritative BuildCustom data lives in Cloudflare D1.
+
+4. Native BuildCustom coding uses VibeSDK/ThinkAgent.
+
+5. VibeSDK runs on Cloudflare.
+
+6. Generated apps/previews run through the intended Cloudflare/VibeSDK/WfP architecture.
+
+7. Required existing project/agent state is preserved OR intentionally recreated if disposable.
+
+8. No runtime dependency on Replit remains.
+
+9. Replit DATABASE_URL is no longer required.
+
+10. Replit secrets are no longer required.
+
+11. Replit hosting/processes are no longer required.
+
+12. Turning Replit completely OFF has zero effect.
+
+13. Eventually deleting the Replit project has zero effect.
+
+==================================================
+12. DO NOT CHANGE ANYTHING YET
+==================================================
+
+THIS TASK IS READ-ONLY.
+
+Do not:
+
+- deploy Workers
+- upload Worker versions
+- delete resources
+- recreate resources
+- modify databases
+- change bindings
+- change secrets
+- modify DO state
+- enable runtime operations
+- attach app.buildcustom.ai
+- revoke the temporary test token
+- modify the two verified VibeSDK fixes
+
+==================================================
+13. RETURN ONE CLEAR RECOMMENDATION
+==================================================
+
+Return:
+
+1. authoritative current BuildCustom source
+2. authoritative current VibeSDK source
+3. authoritative BuildCustom data source
+4. whether Cloudflare D1 currently contains that authoritative data
+5. existing VibeSDK agent/workspace inventory
+6. what VibeSDK state MUST be preserved
+7. what VibeSDK state is disposable
+8. Cloudflare infrastructure inventory
+9. what infrastructure should remain
+10. what old deployment artifacts can be ignored/replaced
+11. whether compatibility with protected Worker
+    8522e70c-27f4-4ef3-a46a-80edbd308490
+    is actually necessary
+12. WHY or WHY NOT
+13. the simplest revised migration architecture
+14. the simplest revised migration sequence
+15. remaining blockers before deployment
+16. exact NEXT TASK we should perform
+
+Most importantly:
+
+Optimize for getting the CURRENT BUILDCUSTOM DEVELOPMENT VERSION
+completely off Replit and onto Cloudflare safely.
+
+Do NOT optimize for preserving an obsolete deployment simply because it
+currently exists.
+
+STOP after the report.
+
+Do not make any changes.
