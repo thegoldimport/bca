@@ -1,0 +1,415 @@
+We accept the read-only compatibility review classification:
+
+PATH B
+
+The two VibeSDK fixes are FROZEN and verified.
+
+Do not modify them.
+
+The remaining blocker is SOURCE PROVENANCE for protected VibeSDK Worker:
+
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+The deployed bundle exhibits the same relevant defect mechanisms as our
+candidate, but the exact Git revision and dependency lock used to build
+it remain UNKNOWN.
+
+The next task is SOURCE ARCHAEOLOGY ONLY.
+
+GOAL:
+
+Identify, or reconstruct with strong deterministic evidence, the exact
+source + dependency state that produced the protected Worker.
+
+Do not deploy anything.
+Do not modify production.
+Do not modify the frozen fixes.
+
+==================================================
+1. START WITH THE DEPLOYMENT TIMELINE
+==================================================
+
+Determine the exact timestamp of deployment/version:
+
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+Record:
+
+- deployment timestamp
+- Wrangler upload metadata
+- script ETag/hash
+- compatibility date
+- compatibility flags
+- module inventory
+- binding inventory
+- deployment actor/source metadata if available
+
+Then establish a narrow source-search window around that timestamp.
+
+==================================================
+2. SEARCH REPLIT HISTORY
+==================================================
+
+Read-only inspect every realistic Replit source of the deployment.
+
+Look for:
+
+- shell history
+- Replit Agent history
+- deployment logs
+- console output
+- command history
+- Git reflog
+- detached HEADs
+- old branches
+- local commits
+- untracked build metadata
+- Wrangler logs
+- .wrangler directories
+- caches
+- temporary directories
+- previous VibeSDK checkouts
+- package-manager caches
+- deployment scripts
+- environment-specific config
+- archived worktrees
+- backup directories
+- Replit snapshots/checkpoints if accessible
+
+Search specifically around the protected Worker's deployment timestamp.
+
+Look for commands such as:
+
+wrangler deploy
+bunx wrangler deploy
+npx wrangler deploy
+
+and determine the working directory from which the upload occurred.
+
+Do not alter any historical state.
+
+==================================================
+3. SEARCH GIT OBJECTS, NOT JUST VISIBLE BRANCHES
+==================================================
+
+Inspect the relevant repositories for unreachable or detached Git
+objects.
+
+Use read-only Git inspection including where appropriate:
+
+- reflog
+- fsck
+- dangling commits
+- unreachable commits
+- tags
+- remote refs
+- deleted branches still represented locally
+- stash history
+- worktree metadata
+
+We care about the exact checkout that existed when the protected Worker
+was uploaded, even if that commit is no longer on a normal branch.
+
+==================================================
+4. SEARCH GITHUB HISTORY
+==================================================
+
+Read-only inspect the relevant GitHub repository history around the
+deployment timestamp.
+
+Check:
+
+- commits
+- branches
+- tags
+- merged PRs
+- deleted/remote refs if evidence remains
+- Actions runs
+- workflow artifacts if available
+- deployment logs
+- commit statuses
+- build artifacts
+- release artifacts
+
+Look for any workflow or manual deployment evidence connecting a Git SHA
+to the protected Worker deployment.
+
+==================================================
+5. RECOVER THE DEPENDENCY FINGERPRINT
+==================================================
+
+The Git SHA alone is not enough if dependency state could differ.
+
+From the protected bundle and deployment metadata, derive as much
+dependency/runtime fingerprinting as possible.
+
+Compare against historical candidate checkouts:
+
+- package.json
+- bun.lock
+- nested package manifests
+- Wrangler version
+- Agents package version
+- Cloudflare packages
+- Vite/build packages
+- SDK package versions
+- generated bundle signatures
+- module names
+- known dependency code fragments
+
+Determine whether candidate commits can be eliminated because their
+dependency fingerprints do not match the deployed artifact.
+
+==================================================
+6. USE THE PROTECTED BUNDLE AS A FINGERPRINT
+==================================================
+
+We have the actual deployed protected code available for read-only
+inspection.
+
+Use it aggressively as evidence.
+
+Identify distinctive source fragments from the protected bundle,
+especially in:
+
+- SpaceDO restore implementation
+- ThinkCodingBehavior
+- ThinkAgent
+- generatedFilesMap handling
+- rollback_to_commit
+- WebSocket protocol
+- API-key exchange
+- ws-ticket flow
+- deployment path
+
+Compare those against Git history.
+
+The goal is to narrow the possible source commits.
+
+Do not rely only on function names.
+
+Use meaningful implementation-level differences.
+
+==================================================
+7. AUTOMATE CANDIDATE COMPARISON IF PRACTICAL
+==================================================
+
+If there is a manageable set of historical commits around the deployment
+window, create a READ-ONLY comparison process.
+
+For each plausible commit:
+
+1. checkout in an isolated temporary worktree
+2. use its own lockfile
+3. use the historically appropriate toolchain where determinable
+4. build WITHOUT deploying
+5. compare the resulting artifact structurally to the protected artifact
+
+Compare:
+
+- module inventory
+- normalized bundle contents
+- identifiable code fragments
+- source-map structure if available
+- dependency signatures
+- bundle hash/ETag if deterministic
+
+Do not assume byte-identical output is always possible.
+
+If timestamps, nondeterministic IDs, or build metadata prevent exact
+hash equality, normalize only those proven nondeterministic portions and
+document the normalization.
+
+==================================================
+8. TRY FOR AN EXACT ARTIFACT MATCH
+==================================================
+
+Best possible result:
+
+A historical checkout + lockfile + toolchain reproduces the protected
+Worker artifact exactly.
+
+If achieved, classify:
+
+EXACT BUILD PROVENANCE RECONSTRUCTED
+
+Record:
+
+- Git SHA
+- lockfile hash
+- package manifest hashes
+- Node version
+- Bun/npm version
+- Wrangler version
+- build command
+- compatibility date
+- resulting artifact hash
+- protected artifact hash
+
+This would give us the production baseline we need.
+
+==================================================
+9. SECOND-BEST RESULT: UNIQUE STRUCTURAL MATCH
+==================================================
+
+If byte-identical reproduction is impossible for a proven reason, determine
+whether exactly ONE historical source/dependency state matches all
+observable protected-artifact characteristics.
+
+Only classify:
+
+UNIQUE STRUCTURAL SOURCE MATCH
+
+if competing commits can be affirmatively eliminated.
+
+Document exactly what prevents byte-identical reproduction.
+
+Do not call this exact provenance.
+
+==================================================
+10. IF MULTIPLE CANDIDATES REMAIN
+==================================================
+
+If more than one source/dependency state remains compatible with the
+protected artifact:
+
+classify:
+
+PROVENANCE STILL AMBIGUOUS
+
+List the remaining candidates and exactly how they differ.
+
+Then determine whether the FROZEN PATCH applies identically to every
+remaining candidate.
+
+This is important.
+
+If the same two source changes apply cleanly and semantically identically
+to every plausible source candidate, that may give us a safer next path
+even without knowing which candidate produced production.
+
+Do not make that safety decision yet.
+
+Just report the evidence.
+
+==================================================
+11. DO NOT MODIFY THE FROZEN PATCH
+==================================================
+
+The frozen patch contains only:
+
+- SpaceDO authoritative restore correction
+- ThinkAgent post-restore synchronization correction
+- their regression tests
+
+No dependency changes.
+No lockfile changes.
+No bindings.
+No migrations.
+
+Keep it frozen.
+
+Do not adapt it during source archaeology.
+
+==================================================
+12. DO NOT USE PRODUCTION AS A TEST ENVIRONMENT
+==================================================
+
+Do not:
+
+- deploy
+- upload a Worker version
+- invoke a production restore
+- mutate an agent
+- create a production test agent
+- change traffic
+- change secrets
+- change bindings
+- enable runtime operations
+- attach app.buildcustom.ai
+
+This task is forensic/read-only.
+
+==================================================
+13. REPORT THE SOURCE PROVENANCE RESULT
+==================================================
+
+Return one classification:
+
+A. EXACT BUILD PROVENANCE RECONSTRUCTED
+
+B. UNIQUE STRUCTURAL SOURCE MATCH
+
+C. PROVENANCE STILL AMBIGUOUS
+
+D. PROVENANCE UNRECOVERABLE WITH AVAILABLE EVIDENCE
+
+Then report:
+
+1. protected Worker deployment timestamp
+2. protected artifact fingerprint
+3. Replit deployment-history evidence
+4. Git/reflog evidence
+5. GitHub evidence
+6. dependency fingerprint evidence
+7. historical commits examined
+8. builds reproduced
+9. artifact comparisons
+10. strongest matching source revision(s)
+11. strongest matching lockfile/dependency state(s)
+12. eliminated candidates and why
+13. whether an exact artifact match was achieved
+14. if not, why not
+15. whether the frozen patch applies cleanly to every remaining plausible
+    candidate
+16. remaining unknowns
+
+==================================================
+14. RECOMMEND THE NEXT TECHNICAL PATH
+==================================================
+
+Do not perform it.
+
+Based on the evidence recommend ONE:
+
+PATH A1:
+Exact production baseline recovered. Apply frozen patch to that exact
+baseline and build an isolated production-parity candidate.
+
+PATH A2:
+Exact provenance unavailable, but one unique structural baseline is
+established strongly enough to build an isolated production-parity
+candidate.
+
+PATH B1:
+Multiple plausible baselines remain, but the frozen patch applies
+identically to all of them. Perform an additional compatibility proof
+before constructing a candidate.
+
+PATH B2:
+Multiple materially different baselines remain. Do not construct a
+production candidate yet.
+
+PATH C:
+Available evidence cannot recover a useful baseline and we need a
+different migration strategy.
+
+STOP after the report.
+
+Do not deploy anything.
+
+==================================================
+NORTH STAR
+==================================================
+
+We are NOT debugging VibeSDK anymore.
+
+We have a verified patch.
+
+We are trying to answer:
+
+WHAT EXACT SOURCE AND DEPENDENCY STATE CREATED THE WORKER CURRENTLY
+HOLDING OUR EXISTING PRODUCTION AGENTS AND WORKSPACES?
+
+Use deployment history + Git history + dependency fingerprints + the
+actual protected bundle to answer that as rigorously as possible.

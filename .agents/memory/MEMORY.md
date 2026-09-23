@@ -23,4 +23,5 @@
 - [Think file projection](think-file-projection.md) — after a SpaceDO restore, replace the persisted host file snapshot before reporting completion; conversation reconnect alone cannot hydrate files.
 - [Preview buildability gate](preview-buildability-gate.md) — marker-only restore fixtures are not preview-ready; compare valid A and B previews before attributing a build failure to restore.
 - [Exact patch artifacts](exact-patch-artifacts.md) — command output capture can change whitespace; verify generated unified diffs apply to their pinned base.
+- [External Worker provenance](external-worker-provenance.md) — a matching bundle method and asset list can narrow source candidates, not identify a deleted upload checkout.
 - [Cloudflare container sizing](cloudflare-container-sizing.md) — container validation requires enough memory per vCPU and caps disk relative to memory.
