@@ -1,0 +1,501 @@
+The authoritative SpaceDO restore defect is now independently reproduced,
+fixed, regression-tested, and verified in a real isolated Cloudflare canary.
+
+FREEZE THAT FIX.
+
+Do not redesign or expand the SpaceDO restore fix unless new executable
+evidence proves it is necessary.
+
+Current verified state:
+
+A
+→ real ThinkAgent edit
+→ B
+→ normal restore(A)
+→ authoritative committed tree = EXACTLY A
+
+But after authoritative restore:
+
+existing ThinkAgent/session file view = B
+
+AND
+
+fresh ticketed reconnect to the same agent = B
+
+Therefore we now have independent executable evidence for a SECOND defect:
+
+THINKAGENT STALE-STATE DEFECT REPRODUCED
+
+The next task is ONLY:
+
+TRACE THE ROOT CAUSE OF THINKAGENT REMAINING AT B AFTER SPACEDO HAS
+AUTHORITATIVELY RESTORED TO A, WRITE A FAILING REGRESSION FIRST, AND
+IMPLEMENT THE SMALLEST VIBESDK-NATIVE FIX.
+
+Do not investigate preview deployment yet.
+Do not modify production.
+
+==================================================
+1. PRESERVE/FREEZE THE VERIFIED SPACEDO FIX
+==================================================
+
+Work from the isolated candidate containing the already-verified restore
+fix.
+
+Candidate lineage originates from:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+The exact production source revision remains UNKNOWN.
+
+The existing SpaceDO restore fix has already proven:
+
+TREE(A)
+→ edit
+→ TREE(B)
+→ restore(A)
+→ TREE(A)
+
+with an empty full-tree Git diff between A and the forward restore commit.
+
+Preserve:
+
+- authoritative target-blob reconciliation
+- explicit staging
+- full committed-tree verification
+- fail-closed behavior before deployment
+- existing focused restore regressions
+
+Do not replace this with another restore architecture.
+
+==================================================
+2. TRACE THE ACTUAL THINKAGENT FILE-STATE PATH
+==================================================
+
+Trace exactly where the file state returned after restore comes from.
+
+Document the real candidate/fixed-candidate flow for:
+
+SpaceDO authoritative workspace
+→ ThinkAgent state
+→ generatedFilesMap
+→ conversation/session state
+→ authenticated file reads
+→ WebSocket connection
+→ reconnect
+→ agent hydration
+
+We need to understand why BOTH:
+
+A. the existing session
+
+and
+
+B. a completely fresh ticketed reconnect
+
+return B after SpaceDO is conclusively A.
+
+Do not assume generatedFilesMap is the only cause.
+
+Prove it from source and executable behavior.
+
+==================================================
+3. IDENTIFY OWNERSHIP OF FILE STATE
+==================================================
+
+Answer explicitly:
+
+What is the intended source of truth for project files?
+
+The architectural requirement remains:
+
+SpaceDO = authoritative workspace.
+
+ThinkAgent may cache or expose file state for performance/UI purposes,
+but it must not become a competing authoritative workspace.
+
+Determine:
+
+- where generatedFilesMap is populated
+- where it is persisted
+- when it is refreshed
+- what reconnect hydrates from
+- whether reconnect restores serialized ThinkAgent state rather than
+  reading SpaceDO
+- whether rollback_to_commit updates ThinkAgent state
+- whether restore sends a new authoritative file-state frame
+- whether BuildCustom authenticated reads read ThinkAgent state or
+  SpaceDO state
+- whether any state version/revision exists to detect staleness
+
+==================================================
+4. WRITE THE REGRESSION BEFORE THE FIX
+==================================================
+
+Create an executable regression representing the VERIFIED real behavior.
+
+A:
+
+index.html = RESTORE_REAL_A
+a-only.txt = A_ONLY
+b-only.txt = absent
+
+B:
+
+index.html = RESTORE_REAL_B
+a-only.txt = absent
+b-only.txt = B_ONLY
+
+Then:
+
+restore B → A
+
+First assert:
+
+authoritative SpaceDO/tree = A
+
+Only after that assertion passes, assert:
+
+existing ThinkAgent-visible files = A
+
+Then simulate/perform the closest executable equivalent of a fresh
+ticketed reconnect/hydration and assert:
+
+reconnected ThinkAgent-visible files = A
+
+Run this against the current candidate WITH the verified SpaceDO restore
+fix but WITHOUT a ThinkAgent fix.
+
+Expected result:
+
+authoritative tree assertion PASSES
+
+ThinkAgent/session assertion FAILS with B
+
+reconnect assertion FAILS with B
+
+This is critical.
+
+If the test cannot reproduce that ordering:
+
+STOP.
+
+Do not write a ThinkAgent fix.
+
+==================================================
+5. DETERMINE THE ROOT CAUSE
+==================================================
+
+Trace why ThinkAgent remains B.
+
+Determine whether the cause is:
+
+- generatedFilesMap persisted independently from SpaceDO
+- restore never refreshes generatedFilesMap
+- reconnect hydrates serialized stale ThinkAgent state
+- conversation state contains stale files
+- authenticated reads are routed to the wrong state source
+- no revision/version invalidation occurs after SpaceDO mutation
+- restore completion does not notify/hydrate the owning ThinkAgent
+- or another mechanism
+
+Prove the cause.
+
+Do not merely add a timeout, sleep, polling loop, or forced reconnect.
+
+==================================================
+6. DEFINE THE CORRECT SEMANTICS
+==================================================
+
+Maintain this architectural invariant:
+
+SPACEDO IS THE AUTHORITATIVE FILE WORKSPACE.
+
+After a successful authoritative restore to revision A:
+
+- existing session file reads must represent A
+- fresh reconnect must represent A
+- subsequent ThinkAgent work must begin from A
+
+ThinkAgent should not be capable of resurrecting B after authoritative
+SpaceDO restore.
+
+Prefer synchronization/invalidation/hydration using VibeSDK's existing
+architecture.
+
+Do not create another source of truth.
+
+==================================================
+7. IMPLEMENT THE SMALLEST VIBESDK-NATIVE FIX
+==================================================
+
+Only after the regression fails correctly.
+
+Implement the smallest change that restores consistency between SpaceDO
+and ThinkAgent.
+
+Potential solutions must be selected based on the proven root cause,
+not this prompt.
+
+Do NOT automatically implement any particular approach.
+
+Possible architectural categories to evaluate include:
+
+- refresh ThinkAgent file state from SpaceDO after successful restore
+- invalidate agent-local cached file state and force authoritative
+  hydration
+- make consistency-sensitive reads source SpaceDO directly
+- version cached state against authoritative workspace revision
+
+Choose the smallest solution that matches VibeSDK's existing design.
+
+Do not add:
+
+- another Durable Object
+- Workflow
+- external lock service
+- BuildCustom synchronization service
+- duplicate workspace storage
+- another revision system
+- polling as correctness
+- arbitrary sleeps
+- second coding agent
+
+==================================================
+8. RESTORE MUST REMAIN ATOMIC FROM THE USER'S PERSPECTIVE
+==================================================
+
+A successful restore should not be surfaced as complete while the
+session continues exposing the old tree.
+
+Define the success boundary carefully.
+
+By the time restore is reported as successful:
+
+authoritative SpaceDO = A
+
+AND
+
+the owning ThinkAgent/session must either:
+
+A. already expose A
+
+or
+
+B. be invalidated in a deterministic way such that its next read
+hydrates A before stale state can be returned.
+
+Do not rely on eventual consistency with an arbitrary delay.
+
+==================================================
+9. NEXT-EDIT SAFETY
+==================================================
+
+Add an executable regression for:
+
+A
+→ B
+→ restore A
+→ real/representative next edit C
+
+The edit must start from A.
+
+For example:
+
+After restore, append:
+
+EDIT_AFTER_RESTORE
+
+Expected:
+
+RESTORE_REAL_A
+EDIT_AFTER_RESTORE
+
+NOT:
+
+RESTORE_REAL_B
+EDIT_AFTER_RESTORE
+
+This matters more than UI display alone.
+
+A stale ThinkAgent must not be allowed to write B-derived state back into
+the authoritative A workspace.
+
+==================================================
+10. RECONNECT SAFETY
+==================================================
+
+Explicitly test:
+
+A
+→ B
+→ restore A
+→ disconnect
+→ fresh ticketed reconnect
+
+Expected file state:
+
+A
+
+A fresh reconnect must not resurrect persisted B from ThinkAgent state.
+
+==================================================
+11. LOCAL VALIDATION
+==================================================
+
+Run:
+
+- repository typecheck
+- repository tests
+- nested SDK tests
+- existing SpaceDO restore tests
+- new ThinkAgent stale-state regression
+- reconnect regression
+- restore → next-edit regression
+- repository build
+
+All previously passing SpaceDO restore tests must remain green.
+
+Report exact test counts.
+
+==================================================
+12. REAL CLOUDFLARE CANARY
+==================================================
+
+Only after local validation passes:
+
+Create a fresh disposable isolated environment using the SAME proven
+configuration pattern.
+
+Run the real lifecycle:
+
+ThinkAgent generates A
+→ verify/reconnect A
+→ ThinkAgent edits to B
+→ verify/reconnect B
+→ restore A
+→ independently verify authoritative tree = A
+→ inspect existing ThinkAgent state
+→ fresh ticketed reconnect
+→ inspect state
+→ perform ONE diagnostic edit after restore
+
+PASS requires:
+
+AUTHORITATIVE TREE:
+A
+
+EXISTING SESSION:
+A
+
+FRESH RECONNECT:
+A
+
+NEXT EDIT:
+derived from A
+
+No B state may reappear after restore.
+
+==================================================
+13. KEEP PREVIEW DEPLOYMENT FAILURE SEPARATE
+==================================================
+
+The previous canary also produced:
+
+deployment_failed: Build failed
+
+Do NOT fix that in this task.
+
+Record whether it occurs again.
+
+If authoritative restore and ThinkAgent synchronization pass but preview
+deployment still fails:
+
+classify it separately as:
+
+PREVIEW/DEPLOYMENT DEFECT
+
+We will investigate it afterward.
+
+Do not mix deployment changes into the ThinkAgent fix.
+
+==================================================
+14. FAIL CLOSED
+==================================================
+
+If synchronization/hydration fails after authoritative restore:
+
+restore must not falsely appear fully successful to BuildCustom if stale
+agent state can still be served or used for subsequent edits.
+
+Determine the smallest correct behavior consistent with VibeSDK's
+architecture.
+
+Do not hide synchronization errors.
+
+==================================================
+15. CLEANUP
+==================================================
+
+Delete disposable runtime resources after evidence is collected.
+
+Do not revoke VIBESDK_TEST_AI_GATEWAY_TOKEN yet.
+
+Do not touch production.
+
+==================================================
+16. STOP AND REPORT
+==================================================
+
+Report:
+
+1. exact ThinkAgent file-state/hydration path
+2. proven root cause of stale B
+3. why fresh reconnect also returned B
+4. regression test added
+5. proof it failed before the ThinkAgent fix
+6. exact implementation change
+7. why it is the smallest VibeSDK-native solution
+8. whether SpaceDO remains sole authoritative workspace
+9. typecheck result
+10. repository test counts
+11. SDK test counts
+12. existing restore regression results
+13. new stale-state test results
+14. reconnect test result
+15. next-edit test result
+16. real canary authoritative tree
+17. real canary existing-session state
+18. real canary reconnect state
+19. real canary next-edit result
+20. whether deployment still fails separately
+21. cleanup performed
+22. any new architectural concern discovered
+
+STOP BEFORE PRODUCTION.
+
+Do not deploy to the protected Worker.
+
+Do not enable runtime mutations.
+
+Do not attach app.buildcustom.ai.
+
+==================================================
+SUCCESS CRITERION
+==================================================
+
+The required invariant is:
+
+A
+→ B
+→ restore A
+
+then:
+
+SpaceDO = A
+ThinkAgent = A
+fresh reconnect = A
+next edit starts from A
+
+Only after all four are proven in the real isolated Cloudflare runtime
+should this second defect be considered fixed.
