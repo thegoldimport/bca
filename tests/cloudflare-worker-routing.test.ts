@@ -17,7 +17,7 @@ test("does not treat unrelated or malformed paths as project routes", () => {
 
 test("serializes D1 project rows to the frontend contract", () => {
   const result = serializeProject({ id: 3, user_id: "u", name: "Demo", type: "website", status: "draft", description: "", framework: "React", url: null, created_at: "c", updated_at: "u", agent_id: "a", preview_url: "p", deployment_url: "d" });
-  assert.deepEqual(result, { id: 3, userId: "u", name: "Demo", type: "website", status: "draft", description: "", framework: "React", url: null, createdAt: "c", updatedAt: "u", agentId: "a", previewUrl: "p", deploymentUrl: "d" });
+  assert.deepEqual(result, { id: 3, userId: "u", name: "Demo", type: "website", status: "draft", description: "", framework: "React", url: null, createdAt: "c", updatedAt: "u", agentId: "a", previewUrl: "p", deploymentUrl: "d", previewImageUrl: null });
 });
 
 test("serializes turn JSON columns and release names", () => {

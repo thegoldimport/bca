@@ -3,6 +3,10 @@ import { assertOrigin, createSession, expiredSessionCookie, resolveSession, revo
 import { assertControlPlaneEnvironment, assertSafeStagingTarget } from "./staging/boundary";
 import { ProjectOperationDO } from "./staging/project-do";
 import { createVibeSdkAdapter, VibeSdkAdapterError, type VibeSdkImage } from "./staging/vibesdk-adapter";
+import { handleAdminRoute } from "./admin-routes";
+import { handleContentRoute } from "./content-routes";
+import { handleDomainRoute } from "./domain-routes";
+import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -26,6 +30,8 @@ export type Env = {
   STAGING_LOGIN_ENABLED: string;
   STAGING_REGISTRATION_ENABLED?: string;
   RUNTIME_OPERATIONS_ENABLED: string;
+  STAGING_ALLOWED_DOMAIN_SUFFIXES?: string;
+  GOOGLE_AI_STUDIO_API_KEY?: string;
 };
 
 const attempts = new Map<string, { count: number; reset: number }>();
@@ -57,6 +63,8 @@ export const serializeProject = (row: any) => ({
   agentId: row.agent_id ?? row.agentId ?? null,
   previewUrl: row.preview_url ?? row.previewUrl ?? null,
   deploymentUrl: row.deployment_url ?? row.deploymentUrl ?? null,
+  previewImageUrl: row.has_preview_image && (row.deployment_url ?? row.deploymentUrl)
+    ? `/api/public/projects/${row.id}/preview-image?v=${encodeURIComponent(row.seo_updated_at || "")}` : null,
 });
 export const serializeTurn = (row: any) => ({
   id: row.id,
@@ -84,6 +92,10 @@ export const isReadOnlyRuntimeOperation = (method: string, operation: string): b
   || operation === "turns"
   || operation === "publishing-settings"
   || operation === "releases"
+  || operation === "console"
+  || operation === "domains"
+  || operation === "custom-domain"
+  || operation === "application-domain"
 );
 
 function rateLimit(key: string, limit: number, windowMs = 60_000): boolean {
@@ -106,7 +118,8 @@ function projectInput(input: Record<string, unknown>, fallback = "Project1") {
   const name = typeof input.name === "string" && input.name.trim() ? input.name.trim().slice(0, 120) : fallback;
   const type = typeof input.type === "string" ? input.type.slice(0, 40) : "website";
   const description = typeof input.description === "string" ? input.description.slice(0, 2000) : "";
-  return { name, type, description };
+  const framework = typeof input.framework === "string" && input.framework.trim() ? input.framework.trim().slice(0, 120) : "React + TailwindCSS";
+  return { name, type, description, framework };
 }
 function imageInput(input: unknown): VibeSdkImage[] {
   if (input === undefined) return [];
@@ -141,6 +154,10 @@ export default {
       const url = new URL(request.url);
       const input = (request.method === "GET" || request.method === "HEAD") ? {} : await readBody(request);
       if (request.headers.has("x-user-id")) return json({ message: "Browser-supplied identity is not accepted." }, { status: 400 });
+      const adminResponse = await handleAdminRoute({ request, env, url, input });
+      if (adminResponse) return adminResponse;
+      const contentResponse = await handleContentRoute({ request, env, url, input });
+      if (contentResponse) return contentResponse;
 
       if (url.pathname === "/api/auth/register" && request.method === "POST") {
         if (env.STAGING_LOGIN_ENABLED !== "true") return json({ message: "Staging login is disabled until acceptance testing is authorized." }, { status: 503 });
@@ -196,13 +213,13 @@ export default {
 
       const projectMatch = url.pathname.match(/^\/api\/projects\/(\d+)$/);
       const projectId = projectIdFromPath(url.pathname);
-      const project = projectId === null ? null : await env.DB.prepare("SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id WHERE p.id=? AND p.user_id=?").bind(projectId, user.id).first<any>();
-      const projectList = async () => (await env.DB.prepare("SELECT p.*,l.agent_id,l.preview_url,l.deployment_url FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC").bind(user.id).all()).results.map(serializeProject);
+      const project = projectId === null ? null : await env.DB.prepare("SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name,CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.id=? AND p.user_id=?").bind(projectId, user.id).first<any>();
+      const projectList = async () => (await env.DB.prepare("SELECT p.*,l.agent_id,l.preview_url,l.deployment_url,CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC").bind(user.id).all()).results.map(serializeProject);
       if (url.pathname === "/api/projects" && request.method === "GET") return json(await projectList());
       if (url.pathname === "/api/projects" && request.method === "POST") {
         const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM projects WHERE user_id=?").bind(user.id).first<any>();
         const details = projectInput(input, `Project${Number(count?.count || 0) + 1}`);
-        const result = await env.DB.prepare("INSERT INTO projects(user_id,name,type,description,framework) VALUES(?,?,?,?,?)").bind(user.id, details.name, details.type, details.description, "React + TailwindCSS").run();
+        const result = await env.DB.prepare("INSERT INTO projects(user_id,name,type,description,framework) VALUES(?,?,?,?,?)").bind(user.id, details.name, details.type, details.description, details.framework).run();
         const created = await env.DB.prepare("SELECT * FROM projects WHERE id=?").bind(result.meta.last_row_id).first();
         return json(serializeProject(created), { status: 201 });
       }
@@ -214,7 +231,7 @@ export default {
         return json(serializeProject(await env.DB.prepare("SELECT * FROM projects WHERE id=?").bind(project.id).first()));
       }
       if (project && request.method === "DELETE" && projectMatch) {
-        await env.DB.prepare("DELETE FROM projects WHERE id=? AND user_id=?").bind(project.id, user.id).run();
+        await deleteProjectWithRoutes(env, project.id);
         return json({ success: true });
       }
 
@@ -235,8 +252,15 @@ export default {
         if (!readOnly && !rateLimit(`runtime:${user.id}:${id}`, 30, 60_000)) return json({ message: "Too many runtime mutations." }, { status: 429 });
         if (operation === "status" && request.method === "GET") {
           const status = await adapter.status(runtimeProject);
-          return json({ ...status, previewUrl: status.state?.previewUrl || project.preview_url || null, deploymentUrl: project.deployment_url || null });
+          return json({ ...status, previewUrl: status.state?.previewUrl || project.preview_url || null, deploymentUrl: project.deployment_url || null, previewImageUrl: serializeProject(project).previewImageUrl });
         }
+        if (operation === "console" && request.method === "GET") {
+          const status = await adapter.status(runtimeProject);
+          const state = status.state as any;
+          return json({ lines: [{ time: new Date().toLocaleTimeString(), type: state?.lastError ? "error" : status.connected ? "success" : "info", msg: state?.lastError || `Agent ${status.connected ? "connected" : "not connected"}; generation ${state?.generation?.status || "idle"}; ${status.files} workspace files.` }] });
+        }
+        const domainResponse = await handleDomainRoute({ request, env, url, input, user, project, operation });
+        if (domainResponse) return domainResponse;
         if (operation === "files" && request.method === "GET") return json(await adapter.files(runtimeProject));
         if (operation === "files/content" && request.method === "GET") return json(await adapter.fileContent(runtimeProject, safePath(url.searchParams.get("path"))));
         if (operation === "turns" && request.method === "GET") return json({ turns: (await env.DB.prepare("SELECT * FROM runtime_builder_turns WHERE project_id=? ORDER BY created_at ASC").bind(id).all()).results.map(serializeTurn) });
@@ -245,6 +269,9 @@ export default {
           const slug = cleanSlug(input.subdomainSlug);
           const hostingProvider = input.hostingProvider === "custom" ? "custom" : input.hostingProvider === "buildcustom" ? "buildcustom" : "";
           if (!hostingProvider || !validSlug(slug)) return json({ message: "Choose a supported provider and valid subdomain slug." }, { status: 400 });
+          if (project.deployment_url && slug !== project.subdomain_slug) {
+            return json({ message: "The published address cannot be changed while this project is live." }, { status: 409 });
+          }
           const customDomain = cleanSlug(input.customDomain), customOrigin = cleanSlug(input.customOrigin);
           if (hostingProvider === "custom" && !customOrigin) return json({ message: "Enter the origin hostname supplied by your external hosting provider" }, { status: 400 });
           await env.DB.prepare("INSERT INTO runtime_project_links(project_id,subdomain_slug,hosting_provider,custom_domain,custom_origin) VALUES(?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET subdomain_slug=excluded.subdomain_slug,hosting_provider=excluded.hosting_provider,custom_domain=excluded.custom_domain,custom_origin=excluded.custom_origin,updated_at=datetime('now')").bind(id, slug, hostingProvider === "custom" ? "custom" : "cloudflare", customDomain || null, customOrigin || null).run();
@@ -279,6 +306,8 @@ export default {
         if (operation === "stop" && request.method === "POST") return json(await adapter.stop(runtimeProject));
         if (operation === "deployments" && request.method === "POST") {
           if (!canPublishInStaging(user.role)) return json({ message: "Staging publish requires a super administrator." }, { status: 403 });
+          const settings = await env.DB.prepare("SELECT * FROM runtime_project_links WHERE project_id=?").bind(id).first<any>();
+          if (settings?.hosting_provider === "custom") return json({ message: "Automatic publishing is available with BuildCustom.Ai Hosting. External hosting uses your provider's deployment process." }, { status: 409 });
           const result = await adapter.deploy(runtimeProject);
           const deploymentUrl = new URL(result.url);
           const runtimeUrl = new URL(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
@@ -286,12 +315,31 @@ export default {
             throw new VibeSdkAdapterError("VibeSDK returned a deployment outside the isolated staging runtime.", "RUNTIME_UPSTREAM_ERROR");
           }
           if (!result.commitHash) throw new VibeSdkAdapterError("VibeSDK did not return a restorable deployment revision.", "RUNTIME_UPSTREAM_ERROR");
-          const commit = result.commitHash;
-          const settings = await env.DB.prepare("SELECT * FROM runtime_project_links WHERE project_id=?").bind(id).first<any>();
-          const slug = settings?.subdomain_slug || cleanSlug(project.name);
-          const release = await env.DB.prepare("INSERT INTO runtime_releases(project_id,commit_hash,deployment_url) VALUES(?,?,?) RETURNING *").bind(id, commit, result.url).first();
-          await env.DB.prepare("UPDATE runtime_project_links SET deployment_url=?,deployment_origin_url=?,deployment_script_name=?,subdomain_slug=?,updated_at=datetime('now') WHERE project_id=?").bind(result.url, result.url, result.workersUrl || null, slug, id).run();
-          return json({ ...result, url: result.url, originUrl: result.url, release: serializeRelease(release) }, { status: 201 });
+          const slug = settings?.subdomain_slug || project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+          if (!validSlug(slug)) return json({ message: "Choose a valid publishing address." }, { status: 400 });
+          const scriptName = deploymentScriptName(result.workersUrl, result.url);
+          const seo = await env.DB.prepare("SELECT * FROM seo_settings WHERE project_id=?").bind(id).first<any>();
+          const previousRoute = await env.STAGING_ROUTES.get(slug);
+          if (previousRoute && settings?.deployment_script_name !== scriptName) {
+            let oldScript: unknown;
+            try { oldScript = JSON.parse(previousRoute).scriptName; } catch { /* Refuse to replace unrecognized mappings. */ }
+            if (oldScript !== settings?.deployment_script_name) return json({ message: "This publishing address is already in use." }, { status: 409 });
+          }
+          await writePublishedRoute(env, slug, scriptName, routeMetadata(seo));
+          const publicUrl = env.ENVIRONMENT === "production" ? `https://${slug}.apps.buildcustom.ai` : result.url;
+          let release: any;
+          try {
+            const results = await env.DB.batch([
+              env.DB.prepare("UPDATE runtime_project_links SET deployment_url=?,deployment_origin_url=?,deployment_script_name=?,subdomain_slug=?,updated_at=datetime('now') WHERE project_id=?").bind(publicUrl, result.url, scriptName, slug, id),
+              env.DB.prepare("INSERT INTO runtime_releases(project_id,commit_hash,deployment_url) VALUES(?,?,?) RETURNING *").bind(id, result.commitHash, publicUrl),
+            ]);
+            release = results[1].results?.[0];
+          } catch (error) {
+            if (previousRoute === null) await env.STAGING_ROUTES.delete(slug);
+            else await env.STAGING_ROUTES.put(slug, previousRoute);
+            throw error;
+          }
+          return json({ ...result, url: publicUrl, originUrl: result.url, release: serializeRelease(release) }, { status: 201 });
         }
         const turnRestore = operation.match(/^turns\/(\d+)\/restore$/);
         if (turnRestore && request.method === "POST") {

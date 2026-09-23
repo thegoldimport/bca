@@ -7,7 +7,6 @@ import { Download, Search, Trash2, LogOut, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
 import type { WaitlistEntry } from "@shared/schema";
-import { getApiBase } from "@/lib/api";
 
 export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -18,7 +17,7 @@ export default function AdminDashboard() {
   const fetchEntries = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${getApiBase()}/api/admin/waitlist`);
+      const res = await fetch("/api/admin/waitlist", { credentials: "same-origin" });
       if (res.ok) {
         const entries = await res.json();
         setData(entries);
@@ -31,16 +30,14 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem("isAuthenticated");
-    if (!isAuthenticated) {
-      setLocation("/login");
-      return;
-    }
-    fetchEntries();
+    fetch("/api/auth/me", { credentials: "same-origin" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((user) => user?.role === "super_admin" ? fetchEntries() : setLocation("/login"))
+      .catch(() => setLocation("/login"));
   }, [setLocation]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
     setLocation("/login");
   };
 
@@ -68,7 +65,7 @@ export default function AdminDashboard() {
   const handleDelete = async (id: number) => {
     if (confirm("Are you sure you want to delete this entry?")) {
       try {
-        const res = await fetch(`${getApiBase()}/api/admin/waitlist/${id}`, { method: "DELETE" });
+        const res = await fetch(`/api/admin/waitlist/${id}`, { method: "DELETE", credentials: "same-origin" });
         if (res.ok) {
           setData(data.filter((item) => item.id !== id));
         }

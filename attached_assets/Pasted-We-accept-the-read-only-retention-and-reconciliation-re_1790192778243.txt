@@ -1,0 +1,590 @@
+We accept the read-only retention and reconciliation report.
+
+We are DONE with old VibeSDK Worker source archaeology.
+
+Do not spend more time trying to identify the historical source revision.
+
+DECISIONS:
+
+1. KEEP the existing active VibeSDK ThinkDO and SpaceDO namespaces.
+2. KEEP the existing VibeSDK infrastructure needed by those namespaces.
+3. KEEP Test1 / TaskFlow / test1.apps.buildcustom.ai / Buyer Magnets.
+4. KEEP the two canaries for now. Cleanup can happen later.
+5. KEEP current Cloudflare D1 data, including its D1-only canary rows.
+6. DO NOT re-import PostgreSQL over D1.
+7. The two verified VibeSDK fixes remain frozen.
+8. The old protected Worker source is NOT our canonical source going forward.
+9. Current BuildCustom development code is what we are moving to Cloudflare.
+10. app.buildcustom.ai remains unattached until staging parity passes.
+
+We are now moving to the actual migration work.
+
+==================================================
+TASK: COMPLETE CLOUDFLARE CONTROL-PLANE FEATURE PARITY
+==================================================
+
+Goal:
+
+Make the Cloudflare-hosted BuildCustom control plane functionally
+equivalent to the CURRENT Replit development product so BuildCustom no
+longer requires the Replit Express server at runtime.
+
+DO THIS IN ISOLATED STAGING FIRST.
+
+Do not modify active production VibeSDK state.
+
+Do not attach app.buildcustom.ai.
+
+==================================================
+1. CREATE A PARITY MATRIX FIRST
+==================================================
+
+Before coding, compare:
+
+CURRENT REPLIT IMPLEMENTATION
+
+client/
+server/
+
+against:
+
+CURRENT CLOUDFLARE IMPLEMENTATION
+
+cloudflare/worker.ts
+and related Cloudflare code.
+
+Inventory EVERY API route used by the current frontend.
+
+For each route classify:
+
+ALREADY PORTED
+PARTIALLY PORTED
+MISSING
+REPLIT-SPECIFIC / REMOVE
+DEVELOPMENT-ONLY
+
+Do not rely only on the previous report.
+
+Inspect the actual current frontend calls and Express routes.
+
+==================================================
+2. PRESERVE EXISTING CLOUDFLARE ARCHITECTURE
+==================================================
+
+Do NOT redesign BuildCustom.
+
+BuildCustom control plane owns:
+
+- users
+- auth
+- sessions
+- projects
+- ownership
+- permissions
+- project → agent mapping
+- dashboard APIs
+- releases
+- deployment metadata
+- domain metadata
+- settings
+- admin functionality
+- waitlist
+- blog/autoblogger configuration
+- SEO configuration
+- pages/templates
+- billing/usage later
+
+VibeSDK owns:
+
+- ThinkAgent
+- SpaceDO
+- workspaces
+- files
+- coding
+- execution
+- previews
+- revisions
+- restore
+- generated-app deployment
+
+Do not duplicate VibeSDK functionality in the control plane.
+
+==================================================
+3. PORT ALL CURRENT DEVELOPMENT APIs
+==================================================
+
+The previous audit identified missing Cloudflare APIs for:
+
+- admin
+- waitlist
+- blog
+- autoblogger
+- SEO
+- social images
+- pages
+- templates
+- public images
+- console
+- domain/DNS management
+
+Verify that list against the current source.
+
+Then implement every CURRENT PRODUCT endpoint needed for feature parity.
+
+Preserve existing frontend request/response contracts wherever practical.
+
+Do not add speculative new features.
+
+==================================================
+4. REMOVE THE REPLIT API FALLBACK
+==================================================
+
+Current frontend code contains behavior where admin login and waitlist
+requests from non-Replit hosts are sent to:
+
+https://ai-build-studio.replit.app
+
+Remove this runtime dependency.
+
+Cloudflare-hosted BuildCustom must use the Cloudflare control plane.
+
+Do not merely change the URL.
+
+Implement the required Cloudflare endpoints first and then route the
+frontend to them.
+
+After this task, normal production frontend behavior must NOT require
+ai-build-studio.replit.app.
+
+==================================================
+5. AUTH / SESSION BEHAVIOR
+==================================================
+
+Preserve the secure Cloudflare session architecture already established.
+
+Do NOT reintroduce:
+
+- x-user-id authentication
+- localStorage identity as authentication
+- insecure Replit auth assumptions
+
+Keep:
+
+- opaque secure session cookie
+- ownership enforcement
+- authorization checks
+- open registration behavior according to current staging configuration
+- admin role enforcement
+
+Port functionality onto the secure Cloudflare auth model rather than
+copying insecure historical behavior.
+
+==================================================
+6. DATABASE
+==================================================
+
+Use isolated STAGING D1 for implementation/testing.
+
+Do not modify production D1 during development.
+
+Do not make PostgreSQL the runtime database.
+
+Port PostgreSQL/Drizzle behavior to D1-compatible behavior where needed.
+
+Preserve existing IDs and API contracts.
+
+If schema additions are genuinely required for current-development
+feature parity:
+
+- document them
+- make them additive where possible
+- create explicit migration files
+- test them in staging
+
+Do not casually redesign the schema.
+
+==================================================
+7. PROJECT DELETION PARITY
+==================================================
+
+The audit found that Cloudflare project deletion does not currently have
+parity with the Replit implementation's published-route cleanup.
+
+Inspect the actual current behavior.
+
+Implement safe equivalent behavior.
+
+Deleting a BuildCustom project must not leave unintended:
+
+- app routes
+- route KV mappings
+- domain mappings
+- deployment metadata
+
+BUT:
+
+Do not allow staging tests to delete active Test1/Buyer Magnets
+production resources.
+
+Use isolated staging resources.
+
+==================================================
+8. DOMAIN / DNS MANAGEMENT
+==================================================
+
+Port the current domain-management functionality required by the
+frontend.
+
+Preserve the architecture already proven:
+
+customer hostname
+→ Cloudflare Custom Hostname / Cloudflare for SaaS
+→ BuildCustom gateway
+→ hostname lookup
+→ deployment
+→ Workers for Platforms dispatch
+
+Do not create one Worker route per customer hostname.
+
+Support the current product operations needed for:
+
+- list domains
+- add domain
+- remove domain
+- verify/check status
+- primary domain behavior if currently implemented
+- domain role if currently implemented
+- DNS instructions/status
+
+Use isolated staging resources for mutation tests.
+
+Do not touch Buyer Magnets.
+
+==================================================
+9. BLOG / AUTOBLOGGER / SEO / PAGES / TEMPLATES
+==================================================
+
+Port the existing CURRENT development behavior.
+
+Do not redesign these systems.
+
+Maintain frontend contract compatibility.
+
+Verify CRUD behavior and ownership enforcement.
+
+For background/automation behavior that cannot map directly from the
+Express process model to Workers:
+
+identify the Cloudflare-native equivalent.
+
+Use the simplest Cloudflare-native mechanism necessary.
+
+Do not introduce orchestration unless actually required.
+
+==================================================
+10. CONSOLE / BUILDER ROUTES
+==================================================
+
+Verify all current console/builder APIs.
+
+Existing VibeSDK adapter behavior should remain narrow.
+
+Do not create a second coding agent.
+
+Do not duplicate files/workspaces in D1.
+
+Do not duplicate revisions.
+
+Do not create a BuildCustom project Durable Object.
+
+==================================================
+11. REPLIT-SPECIFIC SOURCE
+==================================================
+
+Identify Replit-specific code including:
+
+- .replit process assumptions
+- DATABASE_URL runtime usage
+- Replit-hosted URLs
+- Replit Vite plugins/tooling
+- Replit CORS assumptions
+- Replit meta-image fallbacks
+- Replit environment detection
+
+Classify each:
+
+REMOVE FOR PRODUCTION
+KEEP DEV-ONLY
+REPLACE WITH CLOUDFLARE EQUIVALENT
+NO LONGER USED
+
+Do not delete useful local development tooling merely because it mentions
+Replit.
+
+The requirement is:
+
+Cloudflare production must not depend on Replit.
+
+==================================================
+12. SECRETS / CONFIGURATION INVENTORY
+==================================================
+
+Identify every runtime configuration value currently supplied through
+Replit that Cloudflare production will eventually need.
+
+Do NOT print secret values.
+
+Report only names and destination:
+
+Cloudflare Worker secret
+Cloudflare binding
+D1
+KV
+R2
+configuration variable
+development-only
+
+Do not rotate or move production secrets in this task unless staging
+requires a separate test credential.
+
+==================================================
+13. BUILD ISOLATED STAGING
+==================================================
+
+Deploy the completed control-plane parity work ONLY to the isolated
+Cloudflare staging environment.
+
+Do not update:
+
+- protected VibeSDK Worker
+- active VibeSDK DO namespaces
+- production control-plane Worker
+- production D1
+- production gateway
+- Buyer Magnets
+- generated production apps
+- app.buildcustom.ai
+
+Use staging resources.
+
+==================================================
+14. TEST THE CURRENT PRODUCT
+==================================================
+
+Test the Cloudflare staging version as a PRODUCT, not merely individual
+API functions.
+
+At minimum test:
+
+AUTH
+- login
+- logout
+- session persistence
+- unauthorized access
+- ownership enforcement
+- admin authorization
+
+DASHBOARD
+- project list
+- create project
+- open project
+- update project
+- delete isolated staging project
+
+BUILDER
+- existing builder data loads
+- VibeSDK adapter read paths function where staging supports them
+
+BLOG
+- list
+- create
+- edit
+- delete
+
+AUTOBLOGGER
+- read settings
+- update settings
+- current supported operations
+
+SEO
+- read
+- update
+- social-image behavior
+
+PAGES
+- list
+- create
+- update
+- delete
+
+TEMPLATES
+- list
+- required template operations
+
+WAITLIST
+- public submission
+- admin access where applicable
+
+ADMIN
+- login/session behavior
+- required dashboard APIs
+
+DOMAINS
+- list
+- add using staging resources
+- status
+- remove
+- cleanup
+
+PROJECT DELETION
+- deployment metadata cleanup
+- route cleanup
+- domain cleanup
+- no unrelated resource deletion
+
+PUBLIC APIs
+- images/content/endpoints currently used by the product
+
+==================================================
+15. REPLIT-INDEPENDENCE CHECK
+==================================================
+
+This is critical.
+
+After staging passes normally:
+
+STOP the Replit application/process if safely possible without affecting
+the development source itself.
+
+Then rerun the Cloudflare staging acceptance suite.
+
+Verify the staging product does NOT require:
+
+- Replit HTTP server
+- Replit PostgreSQL
+- DATABASE_URL
+- ai-build-studio.replit.app
+- Replit process memory
+- Replit callbacks
+- Replit-hosted assets
+- Replit runtime secrets
+
+If stopping Replit is unsafe in the current environment, simulate the
+dependency removal explicitly and document the limitation.
+
+==================================================
+16. DO NOT TOUCH THE FROZEN VIBESDK FIXES
+==================================================
+
+This task is CONTROL-PLANE PARITY.
+
+Do not continue modifying VibeSDK.
+
+Do not deploy the two fixes to the active VibeSDK Worker yet.
+
+We will handle the retained-state VibeSDK upgrade separately after the
+BuildCustom control plane is ready.
+
+==================================================
+17. TESTS
+==================================================
+
+Add/maintain automated tests for the Cloudflare control plane.
+
+Test:
+
+- API contracts
+- auth
+- ownership
+- CRUD
+- admin
+- waitlist
+- blog
+- autoblogger
+- SEO
+- pages
+- templates
+- domains
+- deletion cleanup
+
+Run:
+
+- existing tests
+- new tests
+- typecheck
+- production build
+- Cloudflare staging deployment validation
+
+==================================================
+18. SUCCESS CRITERIA
+==================================================
+
+This task succeeds when:
+
+1. Every current frontend API dependency has a Cloudflare implementation
+   OR is explicitly classified as intentionally removed/dev-only.
+
+2. No normal Cloudflare-hosted frontend request requires the Replit API.
+
+3. Cloudflare staging reproduces the current development product's
+   control-plane functionality.
+
+4. Staging D1 is the runtime database.
+
+5. Secure Cloudflare session auth remains intact.
+
+6. BuildCustom/VibeSDK architecture remains unchanged.
+
+7. Replit-off staging acceptance passes.
+
+8. Production resources remain untouched.
+
+==================================================
+19. REPORT
+==================================================
+
+Return:
+
+1. full API parity matrix
+2. files changed
+3. endpoints added
+4. endpoints intentionally not ported and why
+5. D1 schema changes
+6. frontend Replit dependencies removed
+7. remaining Replit references and classification
+8. secrets/configuration migration inventory
+9. auth test results
+10. dashboard test results
+11. blog/autoblogger results
+12. SEO results
+13. pages/templates results
+14. waitlist/admin results
+15. domain results
+16. project-deletion cleanup results
+17. staging deployment result
+18. Replit-off acceptance result
+19. automated test counts
+20. typecheck/build results
+21. remaining blockers
+22. exact next task
+
+==================================================
+20. PRODUCTION SAFETY
+==================================================
+
+DO NOT:
+
+- attach app.buildcustom.ai
+- enable production runtime mutations
+- modify active VibeSDK namespaces
+- modify Test1
+- modify Buyer Magnets
+- modify production D1
+- deploy the frozen VibeSDK fixes
+- delete canaries
+- clean up legacy resources
+
+This task is about getting the CURRENT BUILDCUSTOM DEVELOPMENT PRODUCT
+fully functional on isolated Cloudflare staging.
+
+STOP after the report.

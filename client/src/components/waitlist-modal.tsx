@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getApiBase } from "@/lib/api";
 
 interface WaitlistModalProps {
   isOpen: boolean;
@@ -23,8 +22,7 @@ export function WaitlistModal({ isOpen, onClose, source = "waitlist" }: Waitlist
     setIsLoading(true);
 
     try {
-      const apiBase = getApiBase();
-      const res = await fetch(`${apiBase}/api/waitlist`, {
+      const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, source }),
