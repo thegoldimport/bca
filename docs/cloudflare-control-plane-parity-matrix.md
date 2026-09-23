@@ -46,14 +46,14 @@ Safety boundary: implementation and mutation tests use the isolated staging D1, 
 | Auth login/me/logout/profile/password | Implemented | Secure D1-backed cookie; login/me/logout exercised with the Replit server stopped. |
 | Auth register | Partial | Endpoint implemented; registration remains intentionally closed by staging configuration. |
 | Project list/create/read/update | Implemented | D1 owner scope and preview-image URL field. |
-| Project deletion | Partial | Staging D1, route KV, preview KV, and hostname mapping cleanup exercised; live SaaS-hostname teardown requires isolated staging zone credentials. |
-| Runtime status/files/content/turns, console | Implemented | Status/console exercised on an ungenerated project; generated-agent files require separate isolated agent testing. |
-| Runtime messages/preview/stop/turn restore/release restore | Partial | Adapter code remains wired and unit tested; live generated-agent mutations were not run against this acceptance account. |
-| Runtime deploy/release/publishing-settings | Partial | Release and isolated route KV writes exist; no isolated staging gateway routes a public managed URL, and live publishing was not executed. Published slug changes are blocked. |
+| Project deletion | Partial | Real generated staging project, release, route KV, preview KV, project-agent link, users and disposable dispatch script were cleaned up. SaaS-hostname teardown still needs an isolated staging zone; VibeSDK has no per-agent deletion API. |
+| Runtime status/files/content/turns, console | Implemented | Generated-agent status, files, file content and turns passed with Replit off. |
+| Runtime messages/preview/stop/turn restore/release restore | Partial | Normal generation, edit and preview passed with Replit off; stop and restores retain prior adapter tests, not a new live exercise. |
+| Runtime deploy/release/publishing-settings | Implemented for tested staging app | Disposable app published through isolated staging KV, gateway and dispatch to HTTP 200 with expected content/assets. Release and URL persisted; slug lock passed. Path-based workers.dev gateway does not prove generic root-navigation parity for all apps. |
 | Blog CRUD, autoblogger GET/PUT | Implemented | Owner-scoped staging CRUD exercised; no autoblogger scheduler exists in the current Express implementation. |
-| SEO GET/PUT/social-image POST/DELETE | Implemented with limitation | Staging CRUD exercised; published KV metadata refresh tested. New publish does not capture a public preview screenshot. |
+| SEO GET/PUT/social-image POST/DELETE | Implemented | Live publish verified route SEO and social-image metadata refresh. |
 | SEO suggestions | Partial | Bounded VibeSDK file reads and provider call implemented; staging lacks a dedicated `GOOGLE_AI_STUDIO_API_KEY` Worker secret and a generated-agent end-to-end test. |
-| Public preview/social images | Implemented with limitation | Binary serving and validation tested; newly published preview capture is absent. |
+| Public preview/social images | Implemented for tested staging app | New publish captured a JPEG with a Browser Run Worker binding; gateway KV image, public authoring image endpoint and frontend status URL passed. |
 | Pages CRUD; templates list/detail | Implemented | Owner-scoped staging page CRUD; existing D1 templates served. |
 | Public waitlist; admin login/waitlist list/delete/status | Implemented | Admin now uses D1 role and secure cookie, not the legacy shared password. |
 | Custom/application domain list/status, DNS inspect/import/configure | Partial | Staging metadata APIs wired; DNS wizard paths are unit-tested but not end-to-end exercised on an isolated customer hostname. |

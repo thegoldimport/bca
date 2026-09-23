@@ -1,0 +1,509 @@
+Great. We accept the Cloudflare control-plane parity report.
+
+Major milestone confirmed:
+
+- Cloudflare staging control plane is deployed.
+- 100 automated tests pass.
+- Typecheck passes.
+- Production builds pass.
+- Core product acceptance passes.
+- Replit API fallback is removed.
+- Replit development server was stopped.
+- DATABASE_URL was removed.
+- The tested Cloudflare staging product continued working.
+
+DO NOT reopen already-passed control-plane work.
+
+We now need to close ONLY the remaining parity gaps.
+
+==================================================
+TASK: COMPLETE THE REMAINING CLOUDFLARE STAGING ACCEPTANCE
+==================================================
+
+Remaining unverified/partial areas:
+
+1. managed publishing through a real isolated staging gateway
+2. preview screenshot capture on publish
+3. staging-only custom hostname add/status/remove
+4. generated-agent runtime/file flows
+5. SEO suggestions against a real generated project
+6. final Replit-off acceptance including those flows
+
+Do not redesign anything else.
+
+Do not touch production resources.
+
+==================================================
+1. KEEP PRODUCTION FROZEN
+==================================================
+
+Do NOT modify:
+
+- production control-plane Worker
+- production control-plane D1
+- active VibeSDK namespaces
+- protected VibeSDK Worker
+- Test1
+- TaskFlow
+- test1.apps.buildcustom.ai
+- Buyer Magnets
+- production gateway
+- production route KV
+- production generated-app dispatch namespace
+- production Cloudflare for SaaS hostnames
+- production canaries
+- app.buildcustom.ai
+
+Production runtime mutations remain disabled.
+
+==================================================
+2. SAME CLOUDFLARE ACCOUNT IS FINE
+==================================================
+
+Do NOT create or require a separate Cloudflare account.
+
+Use isolated staging resources inside the existing Cloudflare account.
+
+Isolation must come from separate:
+
+- Worker names
+- KV namespaces
+- D1 where applicable
+- dispatch namespaces
+- gateway Worker/routes
+- test hostname/domain resources
+- staging configuration
+
+Do not reuse production stateful resources for mutation tests.
+
+==================================================
+3. ESTABLISH AN ISOLATED STAGING PUBLISH PATH
+==================================================
+
+We need a real staging equivalent of:
+
+BuildCustom control plane
+→ route metadata
+→ gateway
+→ Workers for Platforms generated app
+
+Create or verify isolated staging equivalents for:
+
+- staging control-plane Worker
+- staging route KV
+- staging gateway Worker
+- staging generated-app dispatch namespace
+- staging generated app
+- staging hostname/subdomain
+
+Use a clearly isolated hostname such as the existing staging proof
+namespace/domain pattern if available.
+
+Do not route through production:
+
+*.apps.buildcustom.ai
+
+unless an already-approved isolated staging subdomain under it exists
+that cannot affect production mappings.
+
+Prefer the existing staging architecture if one already exists rather
+than creating redundant infrastructure.
+
+==================================================
+4. VERIFY MANAGED PUBLISH END TO END
+==================================================
+
+Using a disposable STAGING project:
+
+Generate/use a valid buildable app.
+
+Then test the actual BuildCustom publish flow.
+
+Verify:
+
+BuildCustom project
+→ VibeSDK/generated deployment
+→ release metadata
+→ staging route KV
+→ staging gateway
+→ staging Workers for Platforms dispatch
+→ public HTTP URL
+
+The final managed published URL must return HTTP 200 and the expected
+application.
+
+Do not count direct access to a generated Worker as managed-publish
+success.
+
+We need the gateway/routing path.
+
+==================================================
+5. VERIFY PUBLISH METADATA
+==================================================
+
+After publishing verify:
+
+- release record
+- deployment ID/script name
+- managed slug
+- route KV mapping
+- preview mapping where applicable
+- SEO metadata
+- social-image metadata
+- primary published URL
+
+Verify the frontend receives the expected values.
+
+==================================================
+6. VERIFY SLUG SAFETY
+==================================================
+
+The parity review found a slug-change cleanup risk.
+
+Current code blocks unsafe published slug changes.
+
+Test that behavior.
+
+Then determine whether CURRENT DEVELOPMENT PRODUCT behavior actually
+requires published slug changes.
+
+If not required for parity:
+
+keep the safety block and document it.
+
+If required:
+
+implement the smallest safe behavior that:
+
+1. creates/updates the new staging route
+2. verifies it
+3. removes the old route
+4. cannot orphan the published application
+
+Test only against staging resources.
+
+Do not expand this into a routing redesign.
+
+==================================================
+7. PREVIEW SCREENSHOT CAPTURE
+==================================================
+
+The report says existing preview/social-image serving works, but a NEW
+publish does not capture its preview screenshot.
+
+Trace the CURRENT development behavior.
+
+Determine whether preview screenshot capture is an actual current
+product feature expected during publish.
+
+If yes:
+
+implement the Cloudflare-compatible equivalent.
+
+Keep it simple.
+
+Verify:
+
+publish
+→ screenshot/preview generated
+→ stored using the intended existing storage mechanism
+→ public preview endpoint serves it
+→ frontend displays it
+
+If current development never actually performs automatic screenshot
+capture, document that instead of inventing a new feature.
+
+==================================================
+8. STAGING CUSTOM HOSTNAME TESTING
+==================================================
+
+We need a genuinely isolated hostname mutation test.
+
+Do NOT use Buyer Magnets.
+
+Do NOT mutate production SaaS hostnames.
+
+First inspect what staging domain/zone resources already exist.
+
+Prefer using an existing isolated staging zone/subdomain if suitable.
+
+We need to exercise:
+
+- add hostname
+- inspect DNS requirements
+- hostname status
+- SSL/status refresh
+- remove hostname
+- cleanup metadata
+
+If a new staging-only credential is necessary, determine the MINIMUM
+Cloudflare permissions required.
+
+Do not print secret values.
+
+Do not reuse an account-wide credential if it could accidentally mutate
+protected production hostname resources without an isolation boundary.
+
+If Cloudflare cannot provide resource-level isolation for the required
+operation in this account, STOP that subtest and report exactly what
+owner action/resource is required.
+
+Do not weaken the safety gate just to make the test pass.
+
+==================================================
+9. GENERATED-AGENT ACCEPTANCE
+==================================================
+
+The previous acceptance did not exercise generated-agent file reads and
+mutations end to end.
+
+Use ONLY an isolated staging VibeSDK runtime/project.
+
+Do not use Test1 or active production namespaces.
+
+Test:
+
+- create/reconnect staging agent
+- status
+- normal generation
+- file list
+- file content
+- conversation/turn state
+- normal edit
+- preview
+- release/deployment where required by publish flow
+
+Use the normal BuildCustom control-plane adapter.
+
+We are testing the integration as the product uses it.
+
+==================================================
+10. DO NOT MODIFY THE FROZEN RESTORE FIXES
+==================================================
+
+The SpaceDO restore fix and ThinkAgent synchronization fix remain frozen.
+
+If the isolated staging runtime already contains them, use that code.
+
+Do not refactor or expand them.
+
+If the staging runtime does not yet contain them, report that clearly
+before changing runtime code.
+
+Do not touch the active VibeSDK runtime.
+
+==================================================
+11. SEO SUGGESTIONS
+==================================================
+
+Verify SEO suggestions against the isolated generated staging project.
+
+Test:
+
+BuildCustom control plane
+→ bounded generated-project file analysis
+→ configured provider
+→ SEO suggestions response
+
+Use a staging-specific provider secret/configuration.
+
+Do not use or expose production secrets unnecessarily.
+
+Verify:
+
+- authenticated owner only
+- bounded file access
+- successful provider response
+- expected frontend/API contract
+- provider failure handling
+
+==================================================
+12. LIVE DOMAIN FLOW
+==================================================
+
+If isolated Cloudflare for SaaS testing is safely available, test:
+
+- add staging custom hostname
+- receive DNS requirements/status
+- verify status refresh
+- serve staging generated app where technically practical
+- remove hostname
+- verify Cloudflare hostname cleanup
+- verify D1/control-plane cleanup
+
+Do not leave disposable hostname resources behind.
+
+==================================================
+13. PROJECT DELETION WITH REAL STAGING RESOURCES
+==================================================
+
+Once managed publishing and staging hostname creation work:
+
+create a disposable project with:
+
+- generated app
+- managed route
+- preview mapping
+- release metadata
+- custom staging hostname if available
+
+Then delete it through BuildCustom.
+
+Verify cleanup of:
+
+- BuildCustom project data
+- project-agent link where appropriate
+- route KV
+- preview KV
+- domain metadata
+- Cloudflare custom hostname
+- published routing metadata
+
+Do not accidentally delete shared VibeSDK infrastructure or dispatch
+namespaces.
+
+==================================================
+14. FINAL REPLIT-OFF ACCEPTANCE
+==================================================
+
+After all available staging flows pass normally:
+
+STOP the Replit development server again.
+
+Unset/remove DATABASE_URL from the acceptance environment.
+
+Ensure no requests can fall back to:
+
+ai-build-studio.replit.app
+
+Then rerun the COMPLETE staging acceptance suite, now including:
+
+- auth
+- sessions
+- dashboard
+- project CRUD
+- blog
+- autoblogger
+- SEO
+- SEO suggestions
+- pages
+- templates
+- waitlist
+- admin
+- generated-agent status
+- generated-agent files
+- generated-agent edit
+- preview
+- managed publish
+- published URL
+- preview image
+- staging hostname lifecycle if safely available
+- project deletion/cleanup
+
+The goal is:
+
+EVERY PRODUCTION-RELEVANT BUILDCUSTOM FLOW TESTED IN STAGING CONTINUES
+TO WORK WITH REPLIT OFF.
+
+==================================================
+15. TESTS
+==================================================
+
+Run all existing tests.
+
+Add focused regression tests only where necessary for the remaining
+gaps.
+
+Report:
+
+- automated test count
+- failures
+- typecheck
+- Node production build
+- Cloudflare build
+- Wrangler dry-run
+- staging deployment
+- live acceptance
+
+==================================================
+16. CLEANUP
+==================================================
+
+After evidence is collected:
+
+Delete ONLY disposable resources created specifically for this task.
+
+Do not delete reusable staging infrastructure unless clearly temporary.
+
+Do not touch production.
+
+==================================================
+17. SUCCESS CRITERIA
+==================================================
+
+Return COMPLETE STAGING PARITY only if:
+
+1. managed publish works through the isolated staging gateway
+2. generated published URL returns HTTP 200
+3. publish metadata is correct
+4. generated-agent integration works end to end
+5. SEO suggestions work
+6. preview screenshot behavior matches the current product
+7. custom hostname lifecycle works OR is the only explicitly
+   owner-blocked Cloudflare credential/resource issue remaining
+8. project cleanup is safe
+9. full Replit-off acceptance passes
+10. no production resource was modified
+
+==================================================
+18. REPORT
+==================================================
+
+Return:
+
+1. staging infrastructure used
+2. resources created
+3. resources reused
+4. managed publish result
+5. published URL result
+6. route KV result
+7. release metadata result
+8. slug behavior result
+9. preview screenshot result
+10. generated-agent result
+11. SEO suggestions result
+12. custom hostname add result
+13. hostname status result
+14. hostname remove result
+15. project deletion cleanup result
+16. Replit-off acceptance result
+17. automated test count
+18. typecheck/build results
+19. disposable cleanup performed
+20. remaining blockers
+21. final classification:
+
+A. COMPLETE STAGING PARITY
+
+B. COMPLETE EXCEPT OWNER-ACTION HOSTNAME TEST
+
+C. NOT YET COMPLETE
+
+22. exact next task
+
+==================================================
+19. IMPORTANT
+==================================================
+
+Do not turn this into another architecture investigation.
+
+We know the architecture.
+
+We know the migration target.
+
+We are closing the remaining staging acceptance gaps so we can move
+toward launch.
+
+Do not touch production.
+
+STOP after the report.

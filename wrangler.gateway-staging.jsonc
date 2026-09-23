@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buildcustom-apps-gateway-staging",
+  "main": "infrastructure/buildcustom-apps-gateway-staging.js",
+  "compatibility_date": "2026-09-20",
+  "workers_dev": true,
+  "kv_namespaces": [{ "binding": "ROUTES", "id": "e5e119fa2abc4c26a8c027e0d8a8d82c" }],
+  "dispatch_namespaces": [{ "binding": "DISPATCHER", "namespace": "buildcustom-vibesdk-migration-staging" }],
+  "observability": { "enabled": true }
+}
