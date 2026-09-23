@@ -7,7 +7,7 @@ import { handleAdminRoute } from "./admin-routes";
 import { handleContentRoute } from "./content-routes";
 import { handleDomainRoute } from "./domain-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
-import { capturePreviewImage, imageDataUri, previewImageKey, type BrowserRunBinding } from "./staging/preview-image";
+import { capturePreviewImage, imageDataUri, previewImageKey, verifyPublicHostnameRoute, type BrowserRunBinding } from "./staging/preview-image";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -35,6 +35,7 @@ export type Env = {
   GOOGLE_AI_STUDIO_API_KEY?: string;
   BROWSER?: BrowserRunBinding;
   STAGING_MANAGED_GATEWAY_URL?: string;
+  STAGING_MANAGED_HOSTNAME_SUFFIX?: string;
   STAGING_GATEWAY?: Fetcher;
 };
 
@@ -150,12 +151,13 @@ function runtimeError(error: unknown): Response {
   return json({ message: error instanceof Error ? error.message : "Request failed" }, { status: 400 });
 }
 
-export function managedStagingPublishUrl(gateway: string, slug: string): string {
+export function managedStagingPublishUrl(gateway: string, slug: string, hostnameSuffix?: string): string {
+  if (hostnameSuffix === "staging.buildcustom.ai") return `https://${slug}.${hostnameSuffix}/`;
   return `${gateway.replace(/\/+$/, "")}/${slug}/`;
 }
 
-export function hasExactStagingGatewayConfig(url: string | undefined, gateway: Fetcher | undefined): boolean {
-  if (!url || !gateway) return false;
+export function hasExactStagingGatewayConfig(url: string | undefined, gateway: Fetcher | undefined, hostnameSuffix?: string): boolean {
+  if (!url || !gateway || (hostnameSuffix && hostnameSuffix !== "staging.buildcustom.ai")) return false;
   try {
     const parsed = new URL(url);
     return parsed.protocol === "https:" && parsed.hostname === STAGING_GATEWAY_HOST
@@ -339,7 +341,7 @@ export default {
         if (operation === "stop" && request.method === "POST") return json(await adapter.stop(runtimeProject));
         if (operation === "deployments" && request.method === "POST") {
           if (!canPublishInStaging(user.role)) return json({ message: "Staging publish requires a super administrator." }, { status: 403 });
-          if (env.ENVIRONMENT === "staging" && !hasExactStagingGatewayConfig(env.STAGING_MANAGED_GATEWAY_URL, env.STAGING_GATEWAY)) {
+          if (env.ENVIRONMENT === "staging" && !hasExactStagingGatewayConfig(env.STAGING_MANAGED_GATEWAY_URL, env.STAGING_GATEWAY, env.STAGING_MANAGED_HOSTNAME_SUFFIX)) {
             return json({ message: "Staging managed gateway is not configured." }, { status: 503 });
           }
           const settings = await env.DB.prepare("SELECT * FROM runtime_project_links WHERE project_id=?").bind(id).first<any>();
@@ -367,7 +369,7 @@ export default {
           const publicUrl = env.ENVIRONMENT === "production"
             ? `https://${slug}.apps.buildcustom.ai`
             : env.STAGING_MANAGED_GATEWAY_URL
-              ? managedStagingPublishUrl(env.STAGING_MANAGED_GATEWAY_URL, slug)
+              ? managedStagingPublishUrl(env.STAGING_MANAGED_GATEWAY_URL, slug, env.STAGING_MANAGED_HOSTNAME_SUFFIX)
               : result.url;
           try {
             await writePublishedRoute(env, slug, scriptName, routeMetadata(prospectiveSeo));
@@ -379,7 +381,10 @@ export default {
             throw error;
           }
           if (env.ENVIRONMENT === "staging") {
-            try { await verifyManagedStagingRoute(env.STAGING_GATEWAY!, publicUrl, slug, scriptName); }
+            try {
+              await verifyManagedStagingRoute(env.STAGING_GATEWAY!, publicUrl, slug, scriptName);
+              if (env.STAGING_MANAGED_HOSTNAME_SUFFIX) await verifyPublicHostnameRoute(env.BROWSER, publicUrl, slug, scriptName);
+            }
             catch (error) {
               if (previousRoute === null) await env.STAGING_ROUTES.delete(slug);
               else await env.STAGING_ROUTES.put(slug, previousRoute);

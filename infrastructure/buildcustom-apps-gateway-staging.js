@@ -1,4 +1,5 @@
 const HOSTNAME = "buildcustom-apps-gateway-staging.thegoldimport.workers.dev";
+const STAGING_SUFFIX = ".staging.buildcustom.ai";
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SCRIPT = /^[a-z0-9_][a-z0-9-_]*$/;
 
@@ -36,6 +37,13 @@ export function stagingPath(pathname) {
   return { slug: match[1], path: `/${match[2] || ""}`.replace(/\/+/g, "/"), trailingSlash: pathname === `/p/${match[1]}/` || pathname.startsWith(`/p/${match[1]}/`) };
 }
 
+export function stagingHost(hostname) {
+  const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  if (!normalized.endsWith(STAGING_SUFFIX)) return null;
+  const slug = normalized.slice(0, -STAGING_SUFFIX.length);
+  return SLUG.test(slug) ? slug : null;
+}
+
 export function rewriteRootAbsoluteUrl(value, slug) {
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//") || value.startsWith(`/p/${slug}/`)) return value;
   return `/p/${slug}${value}`;
@@ -60,7 +68,7 @@ function rewriteSrcset(value, slug) {
 
 function removeElement() { return { element(element) { element.remove(); } }; }
 
-function rewriteHtml(response, metadata, origin, slug) {
+function rewriteHtml(response, metadata, origin, slug, hostnameMode) {
   if (!response.headers.get("content-type")?.includes("text/html") || typeof HTMLRewriter === "undefined") return response;
   let rewriter = new HTMLRewriter();
   const replacements = [
@@ -75,25 +83,26 @@ function rewriteHtml(response, metadata, origin, slug) {
   rewriter = rewriter.on("*", { element(element) {
     for (const name of ["href", "src", "action", "poster"]) {
       const attribute = element.getAttribute(name);
-      if (attribute) element.setAttribute(name, rewriteRootAbsoluteUrl(attribute, slug));
+       if (attribute && !hostnameMode) element.setAttribute(name, rewriteRootAbsoluteUrl(attribute, slug));
     }
     const srcset = element.getAttribute("srcset");
-    if (srcset) element.setAttribute("srcset", rewriteSrcset(srcset, slug));
+    if (srcset && !hostnameMode) element.setAttribute("srcset", rewriteSrcset(srcset, slug));
     const style = element.getAttribute("style");
-    if (style) element.setAttribute("style", rewriteRootAbsoluteCss(style, slug));
+    if (style && !hostnameMode) element.setAttribute("style", rewriteRootAbsoluteCss(style, slug));
   } });
-  rewriter = rewriter.on("style", { text(text) { text.replace(rewriteRootAbsoluteCss(text.text, slug)); } });
+  if (!hostnameMode) rewriter = rewriter.on("style", { text(text) { text.replace(rewriteRootAbsoluteCss(text.text, slug)); } });
   return rewriter.transform(response);
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.hostname.toLowerCase().replace(/\.$/, "") !== HOSTNAME) return new Response("Not found", { status: 404 });
-    const resolved = stagingPath(url.pathname);
+    const hostnameMode = url.hostname.toLowerCase().replace(/\.$/, "") !== HOSTNAME;
+    const slugFromHost = hostnameMode ? stagingHost(url.hostname) : null;
+    const resolved = hostnameMode ? (slugFromHost ? { slug: slugFromHost, path: url.pathname } : null) : stagingPath(url.pathname);
     if (!resolved) return new Response("Not found", { status: 404 });
     const { slug, path } = resolved;
-    if (!resolved.trailingSlash && path === "/") return Response.redirect(`${url.origin}/p/${slug}/${url.search}`, 308);
+    if (!hostnameMode && !resolved.trailingSlash && path === "/") return Response.redirect(`${url.origin}/p/${slug}/${url.search}`, 308);
     const raw = await env.ROUTES.get(slug);
     if (!raw) return new Response("Project not found", { status: 404 });
     const { scriptName, metadata } = routeConfig(raw);
@@ -102,16 +111,21 @@ export default {
     if (path === "/_buildcustom/route-check") {
       return Response.json({ ok: true, project: slug, scriptName }, { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
     }
+    if (path === "/_buildcustom/route-check.html") {
+      return new Response(`<!doctype html><html><body><div id="buildcustom-staging-route" data-project="${slug}" data-script="${scriptName}">Staging route</div></body></html>`, {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
+      });
+    }
     if (path === "/_buildcustom/preview-image") {
       const image = await env.ROUTES.get(`preview:${slug}`, "arrayBuffer");
       return image ? new Response(image, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff" } }) : new Response("Preview image not found", { status: 404 });
     }
     if (path === "/robots.txt") {
-      const body = metadata.allowIndexing === false ? "User-agent: *\nDisallow: /\n" : `User-agent: *\nAllow: /\nSitemap: ${url.origin}/p/${slug}/sitemap.xml\n`;
+      const body = metadata.allowIndexing === false ? "User-agent: *\nDisallow: /\n" : `User-agent: *\nAllow: /\nSitemap: ${url.origin}${hostnameMode ? "/" : `/p/${slug}/`}sitemap.xml\n`;
       return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
     }
     if (path === "/sitemap.xml") {
-      const canonical = escapeHtml(metadata.canonicalUrl || `${url.origin}/p/${slug}/`);
+      const canonical = escapeHtml(metadata.canonicalUrl || `${url.origin}${hostnameMode ? "/" : `/p/${slug}/`}`);
       return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${canonical}</loc></url></urlset>`, { headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
     }
 
@@ -121,10 +135,10 @@ export default {
     const location = dispatched.headers.get("Location");
     if (location?.startsWith("/") && !location.startsWith("//")) {
       const redirectHeaders = new Headers(dispatched.headers);
-      redirectHeaders.set("Location", rewriteRootAbsoluteUrl(location, slug));
+      redirectHeaders.set("Location", hostnameMode ? location : rewriteRootAbsoluteUrl(location, slug));
       redirectHeaders.delete("content-length");
       return new Response(null, { status: dispatched.status, statusText: dispatched.statusText, headers: redirectHeaders });
     }
-    return rewriteHtml(dispatched, metadata, url.origin, slug);
+    return rewriteHtml(dispatched, metadata, url.origin, slug, hostnameMode);
   },
 };

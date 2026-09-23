@@ -1,0 +1,761 @@
+Great. We accept the latest staging acceptance report.
+
+IMPORTANT CONTEXT / DECISION UPDATE:
+
+Do NOT reopen or repeat work that already passed.
+
+We now have strong evidence that with Replit OFF:
+
+- authentication/control-plane flows work
+- generated-agent creation works
+- generation works
+- editing works
+- file reads work
+- preview works
+- managed publishing works
+- staging gateway routing works
+- generated HTML/assets work
+- screenshot capture works
+- release metadata works
+- slug locking works
+- project cleanup works
+- D1/KV cleanup works
+
+112 automated tests pass with 0 failures.
+
+The remaining work should be tightly scoped.
+
+We need to close:
+
+1. staging SEO provider verification
+2. realistic hostname-based generated-app staging
+3. external custom-domain / Cloudflare for SaaS verification
+
+There is also an important architecture clarification:
+
+We ALREADY own and control buildcustom.ai.
+
+Our intended production hostname architecture is:
+
+buildcustom.ai
+= marketing site
+
+app.buildcustom.ai
+= BuildCustom dashboard/builder
+
+*.apps.buildcustom.ai
+= generated customer apps hosted on BuildCustom
+
+customer-owned external domains
+= Cloudflare for SaaS custom hostnames pointing to those generated apps
+
+For STAGING, we should use our existing buildcustom.ai domain if this
+can be done safely.
+
+Preferred staging structure:
+
+staging.buildcustom.ai
+= staging BuildCustom application/control-plane entry if useful
+
+*.staging.buildcustom.ai
+= staging generated applications
+
+Example:
+
+test-app.staging.buildcustom.ai
+
+This should be the staging equivalent of:
+
+customer-app.apps.buildcustom.ai
+
+Do NOT require another registered domain merely to test generated apps
+at the root of a hostname.
+
+==================================================
+PART 1: KEEP PRODUCTION FROZEN
+==================================================
+
+Do NOT modify:
+
+- production control-plane Worker
+- production control-plane D1
+- active production VibeSDK namespaces
+- protected VibeSDK Worker
+- Test1
+- TaskFlow
+- test1.apps.buildcustom.ai
+- Buyer Magnets
+- production gateway
+- production route KV
+- production generated-app dispatch namespace
+- production custom hostnames
+- production canaries
+- app.buildcustom.ai
+- *.apps.buildcustom.ai production routing
+
+Production runtime mutations remain disabled.
+
+Do NOT deploy the frozen VibeSDK restore fixes to production during this
+task.
+
+==================================================
+PART 2: STAGING SEO PROVIDER
+==================================================
+
+The staging control-plane Worker needs its own:
+
+GOOGLE_AI_STUDIO_API_KEY
+
+First check whether an appropriate TEST/STAGING Google AI Studio key
+already exists securely in the Replit environment or staging
+configuration.
+
+DO NOT print its value.
+
+DO NOT expose it in logs.
+
+DO NOT copy a production credential unless it is explicitly appropriate
+for staging use.
+
+If an appropriate existing key is available:
+
+configure it directly as a secret ONLY on:
+
+buildcustom-control-plane-staging
+
+Then verify the SEO suggestions flow using an isolated generated staging
+project.
+
+Test:
+
+owner
+→ BuildCustom SEO suggestions endpoint
+→ bounded generated-project file analysis
+→ Google provider
+→ valid suggestions response
+
+Also verify:
+
+- non-owner denied
+- missing/invalid provider behavior
+- provider failure handled safely
+- no secret exposed
+- frontend/API contract correct
+
+If NO appropriate staging key exists:
+
+do NOT fail the entire task.
+
+Record:
+
+OWNER ACTION REQUIRED — SEO KEY
+
+and tell me at the end exactly what I need to create/configure.
+
+Continue with the staging hostname work.
+
+==================================================
+PART 3: REALISTIC STAGING GENERATED-APP HOSTNAMES
+==================================================
+
+The previous staging gateway proved:
+
+/p/<slug>/
+
+works.
+
+That is useful, but it is not our intended production architecture for
+BuildCustom-hosted apps.
+
+Production generated apps should ultimately look like:
+
+my-app.apps.buildcustom.ai
+
+Therefore staging generated apps should preferably look like:
+
+my-app.staging.buildcustom.ai
+
+This gives each generated app the ROOT of its own hostname.
+
+That lets us properly test:
+
+/
+root-relative assets
+JavaScript bundles
+CSS
+SPA routing
+nested-route refreshes
+API paths
+and other behavior that may not work correctly under /p/<slug>/.
+
+==================================================
+PART 4: DETERMINE SAFE STAGING SUBDOMAIN ARCHITECTURE
+==================================================
+
+First investigate whether the existing buildcustom.ai Cloudflare zone
+can safely support:
+
+*.staging.buildcustom.ai
+
+without affecting:
+
+buildcustom.ai
+www.buildcustom.ai
+app.buildcustom.ai
+*.apps.buildcustom.ai
+or any current production routing.
+
+We do NOT want another Cloudflare account.
+
+We do NOT want to buy another domain unless Cloudflare technically makes
+that unavoidable.
+
+Same Cloudflare account is fine.
+
+Isolation should come from separate staging resources.
+
+Preferred flow:
+
+test-app.staging.buildcustom.ai
+→ staging gateway Worker
+→ staging route KV
+→ staging Workers for Platforms dispatch namespace
+→ generated staging app
+
+Use ONLY staging infrastructure.
+
+Do NOT route this through production infrastructure.
+
+==================================================
+PART 5: DNS / WORKER ROUTING
+==================================================
+
+Determine the minimum DNS/Worker configuration needed for:
+
+*.staging.buildcustom.ai
+
+If it can be configured safely using existing permissions and clearly
+isolated staging resources, implement it.
+
+If owner action is required, STOP only that mutation and give me exact
+instructions at the end.
+
+For DNS instructions I want exactly:
+
+TYPE
+NAME
+TARGET
+PROXY STATUS
+
+plus any Worker route required.
+
+Do not give me a giant Cloudflare tutorial.
+
+Do NOT change:
+
+buildcustom.ai
+app.buildcustom.ai
+*.apps.buildcustom.ai
+
+==================================================
+PART 6: TEST A — BUILDCUSTOM-HOSTED SUBDOMAIN
+==================================================
+
+This is separate from external custom domains.
+
+TEST A proves BuildCustom-hosted generated applications.
+
+It should NOT require Cloudflare for SaaS custom-hostname creation,
+because buildcustom.ai is our own zone.
+
+Using disposable staging resources:
+
+1. create a disposable BuildCustom staging project
+2. create/generated staging agent
+3. generate a valid application
+4. publish it
+5. write staging route metadata
+6. route through staging gateway
+7. expose it as something like:
+
+   test-app.staging.buildcustom.ai
+
+8. verify HTTP 200
+9. verify expected generated HTML
+10. verify JS assets
+11. verify CSS assets
+12. verify root-relative assets
+13. verify client-side navigation if SPA
+14. verify direct refresh on a nested SPA route if applicable
+15. verify application API paths if the generated app uses them
+16. verify screenshot/preview still works
+17. verify release metadata
+18. verify frontend receives the correct published URL
+
+Do NOT count direct access to the generated Worker as success.
+
+The request must flow:
+
+hostname
+→ staging gateway
+→ staging route lookup
+→ staging dispatch
+→ generated app
+
+==================================================
+PART 7: SLUG / HOSTNAME ROUTING
+==================================================
+
+Keep the already-verified published slug locking behavior unless the
+hostname architecture requires a small staging-compatible adjustment.
+
+Do NOT redesign routing.
+
+The intended relationship should be conceptually:
+
+project slug
+→ generated hostname
+→ route KV
+→ generated deployment
+
+Example:
+
+slug:
+my-test-app
+
+hostname:
+my-test-app.staging.buildcustom.ai
+
+Do not modify production *.apps.buildcustom.ai behavior in this task.
+
+==================================================
+PART 8: SCREENSHOT / PREVIEW
+==================================================
+
+Screenshot capture already passed using Cloudflare Browser Run.
+
+Verify that hostname-based publishing does not break it.
+
+Confirm:
+
+publish
+→ screenshot capture
+→ preview storage
+→ public preview endpoint
+→ frontend-facing preview URL
+
+Do not rebuild this feature if the existing implementation already
+works.
+
+==================================================
+PART 9: PROJECT DELETION WITH HOSTNAME ROUTING
+==================================================
+
+Using ONLY the disposable staging project created for TEST A:
+
+delete it through the normal BuildCustom flow.
+
+Verify cleanup of:
+
+- BuildCustom project data
+- project-agent mapping where appropriate
+- release metadata
+- staging route KV
+- preview KV
+- staging hostname routing metadata
+- generated disposable dispatch script where current architecture
+  expects cleanup
+
+Do NOT delete shared staging infrastructure.
+
+VibeSDK currently has no safe per-agent deletion API.
+
+Do not invent one during this task.
+
+A leftover isolated staging test agent is acceptable if documented.
+
+==================================================
+PART 10: TEST B — EXTERNAL CUSTOM DOMAIN
+==================================================
+
+This is a DIFFERENT test.
+
+Do not confuse it with TEST A.
+
+TEST A:
+
+my-app.staging.buildcustom.ai
+
+proves BuildCustom-hosted generated apps.
+
+TEST B proves a customer's external domain:
+
+customer-owned hostname
+→ Cloudflare Custom Hostname / Cloudflare for SaaS
+→ BuildCustom gateway
+→ generated app
+
+We still eventually need TEST B because custom domains are part of
+BuildCustom.
+
+However, TEST B should NOT block TEST A.
+
+==================================================
+PART 11: INVESTIGATE WHETHER TEST B CAN ALSO USE BUILDCUSTOM.AI
+==================================================
+
+Determine whether Cloudflare for SaaS allows us to safely exercise the
+Custom Hostnames API/lifecycle using an isolated hostname/subdomain that
+we control under buildcustom.ai.
+
+We need to exercise the actual Custom Hostnames API:
+
+- add hostname
+- DNS requirements
+- hostname status
+- SSL lifecycle/status
+- routing
+- removal
+
+If Cloudflare allows a safe staging test under our existing domain,
+design the minimum isolated setup.
+
+If Cloudflare requires an independent hostname/domain arrangement to
+meaningfully test customer-owned custom hostnames, report exactly what
+is required.
+
+Do NOT buy anything.
+
+Do NOT create another account.
+
+Do NOT touch Buyer Magnets.
+
+Do NOT weaken safety gates.
+
+==================================================
+PART 12: CLOUDFLARE TOKEN SAFETY
+==================================================
+
+If TEST B requires a Cloudflare API token, determine the minimum
+permissions.
+
+Scope it as narrowly as Cloudflare permits.
+
+Prefer:
+
+buildcustom.ai zone only
+
+and only the permissions actually required for:
+
+- custom hostname creation
+- SSL/custom hostname management
+- hostname status
+- hostname removal
+
+Do not use an unnecessarily broad account-wide credential.
+
+If Cloudflare's permission model cannot safely isolate these operations
+inside the current zone, tell me.
+
+Do not silently use a broader credential.
+
+==================================================
+PART 13: IF OWNER ACTION IS REQUIRED
+==================================================
+
+If you need me to manually create something in Cloudflare or Google,
+do NOT turn it into a failure.
+
+Return:
+
+OWNER ACTION REQUIRED
+
+For each action, give me extremely simple instructions.
+
+Example format:
+
+GOOGLE:
+
+1. Go to ...
+2. Create ...
+3. Save it in Replit Secrets as GOOGLE_AI_STUDIO_API_KEY
+
+CLOUDFLARE:
+
+1. Go to ...
+2. Click ...
+3. Create ...
+4. Permission: ...
+5. Zone: buildcustom.ai
+6. Save it as ...
+
+If DNS is needed:
+
+TYPE:
+NAME:
+TARGET:
+PROXY STATUS:
+
+Do not give me unnecessary explanation.
+
+Wait for me after giving the instructions.
+
+==================================================
+PART 14: SEO SUGGESTIONS ACCEPTANCE
+==================================================
+
+Once the staging provider key is available, verify:
+
+1. owner can request SEO suggestions
+2. generated project files are analyzed through the intended bounded
+   mechanism
+3. real Google provider responds
+4. suggestions have expected API shape
+5. frontend can consume them
+6. non-owner denied
+7. provider error handled
+8. missing provider configuration handled
+9. secret never exposed
+
+==================================================
+PART 15: EXTERNAL CUSTOM DOMAIN ACCEPTANCE
+==================================================
+
+If TEST B can safely be performed with isolated staging resources, test:
+
+1. create disposable staging project
+2. publish generated app
+3. add disposable custom hostname through BuildCustom
+4. return DNS requirements
+5. inspect hostname status
+6. inspect SSL status
+7. complete verification
+8. access generated app through custom hostname
+9. verify HTML
+10. verify JS/CSS/assets
+11. verify root-relative assets
+12. verify SPA behavior if applicable
+13. refresh status
+14. remove hostname through BuildCustom
+15. verify Cloudflare Custom Hostname removed
+16. verify D1 metadata removed
+17. verify routing cleanup
+
+Do not leave disposable custom-hostname resources behind.
+
+==================================================
+PART 16: FINAL REPLIT-OFF ACCEPTANCE
+==================================================
+
+After all available staging blockers are resolved:
+
+STOP the Replit development server again.
+
+Unset DATABASE_URL from the acceptance environment.
+
+Ensure there is NO fallback to:
+
+ai-build-studio.replit.app
+
+Run the complete staging acceptance suite.
+
+Verify:
+
+AUTH
+- login
+- logout
+- session persistence
+- unauthorized access
+- ownership
+
+DASHBOARD
+- list projects
+- create
+- read
+- update
+- delete
+
+ADMIN / WAITLIST
+- admin auth
+- authorization
+- waitlist submission
+- waitlist management
+
+CONTENT
+- blog
+- autoblogger
+- SEO
+- REAL SEO suggestions
+- pages
+- templates
+
+GENERATED APP
+- agent creation
+- generation
+- file list
+- file content
+- turns
+- edit
+- preview
+- managed publish
+- release metadata
+- screenshot
+- hostname-based published app
+- HTML
+- JS
+- CSS
+- root-relative assets
+- SPA routing where applicable
+
+CUSTOM DOMAIN
+- add
+- status
+- SSL
+- routing
+- remove
+
+CLEANUP
+- project deletion
+- route cleanup
+- preview cleanup
+- domain cleanup
+- disposable generated script cleanup
+
+==================================================
+PART 17: DO NOT TOUCH FROZEN VIBESDK FIXES
+==================================================
+
+The verified:
+
+- SpaceDO restore fix
+- ThinkAgent synchronization fix
+
+remain frozen.
+
+Do not modify them.
+
+Do not deploy them to the active production VibeSDK runtime during this
+task.
+
+If isolated staging already contains them, that is fine.
+
+Do not reopen restore investigation.
+
+==================================================
+PART 18: TESTS
+==================================================
+
+Run all existing tests.
+
+Add only focused tests required by this remaining work.
+
+Report:
+
+- automated test count
+- failures
+- typecheck
+- Node production build
+- Cloudflare build
+- Wrangler dry-run
+- staging deployment
+- live staging acceptance
+- Replit-off acceptance
+
+==================================================
+PART 19: SUCCESS CLASSIFICATIONS
+==================================================
+
+Use one of these exact classifications:
+
+A. COMPLETE STAGING PARITY
+
+Use only if:
+
+- real SEO provider succeeds
+- provider failure behavior succeeds
+- *.staging.buildcustom.ai generated-app hosting succeeds
+- generated app works from hostname root
+- assets work
+- SPA/root routing is verified where applicable
+- external custom-domain lifecycle is verified
+- cleanup works
+- complete Replit-off acceptance passes
+- production remains untouched
+
+B. CORE STAGING PARITY COMPLETE — EXTERNAL CUSTOM DOMAIN OWNER ACTION
+REQUIRED
+
+Use if everything including:
+
+*.staging.buildcustom.ai
+
+works with Replit off, but the only remaining item is a resource or
+credential needed specifically to test external customer-owned custom
+domains.
+
+C. OWNER ACTION REQUIRED
+
+Use if staging DNS or Google provider configuration requires me before
+you can complete the core tests.
+
+D. NOT YET COMPLETE
+
+Use only if an actual implementation/test defect remains.
+
+==================================================
+PART 20: FINAL REPORT
+==================================================
+
+Return:
+
+1. SEO provider result
+2. staging hostname architecture
+3. DNS configuration
+4. staging gateway configuration
+5. *.staging.buildcustom.ai result
+6. generated-app hostname result
+7. HTML result
+8. JS/CSS/assets result
+9. SPA/root-navigation result
+10. screenshot result
+11. route KV result
+12. release metadata result
+13. deletion cleanup result
+14. external Custom Hostnames feasibility
+15. external hostname add result
+16. external hostname status/SSL result
+17. external hostname remove result
+18. full Replit-off result
+19. automated test count
+20. build/typecheck results
+21. resources created
+22. resources cleaned up
+23. remaining owner actions
+24. final classification
+25. exact next task
+
+==================================================
+MOST IMPORTANT
+==================================================
+
+Do not turn this into another architecture investigation.
+
+We know the architecture.
+
+We know BuildCustom can operate from Cloudflare with Replit off.
+
+We are closing the remaining staging acceptance gaps.
+
+Use our existing buildcustom.ai domain for realistic staging subdomains
+if Cloudflare safely supports it.
+
+Do not require another registered domain merely to test:
+
+*.staging.buildcustom.ai
+
+Keep the true external custom-domain / Cloudflare for SaaS test
+separate from BuildCustom-hosted subdomain testing.
+
+Do not touch production.
+
+STOP after the report or when owner action is required.

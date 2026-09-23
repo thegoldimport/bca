@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capturePreviewImage, imageDataUri, previewImageKey } from "../cloudflare/staging/preview-image";
+import { capturePreviewImage, imageDataUri, previewImageKey, verifyPublicHostnameRoute } from "../cloudflare/staging/preview-image";
 import { hasExactStagingGatewayConfig, managedStagingPublishUrl, verifyManagedStagingRoute } from "../cloudflare/worker";
 
 const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
@@ -35,6 +35,7 @@ test("preview image key, data URI, and managed gateway URL stay isolated", () =>
   assert.equal(previewImageKey("demo"), "preview:demo");
   assert.equal(imageDataUri(jpeg), "data:image/jpeg;base64,/9j/2Q==");
   assert.equal(managedStagingPublishUrl("https://gateway.test/p/", "demo"), "https://gateway.test/p/demo/");
+  assert.equal(managedStagingPublishUrl("https://gateway.test/p", "demo", "staging.buildcustom.ai"), "https://demo.staging.buildcustom.ai/");
 });
 
 test("managed route verification uses the staging gateway service binding", async () => {
@@ -55,10 +56,31 @@ test("managed route verification uses the staging gateway service binding", asyn
   ]);
 });
 
+test("hostname publish requires public Browser Rendering route identity", async () => {
+  const url = "https://demo.staging.buildcustom.ai/";
+  const calls: string[] = [];
+  const browser = { quickAction: async (action: "content", options: Record<string, unknown>) => {
+    calls.push(`${action}:${options.url}`);
+    return new Response('<html><body><div id="buildcustom-staging-route" data-project="demo" data-script="demo-script">Staging route</div></body></html>', {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  } };
+  await verifyPublicHostnameRoute(browser, url, "demo", "demo-script");
+  assert.deepEqual(calls, ["content:https://demo.staging.buildcustom.ai/_buildcustom/route-check.html"]);
+  await verifyPublicHostnameRoute({ quickAction: async () => Response.json({
+    success: true,
+    result: '<html><body><div id="buildcustom-staging-route" data-project="demo" data-script="demo-script">Staging route</div></body></html>',
+  }) }, url, "demo", "demo-script");
+  await assert.rejects(() => verifyPublicHostnameRoute(browser, url, "demo", "wrong-script"), /unexpected gateway/);
+  await assert.rejects(() => verifyPublicHostnameRoute(undefined, url, "demo", "demo-script"), /requires Browser Rendering/);
+});
+
 test("staging publishing rejects missing or non-isolated gateway configuration", () => {
   const binding = { fetch: async () => new Response() };
   assert.equal(hasExactStagingGatewayConfig(undefined, binding), false);
   assert.equal(hasExactStagingGatewayConfig("https://buildcustom-apps-gateway-staging.thegoldimport.workers.dev/p", binding), true);
+  assert.equal(hasExactStagingGatewayConfig("https://buildcustom-apps-gateway-staging.thegoldimport.workers.dev/p", binding, "staging.buildcustom.ai"), true);
+  assert.equal(hasExactStagingGatewayConfig("https://buildcustom-apps-gateway-staging.thegoldimport.workers.dev/p", binding, "apps.buildcustom.ai"), false);
   assert.equal(hasExactStagingGatewayConfig("https://buildcustom-apps-gateway-staging.thegoldimport.workers.dev/p?route=prod", binding), false);
   assert.equal(hasExactStagingGatewayConfig("https://buildcustom-apps-gateway.thegoldimport.workers.dev/p", binding), false);
 });

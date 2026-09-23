@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import gateway, { metadataTags, rewriteRootAbsoluteCss, rewriteRootAbsoluteUrl, stagingPath } from "../infrastructure/buildcustom-apps-gateway-staging.js";
+import gateway, { metadataTags, rewriteRootAbsoluteCss, rewriteRootAbsoluteUrl, stagingHost, stagingPath } from "../infrastructure/buildcustom-apps-gateway-staging.js";
 
 const route = JSON.stringify({ scriptName: "staging-app", metadata: { title: "Staging app", allowIndexing: true } });
 function env(extra = {}) {
@@ -19,6 +19,32 @@ test("only the staging host and reserved slug path resolve", () => {
   assert.equal(rewriteRootAbsoluteUrl("//cdn.example/app.js", "demo"), "//cdn.example/app.js");
   assert.equal(rewriteRootAbsoluteCss('body{background:url("/img/bg.png")} @import "/css/site.css";', "demo"), 'body{background:url("/p/demo/img/bg.png")} @import "/p/demo/css/site.css";');
   assert.equal(metadataTags({}), "");
+  assert.equal(stagingHost("Demo.staging.buildcustom.ai"), "demo");
+  assert.equal(stagingHost("demo.apps.buildcustom.ai"), null);
+  assert.equal(stagingHost("demo.other.staging.buildcustom.ai"), null);
+  assert.equal(stagingHost("staging.buildcustom.ai"), null);
+});
+
+test("generated staging hostname dispatches from root without prefix rewriting", async () => {
+  const paths = [];
+  const hosted = env({ DISPATCHER: { get: (name) => {
+    assert.equal(name, "staging-app");
+    return { fetch: async (request) => {
+      paths.push(new URL(request.url).pathname + new URL(request.url).search);
+      return new Response("hosted", { headers: { "content-type": "text/plain" } });
+    } };
+  } } });
+  for (const path of ["/", "/assets/app.js?v=1", "/nested/route", "/api/data"]) {
+    const response = await gateway.fetch(new Request(`https://demo.staging.buildcustom.ai${path}`), hosted);
+    assert.equal(response.status, 200);
+  }
+  assert.deepEqual(paths, ["/", "/assets/app.js?v=1", "/nested/route", "/api/data"]);
+  const routeCheck = await gateway.fetch(new Request("https://demo.staging.buildcustom.ai/_buildcustom/route-check"), hosted);
+  assert.equal((await routeCheck.json()).scriptName, "staging-app");
+  const publicCheck = await gateway.fetch(new Request("https://demo.staging.buildcustom.ai/_buildcustom/route-check.html"), hosted);
+  assert.match(await publicCheck.text(), /data-project="demo" data-script="staging-app"/);
+  const robots = await gateway.fetch(new Request("https://demo.staging.buildcustom.ai/robots.txt"), hosted);
+  assert.match(await robots.text(), /Sitemap: https:\/\/demo\.staging\.buildcustom\.ai\/sitemap\.xml/);
 });
 
 test("bare project path redirects before dispatch and preserves query", async () => {

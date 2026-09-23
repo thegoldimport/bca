@@ -23,6 +23,7 @@
     "STAGING_ROUTE_KV_ID": "e5e119fa2abc4c26a8c027e0d8a8d82c",
     "STAGING_DISPATCH_NAMESPACE": "buildcustom-vibesdk-migration-staging",
     "STAGING_MANAGED_GATEWAY_URL": "https://buildcustom-apps-gateway-staging.thegoldimport.workers.dev/p",
+    "STAGING_MANAGED_HOSTNAME_SUFFIX": "staging.buildcustom.ai",
     "STAGING_ALLOWED_ORIGIN": "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
     "STAGING_LOGIN_ENABLED": "true",
     "STAGING_REGISTRATION_ENABLED": "false",
