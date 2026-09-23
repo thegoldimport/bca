@@ -5,6 +5,7 @@
 - [Published release restores](published-release-restores.md) — restore old releases forward into Development; Production changes only through a new approved publish.
 - [VibeSDK generation completion](vibesdk-generation-completion.md) — completion signals can disagree with active tools; persist results before reconnect clears commit state.
 - [VibeSDK SDK behavior selection](vibesdk-sdk-behavior-selection.md) — AgenticClient selects the legacy path, not the browser's Think behavior.
+- [AI Gateway test isolation](ai-gateway-isolation.md) — Run tokens span an account's gateways; a disposable gateway alone is not a credential boundary.
 - [Hosting product model](hosting-product-model.md) — offer paid managed hosting with an automatic subdomain, external hosting, and optional custom domains for either.
 - [Cloudflare account token scoping](cloudflare-account-token-scoping.md) — derive the account ID from the owned zone before judging an account-scoped API token invalid.
 - [Published metadata injection](published-metadata-injection.md) — apply per-project SEO and favicon settings at the gateway because runtime workspace files are read-only.

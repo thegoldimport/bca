@@ -1,0 +1,449 @@
+Before we continue the restore investigation, I want to reset this work around Cloudflare's intended VibeSDK architecture and normal documented lifecycle.
+
+We have spent several rounds building increasingly specialized test harnesses around SpaceDO, ThinkAgent, Git/restore state, and Durable Objects. Stop doing that for now.
+
+Cloudflare built VibeSDK to work through its normal application/API/SDK lifecycle, and BuildCustom should stay as close to that architecture as possible.
+
+The immediate problem is earlier than restore:
+
+In the last isolated test, a real ThinkAgent was successfully created and connected through VibeSDK's normal ticketed WebSocket path, but its first model request returned HTTP 400 Bad Request. A generation_complete event followed, but reconnect showed zero files.
+
+Therefore the next task is ONLY:
+
+VERIFY THE ISOLATED VIBESDK DEPLOYMENT AGAINST CLOUDFLARE'S NORMAL DOCUMENTED CONFIGURATION, IDENTIFY THE HTTP 400, AND PROVE ONE SUCCESSFUL NORMAL GENERATION.
+
+Do not investigate restore yet.
+Do not write a consistency fix.
+Do not create another custom SpaceDO/ThinkAgent harness.
+Do not modify production.
+
+==================================================
+0. PRODUCTION IS FROZEN
+==================================================
+
+Do not modify:
+
+Protected VibeSDK Worker:
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+Production control plane:
+a7e0b81b-c017-4fab-a753-380ccf5b9332
+
+Keep:
+RUNTIME_OPERATIONS_ENABLED=false
+
+Do not attach:
+app.buildcustom.ai
+
+Do not modify existing production DO namespaces, D1, KV, R2, dispatch namespaces, containers, Workers, agents, workspaces, customer apps, domains, or secrets.
+
+==================================================
+1. USE CLOUDFLARE/VIBESDK AS THE REFERENCE
+==================================================
+
+Before debugging the 400 as a code defect, review the CURRENT official Cloudflare VibeSDK setup/deployment documentation and the repository documentation corresponding to the candidate.
+
+Treat Cloudflare's intended VibeSDK deployment architecture as the baseline.
+
+We want:
+
+BuildCustom
+    ↓
+narrow authenticated adapter / official VibeSDK API/SDK
+    ↓
+VibeSDK
+    ↓
+ThinkAgent
+    ↓
+SpaceDO/workspace
+    ↓
+Sandbox/Containers
+    ↓
+preview/deployment
+    ↓
+Workers for Platforms
+
+Do not invent another runtime layer.
+
+Do not create BuildCustom-owned workspace state, revision state, locking, restore orchestration, or another coding agent.
+
+==================================================
+2. CANDIDATE SOURCE
+==================================================
+
+Continue using the clean candidate development baseline:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Important:
+
+EXACT PRODUCTION SOURCE REVISION = UNKNOWN
+
+Do not claim this commit built production.
+
+However, it remains our candidate executable development baseline.
+
+Do not upgrade or casually change its:
+
+- dependencies
+- Bun lockfiles
+- Agents dependency
+- Wrangler dependency
+- Cloudflare dependencies
+- compatibility configuration
+- application source
+
+The repository already proved:
+
+- repository typecheck passes
+- 474 repository tests pass, 1 skipped
+- repository build passes
+- nested SDK build passes
+- 40 SDK tests pass
+
+Preserve that baseline.
+
+==================================================
+3. COMPARE THE FAILED TEST DEPLOYMENT AGAINST NORMAL VIBESDK REQUIREMENTS
+==================================================
+
+Determine what configuration a normal VibeSDK deployment requires according to Cloudflare/VibeSDK documentation.
+
+Then compare those REQUIREMENTS against:
+
+A. the failed disposable environment
+
+and
+
+B. the known-working protected BuildCustom VibeSDK environment
+
+This comparison must be READ ONLY for production.
+
+Compare relevant configuration such as:
+
+- model provider
+- model name/model selection
+- GOOGLE_AI_STUDIO_API_KEY or other documented provider secret where applicable
+- AI Gateway configuration
+- JWT/auth configuration
+- VibeSDK API-key/auth configuration
+- required environment variables
+- required secret NAMES
+- D1 bindings
+- KV bindings
+- R2 bindings
+- Durable Object bindings
+- Sandbox/Container configuration
+- Workers for Platforms / dispatch configuration where required
+- compatibility date
+- compatibility flags
+- service bindings
+- any required VibeSDK initialization/configuration
+
+Never expose secret VALUES.
+
+Never print:
+
+- API keys
+- authorization headers
+- JWT secrets
+- provider credentials
+- Cloudflare credentials
+- raw VibeSDK credentials
+
+We care about whether required configuration exists and is wired correctly, not its secret value.
+
+==================================================
+4. IDENTIFY THE ACTUAL SOURCE OF HTTP 400
+==================================================
+
+Reproduce ONE minimal generation through the normal VibeSDK lifecycle.
+
+Use:
+
+Create a single index.html file containing exactly:
+
+BASELINE_GENERATION_OK
+
+Capture enough sanitized server-side diagnostics to determine WHICH COMPONENT returned HTTP 400.
+
+Determine whether it originates from:
+
+- model provider
+- AI Gateway
+- malformed model request
+- unsupported model
+- missing model configuration
+- authentication
+- missing environment variable
+- missing Worker binding
+- Agents runtime
+- VibeSDK request construction
+- or another component
+
+Capture the sanitized error:
+
+- status
+- error code if available
+- error type
+- error message
+- responsible component
+
+Do not expose credentials.
+
+Do not treat generation_complete as evidence of success.
+
+==================================================
+5. CHECK generation_complete SEMANTICS
+==================================================
+
+The previous run emitted generation_complete after the model request returned HTTP 400 and ultimately produced zero files.
+
+Investigate this behavior READ ONLY.
+
+Determine whether:
+
+A. VibeSDK intentionally emits generation_complete after a failed generation and also provides a separate error/failure event that clients must interpret,
+
+or
+
+B. VibeSDK incorrectly signals successful completion after generation failure.
+
+Do not fix this during this task.
+
+Document the expected protocol behavior and what BuildCustom should eventually interpret.
+
+==================================================
+6. FIX CONFIGURATION ONLY IF APPROPRIATE
+==================================================
+
+If the 400 is caused by the disposable environment being configured differently from a normal documented VibeSDK deployment, correct ONLY the disposable environment configuration.
+
+Examples:
+
+- missing required binding
+- wrong model configuration
+- missing test provider credential
+- incorrect AI Gateway configuration
+- missing environment setting
+- incorrect test Worker configuration
+
+Do not modify VibeSDK source to make the test environment work.
+
+If normal generation appears to require a VibeSDK SOURCE change, STOP.
+
+If reproducing the documented environment requires modifying production, STOP.
+
+==================================================
+7. USE A REAL ISOLATED VIBESDK DEPLOYMENT
+==================================================
+
+If a disposable environment needs to be recreated, create only the resources required by normal VibeSDK.
+
+Use isolated test-specific names.
+
+Do not share production state.
+
+The test environment must not use production:
+
+- DO namespaces
+- D1
+- KV
+- R2
+- dispatch namespace
+- agents
+- workspaces
+- customer Workers
+- generated applications
+
+If a normal VibeSDK deployment requires resources the previous test omitted, create isolated equivalents where Cloudflare permits it.
+
+Do not create custom replacements for VibeSDK subsystems merely because an isolated Cloudflare resource is inconvenient to provision.
+
+If a required Cloudflare capability cannot be isolated, STOP and explain the limitation.
+
+==================================================
+8. PROVE THE SIMPLEST NORMAL SUCCESS PATH
+==================================================
+
+Once configuration is correct, run ONLY this lifecycle:
+
+prompt
+↓
+normal VibeSDK API/SDK
+↓
+real ThinkAgent
+↓
+successful model call
+↓
+generate index.html
+↓
+persist workspace/files
+↓
+authenticated file read
+↓
+disconnect
+↓
+reconnect same agent
+↓
+authenticated file read again
+
+Use:
+
+BASELINE_GENERATION_OK
+
+PASS requires ALL of the following:
+
+1. ThinkAgent is created normally.
+2. Ticketed/normal transport connects.
+3. Model request returns successfully.
+4. No HTTP 400 or equivalent model failure occurs.
+5. A real generation turn executes.
+6. index.html actually exists.
+7. Normal authenticated file read returns BASELINE_GENERATION_OK.
+8. The file is persisted through VibeSDK's normal workspace mechanism.
+9. Disconnect/reconnect using the SAME agent ID succeeds.
+10. File read after reconnect still returns BASELINE_GENERATION_OK.
+
+generation_complete by itself does NOT satisfy any of these requirements.
+
+==================================================
+9. VERIFY A AUTHORITATIVELY
+==================================================
+
+If the baseline generation succeeds, establish Revision/State A.
+
+Record through the most authoritative normal VibeSDK mechanism available:
+
+- agent ID
+- workspace/project identifier
+- file path
+- exact marker
+- file hash if available
+- commit/revision identifier if applicable
+- authoritative persisted content
+
+We need independent evidence that:
+
+A = BASELINE_GENERATION_OK
+
+Do not manually inject A.
+
+A must have been produced and persisted through the normal VibeSDK lifecycle.
+
+==================================================
+10. STOP AT A
+==================================================
+
+Once A is proven:
+
+STOP.
+
+Do NOT:
+
+- create B
+- perform restore
+- patch rollbackToCommit
+- change generatedFilesMap behavior
+- modify SpaceDO
+- test restore concurrency
+- test cancellation fencing
+- change HTTP/RPC deploy behavior
+- write the consistency fix
+- deploy anything to production
+
+The entire purpose of this task is to establish that our isolated environment can run Cloudflare/VibeSDK normally before we use it to investigate restore.
+
+==================================================
+11. HARD STOP CONDITIONS
+==================================================
+
+STOP without modifying VibeSDK source if:
+
+- the source of HTTP 400 cannot be determined
+- normal VibeSDK configuration cannot be reproduced safely
+- the candidate cannot perform an ordinary generation
+- a required Cloudflare capability cannot be isolated
+- fixing the test requires changing VibeSDK source
+- production resources would need modification
+- production secrets would need to be exposed
+- index.html is not actually persisted
+- reconnect does not return the same file
+- authoritative A cannot be established
+
+Do not work around a failed gate.
+
+Report the failure instead.
+
+==================================================
+12. REPORT
+==================================================
+
+At the end, report:
+
+1. Current Cloudflare/VibeSDK documentation/configuration requirements relevant to this test.
+
+2. Configuration differences discovered between:
+   - documented VibeSDK
+   - failed disposable environment
+   - known-working production environment
+
+3. Exact component that returned HTTP 400.
+
+4. Sanitized HTTP 400 error/code/message.
+
+5. Root cause of the 400, if established.
+
+6. Disposable configuration changes made.
+
+7. Confirmation VibeSDK source/dependencies remained unchanged.
+
+8. Model-call result after configuration correction.
+
+9. ThinkAgent generation result.
+
+10. index.html file-read result.
+
+11. persistence result.
+
+12. reconnect result.
+
+13. authoritative A revision/content/hash evidence.
+
+14. Explanation of generation_complete behavior after the previous failed model request.
+
+15. Exact isolated Cloudflare resources created.
+
+16. Confirmation those resources do not share production state.
+
+17. Whether the isolated environment now accurately exercises the normal documented VibeSDK lifecycle.
+
+18. Final gate:
+
+BASELINE A PROVEN
+
+or
+
+BASELINE A NOT PROVEN
+
+19. If BASELINE A PROVEN, state whether the environment is now suitable for the NEXT SEPARATE task:
+
+A → real ThinkAgent edit → B → normal restore A → independently verify SpaceDO → compare ThinkAgent.
+
+Do not perform that next task yet.
+
+==================================================
+NORTH STAR
+==================================================
+
+Stay as close as possible to Cloudflare's documented VibeSDK architecture.
+
+BuildCustom should customize ABOVE VibeSDK wherever possible.
+
+We should only modify VibeSDK internals when a defect is reproduced through VibeSDK's normal documented lifecycle and there is clear executable evidence that the underlying runtime itself needs correction.
+
+For this task, success is intentionally boring:
+
+NORMAL VIBESDK GENERATION WORKS.
+
+Nothing more.
