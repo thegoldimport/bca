@@ -1,0 +1,444 @@
+Good. We are adopting this revised migration strategy.
+
+We are NO LONGER trying to preserve the exact historical source code of
+the old VibeSDK Worker.
+
+We ARE preserving any VibeSDK state, BuildCustom data, generated apps,
+domains, and Cloudflare infrastructure that actually matters.
+
+The next task is:
+
+READ-ONLY STATE RETENTION + DATA RECONCILIATION INVENTORY
+
+DO NOT modify anything.
+
+==================================================
+GOAL
+==================================================
+
+Answer two practical questions:
+
+1. Which existing VibeSDK Durable Objects/state do we actually need to
+   preserve?
+
+2. What is the exact authoritative BuildCustom dataset that should live
+   in Cloudflare D1 when we leave Replit?
+
+We know:
+
+- 11 ThinkAgent Durable Objects contain stored state.
+- 11 SpaceDO Durable Objects contain stored workspace data.
+- BuildCustom D1 currently maps only 3 agent IDs.
+- Those 3 mapped projects are:
+  - Test1
+  - Production Canary
+  - Cancellation Canary
+- Development PostgreSQL and Cloudflare D1 are no longer identical.
+- D1 contains additional canary activity created during migration testing.
+- Test1 has existing generated-app/domain/release relationships that
+  should currently be treated as important.
+- There is no evidence that we are protecting meaningful external
+  customer production traffic.
+- Much of this environment has been used for our own development/testing.
+
+==================================================
+1. DO NOT READ PRIVATE WORKSPACE CONTENT UNLESS NECESSARY
+==================================================
+
+Start with metadata.
+
+Do not dump source files, prompts, messages, secrets, or project contents.
+
+Use IDs, timestamps, counts, relationships, deployment references,
+route references, and other metadata first.
+
+If content inspection becomes absolutely necessary to identify an
+otherwise unattributable object, STOP and report that rather than
+reading it automatically.
+
+==================================================
+2. BUILD A BUILDCUSTOM PROJECT INVENTORY
+==================================================
+
+Using BOTH:
+
+- current Replit development PostgreSQL
+- Cloudflare control-plane D1
+
+Create a complete project inventory.
+
+For every project record available in either database report:
+
+- project ID
+- project name
+- user/owner ID
+- created timestamp
+- updated timestamp
+- mapped VibeSDK agent ID if any
+- releases count
+- turns count
+- domains
+- generated-app deployment references
+- whether present in PostgreSQL
+- whether present in D1
+
+Classify:
+
+BOTH
+POSTGRES ONLY
+D1 ONLY
+
+Do not mutate anything.
+
+==================================================
+3. RECONCILE POSTGRES VS D1
+==================================================
+
+Perform a read-only row-level comparison for all BuildCustom
+control-plane tables that matter to migration.
+
+At minimum:
+
+- users
+- projects
+- project ownership
+- project-agent mappings
+- turns/conversation metadata stored by BuildCustom
+- releases
+- domains
+- deployment metadata
+- settings required by the app
+
+Identify:
+
+- identical rows
+- PostgreSQL-only rows
+- D1-only rows
+- same-ID rows with different values
+
+Do NOT automatically choose PostgreSQL or D1 as the winner.
+
+For every conflict determine, where possible, which record is newer and
+what operation appears to have created the difference.
+
+Our likely desired final dataset is:
+
+original authoritative development data
++
+legitimate migration/canary data we intentionally choose to retain
+
+NOT simply another destructive PostgreSQL → D1 import.
+
+==================================================
+4. MAP THE THREE KNOWN AGENTS
+==================================================
+
+For:
+
+- Test1
+- Production Canary
+- Cancellation Canary
+
+Map:
+
+BuildCustom project
+→ agent ID
+→ ThinkAgent object where determinable
+→ SpaceDO/workspace where determinable
+→ releases
+→ generated Worker/app
+→ routes
+→ domains
+
+Do this read-only.
+
+For each, report what would break if its existing VibeSDK state were
+discarded.
+
+==================================================
+5. ATTRIBUTE THE 11 THINK OBJECTS
+==================================================
+
+Using metadata only where possible, inventory all 11 existing ThinkAgent
+objects.
+
+For each report whatever can safely be determined:
+
+- object identifier
+- known agent identifier
+- created/first-seen timestamp if available
+- last activity timestamp if available
+- state/message counts
+- associated SpaceDO identifier if metadata exposes it
+- BuildCustom project association
+- generated deployment association
+- whether referenced anywhere in BuildCustom D1
+- whether referenced by an active route/domain/release
+
+Try to associate each object with:
+
+KNOWN PROJECT
+KNOWN CANARY
+KNOWN MIGRATION TEST
+UNMAPPED TEST-LIKE
+UNMAPPED UNKNOWN
+
+Do not infer disposable merely from age.
+
+==================================================
+6. ATTRIBUTE THE 11 SPACE OBJECTS
+==================================================
+
+Perform the same metadata-only inventory for the 11 SpaceDO objects.
+
+Report where available:
+
+- object identifier
+- workspace identifier
+- associated ThinkAgent
+- file count
+- commit/history count
+- last activity
+- deployment references
+- project association
+- route/domain association
+
+Again classify:
+
+KNOWN PROJECT
+KNOWN CANARY
+KNOWN MIGRATION TEST
+UNMAPPED TEST-LIKE
+UNMAPPED UNKNOWN
+
+Do not read source files.
+
+==================================================
+7. LOOK FOR SAFE RELATIONSHIP EVIDENCE
+==================================================
+
+Use existing metadata/logs/database relationships to connect objects.
+
+Possible evidence includes:
+
+- agent IDs
+- workspace IDs
+- project-agent mapping
+- deployment IDs
+- release records
+- timestamps
+- route records
+- generated Worker names
+- existing logs
+- domain records
+- creation sequences
+
+Do NOT mutate objects or invoke operations merely to identify them.
+
+==================================================
+8. IDENTIFY GENERATED APPS
+==================================================
+
+Inventory generated-app Workers/deployments currently associated with
+BuildCustom/VibeSDK.
+
+For each determine:
+
+- deployment/Worker identifier
+- corresponding BuildCustom project if known
+- corresponding agent/workspace if known
+- active route/subdomain
+- custom domain
+- release record
+- whether currently reachable
+- whether preservation is required
+
+Pay special attention to:
+
+- TaskFlow/Test1
+- test1 route
+- Buyer Magnets domains
+- Production Canary
+- Cancellation Canary
+
+Do not redeploy anything.
+
+==================================================
+9. CREATE A RETENTION TABLE
+==================================================
+
+Create ONE combined retention table tying together:
+
+BuildCustom Project
+Agent
+ThinkDO
+SpaceDO
+Generated App
+Release
+Route
+Domain
+
+For every identifiable chain classify:
+
+MUST PRESERVE
+SHOULD PRESERVE
+SAFE TO RECREATE
+LIKELY DISPOSABLE
+UNKNOWN
+
+Use conservative classification for genuinely unknown objects.
+
+But do NOT classify something UNKNOWN merely because it is old.
+
+Use all available metadata first.
+
+==================================================
+10. IMPORTANT OWNER-INTENT CONTEXT
+==================================================
+
+This is still a development-stage product.
+
+There is no meaningful external customer production traffic that we are
+trying to preserve.
+
+Therefore development canaries and clearly isolated migration tests do
+NOT need enterprise-grade historical preservation.
+
+However:
+
+Do not delete them in this task.
+
+Just identify them clearly so the owner can approve disposal later.
+
+Test1 and Buyer Magnets should currently remain preserved unless evidence
+shows they are completely reproducible and the owner later approves
+recreation.
+
+==================================================
+11. DETERMINE THE MINIMUM STATE WE NEED
+==================================================
+
+At the end answer:
+
+If we wanted the simplest possible clean production launch of
+BuildCustom on Cloudflare, what is the MINIMUM existing VibeSDK state
+that actually needs to survive?
+
+For example, determine whether the answer is effectively:
+
+- preserve only Test1/Buyer Magnets
+- preserve Test1 plus the two canaries
+- preserve additional unidentified workspaces
+- or preserve the entire existing DO namespace because attribution is
+  insufficient
+
+Do not perform the decision.
+
+Just establish the evidence.
+
+==================================================
+12. DETERMINE FINAL D1 DATASET
+==================================================
+
+Recommend the exact logical reconciliation strategy for BuildCustom D1.
+
+Do not execute it.
+
+Specify:
+
+KEEP FROM POSTGRES
+KEEP FROM CURRENT D1
+MERGE
+DISCARD LATER WITH OWNER APPROVAL
+NEEDS REVIEW
+
+The resulting target should represent the CURRENT BuildCustom
+development product at the moment we leave Replit.
+
+==================================================
+13. CHECK FOR REMAINING REPLIT DEPENDENCIES
+==================================================
+
+While doing this inventory, identify current data/runtime dependencies
+that still point to Replit.
+
+Look specifically for:
+
+- Replit URLs
+- DATABASE_URL
+- Replit-specific environment variables
+- callbacks
+- API URLs
+- frontend helpers
+- cron/background jobs
+- asset URLs
+- deployment callbacks
+- auth callbacks
+- webhook URLs
+- hardcoded domains
+
+Do not fix them.
+
+Return them as the migration dependency list.
+
+==================================================
+14. NO CHANGES
+==================================================
+
+Do NOT:
+
+- deploy
+- delete
+- migrate
+- rewrite D1
+- modify PostgreSQL
+- modify DO state
+- invoke restore
+- invoke an agent turn
+- redeploy generated apps
+- change routes
+- change domains
+- modify Workers
+- change secrets
+- enable runtime operations
+- attach app.buildcustom.ai
+
+READ ONLY.
+
+==================================================
+15. FINAL REPORT
+==================================================
+
+Return:
+
+1. complete BuildCustom project inventory
+2. PostgreSQL vs D1 reconciliation table
+3. all 11 ThinkDO metadata records
+4. all 11 SpaceDO metadata records
+5. known Think ↔ Space relationships
+6. known project ↔ agent ↔ workspace relationships
+7. generated-app inventory
+8. route/domain inventory
+9. combined retention table
+10. MUST PRESERVE state
+11. SHOULD PRESERVE state
+12. likely disposable state
+13. remaining UNKNOWN state
+14. minimum state required for launch
+15. recommended final D1 reconciliation strategy
+16. remaining Replit dependencies
+17. whether we can safely stop caring about old VibeSDK Worker source
+18. whether a fresh VibeSDK runtime is realistic OR whether retaining the
+    existing namespaces is simpler
+19. simplest migration path based on the evidence
+20. EXACT NEXT TASK
+
+Most importantly:
+
+We are trying to get BuildCustom live.
+
+Do enough investigation to protect state that actually matters, but do
+not turn development/test artifacts into unnecessary migration
+complexity.
+
+STOP after the report.
