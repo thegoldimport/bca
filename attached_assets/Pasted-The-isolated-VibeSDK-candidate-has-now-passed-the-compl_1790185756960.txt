@@ -1,0 +1,446 @@
+The isolated VibeSDK candidate has now passed the complete restore consistency invariant:
+
+A
+→ B
+→ restore A
+→ authoritative committed tree = A
+→ existing ThinkAgent session = A
+→ fresh ticketed reconnect = A
+→ next ThinkAgent edit starts from A
+
+Validation currently passes:
+
+- 492 repository tests, 1 skipped
+- 40 SDK tests
+- typecheck
+- build
+- real isolated Cloudflare canary
+
+FREEZE BOTH VERIFIED FIXES:
+
+1. SpaceDO authoritative restore fix
+2. ThinkAgent post-restore synchronization fix
+
+Do not redesign, expand, or refactor either fix during this task.
+
+The only remaining observed runtime failure is:
+
+deployment_failed: Build failed
+
+The next task is ONLY:
+
+DETERMINE WHY PREVIEW DEPLOYMENT FAILS, WHETHER IT IS ACTUALLY
+RESTORE-SPECIFIC, AND FIX IT ONLY IF EXECUTABLE EVIDENCE SHOWS A
+VIBESDK DEFECT.
+
+Do not modify production.
+
+==================================================
+1. PRODUCTION REMAINS FROZEN
+==================================================
+
+Do not modify:
+
+Protected VibeSDK Worker:
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+Production control plane:
+a7e0b81b-c017-4fab-a753-380ccf5b9332
+
+Keep:
+
+RUNTIME_OPERATIONS_ENABLED=false
+
+Do not attach:
+
+app.buildcustom.ai
+
+Do not touch production resources or credentials.
+
+==================================================
+2. PRESERVE THE VERIFIED CANDIDATE
+==================================================
+
+Work from the isolated candidate containing BOTH verified fixes.
+
+The candidate lineage originates from:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Exact production source revision remains UNKNOWN.
+
+Before doing anything else, record the current Git diff/commit state of
+the two verified fixes so we can prove they remain unchanged throughout
+this investigation.
+
+==================================================
+3. DO NOT ASSUME RESTORE CAUSED THE BUILD FAILURE
+==================================================
+
+This is the most important requirement.
+
+The test app used intentionally minimal file contents such as:
+
+RESTORE_REAL_A
+
+Those files may not themselves represent a valid buildable VibeSDK app.
+
+Therefore:
+
+DO NOT classify deployment_failed: Build failed as a VibeSDK deployment
+defect until we establish that the exact same revision successfully
+builds/deploys outside the restore operation.
+
+First answer:
+
+IS THE BUILD FAILURE CAUSED BY RESTORE?
+
+or
+
+IS THE TEST APPLICATION ITSELF NOT BUILDABLE?
+
+or
+
+IS THERE A GENERAL PREVIEW/DEPLOYMENT CONFIGURATION PROBLEM?
+
+==================================================
+4. CAPTURE THE REAL BUILD ERROR
+==================================================
+
+Recreate a disposable isolated environment using the same proven
+configuration pattern.
+
+Capture the actual sanitized build failure from the preview/deployment
+system.
+
+We need more than:
+
+Build failed
+
+Capture:
+
+- build command
+- exit code
+- failing phase
+- bundler/compiler error
+- relevant file/path
+- sanitized stderr/output
+- whether Sandbox/Container started successfully
+- whether dependencies installed successfully
+- whether build artifacts were produced
+
+Never expose credentials.
+
+Do not patch anything yet.
+
+==================================================
+5. CREATE A VALID BUILDABLE TEST APP
+==================================================
+
+Use the NORMAL real ThinkAgent lifecycle to generate a minimal but
+actually buildable application appropriate for this VibeSDK template.
+
+Do not manually inject files.
+
+Ask the ThinkAgent for something simple such as:
+
+Create the smallest valid application for this workspace that displays
+the exact text RESTORE_BUILD_A and is ready for preview.
+
+Let VibeSDK/ThinkAgent create whatever normal package files, source files,
+configuration, and dependencies the template requires.
+
+Call this:
+
+BUILDABLE A
+
+==================================================
+6. PRE-RESTORE PREVIEW GATE
+==================================================
+
+Before creating B or testing restore:
+
+Deploy/preview BUILDABLE A through the normal VibeSDK preview path.
+
+HARD PASS requires:
+
+- build succeeds
+- preview deployment succeeds
+- preview responds successfully
+- rendered/source result contains RESTORE_BUILD_A where appropriate
+
+If BUILDABLE A fails before any restore:
+
+STOP.
+
+The failure is NOT proven restore-specific.
+
+Trace the normal preview/build configuration instead.
+
+Do not continue to B/restore until an ordinary generated app can preview.
+
+==================================================
+7. CREATE BUILDABLE B
+==================================================
+
+Only if A previews successfully:
+
+Use the SAME real ThinkAgent to make a normal conversational edit.
+
+Change the visible marker from:
+
+RESTORE_BUILD_A
+
+to:
+
+RESTORE_BUILD_B
+
+Also make one small structural/file change that gives us an obvious
+revision difference while preserving a valid build.
+
+Do not manually inject state.
+
+Verify:
+
+- authenticated files show B
+- committed tree represents B
+- B preview/build succeeds normally
+
+HARD GATE:
+
+Both A and B must independently build and preview successfully BEFORE
+restore.
+
+If B fails normally:
+
+STOP.
+
+==================================================
+8. RESTORE B → A
+==================================================
+
+Only after both A and B independently preview successfully:
+
+Use the normal rollback_to_commit path to restore B → A.
+
+The already-fixed invariants must still hold:
+
+authoritative committed tree = A
+existing ThinkAgent session = A
+fresh reconnect = A
+
+Do not modify those fixes.
+
+==================================================
+9. TEST PREVIEW AFTER RESTORE
+==================================================
+
+Run the normal preview/deployment operation for restored A.
+
+Compare it against the PREVIOUSLY SUCCESSFUL preview of the exact A
+revision/state.
+
+PASS:
+
+Restored A builds and previews successfully.
+
+If so:
+
+the previous Build failed result was caused by the intentionally minimal
+non-buildable test application or previous disposable environment.
+
+There is no demonstrated restore/deployment defect.
+
+STOP.
+
+FAIL:
+
+Original A preview succeeds.
+B preview succeeds.
+Restored authoritative tree is exactly A.
+Restored session state is A.
+But restored A preview/build fails.
+
+Only then do we have evidence of a restore-specific preview/deployment
+defect.
+
+==================================================
+10. IF RESTORED A FAILS, COMPARE INPUTS
+==================================================
+
+Before changing code, compare:
+
+PRE-RESTORE A BUILD INPUT
+
+vs
+
+POST-RESTORE A BUILD INPUT
+
+Determine whether they are actually equivalent.
+
+Compare relevant:
+
+- committed tree
+- working tree
+- package files
+- lockfiles
+- build configuration
+- environment
+- workspace metadata
+- dependency state
+- Sandbox/Container state
+- generated preview configuration
+- deployment metadata
+
+The committed Git tree may be identical while some non-Git workspace or
+runtime state differs.
+
+Prove the difference.
+
+==================================================
+11. WRITE A REGRESSION BEFORE ANY FIX
+==================================================
+
+Only if a real restore-specific deployment defect is proven:
+
+Write an executable regression representing:
+
+valid buildable A
+→ preview A succeeds
+→ edit to valid buildable B
+→ preview B succeeds
+→ restore A
+→ authoritative tree exactly A
+→ preview restored A
+
+Expected:
+
+preview restored A succeeds.
+
+Run it against the current candidate with the two frozen fixes but
+without a deployment fix.
+
+It must fail for the same proven reason as the real canary.
+
+If it does not reproduce:
+
+STOP.
+
+Do not write a deployment fix.
+
+==================================================
+12. IMPLEMENT ONLY THE SMALLEST PROVEN FIX
+==================================================
+
+Only after the regression reproduces:
+
+Implement the smallest VibeSDK-native correction.
+
+Do not redesign deployment.
+
+Do not add BuildCustom orchestration.
+
+Do not add another Worker/DO/Workflow/revision system.
+
+Do not modify the already-correct restore semantics merely to make
+preview work.
+
+==================================================
+13. VALIDATE EVERYTHING
+==================================================
+
+After any necessary deployment fix run:
+
+- typecheck
+- repository tests
+- nested SDK tests
+- SpaceDO restore regressions
+- ThinkAgent synchronization regressions
+- preview/deployment regression
+- build
+
+Then run a fresh real isolated Cloudflare canary:
+
+buildable A
+→ preview A
+→ ThinkAgent edit B
+→ preview B
+→ restore A
+→ authoritative tree A
+→ existing session A
+→ reconnect A
+→ preview restored A
+→ one normal post-restore edit derived from A
+
+All must pass.
+
+==================================================
+14. CLEANUP
+==================================================
+
+Delete disposable runtime resources after evidence collection.
+
+Do not revoke:
+
+VIBESDK_TEST_AI_GATEWAY_TOKEN
+
+yet.
+
+Do not touch production.
+
+==================================================
+15. STOP AND REPORT
+==================================================
+
+Report:
+
+1. confirmation both verified fixes remained unchanged
+2. actual sanitized reason for the previous/current Build failed
+3. whether the original minimal RESTORE_REAL_A app was itself buildable
+4. BUILDABLE A contents/revision
+5. pre-restore A preview result
+6. BUILDABLE B contents/revision
+7. B preview result
+8. restored authoritative tree result
+9. restored existing-session result
+10. restored reconnect result
+11. restored-A preview result
+12. classification:
+
+A. TEST APP WAS NOT BUILDABLE
+
+B. GENERAL PREVIEW/ENVIRONMENT PROBLEM
+
+C. RESTORE-SPECIFIC PREVIEW DEFECT REPRODUCED
+
+D. NO PREVIEW DEFECT REPRODUCED
+
+13. if C, proven root cause
+14. regression evidence before fix
+15. exact fix, if one was necessary
+16. final typecheck/build/test counts
+17. final real Cloudflare canary result
+18. cleanup performed
+19. any remaining blockers before production compatibility review
+
+STOP BEFORE PRODUCTION.
+
+Do not deploy to the protected Worker.
+Do not enable runtime mutations.
+Do not attach app.buildcustom.ai.
+
+==================================================
+SUCCESS CRITERION
+==================================================
+
+Do not fix "Build failed" blindly.
+
+First prove:
+
+valid A previews
+valid B previews
+restore returns exact A
+restored A previews
+
+If that passes, there is no remaining deployment defect from this
+restore investigation.

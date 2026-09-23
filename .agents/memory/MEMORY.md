@@ -21,4 +21,5 @@
 - [Production VibeSDK transport gate](production-vibesdk-transport-gate.md) — isolated exact restore proves Think files can stay stale; production source remains unknown.
 - [Isolated VibeSDK bundle identity](isolated-vibesdk-bundle-identity.md) — a test checkout can silently bundle the untouched workspace package through shared node_modules; inspect dry-run output.
 - [Think file projection](think-file-projection.md) — after a SpaceDO restore, replace the persisted host file snapshot before reporting completion; conversation reconnect alone cannot hydrate files.
+- [Preview buildability gate](preview-buildability-gate.md) — marker-only restore fixtures are not preview-ready; compare valid A and B previews before attributing a build failure to restore.
 - [Cloudflare container sizing](cloudflare-container-sizing.md) — container validation requires enough memory per vCPU and caps disk relative to memory.
