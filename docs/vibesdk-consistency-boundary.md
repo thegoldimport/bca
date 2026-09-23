@@ -4,6 +4,14 @@ Status: **not proven; do not deploy the isolated candidate to the protected Vibe
 
 Source inspected: public `cloudflare/vibesdk` at `9da158d82c597a0e8f4bf033cdccd1053fb6fb15`. VibeSDK source is not part of the BuildCustom repository. The isolated investigation checkout was under `/tmp/vibesdk-consistency`; it is not a production artifact or a reviewed deployment candidate.
 
+## Executable-baseline gate
+
+A fresh, unmodified checkout of public upstream `main` was made at `/tmp/vibesdk-baseline`, revision `9da158d82c597a0e8f4bf033cdccd1053fb6fb15`. Its intended dependency manager is Bun (`bun.lock`, SHA-256 `b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f`), and `package.json` requires Node >=22. The local tools are Bun 1.3.6 and Node 22.22.0. **This checkout is a candidate, not a proven copy of the production source.**
+
+The protected Worker version `8522e70c-27f4-4ef3-a46a-80edbd308490` was uploaded via Wrangler. Its version metadata does not identify a Git commit. The downloaded production and migration-staging bundles have the same recorded ETag, which proves bundle equality between those Workers, not source-revision provenance. The staging migration used database migrations from the above public commit, but that does not establish which source commit built the Worker. The downloaded bundle has module paths but no embedded Git SHA. Therefore the **exact production source revision remains unverified**.
+
+Per the owner’s stop condition, no dependency installation, typecheck, baseline unit/integration tests, build, or new regression-test/implementation work was performed on the candidate checkout. Baseline test counts and failures are **not available**. Recover a build manifest, source revision annotation, or reproducible artifact comparison establishing source provenance before continuing.
+
 ## Operation map
 
 | Operation | Entry point | Reads from | Writes to | Current synchronization | Materialization |

@@ -26,3 +26,9 @@ Cancellation needs separate attention: ThinkAgent chat runs in a child Durable O
 **Why:** Isolated source review found that host cancellation does not propagate an abort to the child ThinkAgent turn, and a failed restore commit can otherwise be followed by a deployed older branch while the host advertises restored files.
 
 **How to apply:** Treat child-turn ownership and fail-closed commit/deploy verification as prerequisites for the restore canary. Do not use a generatedFilesMap refresh alone as proof of workspace consistency.
+
+The matching downloaded bundle ETags for protected production and isolated staging prove they run the same artifact, but neither version metadata nor the bundle establishes the exact public Git source revision that built it. The isolated staging database migrations came from a known public commit; that is not deployment provenance.
+
+**Why:** The protected Worker’s Cloudflare version metadata identifies a Wrangler upload but contains no Git commit. A candidate clean checkout can be made from upstream, yet running tests against it cannot establish a baseline for the protected Worker until source identity is proved.
+
+**How to apply:** Before another restore patch, recover trusted source-to-bundle provenance (build manifest/commit annotation or a reproducible artifact match). Do not treat public `main`, a staging D1 migration commit, or matching production/staging ETags as proof of the production source commit.

@@ -1,0 +1,370 @@
+Good stop. Do not make another speculative consistency patch yet.
+
+We have now had multiple isolated revisions fail architecture review, and the latest checkout could not run the actual VibeSDK typecheck or integration tests because its dependencies were unavailable.
+
+Before attempting another implementation, establish a REAL EXECUTABLE ISOLATED VIBESDK DEVELOPMENT ENVIRONMENT from the exact source/version corresponding to the protected production Worker.
+
+Production remains completely unchanged:
+
+protected VibeSDK Worker remains 8522e70c-27f4-4ef3-a46a-80edbd308490
+gated control plane remains a7e0b81b-c017-4fab-a753-380ccf5b9332
+RUNTIME_OPERATIONS_ENABLED=false
+app.buildcustom.ai remains unattached
+
+Do not modify those.
+
+==================================================
+PHASE 1: MAKE THE ISOLATED VIBESDK CHECKOUT EXECUTABLE
+
+Identify the exact VibeSDK source revision/bundle corresponding to the protected production runtime.
+
+Create a clean isolated checkout/worktree.
+
+Install the repository's intended dependencies using its existing package manager and lockfile.
+
+Do not casually upgrade dependencies.
+
+Do not change framework/runtime versions merely to make tests pass.
+
+Establish that the UNMODIFIED baseline can execute:
+
+dependency installation
+typecheck
+existing unit tests
+existing relevant integration tests
+build
+
+Record:
+
+source revision
+package manager
+lockfile
+runtime/Node version if applicable
+baseline test counts
+baseline failures, if any
+
+If the exact production source cannot be reconstructed into an executable development environment, STOP and report why before making another consistency patch.
+
+==================================================
+PHASE 2: TURN THE DISCOVERED BUGS INTO FAILING TESTS FIRST
+
+Do NOT begin by writing another fix.
+
+Using the operation map already documented in:
+
+docs/vibesdk-consistency-boundary.md
+
+write executable regression/integration tests that reproduce the defects we have already discovered.
+
+At minimum create tests for:
+
+RESTORE FALSE SUCCESS
+
+Force the authoritative restore/commit step to fail.
+
+Expected:
+
+restore reports failure
+no success response is returned
+no success revision is recorded
+ThinkAgent does not claim the target files are active
+deploy/preview does not claim successful restored state
+RESTORE → READ CONSISTENCY
+
+A = known file hashes/content.
+B = different known hashes/content.
+
+Restore A from B.
+
+Expected after successful completion:
+
+SpaceDO = A
+file reads = A
+ThinkAgent-visible files = A
+preview materialization = A
+RESTORE → EDIT CONSISTENCY
+
+Restore A from B.
+
+Immediately perform an edit whose result proves the agent started from A.
+
+Expected:
+
+next edit uses A
+resulting C derives from A
+no stale B state is used
+RESTORE + CONCURRENT READ
+
+Attempt consistency-sensitive reads while restore is in progress.
+
+Expected:
+
+caller never receives a half-restored authoritative tree
+RESTORE + CONCURRENT EDIT
+
+Start/retain an active ThinkAgent generation/edit while restore occurs.
+
+Expected:
+
+defined safe serialization/cancellation behavior
+the old child turn cannot write after restore completion
+CANCELLATION FENCE
+
+Start a child ThinkAgent turn.
+
+Cancel/reset/reconnect.
+
+Expected:
+
+the original child turn cannot later mutate SpaceDO
+cancellation has a verifiable terminal boundary
+HTTP/RPC DEPLOY PARITY
+
+From identical authoritative SpaceDO state:
+
+Expected:
+
+HTTP deploy and RPC deploy materialize the same file tree/hash
+both propagate persistence/materialization errors
+RECONNECT AFTER RESTORE
+
+Restore A.
+Disconnect.
+Reconnect with the same agent_id.
+
+Expected:
+
+SpaceDO = A
+ThinkAgent-visible state = A
+file reads = A
+subsequent edit begins from A
+==================================================
+IMPORTANT: THESE TESTS SHOULD FAIL AGAINST CURRENT VIBESDK
+
+Before implementing a fix, run the new tests against the unmodified baseline.
+
+We WANT the relevant regression tests to fail in ways that reproduce the known defects.
+
+This gives us executable evidence that:
+
+the test actually detects the bug
+the eventual fix addresses the bug
+we are not merely reasoning about plausible source changes
+
+Report the baseline failing results.
+
+==================================================
+PHASE 3: DETERMINE WHETHER THIS IS ALREADY FIXED UPSTREAM
+
+Before writing another custom patch, compare the production VibeSDK source against the CURRENT upstream VibeSDK implementation.
+
+Specifically inspect whether upstream has changed:
+
+ThinkCodingBehavior.rollbackToCommit
+SpaceDO mutation serialization
+SpaceDO read consistency
+ThinkAgent hydration
+generatedFilesMap
+child-agent cancellation
+reconnect/reset behavior
+HTTP deploy
+RPC deploy
+error propagation around commit/restore/persistence
+
+If current upstream already contains architectural changes that address these issues, DO NOT independently reinvent them.
+
+Instead:
+
+identify the relevant upstream changes
+determine whether they can be safely backported
+test the upstream behavior using OUR regression suite
+
+Do not blindly upgrade the entire VibeSDK runtime.
+
+==================================================
+PHASE 4: IMPLEMENT ONLY AFTER TESTS EXIST
+
+Only after:
+
+executable environment works
+baseline tests run
+defect regression tests exist
+defects reproduce
+current upstream has been reviewed
+
+may you implement the next isolated candidate.
+
+The implementation must preserve:
+
+SpaceDO = authoritative workspace
+
+Do not introduce another source of truth.
+
+Do not add:
+
+BuildCustom workspace storage
+another DO
+Workflow orchestration
+operation ledger
+external lock service
+second revision system
+BuildCustom synchronization engine
+==================================================
+REQUIRED SEMANTICS
+
+The eventual implementation must fail CLOSED.
+
+A restore cannot report success unless its required authoritative operations actually succeeded.
+
+Commit failure → restore failure.
+
+Persistence failure → operation failure.
+
+Materialization/deploy failure, where part of the operation contract → operation failure.
+
+Do not suppress errors.
+
+Do not convert rejected commits into success responses.
+
+==================================================
+CANCELLATION MUST BE PROVABLE
+
+Do not merely send a cancellation request to a child ThinkAgent and assume it stopped.
+
+Establish the actual lifecycle.
+
+We need a boundary after which the cancelled generation can no longer mutate the authoritative SpaceDO workspace.
+
+If the current ThinkAgent architecture cannot provide that guarantee, report that explicitly.
+
+Do not invent a fake acknowledgement.
+
+==================================================
+SERIALIZATION
+
+Use the existing SpaceDO / Durable Object lifecycle wherever possible.
+
+We need consistency-sensitive reads and writes to obey a coherent boundary.
+
+Avoid nested locking patterns that can deadlock.
+
+Prefer one clearly defined mutation/consistency primitive rather than several partially overlapping locks.
+
+==================================================
+HTTP/RPC DEPLOY
+
+Align HTTP and RPC deployment semantics.
+
+Both should materialize from the same authoritative SpaceDO workspace state.
+
+Both should expose equivalent success/error semantics where applicable.
+
+Do not maintain two subtly different workspace interpretations.
+
+==================================================
+PHASE 5: EXECUTABLE VALIDATION
+
+Run:
+
+repository typecheck
+existing VibeSDK test suite
+new regression suite
+integration tests
+build
+
+Then run the deterministic:
+
+A
+→ B
+→ restore A
+→ verify every reader sees A
+→ reconnect
+→ verify A
+→ edit from A
+→ C
+
+Also run:
+
+concurrent restore/read
+concurrent restore/edit
+cancellation
+reconnect/reset
+HTTP deploy
+RPC deploy
+forced commit failure
+forced persistence failure
+==================================================
+PHASE 6: ISOLATED CLOUDFLARE CANARY
+
+Only after the executable local/integration suite passes may you deploy the candidate to DISPOSABLE isolated Cloudflare resources.
+
+Do not deploy to the protected production VibeSDK Worker.
+
+Run the same behavioral tests against the actual isolated Worker/DO environment.
+
+Unit tests alone are not sufficient for Durable Object concurrency semantics.
+
+==================================================
+PHASE 7: INDEPENDENT ARCHITECTURE REVIEW
+
+After the isolated Cloudflare canary passes, perform another read-only independent architecture review.
+
+Specifically try to find:
+
+read bypasses
+write bypasses
+stale ThinkAgent state
+child-turn writes after cancellation
+HTTP/RPC divergence
+false success responses
+swallowed persistence errors
+restore/edit races
+reconnect races
+nested-lock/deadlock risk
+
+Do not approve merely because tests pass.
+
+==================================================
+STOP BEFORE PRODUCTION
+
+Even if everything passes:
+
+DO NOT modify the protected production VibeSDK Worker.
+
+STOP and report:
+
+exact executable baseline established
+baseline VibeSDK test results
+regression tests added
+which tests failed against unmodified VibeSDK
+upstream VibeSDK findings
+exact implementation chosen
+SpaceDO consistency model
+cancellation/fencing model
+HTTP/RPC deployment model
+error propagation model
+local/integration test results
+deterministic A/B/restore/edit results
+concurrency test results
+isolated Cloudflare canary results
+independent architecture review results
+exact source diff proposed for production
+whether any DO migration is required
+whether any binding/resource change is required
+expected effect on existing agents/workspaces
+production deployment procedure
+rollback procedure
+remaining risks/blockers
+
+Do not request production approval until we have EXECUTABLE evidence rather than source reasoning alone.
+
+==================================================
+NORTH STAR
+
+Stop iterating through speculative patches.
+
+From this point forward use:
+
+reproduce with executable test → understand → fix → test locally → test real isolated DO runtime → architecture review → owner approval
+
+Production remains frozen and safe until that sequence succeeds.
