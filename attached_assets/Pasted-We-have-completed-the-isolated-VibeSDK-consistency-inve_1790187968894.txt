@@ -1,0 +1,466 @@
+We have completed the isolated VibeSDK consistency investigation.
+
+FINAL VERIFIED ISOLATED STATE:
+
+1. SpaceDO restore defect
+   REPRODUCED
+   ROOT CAUSE PROVEN
+   FIXED
+   REGRESSION TESTED
+   REAL CLOUDFLARE CANARY PASSED
+
+2. ThinkAgent stale-state defect
+   REPRODUCED
+   ROOT CAUSE PROVEN
+   FIXED
+   REGRESSION TESTED
+   REAL CLOUDFLARE CANARY PASSED
+
+3. Restore-specific preview/deployment defect
+   NOT REPRODUCED
+
+A valid generated application successfully passed:
+
+A preview = HTTP 200
+→ ThinkAgent edit
+→ B preview = HTTP 200
+→ restore A
+→ authoritative tree exactly A
+→ existing session = A
+→ fresh reconnect = A
+→ restored preview = HTTP 200
+
+DO NOT MODIFY THE VERIFIED FIXES.
+
+DO NOT WRITE MORE VIBESDK FEATURES.
+
+The remaining blocker is:
+
+THE EXACT SOURCE REVISION USED TO BUILD THE PROTECTED PRODUCTION VIBESDK
+WORKER IS UNKNOWN.
+
+The next task is a READ-ONLY PRODUCTION COMPATIBILITY REVIEW.
+
+Do not deploy anything.
+
+==================================================
+1. PRODUCTION REMAINS FROZEN
+==================================================
+
+Protected VibeSDK Worker version:
+
+8522e70c-27f4-4ef3-a46a-80edbd308490
+
+Production control plane:
+
+a7e0b81b-c017-4fab-a753-380ccf5b9332
+
+Keep:
+
+RUNTIME_OPERATIONS_ENABLED=false
+
+Do not attach:
+
+app.buildcustom.ai
+
+Do not modify:
+
+- production Worker
+- Worker versions
+- DO namespaces
+- migrations
+- D1
+- KV
+- R2
+- dispatch namespace
+- containers
+- secrets
+- routes
+- domains
+- agents
+- workspaces
+- customer apps
+
+==================================================
+2. FREEZE THE VERIFIED PATCH
+==================================================
+
+Record the exact current isolated source state containing:
+
+A. SpaceDO authoritative restore fix
+B. ThinkAgent synchronization fix
+
+Record:
+
+- base candidate commit
+- modified files
+- exact Git diff
+- test files
+- production files
+- dependency state
+- lockfile state
+
+Base candidate lineage:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Do not alter this patch during the compatibility review.
+
+Create a clean patch/diff artifact if useful so the verified changes can
+be reapplied deterministically.
+
+==================================================
+3. RECONFIRM PROTECTED WORKER ARTIFACT IDENTITY
+==================================================
+
+Read-only inspect the currently protected production VibeSDK Worker.
+
+Confirm:
+
+- Worker version ID
+- bundle/module metadata available through Cloudflare
+- upload metadata
+- compatibility date
+- compatibility flags
+- bindings
+- DO namespace bindings
+- D1
+- KV
+- R2
+- dispatch namespace
+- container bindings
+- service bindings
+- relevant environment metadata
+
+Reconfirm whether the active production and previously identified
+staging Worker still have identical deployed bundle hashes/ETags if that
+comparison remains available.
+
+Do not change either Worker.
+
+==================================================
+4. SEARCH FOR SOURCE PROVENANCE AGAIN
+==================================================
+
+Before accepting UNKNOWN permanently, perform one final read-only search
+for source provenance.
+
+Inspect available:
+
+- Worker metadata
+- deployment metadata
+- source maps
+- uploaded modules
+- Wrangler metadata
+- build annotations
+- GitHub Actions/history
+- Replit deployment history
+- repository history
+- local build artifacts
+- CI/CD configuration
+- Wrangler output/history
+- package metadata
+- comments/version strings
+- lockfile fingerprints
+- sourceContent in source maps if present
+
+Look specifically for:
+
+- Git SHA
+- repository URL
+- build ID
+- Wrangler deployment annotation
+- source map source contents
+- package version
+- dependency fingerprints
+
+Do not infer a source SHA without evidence.
+
+Classify provenance as:
+
+EXACT SOURCE IDENTIFIED
+
+or
+
+EXACT SOURCE STILL UNKNOWN
+
+==================================================
+5. COMPARE PRODUCTION ARTIFACT TO CANDIDATE ARCHITECTURE
+==================================================
+
+If exact source remains unknown, perform structural compatibility analysis.
+
+Compare the protected deployed artifact against the unmodified candidate:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Focus ONLY on code paths touched by our verified patch.
+
+For the SpaceDO fix compare the deployed artifact's observable/bundled
+implementation of:
+
+- restore/history lookup
+- target revision checkout/read
+- filesystem reconciliation
+- Git status/staging
+- forward restore commit
+- deployment-after-restore ordering
+
+For ThinkAgent compare:
+
+- generatedFilesMap
+- persistence of that map
+- restore completion behavior
+- file-state publication
+- reconnect hydration
+- SpaceDO → ThinkAgent synchronization
+
+Determine whether the protected Worker exhibits the SAME relevant
+architecture and SAME defect mechanisms as the candidate.
+
+Use deployed bundle inspection/source maps if legitimately available.
+
+Do not modify production to test this.
+
+==================================================
+6. USE TASK #57 AS RUNTIME EVIDENCE
+==================================================
+
+We also have production-runtime evidence from Task #57.
+
+The protected Worker previously demonstrated:
+
+- existing agent reconnect
+- file retrieval
+- conversational turns
+- Plan Mode
+- edit
+- revisions
+- protected preview
+- cancellation acknowledgement
+- native publish
+- generated app HTTP 200
+
+And during restore:
+
+- requested historical commit accepted
+- SpaceDO restore path executed
+- restored preview deployed
+- returned commit matched
+- BuildCustom-facing file state remained pre-restore
+
+Use this only as supporting compatibility evidence.
+
+Do not reinterpret it beyond what was actually observed.
+
+==================================================
+7. DETERMINE PATCH PORTABILITY
+==================================================
+
+For EACH verified fix independently classify:
+
+SPACE DO FIX:
+
+A. CLEANLY PORTABLE
+B. PORTABLE WITH SMALL ADAPTATION
+C. CANNOT ESTABLISH SAFELY
+
+THINKAGENT FIX:
+
+A. CLEANLY PORTABLE
+B. PORTABLE WITH SMALL ADAPTATION
+C. CANNOT ESTABLISH SAFELY
+
+Base classification on actual structural evidence.
+
+Do not classify something as cleanly portable merely because function
+names look similar.
+
+Check:
+
+- method signatures
+- state shapes
+- storage semantics
+- RPC contracts
+- serialization
+- bindings
+- migrations
+- package/runtime assumptions
+
+==================================================
+8. CHECK DURABLE OBJECT COMPATIBILITY CAREFULLY
+==================================================
+
+This is critical because existing production agents/workspaces already
+live in production DO namespaces.
+
+Determine whether applying the verified code changes would require:
+
+- a DO migration
+- class rename
+- namespace change
+- storage schema change
+- state transformation
+- object recreation
+- D1 migration
+- KV migration
+- Artifacts migration
+- dispatch namespace change
+
+Desired answer should be based on evidence.
+
+If no persistent schema changes are introduced by either fix, explicitly
+prove that from the patch.
+
+Existing production DO identities must remain intact.
+
+==================================================
+9. CHECK EXISTING AGENT COMPATIBILITY
+==================================================
+
+Determine whether an existing production ThinkAgent created before the
+patch can safely reconnect after a patched Worker deployment.
+
+Specifically inspect whether its existing persisted:
+
+- generatedFilesMap
+- conversation state
+- identifiers
+- workspace association
+- SpaceDO relationship
+
+can be consumed by the patched code without migration.
+
+We must not require users to recreate agents/projects.
+
+==================================================
+10. CHECK ROLLBACK COMPATIBILITY
+==================================================
+
+Determine what happens if a patched Worker version is deployed and must
+be rolled back to the currently protected Worker version.
+
+Check whether the two fixes write any NEW persistent state that the old
+Worker cannot understand.
+
+Ideal property:
+
+code-only behavior change with backwards-compatible persisted state.
+
+If that is true, prove it.
+
+If not, document exactly why.
+
+==================================================
+11. DO NOT DEPLOY JUST TO DISCOVER COMPATIBILITY
+==================================================
+
+This task is READ ONLY.
+
+Do not:
+
+- create a production canary agent
+- mutate an existing production agent
+- invoke restore in production
+- deploy a candidate Worker
+- upload a new version
+- alter traffic
+- alter routes
+- alter secrets
+- change runtime gate
+
+We already have disposable Cloudflare evidence for behavior.
+
+This task is about compatibility with the protected artifact.
+
+==================================================
+12. DECISION MATRIX
+==================================================
+
+At the end provide a matrix for:
+
+Source provenance
+SpaceDO patch portability
+ThinkAgent patch portability
+DO storage compatibility
+Existing-agent compatibility
+Rollback compatibility
+Binding compatibility
+Dependency compatibility
+Production runtime evidence
+Isolated canary evidence
+
+Each should be:
+
+PASS
+FAIL
+UNKNOWN
+
+with concise evidence.
+
+==================================================
+13. DETERMINE THE SAFEST NEXT ACTION
+==================================================
+
+Based on evidence, recommend ONE of these technical paths:
+
+PATH A:
+We have enough compatibility evidence to build a production-compatible
+candidate and test it in an isolated production-parity Worker before any
+protected deployment.
+
+PATH B:
+We need to reconstruct the protected source more precisely before
+building a production-compatible candidate.
+
+PATH C:
+There is a concrete incompatibility requiring adaptation first.
+
+Do not deploy the chosen path.
+
+Just identify it and explain why.
+
+==================================================
+14. TEMPORARY TOKEN
+==================================================
+
+Do not use:
+
+VIBESDK_TEST_AI_GATEWAY_TOKEN
+
+during this read-only review unless absolutely necessary.
+
+No model/runtime canary should be required.
+
+Do not revoke it yet.
+
+==================================================
+15. REPORT
+==================================================
+
+Return:
+
+1. exact protected Worker version inspected
+2. whether production/staging artifact identity remains confirmed
+3. source-provenance result
+4. strongest provenance evidence available
+5. frozen patch files/diff summary
+6. SpaceDO patch portability classification
+7. ThinkAgent patch portability classification
+8. persistent-state/schema impact
+9. existing-agent compatibility
+10. rollback compatibility
+11. binding compatibility
+12. dependency/runtime compatibility
+13. Task #57 supporting evidence
+14. isolated-canary supporting evidence
+15. PASS/FAIL/UNKNOWN decision matrix
+16. remaining unknowns
+17. recommended PATH A, B, or C
+18. exact next step, WITHOUT performing it
+
+STOP.
+
+Do not deploy anything.
+Do not enable runtime mutations.
+Do not attach app.buildcustom.ai.

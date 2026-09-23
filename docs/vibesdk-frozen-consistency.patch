@@ -1,0 +1,792 @@
+--- a/space/src/space/durable-object.ts
++++ b/space/src/space/durable-object.ts
+@@ -15,7 +15,7 @@
+   VIBE_APP_MODULE,
+ } from "./inspector-wrapper"
+ import { ArtifactsBackend, resolveSpaceFsBackendMode, SqlBackend, type SpaceFsBackend } from "./fs-backend"
+-import { stageWorkdir, stagedTreeMatchesHead, resolveHead } from "./git-objects"
++import { stageWorkdir, stagedTreeMatchesHead, resolveHead, walkTreeFiles, readBlobBytes } from "./git-objects"
+ import { stripPreviewSecurityHeaders } from "./preview-headers"
+ 
+ // ─── Inspector result types ────────────────────────────────────────────────
+@@ -482,41 +482,69 @@
+       return { error: `Commit ${commitHash} not found on branch "${branch}"` }
+     }
+ 
+-    // Capture the file tree at the target commit as raw bytes. Reading and
+-    // rewriting via bytes (not strings) keeps binary assets — fonts, images,
+-    // favicons — byte-for-byte intact. Round-tripping them through UTF-8
+-    // corrupts them and inflates each invalid byte into a 3-byte replacement
+-    // char, which can push a file past the SQLite inline-value limit and throw
+-    // SQLITE_TOOBIG (only reproduced on rollback, since normal deploys never
+-    // rewrite these files).
+-    await this.git.checkout({ ref: target.oid })
++    // Read committed blobs, not the checkout working tree. Checkout can retain
++    // local changes; the Git object tree is the requested revision.
+     const targetFiles = new Map<string, Uint8Array>()
+-    for (const info of await globInfos(this.overlay, "**/*")) {
+-      if (info.type !== "file") continue
+-      if (isReservedPath(info.path)) continue
+-      const bytes = await this.overlay.readFileBytes(info.path)
+-      if (bytes) targetFiles.set(info.path, bytes)
++    const targetTree = await walkTreeFiles(this.fs, target.oid)
++    for (const [path, entry] of targetTree) {
++      if (isReservedPath(path)) continue
++      targetFiles.set(path, await readBlobBytes(this.fs, entry.oid))
+     }
+ 
+-    // Return to the branch HEAD and reconcile the working tree: remove files
+-    // that are absent from the target, then (over)write the captured files.
++    // The new forward commit must be on the requested branch, even if this
++    // SpaceDO was previously left on a different branch or detached HEAD.
+     await this.git.checkout({ ref: branch })
+-    for (const info of await globInfos(this.overlay, "**/*")) {
++
++    // Use the backend FS (not the raw overlay) so Artifacts whiteouts and
++    // checkpoint dirtiness are maintained for both deletions and rewrites.
++    for (const info of await globInfos(this.fs, "**/*")) {
+       if (info.type !== "file") continue
+       if (isReservedPath(info.path)) continue
+       if (!targetFiles.has(info.path)) {
+-        await this.overlay.rm(info.path, { force: true })
++        await this.fs.rm(info.path, { force: true })
+       }
+     }
+     for (const [path, bytes] of targetFiles) {
+-      await this.overlay.writeFileBytes(path, bytes)
++      await this.fs.writeFileBytes(path, bytes)
+     }
+ 
+-    // Commit the restored tree (no-op if nothing changed) and redeploy.
+-    try {
+-      await this.gitCommit(`rollback: restore ${target.oid.slice(0, 8)}`)
+-    } catch {
+-      // Clean tree (already at target) — proceed to redeploy existing HEAD.
++    // Verify writes before committing. In particular, a changed file present
++    // in both trees must not be mistaken for an unchanged file.
++    const writtenPaths = new Set<string>()
++    for (const info of await globInfos(this.fs, "**/*")) {
++      if (info.type !== "file" || isReservedPath(info.path)) continue
++      writtenPaths.add(info.path)
++      const expected = targetFiles.get(info.path)
++      const actual = await this.fs.readFileBytes(info.path)
++      if (!expected || !actual || expected.length !== actual.length ||
++          !expected.every((byte, index) => byte === actual[index])) {
++        throw new Error(`Restore workspace mismatch at ${info.path}`)
++      }
++    }
++    if (writtenPaths.size !== targetFiles.size) {
++      throw new Error("Restore workspace has missing target files")
++    }
++
++    // statusMatrix can report a rapidly rewritten, same-size tracked file as
++    // unchanged (111). Stage every restored path explicitly so gitCommit does
++    // not preserve the old blob; gitCommit stages deletions as usual.
++    for (const path of targetFiles.keys()) {
++      await this.git.add({ filepath: path.replace(/^\/+/, "") })
++    }
++    await this.gitCommitLocal(`rollback: restore ${target.oid.slice(0, 8)}`)
++
++    // A successful commit must be the target tree, not merely a new revision
++    // with a plausible rollback message. Never deploy a mixed commit.
++    const restoredOid = await resolveHead(this.fs, branch)
++    if (!restoredOid) throw new Error("Restore commit has no HEAD")
++    const committedTree = await walkTreeFiles(this.fs, restoredOid)
++    const committedPaths = [...committedTree].filter(([path]) => !isReservedPath(path))
++    if (committedPaths.length !== targetFiles.size ||
++        committedPaths.some(([path, entry]) => entry.oid !== targetTree.get(path)?.oid)) {
++      throw new Error("Restore commit does not match target tree")
++    }
++    if (this.backend instanceof ArtifactsBackend && !(await this.backend.push(branch))) {
++      throw new Error("Restore commit could not be persisted to Artifacts")
+     }
+     return this.deploy(branch)
+   }
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -1,7 +1,7 @@
+ import { RpcTarget } from 'cloudflare:workers';
+ import { getAgentByName } from 'agents';
+ import type { UIMessage } from 'ai';
+-import { ThinkState } from '../state';
++import { ThinkState, type FileState } from '../state';
+ import { AgentInitArgs, DeploymentTarget } from '../types';
+ import { BaseCodingBehavior } from './base';
+ import { WebSocketMessageResponses } from '../../constants';
+@@ -49,6 +49,8 @@
+ type SpaceRpcStub = {
+ 	writeFile: (path: string, content: string) => Promise<unknown>;
+ 	readFile: (path: string, opts?: { offset?: number; limit?: number }) => Promise<string>;
++	glob: (pattern: string) => Promise<string[]>;
++	gitLog: (depth?: number) => Promise<Array<{ oid: string; message: string }>>;
+ 	gitCommit: (
+ 		msg: string,
+ 		author?: { name: string; email: string },
+@@ -749,7 +751,7 @@
+ 	 * `deployCurrentBranch` emits). On a reported build error, emit
+ 	 * `DEPLOYMENT_FAILED`.
+ 	 */
+-	private async handleDeploySpaceOutput(output: unknown): Promise<void> {
++	private async handleDeploySpaceOutput(output: unknown): Promise<boolean> {
+ 		let parsed: Record<string, unknown> | undefined;
+ 		if (typeof output === 'string') {
+ 			try { parsed = JSON.parse(output) as Record<string, unknown>; } catch { parsed = undefined; }
+@@ -759,7 +761,7 @@
+ 
+ 		if (parsed && typeof parsed.error === 'string') {
+ 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, { error: parsed.error });
+-			return;
++			return false;
+ 		}
+ 
+ 		const commitHash = parsed && typeof parsed.commit_hash === 'string' ? parsed.commit_hash : undefined;
+@@ -769,8 +771,45 @@
+ 		try {
+ 			const url = await this.getBrowserPreviewURL();
+ 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, { previewURL: url });
++			return true;
+ 		} catch (e) {
+ 			this.logger.warn('Failed to surface preview after deploy_space', e);
++			return true;
++		}
++	}
++
++	/**
++	 * Replace the editor/session projection from the SpaceDO workspace after
++	 * restore. ThinkAgent's file tools already use SpaceDO; this persisted map
++	 * feeds the current WebSocket and fresh reconnects, not a second workspace.
++	 */
++	private async refreshRestoredFiles(): Promise<void> {
++		const paths = await this.callSpace((space) => space.glob('**/*'));
++		const prior = this.state.generatedFilesMap;
++		const files = await Promise.all(paths.map(async (path) => {
++			const filePath = path.replace(/^\/+/, '');
++			const fileContents = await this.callSpace((space) => space.readFile(path));
++			return [filePath, {
++				filePath,
++				fileContents,
++				filePurpose: prior[filePath]?.filePurpose || 'Generated by think',
++				lastDiff: '',
++			}] as const;
++		}));
++		const generatedFilesMap: Record<string, FileState> = Object.fromEntries(files);
++		// AgentComponent.setState intentionally swallows errors. A restore needs
++		// the underlying Agent persistence/broadcast failure to propagate.
++		this.infrastructure.setState({ ...this.state, generatedFilesMap });
++	}
++
++	private async refreshRestoredFilesOrFail(): Promise<void> {
++		try {
++			await this.refreshRestoredFiles();
++		} catch (error) {
++			// Never intentionally retain a B projection after a committed
++			// restore when a complete authoritative snapshot cannot be read.
++			this.infrastructure.setState({ ...this.state, generatedFilesMap: {} });
++			throw new Error(`Restored workspace, but session file refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+ 		}
+ 	}
+ 
+@@ -795,8 +834,25 @@
+ 
+ 		const branch = this.state.currentBranch || 'main';
+ 		try {
+-			const output = await this.callSpace((space) => space.rollbackToCommit(branch, hash));
+-			await this.handleDeploySpaceOutput(output);
++			const previousHead = (await this.callSpace((space) => space.gitLog(1)))[0]?.oid;
++			let output: unknown;
++			try {
++				output = await this.callSpace((space) => space.rollbackToCommit(branch, hash));
++			} catch (error) {
++				// SpaceDO may have committed the exact target and then thrown in
++				// preview deployment. Its verified forward commit is still the
++				// workspace authority; do not leave this host advertising B.
++				const head = (await this.callSpace((space) => space.gitLog(1)))[0];
++				if (head?.oid !== previousHead && head?.message.startsWith('rollback: restore ')) {
++					await this.refreshRestoredFilesOrFail();
++				}
++				throw error;
++			}
++			// SpaceDO can commit A even when preview building subsequently fails.
++			// Refresh before any result frame so neither this session nor a
++			// reconnect can receive the old B projection.
++			await this.refreshRestoredFilesOrFail();
++			if (!(await this.handleDeploySpaceOutput(output))) return;
+ 			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+ 				message: `Rolled back to commit \`${hash.slice(0, 8)}\` and redeployed.`,
+ 				conversationId: IdGenerator.generateConversationId(),
+--- a/space/test/restore-authoritative.regression.test.ts
++++ b/space/test/restore-authoritative.regression.test.ts
+@@ -0,0 +1,221 @@
++import { describe, expect, it } from "vitest"
++import { env, runInDurableObject } from "cloudflare:test"
++import { SpaceDO } from "../src/space/durable-object"
++import { readBlobBytes, walkTreeFiles } from "../src/space/git-objects"
++import type { Env } from "../src/env"
++import type {} from "./test-env"
++
++const paths = ["/index.html", "/a-only.txt", "/b-only.txt"] as const
++type Tree = Record<(typeof paths)[number], string | null>
++
++async function committedTree(
++  space: SpaceDO,
++  commitOid: string,
++  selectedPaths: readonly string[] = paths,
++): Promise<Record<string, string | null>> {
++  const fs = (space as any).backend.fs
++  const entries = await walkTreeFiles(fs, commitOid)
++  const tree: Record<string, string | null> = {}
++  for (const path of selectedPaths) {
++    const entry = entries.get(path)
++    tree[path] = entry
++      ? new TextDecoder().decode(await readBlobBytes(fs, entry.oid))
++      : null
++  }
++  return tree
++}
++
++async function commit(space: SpaceDO, message: string) {
++  await space.gitCommit(message)
++  return (await space.gitLog(1))[0].oid
++}
++
++describe("normal SpaceDO forward restore of changed and added/deleted files", () => {
++  it("proves checkout does retrieve the changed target file", async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName("restore-checkout-contract"))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      await space.writeFile("/index.html", "RESTORE_REAL_A")
++      await space.writeFile("/a-only.txt", "A_ONLY")
++      const commitA = await commit(space, "A")
++      await space.writeFile("/index.html", "RESTORE_REAL_B")
++      await space.deleteFile("/a-only.txt")
++      await space.writeFile("/b-only.txt", "B_ONLY")
++      await (space as any).backend.git.add({ filepath: "index.html" })
++      const commitB = await commit(space, "B")
++      expect((await committedTree(space, commitB))["/index.html"]).toBe("RESTORE_REAL_B")
++      expect((await committedTree(space, commitA))["/index.html"]).toBe("RESTORE_REAL_A")
++
++      await (space as any).backend.git.checkout({ ref: commitA })
++      expect(await space.readFile("/index.html")).toBe("RESTORE_REAL_A")
++      expect(await space.readFile("/a-only.txt")).toBe("A_ONLY")
++      await expect(space.readFile("/b-only.txt")).rejects.toThrow()
++    })
++  })
++
++  it("commits the exact earlier tree, not a mix of A and B", async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName("restore-exact-a-b"))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const A: Tree = {
++        "/index.html": "RESTORE_REAL_A",
++        "/a-only.txt": "A_ONLY",
++        "/b-only.txt": null,
++      }
++      const B: Tree = {
++        "/index.html": "RESTORE_REAL_B",
++        "/a-only.txt": null,
++        "/b-only.txt": "B_ONLY",
++      }
++
++      await space.writeFile("/index.html", A["/index.html"]!)
++      await space.writeFile("/a-only.txt", A["/a-only.txt"]!)
++      const commitA = await commit(space, "A")
++      expect(await committedTree(space, commitA)).toEqual(A)
++
++      await space.writeFile("/index.html", B["/index.html"]!)
++      await space.deleteFile("/a-only.txt")
++      await space.writeFile("/b-only.txt", B["/b-only.txt"]!)
++      expect(await space.readFile("/index.html")).toBe(B["/index.html"])
++      // The normal commit tool stages the worktree. Explicitly stage the
++      // overwritten path here so this fixture starts with a verified B commit.
++      await (space as any).backend.git.add({ filepath: "index.html" })
++      const commitB = await commit(space, "B")
++      expect(commitB).not.toBe(commitA)
++      expect(await committedTree(space, commitB)).toEqual(B)
++
++      let beforeRestoreCommit: string | undefined
++      const realCommit = space.gitCommitLocal.bind(space)
++      ;(space as any).gitCommitLocal = async (message: string) => {
++        beforeRestoreCommit = await space.readFile("/index.html")
++        return realCommit(message)
++      }
++      // The deployment runs after the forward commit. It does not determine
++      // whether SpaceDO's authoritative committed tree matches the target.
++      ;(space as any).deploy = async () => ({ error: "test deploy unavailable" })
++      await space.rollbackToCommit("main", commitA)
++      expect(beforeRestoreCommit).toBe(A["/index.html"])
++      const forward = (await space.gitLog(1))[0].oid
++      expect(forward).not.toBe(commitB)
++      expect(await committedTree(space, forward)).toEqual(A)
++      expect(await space.readFile("/index.html")).toBe(A["/index.html"])
++      expect(await space.readFile("/a-only.txt")).toBe(A["/a-only.txt"])
++      await expect(space.readFile("/b-only.txt")).rejects.toThrow()
++    })
++  })
++
++  const matrix: Array<{
++    name: string
++    A: Record<string, string>
++    B: Record<string, string>
++  }> = [
++    {
++      name: "changed existing file",
++      A: { "/index.html": "RESTORE_REAL_A" },
++      B: { "/index.html": "RESTORE_REAL_B" },
++    },
++    {
++      name: "new B-only file is removed",
++      A: { "/index.html": "SAME" },
++      B: { "/index.html": "SAME", "/b-only.txt": "B_ONLY" },
++    },
++    {
++      name: "deleted A-only file is recreated",
++      A: { "/index.html": "SAME", "/a-only.txt": "A_ONLY" },
++      B: { "/index.html": "SAME" },
++    },
++    {
++      name: "multiple changed existing files",
++      A: { "/index.html": "RESTORE_REAL_A", "/second.txt": "second-A" },
++      B: { "/index.html": "RESTORE_REAL_B", "/second.txt": "second-B" },
++    },
++    {
++      name: "changed file in a nested path",
++      A: { "/index.html": "SAME", "/nested/page.txt": "nested-A" },
++      B: { "/index.html": "SAME", "/nested/page.txt": "nested-B" },
++    },
++  ]
++
++  for (const [index, { name, A, B }] of matrix.entries()) {
++    it(`restores ${name} in the committed tree`, async () => {
++      const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName(`restore-matrix-${index}`))
++      await runInDurableObject(stub, async (_instance, state) => {
++        const space = new SpaceDO(state, {} as Env)
++        const allPaths = [...new Set([...Object.keys(A), ...Object.keys(B)])]
++        async function setFile(path: string, value: string) {
++          const parent = path.slice(0, path.lastIndexOf("/"))
++          if (parent) await space.mkdir(parent, { recursive: true })
++          await space.writeFile(path, value)
++        }
++        for (const [path, value] of Object.entries(A)) await setFile(path, value)
++        const aOid = await commit(space, "A")
++        for (const path of Object.keys(A)) {
++          if (!(path in B)) await space.deleteFile(path)
++        }
++        for (const [path, value] of Object.entries(B)) {
++          if (A[path] === value) continue
++          await setFile(path, value)
++          // Guarantee the fixture actually commits the changed blob, even
++          // when statusMatrix treats a same-size rapid rewrite as unchanged.
++          await (space as any).backend.git.add({ filepath: path.slice(1) })
++        }
++        const bOid = await commit(space, "B")
++        expect(bOid).not.toBe(aOid)
++        const expectedA = Object.fromEntries(allPaths.map((p) => [p, A[p] ?? null]))
++        const expectedB = Object.fromEntries(allPaths.map((p) => [p, B[p] ?? null]))
++        expect(await committedTree(space, aOid, allPaths)).toEqual(expectedA)
++        expect(await committedTree(space, bOid, allPaths)).toEqual(expectedB)
++
++        ;(space as any).deploy = async () => ({ error: "test deploy unavailable" })
++        await space.rollbackToCommit("main", aOid)
++        const restored = (await space.gitLog(1))[0].oid
++        expect(await committedTree(space, restored, allPaths)).toEqual(expectedA)
++        for (const path of allPaths) {
++          if (A[path] === undefined) {
++            await expect(space.readFile(path)).rejects.toThrow()
++          } else {
++            expect(await space.readFile(path)).toBe(A[path])
++          }
++        }
++      })
++    })
++  }
++
++  for (const failure of ["target", "write", "commit", "tree"] as const) {
++    it(`does not deploy after a ${failure} restore failure`, async () => {
++      const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName(`restore-failure-${failure}`))
++      await runInDurableObject(stub, async (_instance, state) => {
++        const space = new SpaceDO(state, {} as Env)
++        await space.writeFile("/index.html", "RESTORE_REAL_A")
++        const aOid = await commit(space, "A")
++        await space.writeFile("/index.html", "RESTORE_REAL_B")
++        await (space as any).backend.git.add({ filepath: "index.html" })
++        const bOid = await commit(space, "B")
++        expect((await committedTree(space, bOid))["/index.html"]).toBe("RESTORE_REAL_B")
++
++        let deployed = false
++        ;(space as any).deploy = async () => { deployed = true; return { ok: true } }
++        if (failure === "write") {
++          const fs = (space as any).backend.fs
++          fs.writeFileBytes = async () => { throw new Error("injected write failure") }
++        }
++        if (failure === "commit") {
++          ;(space as any).gitCommitLocal = async () => { throw new Error("injected commit failure") }
++        }
++        if (failure === "tree") {
++          // Simulate a commit operation that returns without recording A. The
++          // post-commit tree check must reject it instead of deploying B.
++          ;(space as any).gitCommitLocal = async () => ({ sha: bOid, message: "not restored" })
++        }
++
++        const requested = failure === "target" ? "no-such-commit" : aOid
++        if (failure === "target") {
++          await expect(space.rollbackToCommit("main", requested)).resolves.toHaveProperty("error")
++        } else {
++          await expect(space.rollbackToCommit("main", requested)).rejects.toThrow()
++        }
++        expect(deployed).toBe(false)
++      })
++    })
++  }
++})
+\ No newline at end of file
+--- a/worker/agents/core/think-stale-state.regression.test.ts
++++ b/worker/agents/core/think-stale-state.regression.test.ts
+@@ -0,0 +1,347 @@
++import { describe, expect, it, vi } from 'vitest'
++import { env, runInDurableObject } from 'cloudflare:test'
++vi.mock('agents', () => ({
++  getAgentByName: async () => ({}),
++  Agent: class {},
++  Connection: class {},
++}))
++import { SpaceDO } from '../../../space/src/space/durable-object'
++import { readBlobBytes, walkTreeFiles } from '../../../space/src/space/git-objects'
++import { FileManager } from '../services/implementations/FileManager'
++import { ThinkCodingBehavior } from './behaviors/think'
++import { WorkspaceStore } from '../../../sdk/src/workspace'
++import type { BaseProjectState, FileState } from './state'
++import type { Env } from '../../../space/src/env'
++import type {} from '../../../space/test/test-env'
++
++const paths = ['/index.html', '/a-only.txt', '/b-only.txt'] as const
++const A = {
++  '/index.html': 'RESTORE_REAL_A',
++  '/a-only.txt': 'A_ONLY',
++  '/b-only.txt': null,
++} as const
++const B = {
++  '/index.html': 'RESTORE_REAL_B',
++  '/a-only.txt': null,
++  '/b-only.txt': 'B_ONLY',
++} as const
++
++type PersistedState = BaseProjectState & {
++  generatedFilesMap: Record<string, FileState>
++}
++
++async function commit(space: SpaceDO, message: string): Promise<string> {
++  await space.gitCommit(message)
++  return (await space.gitLog(1))[0].oid
++}
++
++async function tree(space: SpaceDO, oid: string) {
++  const fs = (space as any).backend.fs
++  const entries = await walkTreeFiles(fs, oid)
++  return Object.fromEntries(await Promise.all(paths.map(async (path) => {
++    const entry = entries.get(path)
++    return [path, entry ? new TextDecoder().decode(await readBlobBytes(fs, entry.oid)) : null]
++  })))
++}
++
++async function createAB(space: SpaceDO) {
++  await space.writeFile('/index.html', A['/index.html'])
++  await space.writeFile('/a-only.txt', A['/a-only.txt'])
++  const commitA = await commit(space, 'A')
++  await space.writeFile('/index.html', B['/index.html'])
++  await space.deleteFile('/a-only.txt')
++  await space.writeFile('/b-only.txt', B['/b-only.txt'])
++  await (space as any).backend.git.add({ filepath: 'index.html' })
++  const commitB = await commit(space, 'B')
++  expect(await tree(space, commitA)).toEqual(A)
++  expect(await tree(space, commitB)).toEqual(B)
++  return { commitA, commitB }
++}
++
++function stateWithB(): PersistedState {
++  const file = (filePath: string, fileContents: string): FileState => ({
++    filePath,
++    fileContents,
++    filePurpose: 'Generated by think',
++    lastDiff: '',
++  })
++  return {
++    behaviorType: 'think',
++    projectType: 'app',
++    projectName: 'restore-stale-state-test',
++    query: 'restore stale state',
++    generatedFilesMap: {
++      'index.html': file('index.html', B['/index.html']),
++      'b-only.txt': file('b-only.txt', B['/b-only.txt']!),
++    },
++  } as PersistedState
++}
++
++function behaviorForState(state: PersistedState, space: SpaceDO, broadcasts: unknown[] = []) {
++  const behavior = Object.create(ThinkCodingBehavior.prototype) as ThinkCodingBehavior
++  let current = state
++  const stateManager = {
++    getState: () => current,
++    setState: (next: PersistedState) => { current = next },
++    updateField: () => undefined,
++  }
++  const git = {
++    setOnFilesChangedCallback: () => undefined,
++    getAllFilesFromHead: async () => [],
++  }
++  Object.defineProperty(behavior, 'state', {
++    get: () => current,
++    set: (next: PersistedState) => { current = next },
++    configurable: true,
++  })
++  Object.defineProperty(behavior, 'setState', {
++    value: (next: PersistedState) => { current = next },
++    writable: true,
++    configurable: true,
++  })
++  Object.defineProperty(behavior, 'fileManager', {
++    value: new FileManager(
++    stateManager,
++    () => ({ allFiles: {}, dontTouchFiles: new Set<string>() } as any),
++    git as any,
++    ),
++    writable: true,
++    configurable: true,
++  })
++  // Exercise the actual ThinkCodingBehavior.rollbackToCommit entry point while
++  // keeping the real SpaceDO in the Cloudflare test harness.
++  Object.defineProperty(behavior, 'callSpace', {
++    value: <T>(call: (target: any) => Promise<T>) => call(space),
++    writable: true,
++    configurable: true,
++  })
++  Object.defineProperty(behavior, 'broadcast', {
++    value: (type: string, payload: unknown) => broadcasts.push({ type, payload }),
++    writable: true,
++    configurable: true,
++  })
++  Object.defineProperty(behavior, 'isCodeGenerating', {
++    value: () => false,
++    writable: true,
++    configurable: true,
++  })
++  Object.defineProperty(behavior, 'infrastructure', {
++    value: {
++      logger: () => ({ warn: () => undefined, error: () => undefined }),
++      setState: (next: PersistedState) => {
++        current = next
++        broadcasts.push({ type: 'cf_agent_state', state: next })
++      },
++    },
++    configurable: true,
++  })
++  return { behavior, getState: () => current }
++}
++
++function projection(state: PersistedState) {
++  return Object.fromEntries(
++    Object.entries(state.generatedFilesMap).map(([path, file]) => [path, file.fileContents]),
++  )
++}
++
++function assertAProjection(state: PersistedState) {
++  expect(projection(state)).toEqual({
++    'index.html': A['/index.html'],
++    'a-only.txt': A['/a-only.txt'],
++  })
++  expect(state.generatedFilesMap['b-only.txt']).toBeUndefined()
++}
++
++function assertWorkspaceA(state: PersistedState) {
++  const workspace = new WorkspaceStore()
++  workspace.applyWsMessage({ type: 'agent_connected', state } as any)
++  expect(workspace.snapshot()).toEqual({
++    'index.html': A['/index.html'],
++    'a-only.txt': A['/a-only.txt'],
++  })
++  expect(workspace.read('b-only.txt')).toBeNull()
++  return workspace
++}
++
++describe('ThinkAgent state after an authoritative SpaceDO restore', () => {
++  it('refreshes the current session projection to complete A after restore', async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName('think-stale-current'))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const { commitA } = await createAB(space)
++      ;(space as any).deploy = async () => ({ error: 'test deploy unavailable' })
++      const broadcasts: unknown[] = []
++      const { behavior } = behaviorForState(stateWithB(), space, broadcasts)
++      await behavior.rollbackToCommit(commitA)
++      const forward = (await space.gitLog(1))[0].oid
++      expect(await tree(space, forward)).toEqual(A)
++
++      const files = await behavior.readFiles(['index.html', 'a-only.txt', 'b-only.txt'])
++      expect(broadcasts).toEqual(expect.arrayContaining([
++        expect.objectContaining({ type: 'deployment_failed' }),
++      ]))
++      assertAProjection(behavior.state as PersistedState)
++      expect(files.files).toEqual([
++        { path: 'index.html', content: A['/index.html'] },
++        { path: 'a-only.txt', content: A['/a-only.txt'] },
++      ])
++      assertWorkspaceA(behavior.state as PersistedState)
++    })
++  })
++
++  it('rehydrates complete A, including deletion, after a fresh reconnect', async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName('think-stale-reconnect'))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const { commitA } = await createAB(space)
++      ;(space as any).deploy = async () => ({ error: 'test deploy unavailable' })
++      const broadcasts: unknown[] = []
++      const currentSession = behaviorForState(stateWithB(), space, broadcasts)
++      await currentSession.behavior.rollbackToCommit(commitA)
++      const forward = (await space.gitLog(1))[0].oid
++      expect(await tree(space, forward)).toEqual(A)
++
++      // A fresh ticketed reconnect rehydrates the serialized Think state; it
++      // does not reconstruct files from SpaceDO.
++      const persisted = JSON.parse(JSON.stringify(currentSession.getState())) as PersistedState
++      const reconnected = behaviorForState(persisted, space).behavior
++      const snapshot = reconnected.listFiles()
++      const files = await reconnected.readFiles(['index.html', 'a-only.txt', 'b-only.txt'])
++      assertAProjection(currentSession.getState())
++      expect(Object.fromEntries(snapshot.map((file) => [file.filePath, file.fileContents]))).toEqual({
++        'index.html': A['/index.html'],
++        'a-only.txt': A['/a-only.txt'],
++      })
++      expect(snapshot.some((file) => file.filePath === 'b-only.txt')).toBe(false)
++      expect(files.files).toEqual([
++        { path: 'index.html', content: A['/index.html'] },
++        { path: 'a-only.txt', content: A['/a-only.txt'] },
++      ])
++      assertWorkspaceA(persisted)
++    })
++  })
++
++  it('starts the representative next edit from the refreshed A host read', async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName('think-stale-next-edit'))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const { commitA } = await createAB(space)
++      ;(space as any).deploy = async () => ({ error: 'test deploy unavailable' })
++      const { behavior } = behaviorForState(stateWithB(), space)
++      await behavior.rollbackToCommit(commitA)
++      const forward = (await space.gitLog(1))[0].oid
++      expect(await tree(space, forward)).toEqual(A)
++
++      const beforeEdit = await behavior.readFiles(['index.html'])
++      const nextContent = `${beforeEdit.files[0].content}\nEDIT_AFTER_RESTORE`
++      await (behavior as any).callSpace((target: SpaceDO) => target.writeFile('/index.html', nextContent))
++      await (space as any).backend.git.add({ filepath: 'index.html' })
++      const nextCommit = await commit(space, 'next edit after restore')
++      expect((await tree(space, nextCommit))['/index.html'])
++        .toBe(`${A['/index.html']}\nEDIT_AFTER_RESTORE`)
++    })
++  })
++
++  it('fails closed when authoritative projection refresh fails', async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName('think-stale-refresh-failure'))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const { commitA } = await createAB(space)
++      ;(space as any).deploy = async () => ({ commit_hash: 'should-not-deploy' })
++      const broadcasts: unknown[] = []
++      const current = behaviorForState(stateWithB(), space, broadcasts)
++      ;(space as any).glob = async () => { throw new Error('injected refresh failure') }
++      await current.behavior.rollbackToCommit(commitA)
++
++      expect(await tree(space, (await space.gitLog(1))[0].oid)).toEqual(A)
++      expect(broadcasts).toEqual(expect.arrayContaining([
++        expect.objectContaining({
++          type: 'deployment_failed',
++          payload: expect.objectContaining({ error: expect.stringContaining('session file refresh failed') }),
++        }),
++      ]))
++      expect(broadcasts.some((event: any) => event.type === 'deployment_completed')).toBe(false)
++      expect(broadcasts.some((event: any) => event.type === 'conversation_response')).toBe(false)
++      expect(projection(current.getState())).toEqual({})
++      expect(current.getState().generatedFilesMap['b-only.txt']).toBeUndefined()
++    })
++  })
++
++  it('does not report success when publishing the restored projection fails', async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName('think-stale-publish-failure'))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const { commitA } = await createAB(space)
++      ;(space as any).deploy = async () => ({ commit_hash: 'restored-a' })
++      const broadcasts: unknown[] = []
++      const current = behaviorForState(stateWithB(), space, broadcasts)
++      const infrastructure = (current.behavior as any).infrastructure
++      const publish = infrastructure.setState
++      let failOnce = true
++      infrastructure.setState = (next: PersistedState) => {
++        if (failOnce) {
++          failOnce = false
++          throw new Error('injected state persistence failure')
++        }
++        publish(next)
++      }
++      await current.behavior.rollbackToCommit(commitA)
++
++      expect(await tree(space, (await space.gitLog(1))[0].oid)).toEqual(A)
++      expect(projection(current.getState())).toEqual({})
++      expect(broadcasts).toEqual(expect.arrayContaining([
++        expect.objectContaining({
++          type: 'deployment_failed',
++          payload: expect.objectContaining({ error: expect.stringContaining('state persistence failure') }),
++        }),
++      ]))
++      expect(broadcasts.some((event: any) => event.type === 'deployment_completed')).toBe(false)
++      expect(broadcasts.some((event: any) => event.type === 'conversation_response')).toBe(false)
++    })
++  })
++
++  it('refreshes A before reporting a successful restore', async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName('think-stale-success-boundary'))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const { commitA } = await createAB(space)
++      ;(space as any).deploy = async () => ({ commit_hash: 'restored-a' })
++      const broadcasts: unknown[] = []
++      const current = behaviorForState(stateWithB(), space, broadcasts)
++      Object.defineProperty(current.behavior, 'getBrowserPreviewURL', {
++        value: async () => 'https://preview.example.test',
++        configurable: true,
++      })
++      await current.behavior.rollbackToCommit(commitA)
++
++      const completed = broadcasts.find((event: any) => event.type === 'deployment_completed') as any
++      expect(completed).toBeDefined()
++      expect(projection(current.getState())).toEqual({
++        'index.html': A['/index.html'],
++        'a-only.txt': A['/a-only.txt'],
++      })
++      expect(completed.payload).toEqual({ previewURL: 'https://preview.example.test' })
++      expect(broadcasts.findIndex((event: any) => event.type === 'deployment_completed'))
++        .toBeLessThan(broadcasts.findIndex((event: any) => event.type === 'conversation_response'))
++    })
++  })
++
++  it('refreshes A when preview deployment throws after the forward commit', async () => {
++    const stub = env.FsHarnessDO.get(env.FsHarnessDO.idFromName('think-stale-deploy-throw'))
++    await runInDurableObject(stub, async (_instance, state) => {
++      const space = new SpaceDO(state, {} as Env)
++      const { commitA } = await createAB(space)
++      ;(space as any).deploy = async () => { throw new Error('injected preview failure') }
++      const broadcasts: unknown[] = []
++      const current = behaviorForState(stateWithB(), space, broadcasts)
++      await current.behavior.rollbackToCommit(commitA)
++
++      expect(await tree(space, (await space.gitLog(1))[0].oid)).toEqual(A)
++      assertAProjection(current.getState())
++      expect(broadcasts.some((event: any) => event.type === 'conversation_response')).toBe(false)
++      expect(broadcasts).toEqual(expect.arrayContaining([
++        expect.objectContaining({ type: 'deployment_failed' }),
++      ]))
++    })
++  })
++})
+\ No newline at end of file

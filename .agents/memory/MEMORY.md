@@ -22,4 +22,5 @@
 - [Isolated VibeSDK bundle identity](isolated-vibesdk-bundle-identity.md) — a test checkout can silently bundle the untouched workspace package through shared node_modules; inspect dry-run output.
 - [Think file projection](think-file-projection.md) — after a SpaceDO restore, replace the persisted host file snapshot before reporting completion; conversation reconnect alone cannot hydrate files.
 - [Preview buildability gate](preview-buildability-gate.md) — marker-only restore fixtures are not preview-ready; compare valid A and B previews before attributing a build failure to restore.
+- [Exact patch artifacts](exact-patch-artifacts.md) — command output capture can change whitespace; verify generated unified diffs apply to their pinned base.
 - [Cloudflare container sizing](cloudflare-container-sizing.md) — container validation requires enough memory per vCPU and caps disk relative to memory.
