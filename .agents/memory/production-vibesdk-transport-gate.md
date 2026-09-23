@@ -38,3 +38,9 @@ An unknown production source commit is a hard gate for protected-Worker deployme
 **Why:** The owner explicitly distinguished executable candidate-baseline work from later production compatibility proof. The public candidate can run its pinned Bun/Node unit/type/build checks even while the production source-to-bundle link remains unknown.
 
 **How to apply:** Reproduce the central Think/SpaceDO stale-state defect with an executable test against the unmodified candidate before implementing another fix. Treat pinned Vitest/Miniflare's missing `cloudflare:workers` named `exports` binding as a test-harness gap, not evidence that the defect is fixed or absent.
+
+A disposable Cloudflare Worker with only host/Think/Space Durable Object bindings can start the real classes, but a test adapter that skips normal initialization and injects the host file map is not a full ThinkAgent lifecycle. Never label a B/B result after restore as proof of stale Think hydration.
+
+**Why:** The isolated minimal test ran RPCs and made a rollback commit, yet SpaceDO still read B, no deployment was recorded, and the child ThinkAgent never executed a chat/edit turn. A later checkout/read through the same overlay was not independent proof of A's committed blob.
+
+**How to apply:** First independently verify the committed A and B blob trees and a successful SpaceDO restore/deployment in fully isolated resources. Only then compare real child/host hydration, authenticated reads, reconnect, and next edit; stop if the candidate cannot run that lifecycle without production bindings.

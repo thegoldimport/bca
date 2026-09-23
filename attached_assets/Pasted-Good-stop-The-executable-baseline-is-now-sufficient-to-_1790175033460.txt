@@ -1,0 +1,201 @@
+Good stop. The executable baseline is now sufficient to move to the next validation layer.
+
+Do NOT upgrade VibeSDK's pinned dependencies merely to make Vitest/Miniflare support the real ThinkAgent.
+
+Do NOT write the consistency fix yet.
+
+The next task is narrowly:
+
+Create a disposable isolated Cloudflare test environment capable of running the UNMODIFIED candidate VibeSDK's real ThinkAgent + SpaceDO stack, then reproduce the central regression there.
+
+Production remains frozen and untouched:
+
+protected VibeSDK: 8522e70c-27f4-4ef3-a46a-80edbd308490
+gated control plane: a7e0b81b-c017-4fab-a753-380ccf5b9332
+runtime mutations disabled
+app.buildcustom.ai unattached
+==================================================
+DO NOT CHANGE THE BASELINE
+
+Candidate development baseline:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Keep its:
+
+frozen Bun lockfiles
+declared compatibility date
+current dependencies
+current Agents dependency
+current VibeSDK source
+
+Do not upgrade Miniflare, Vitest, Wrangler, Agents, Cloudflare packages, or application dependencies merely to construct a test harness.
+
+We want to test the real candidate, not a modified runtime.
+
+==================================================
+CREATE DISPOSABLE CLOUDFLARE TEST RESOURCES
+
+Create the minimum isolated Cloudflare resources necessary to run the unmodified candidate's real:
+
+ThinkAgent + SpaceDO
+
+lifecycle.
+
+These resources must be completely separate from:
+
+production VibeSDK DO namespaces
+production VibeSDK D1
+production KV
+production R2
+production dispatch namespace
+production customer Workers
+production workspaces
+production agent IDs
+
+Use obvious disposable/test names.
+
+Do NOT bind the test Worker to existing production state.
+
+If creating these isolated resources requires any action that could affect production, STOP.
+
+==================================================
+UNMODIFIED BASELINE FIRST
+
+Deploy the UNMODIFIED candidate baseline to those disposable resources.
+
+Do not include a consistency fix.
+
+First prove the real harness works:
+
+create disposable agent/workspace
+generate/read files
+create revisions A and B
+reconnect by agent ID
+exercise ThinkAgent file hydration
+exercise SpaceDO restore
+
+If the unmodified candidate cannot run correctly in the isolated Cloudflare environment, STOP and report the infrastructure/runtime blocker.
+
+==================================================
+CENTRAL REQUIRED REGRESSION
+
+Once the real stack runs, reproduce:
+
+A → B → restore A
+
+Make A and B unmistakably different.
+
+Example:
+
+A contains:
+
+THINK_RESTORE_TEST_A
+
+B contains:
+
+THINK_RESTORE_TEST_B
+
+Capture authoritative hashes/content.
+
+After restoring A from B, independently inspect:
+
+SpaceDO authoritative tree
+ThinkAgent generatedFilesMap / exposed file state
+authenticated BuildCustom-style file reads
+reconnect state
+preview/materialized state where available
+
+Determine whether the known stale-state defect reproduces in the real Cloudflare runtime.
+
+==================================================
+NEXT-EDIT REGRESSION
+
+If stale ThinkAgent state reproduces, also prove its behavioral consequence.
+
+After restoring A, issue an edit designed so the output reveals whether the coding agent started from A or stale B.
+
+Record exactly which state the next edit used.
+
+Do not attempt to fix it yet.
+
+==================================================
+RUN THE ALREADY-DISCOVERED CONCURRENCY CASES
+
+Where the real runtime permits, reproduce:
+
+forced/failed restore commit
+restore + concurrent edit
+restore + consistency-sensitive read
+cancellation followed by reconnect
+child ThinkAgent activity after cancellation/reset
+
+We already know two defects reproduce in the SQL-backed test harness.
+
+The purpose here is to determine their behavior under real Durable Object/Agents execution.
+
+==================================================
+HTTP/RPC DEPLOY
+
+If the isolated environment can safely provide the required deployment binding, test HTTP/RPC materialization parity there.
+
+If doing so would unnecessarily expand the test infrastructure, leave this for the eventual fixed-candidate canary and mark it clearly UNTESTED.
+
+Do not create a custom deployment engine merely for this test.
+
+==================================================
+NO FIX DURING THIS TASK
+
+This task is reproduction only.
+
+Even if the correct fix appears obvious:
+
+DO NOT implement it yet.
+
+We first want an executable record of the defect against the unmodified candidate running the real Cloudflare Agents/DO stack.
+
+==================================================
+STOP AND REPORT
+
+After reproduction testing, stop.
+
+Report:
+
+exact disposable Cloudflare resources created
+confirmation none share production state/namespaces
+exact candidate commit deployed
+confirmation source/dependencies were unmodified
+baseline ThinkAgent/SpaceDO functionality result
+A/B revision hashes/content
+SpaceDO state after restore
+ThinkAgent-visible state after restore
+BuildCustom-style file-read state after restore
+reconnect state after restore
+next-edit state/result
+failed-commit behavior
+concurrent-edit behavior
+concurrent-read behavior
+cancellation/reconnect behavior
+HTTP/RPC deploy result or explicit UNTESTED
+which defects now reproduce in the real runtime
+which remain untested
+whether we now have sufficient executable evidence to begin an isolated fix
+
+Do not write the fix.
+
+Do not deploy anything to the protected VibeSDK Worker.
+
+Do not enable production mutations.
+
+Do not attach app.buildcustom.ai.
+
+==================================================
+DECISION GATE
+
+If the central:
+
+B → restore A → ThinkAgent stale state
+
+defect reproduces against the unmodified candidate on real isolated Cloudflare infrastructure, then we finally have the baseline evidence required to begin the fix.
+
+At that point stop for the next task.
