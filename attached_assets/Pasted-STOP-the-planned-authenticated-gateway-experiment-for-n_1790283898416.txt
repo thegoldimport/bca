@@ -1,0 +1,198 @@
+STOP the planned authenticated-gateway experiment for now.
+
+The owner just inspected Cloudflare Account API Tokens after updating
+the token named:
+
+newtestworkersai
+
+to include:
+
+- AI Gateway Run
+- Workers AI Write
+- Workers AI Read
+
+There is an important new observation.
+
+Cloudflare's dashboard currently shows:
+
+newtestworkersai
+Last used: —
+
+workers-kv
+Last used: —
+
+Buildcustomai
+Last used: —
+
+bcatest
+Last used: approximately 4 minutes ago
+
+This is important because we have been assuming that the Worker secret:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+contains the value of the Account API Token named:
+
+newtestworkersai
+
+However, Cloudflare's dashboard does NOT show newtestworkersai as ever
+having been used, while bcatest is actively showing recent usage.
+
+DO NOT enable gateway authentication yet.
+
+DO NOT restore the diagnostic route yet.
+
+DO NOT send any inference.
+
+DO NOT change any secret.
+
+==================================================
+GOAL
+==================================================
+
+Determine, WITHOUT exposing secret values, whether there is evidence
+that BUILDCUSTOM_THINK_API_TOKEN actually contains the intended
+newtestworkersai token or whether it may contain another Cloudflare
+token such as bcatest.
+
+We must not assume that a Worker secret binding's NAME tells us which
+Cloudflare Account API Token value was stored inside it.
+
+==================================================
+READ-ONLY INVESTIGATION
+==================================================
+
+Inspect all available safe metadata surrounding:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+including:
+
+- when the binding was created
+- Worker version where it first appeared
+- subsequent secret-only versions
+- deployment timestamps
+- audit logs if available
+- Cloudflare Account API Token metadata
+- token creation/update timestamps
+- token last-used timestamps
+- any non-secret token identifier/fingerprint Cloudflare exposes
+- any audit-log metadata that can associate requests with a token ID
+  without exposing the token value
+
+Also inspect the successful Workers AI diagnostic event and the failed
+Google events for any safe metadata identifying which Account API Token
+authenticated the account-scoped REST request.
+
+DO NOT send another request to determine this.
+
+==================================================
+IMPORTANT QUESTIONS
+==================================================
+
+Answer:
+
+1. Does Cloudflare's "Last used" field for Account API Tokens update
+   when that token is used as Bearer authentication against:
+
+   /client/v4/accounts/{account_id}/ai/v1/chat/completions
+
+2. If yes, what is the expected update latency?
+
+3. Could the dashboard legitimately still show:
+
+   newtestworkersai → Last used: —
+
+   even though it authenticated our successful Workers AI request and
+   multiple Google requests?
+
+4. Is bcatest's recent Last Used timestamp attributable to unrelated
+   Replit/Cloudflare API operations, deployments, metadata reads, etc.?
+
+5. Does any existing audit record identify the token used by the
+   successful Workers AI diagnostic?
+
+6. Does any existing audit record identify the token used by the
+   minimal Google diagnostic?
+
+7. Can Cloudflare expose a safe token ID/fingerprint for the secret
+   currently stored as BUILDCUSTOM_THINK_API_TOKEN without revealing
+   the secret?
+
+8. Can that identifier be compared against the Account API Token named
+   newtestworkersai?
+
+==================================================
+DO NOT GUESS
+==================================================
+
+If Cloudflare does NOT expose enough information to prove the identity
+of the Worker-held secret, say so.
+
+Do not infer identity merely because:
+
+- the binding is named BUILDCUSTOM_THINK_API_TOKEN
+- newtestworkersai was intended for it
+- bcatest has a recent Last Used timestamp
+
+Likewise, do not conclude bcatest is the Think token merely from timing.
+
+==================================================
+VERY IMPORTANT
+==================================================
+
+Do NOT:
+
+- inspect secret values
+- print secret values
+- rotate secrets
+- replace BUILDCUSTOM_THINK_API_TOKEN
+- modify newtestworkersai
+- modify bcatest
+- enable gateway authentication
+- restore diagnostic routes
+- send AI inference
+- deploy Worker code
+- modify production
+
+This task is READ-ONLY ONLY.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. whether newtestworkersai can be proven to be the value stored in
+   BUILDCUSTOM_THINK_API_TOKEN
+
+2. whether bcatest can be proven or ruled out as that value
+
+3. what Cloudflare's Last Used field actually establishes
+
+4. whether Last Used should have updated from our previous AI REST
+   requests
+
+5. whether there is known update latency
+
+6. relevant token creation/update/use timestamps
+
+7. any safe token IDs/fingerprints/audit metadata available
+
+8. whether the successful Workers AI request identifies its
+   authenticating token
+
+9. whether the failed Google request identifies its authenticating token
+
+10. smallest safe way to PROVE the identity if existing metadata cannot
+
+11. whether we should proceed with the authenticated-gateway experiment
+    yet
+
+12. confirmation zero inference was sent
+
+13. confirmation nothing was changed
+
+14. confirmation production was untouched
+
+STOP after the report.
