@@ -1,0 +1,377 @@
+STOP before implementing the proposed 2-second pacing experiment.
+
+Do NOT modify ThinkAgent.
+
+Do NOT deploy anything.
+
+Do NOT send another inference request.
+
+We need to answer a more fundamental architectural question first.
+
+==================================================
+QUESTION
+==================================================
+
+Cloudflare created VibeSDK as its own open-source reference
+implementation for a vibe-coding platform running on Cloudflare.
+
+We are using:
+
+- VibeSDK ThinkAgent
+- Cloudflare Workers
+- Cloudflare AI Gateway
+- Cloudflare infrastructure
+
+Yet two separate minimal native builds have both produced:
+
+11 successful Cloudflare-managed Gemini calls
+→ call #12 rejected
+→ "Wholesale rate limit exceeded for this gateway"
+
+Before modifying Cloudflare's own ThinkAgent with custom pacing, we need
+to determine whether WE are using VibeSDK's inference architecture the
+way Cloudflare actually intends.
+
+==================================================
+IMPORTANT HISTORY
+==================================================
+
+The VibeSDK deployment we inherited originally had:
+
+directOverride: true
+
+and the native Think path used:
+
+Google AI Studio directly
+via GOOGLE_AI_STUDIO_API_KEY
+
+It was NOT originally using Cloudflare Unified Billing for native
+Think inference.
+
+During this migration, we intentionally changed the isolated staging
+native Think path to:
+
+ThinkAgent
+→ BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST
+→ authenticated AI Gateway
+→ Cloudflare-managed Unified Billing
+→ google/gemini-3.6-flash
+
+That path now works technically.
+
+Cloudflare successfully billed native calls.
+
+However, it reproducibly hits the wholesale limiter after 11
+successful sequential calls.
+
+Therefore:
+
+DO NOT assume Cloudflare Unified Billing is the intended production
+inference architecture for VibeSDK.
+
+We need to establish that from Cloudflare's actual VibeSDK source and
+documentation.
+
+==================================================
+TASK 1 — TRACE OFFICIAL VIBESDK INFERENCE
+==================================================
+
+Research the CURRENT official Cloudflare VibeSDK repository.
+
+Use:
+
+- current source
+- README
+- deployment documentation
+- environment-variable examples
+- wrangler configuration
+- package documentation
+- relevant commits/history if necessary
+- official Cloudflare VibeSDK blog/docs
+- official example deployment instructions
+
+Answer:
+
+If a developer clones VibeSDK TODAY and deploys it according to
+Cloudflare's intended setup, how does ThinkAgent obtain LLM inference?
+
+Trace the exact path.
+
+I want to know:
+
+1. What model/provider does the default/current VibeSDK use?
+
+2. What client/library constructs the model?
+
+3. What credentials are expected?
+
+4. Does it expect a Google API key?
+
+5. Does it expect another provider key?
+
+6. Does it use AI Gateway?
+
+7. Does it use Cloudflare Unified Billing?
+
+8. Does it use BYOK through AI Gateway?
+
+9. Does it use Workers AI?
+
+10. Does it use an env.AI binding?
+
+11. Does it call Cloudflare account-scoped:
+
+   /client/v4/accounts/{account}/ai/v1/...
+
+12. Or does it call the provider directly?
+
+==================================================
+TASK 2 — TRACE directOverride
+==================================================
+
+Find the actual purpose and implementation of:
+
+directOverride
+
+in the relevant VibeSDK/model-routing code.
+
+Determine:
+
+- why it exists
+- what happens when true
+- what happens when false
+- what Cloudflare's default/reference deployment sets it to
+- whether directOverride=true is expected production behavior
+- whether disabling it to force Unified Billing changes the intended
+  architecture
+
+Do not infer from the name.
+
+Trace the code.
+
+==================================================
+TASK 3 — FIND CLOUDFLARE'S OWN DEPLOYMENT MODEL
+==================================================
+
+Determine how Cloudflare expects someone running VibeSDK to pay for
+model inference.
+
+Possible answers include:
+
+A. developer supplies provider API keys
+
+B. BYOK through AI Gateway
+
+C. Cloudflare Unified Billing
+
+D. Workers AI
+
+E. some combination
+
+F. something else
+
+Find actual evidence.
+
+If multiple configurations are supported, distinguish:
+
+DEFAULT
+
+RECOMMENDED
+
+OPTIONAL
+
+EXPERIMENTAL
+
+LEGACY
+
+==================================================
+TASK 4 — UNIFIED BILLING INTENT
+==================================================
+
+Research whether Cloudflare explicitly recommends AI Gateway Unified
+Billing for:
+
+- agentic coding systems
+- multi-step coding agents
+- VibeSDK specifically
+- sustained tool-calling loops
+- production SaaS applications serving many users
+
+Find out whether the wholesale-managed credential path is intended for
+this workload.
+
+Do not assume that because Unified Billing supports Gemini it is
+intended to replace VibeSDK's provider-key architecture.
+
+==================================================
+TASK 5 — WHOLESALE LIMIT
+==================================================
+
+Now reinterpret our reproducible result in light of the official
+architecture.
+
+We observed TWICE:
+
+11 successful sequential Gemini calls
+then
+call #12 wholesale 429.
+
+Determine whether this behavior makes sense if Unified Billing is:
+
+- a convenience billing layer
+- subject to stricter Cloudflare-managed-provider quotas
+- not the default VibeSDK inference path
+
+versus whether it indicates our configuration is wrong.
+
+Do not speculate beyond evidence.
+
+==================================================
+TASK 6 — COMPARE THREE ARCHITECTURES
+==================================================
+
+Compare:
+
+ARCHITECTURE A
+
+ThinkAgent
+→ direct Google API
+→ BuildCustom-owned Google credential
+
+ARCHITECTURE B
+
+ThinkAgent
+→ AI Gateway
+→ BuildCustom-owned Google credential / BYOK
+
+ARCHITECTURE C
+
+ThinkAgent
+→ AI Gateway
+→ Cloudflare Unified Billing / wholesale
+
+For each tell me:
+
+- whether official VibeSDK supports/uses it
+- whether Cloudflare wholesale limits apply
+- who pays Google
+- whether AI Gateway logging remains available
+- whether BuildCustom can meter customer token usage
+- whether BuildCustom can still charge customers its own credit system
+- operational complexity
+- suitability for production BuildCustom
+
+DO NOT choose one yet unless evidence makes the answer obvious.
+
+==================================================
+TASK 7 — CHECK OUR ORIGINAL DEPLOYMENT
+==================================================
+
+READ ONLY.
+
+Compare the current official VibeSDK architecture against what we
+previously discovered in our original deployed VibeSDK:
+
+directOverride: true
+GOOGLE_AI_STUDIO_API_KEY
+direct Google endpoint
+
+Determine whether that original deployment was actually following
+Cloudflare's intended VibeSDK architecture rather than being an
+accidental/custom configuration.
+
+This is important.
+
+==================================================
+TASK 8 — ANSWER THE OWNER'S CORE QUESTION
+==================================================
+
+Answer plainly:
+
+"Cloudflare built VibeSDK and Cloudflare owns the infrastructure.
+Should VibeSDK work out of the box without us modifying ThinkAgent to
+pace requests?"
+
+Give a nuanced answer based on the evidence.
+
+Specifically distinguish:
+
+VibeSDK working as designed
+
+from
+
+our decision to replace its original provider billing path with
+Cloudflare Unified Billing.
+
+==================================================
+TASK 9 — RECOMMEND NEXT STEP
+==================================================
+
+Only after establishing the intended VibeSDK architecture, recommend
+ONE next action.
+
+Preference:
+
+Use Cloudflare/VibeSDK as intended before modifying the agent to work
+around infrastructure limits.
+
+If official VibeSDK expects provider credentials or BYOK, say so.
+
+If official VibeSDK expects Unified Billing, explain why our wholesale
+limit is abnormal and identify the next self-service investigation.
+
+Do NOT implement anything.
+
+==================================================
+ABSOLUTE RESTRICTIONS
+==================================================
+
+ZERO inference requests.
+
+ZERO deployments.
+
+ZERO code changes.
+
+ZERO gateway changes.
+
+ZERO credential changes.
+
+ZERO billing changes.
+
+ZERO model changes.
+
+ZERO pacing changes.
+
+Do not contact support.
+
+Do not touch production.
+
+This is read-only architecture research.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current official VibeSDK inference architecture
+2. default model/provider
+3. exact credential path
+4. purpose of directOverride
+5. whether official VibeSDK uses Unified Billing
+6. whether official VibeSDK uses BYOK
+7. whether official VibeSDK uses direct provider credentials
+8. how official VibeSDK expects inference to be paid for
+9. whether our original direct-Google deployment matched that design
+10. whether our current Unified Billing path deviates from it
+11. comparison of direct provider vs AI Gateway BYOK vs Unified Billing
+12. plain-English answer to whether this should work out of the box
+13. ONE recommended next action
+14. confirmation zero inference
+15. confirmation zero changes
+16. confirmation production untouched
+
+Do NOT perform the recommended action.
+
+STOP.
