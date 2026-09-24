@@ -20,3 +20,9 @@ An owner-reported permission edit to the isolated account token was followed by 
 **Why:** A token edit and a secret-value roll are separate Cloudflare operations, while Worker secret metadata cannot identify which token value is installed. The unchanged gateway status cannot distinguish an unchanged credential from a different Cloudflare rejection.
 
 **How to apply:** If this remains the latest evidence, do not send a third inference request or recommend a top-up as the sole fix. Obtain Cloudflare's specific rejection reason and independently establish credential continuity before altering isolated staging.
+
+Do not replace the existing staging Worker's shared Cloudflare API secret with an inference-only token. Use a separate Think-only binding if choosing a dedicated credential, and first make a tightly scoped staging branch change that selects it.
+
+**Why:** The actual serving Worker, not merely the differing candidate checkout, references the shared credential across non-Think paths such as resource provisioning, deployment, and image handling. A token restricted to Workers AI Read could break those functions even if inference authorization improves.
+
+**How to apply:** Keep the shared secret and both rollback versions intact; request approval for a staging-only dedicated binding and Think branch before installing or testing the new token. A dashboard secret deployment creates a new serving version, so verify binding parity and rollback after that separate change.
