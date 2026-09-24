@@ -1,0 +1,446 @@
+We have made major progress.
+
+DO NOT send another inference request.
+
+The Cloudflare Unified Billing / authenticated AI Gateway problem is now
+considered SOLVED.
+
+The remaining failure is a separate native Think runtime / 429 issue.
+
+==================================================
+PROVEN RESULT
+==================================================
+
+The owner's minimal Google diagnostic succeeded through:
+
+BuildCustom
+→ Cloudflare account-scoped AI REST
+→ authenticated AI Gateway
+→ google/gemini-3.6-flash
+→ Cloudflare-managed billing
+
+Diagnostic evidence:
+
+HTTP 200
+
+Gateway:
+provider: google
+model: google/gemini-3.6-flash
+input tokens: 11
+output tokens: 1
+cost: 0.000012
+wholesale: true
+byok: null
+
+Then exactly ONE client-side native Think generation was attempted.
+
+The native Think request made:
+
+11 SUCCESSFUL Google calls
+
+totaling:
+
+141,094 input tokens
+1,969 output tokens
+$0.0454599 model cost
+
+followed by:
+
+3 HTTP 429 responses
+
+with zero token usage/cost.
+
+The client did NOT retry the generation.
+
+The runtime itself reported:
+
+"Failed after 3 attempts. Last error: Too Many Requests."
+
+The overall generation returned:
+
+HTTP 502
+RUNTIME_UPSTREAM_ERROR
+
+after approximately 44.6 seconds.
+
+No second generation was attempted.
+
+==================================================
+IMPORTANT CONCLUSION
+==================================================
+
+Do NOT investigate the old 403 / error 2049 anymore.
+
+That blocker is resolved.
+
+Authenticated gateway is working.
+
+Cloudflare-managed Google billing is working.
+
+No Google BYOK/provider credential was used.
+
+The CURRENT question is:
+
+WHY did one extremely small native Think generation require 11
+successful Gemini calls totaling approximately 141k input tokens in
+44.6 seconds, and then encounter three 429s?
+
+Before changing quotas, models, retry behavior, prompts, or runtime code,
+we need to understand the request sequence.
+
+==================================================
+TASK — READ-ONLY FORENSIC ANALYSIS
+==================================================
+
+Perform a READ-ONLY investigation of the ONE failed native generation.
+
+DO NOT:
+
+- send inference
+- retry generation
+- create another agent
+- change gateway settings
+- change model
+- change token permissions
+- change runtime code
+- change prompts
+- change retry behavior
+- change quotas
+- change billing
+- change Cloudflare credits
+- change Google credits
+- deploy anything
+- touch production
+
+==================================================
+PART 1 — RECONSTRUCT THE AI CALL TIMELINE
+==================================================
+
+Find all gateway records belonging to this single native generation.
+
+We currently believe there are:
+
+11 successful Google calls
+followed by
+3 HTTP 429 calls.
+
+For EACH call, report:
+
+- sequence number
+- timestamp
+- gateway log ID
+- HTTP status
+- model
+- provider
+- path
+- duration
+- input tokens
+- output tokens
+- cost
+- cached
+- wholesale
+- byok
+
+If safely available without exposing secrets or excessive raw prompt
+content, also determine:
+
+- request purpose / agent phase
+- whether tools were requested
+- whether tool results were returned
+- finish reason
+- whether this appears to be a continuation of the same conversation
+- whether input-token growth occurred across calls
+
+Do NOT dump full prompts or sensitive request bodies.
+
+Summarize structure only.
+
+==================================================
+PART 2 — TOKEN GROWTH
+==================================================
+
+This is especially important.
+
+Show the input token count for calls 1 through 11.
+
+Determine whether input tokens:
+
+A. remain approximately constant
+
+B. grow progressively as conversation/tool history accumulates
+
+C. jump suddenly after a particular tool result
+
+D. repeatedly resend a very large static system/context prompt
+
+E. exhibit another identifiable pattern
+
+Calculate:
+
+- minimum input tokens per successful call
+- maximum input tokens per successful call
+- median
+- average
+- cumulative total
+
+Identify which calls account for the largest share of the 141,094 input
+tokens.
+
+==================================================
+PART 3 — UNDERSTAND THE 11 CALLS
+==================================================
+
+Inspect the native ThinkAgent/runtime implementation READ ONLY.
+
+Explain why a tiny app generation can cause multiple model calls.
+
+Map the observed calls to the agent loop if possible.
+
+For example:
+
+user request
+→ model reasoning
+→ tool call
+→ tool result
+→ model
+→ file operation
+→ model
+→ build/test
+→ model
+→ correction
+etc.
+
+Do NOT assume that 11 calls is excessive.
+
+Determine from the actual VibeSDK implementation whether this is
+expected behavior.
+
+Find:
+
+- maximum agent iterations
+- tool-loop behavior
+- whether full conversation history is resent every iteration
+- whether workspace/file context is repeatedly injected
+- whether build/test output is added to context
+- whether generated files are re-added to context
+- whether previous model responses are retained
+- context trimming/compaction behavior
+- token-budget controls
+- retry behavior
+
+==================================================
+PART 4 — INVESTIGATE THE 429s
+==================================================
+
+Determine as much as possible about the final three 429s.
+
+For each:
+
+- timestamp
+- gateway log ID
+- duration
+- provider
+- model
+- status
+- error metadata
+- response headers if safely available
+- Retry-After if available
+- rate-limit headers if available
+- Cloudflare error information
+- provider error information
+
+Determine whether evidence supports:
+
+- requests per minute limit
+- tokens per minute limit
+- concurrent request limit
+- model/account entitlement
+- Cloudflare gateway limit
+- Cloudflare Unified Billing limit
+- Google upstream quota
+- temporary provider capacity
+- another cause
+
+Do NOT guess if evidence cannot distinguish them.
+
+==================================================
+PART 5 — INTERNAL RETRY BEHAVIOR
+==================================================
+
+The runtime reported:
+
+"Failed after 3 attempts. Last error: Too Many Requests."
+
+Find exactly where that retry behavior originates.
+
+Determine:
+
+- library/module/function responsible
+- retry count
+- delay/backoff behavior
+- whether Retry-After is honored
+- whether all three attempts were the three observed 429 gateway calls
+- whether retrying a 429 causes the full prompt/context to be resent
+- whether those failed attempts incurred token cost
+- whether this retry behavior is configurable
+
+READ ONLY.
+
+Do not change it.
+
+==================================================
+PART 6 — CLOUDFLARE / MODEL LIMITS
+==================================================
+
+Using current Cloudflare documentation and account metadata where
+available, determine what rate/usage limits apply to:
+
+google/gemini-3.6-flash
+
+when accessed through:
+
+Cloudflare Unified Billing
++
+authenticated AI Gateway
++
+account-scoped AI REST.
+
+Distinguish:
+
+1. documented Cloudflare limits
+2. documented provider/model limits
+3. limits actually visible for our account
+4. assumptions that cannot be verified
+
+Check whether our burst of approximately 141k input tokens in under one
+minute plausibly intersects any documented limit.
+
+Do NOT change limits.
+
+==================================================
+PART 7 — IS 141K INPUT NORMAL?
+==================================================
+
+This is the main architectural question.
+
+Based on:
+
+- the actual VibeSDK ThinkAgent implementation
+- the observed gateway call sequence
+- the prompt/context behavior
+- tool loop behavior
+
+classify the 141k input-token usage as one of:
+
+A. Expected for this architecture
+
+B. Somewhat inefficient but expected
+
+C. Clearly abnormal due to a specific identifiable behavior
+
+D. Cannot determine yet
+
+Do NOT classify based merely on intuition.
+
+Support the classification with concrete implementation/runtime
+evidence.
+
+==================================================
+PART 8 — COST IMPLICATION
+==================================================
+
+Do simple factual calculations from this run.
+
+Using the observed:
+
+$0.0454599 native model cost
+
+calculate:
+
+- cost per attempted tiny generation at this observed behavior
+- cost of 100 equivalent attempts
+- cost of 1,000 equivalent attempts
+
+Do NOT design pricing yet.
+
+This is only to understand magnitude.
+
+==================================================
+PART 9 — NEXT ACTION
+==================================================
+
+Recommend the SMALLEST next technical experiment or fix based on the
+evidence.
+
+Possible outcomes might include:
+
+- wait for provider rate-limit window and rerun once
+- reduce unnecessary context
+- adjust agent-loop behavior
+- change retry/backoff
+- use another Cloudflare-billed model
+- request/increase quota
+- another action
+
+But do NOT implement anything.
+
+I want ONE recommended next action based on evidence.
+
+==================================================
+CURRENT CLEANUP STATE
+==================================================
+
+The disposable test project was deleted.
+
+Its two synthetic users and two sessions were also removed after
+confirming they owned no remaining projects.
+
+Do not create or delete anything else.
+
+The clean staging Worker is:
+
+713a1a73-cdad-4f00-bf4e-a656f4a2959d
+
+Gateway authentication must remain:
+
+true
+
+The temporary diagnostic routes are gone.
+
+The unused staging secret:
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+
+is still bound.
+
+Do NOT delete it during this task.
+
+Production must remain untouched.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return a concise but detailed report containing:
+
+1. full 14-call timeline
+2. token counts per successful call
+3. token-growth pattern
+4. why the runtime made 11 successful calls
+5. exact source of the three retries
+6. what caused the 429, if provable
+7. relevant documented/account-visible limits
+8. whether 141k input tokens is expected or abnormal
+9. observed cost implications
+10. ONE recommended next action
+11. confirmation zero inference requests were made
+12. confirmation zero configuration changes were made
+13. confirmation production was untouched
+
+Do not deploy anything.
+
+Do not retry anything.
+
+Do not modify anything.
+
+This is a read-only investigation only.
