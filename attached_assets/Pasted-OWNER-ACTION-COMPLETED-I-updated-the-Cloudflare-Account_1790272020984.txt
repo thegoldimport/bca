@@ -1,0 +1,530 @@
+OWNER ACTION COMPLETED.
+
+I updated the Cloudflare Account API token that we identified for the
+isolated staging environment.
+
+The token now has BOTH:
+
+- Workers KV Storage → Write
+- Workers AI → Read
+
+Account scope remains the same isolated Cloudflare account.
+Token remains active.
+No expiration.
+No IP restriction was added.
+
+I did NOT paste or expose the token value anywhere.
+
+Proceed with the controlled staging Unified Billing retest.
+
+==================================================
+IMPORTANT CONTEXT
+==================================================
+
+Our chosen INITIAL BuildCustom inference architecture is:
+
+BuildCustom
+→ VibeSDK / ThinkAgent
+→ Cloudflare AI Gateway
+→ Cloudflare Unified Billing
+→ model provider
+
+For customer billing later:
+
+BUILDCUSTOM CUSTOMER AI USAGE
+=
+RAW UNDERLYING MODEL COST × 1.20
+
+Cloudflare's Unified Billing fee is BuildCustom COGS.
+
+Do NOT build the customer credit ledger, Stripe billing, model selector,
+or direct-provider routing during this task.
+
+==================================================
+CURRENT STAGING STATE
+==================================================
+
+We already changed ONLY isolated staging native ThinkAgent routing.
+
+Current intended path:
+
+ThinkAgent
+→ Cloudflare REST AI endpoint
+→ buildcustom-think-unified-staging
+→ google/gemini-3.6-flash
+
+Previous controlled request proved:
+
+- request reached the dedicated Cloudflare gateway
+- Google API key was not selected by the new Think branch
+- gateway has no Google BYOK provider configuration
+- byok was null
+- gateway auth is off
+- byok_only is off
+- no gateway rate limit was blocking it
+- previous request returned HTTP 403
+- wholesale was false
+- tokens were 0
+- cost was 0
+
+The leading unresolved possibility was that the Worker credential did not
+have:
+
+Account → Workers AI → Read
+
+I have now manually updated the relevant Cloudflare Account API token to
+include that permission.
+
+==================================================
+TASK 1: VERIFY THE UPDATED CREDENTIAL IS EFFECTIVE
+==================================================
+
+Before sending another generation request, perform any SAFE read-only
+verification available.
+
+Confirm as much as possible that:
+
+- the staging Worker still references CLOUDFLARE_API_TOKEN
+- we have not accidentally switched credentials
+- the Worker/account configuration is unchanged
+- the target account ID is still correct
+- the dedicated gateway is still:
+  buildcustom-think-unified-staging
+- the gateway still has no Google BYOK configuration
+- production is untouched
+
+Do NOT expose the token.
+
+Do NOT rotate the token.
+
+Do NOT create another token.
+
+IMPORTANT:
+
+If updating the existing Cloudflare token preserves the same token value,
+the Worker secret should not need to be changed.
+
+If Cloudflare generated a NEW token value as part of the update and the
+Worker would therefore still have the old credential, STOP and tell me.
+
+Do not ask me to paste a token into chat.
+
+==================================================
+TASK 2: PERFORM EXACTLY ONE CONTROLLED NATIVE THINK REQUEST
+==================================================
+
+Now perform ONE native BuildCustom generation through the normal isolated
+staging control-plane path.
+
+Do not perform multiple attempts.
+
+Do not edit.
+
+Do not preview.
+
+Do not publish.
+
+Do not run full acceptance.
+
+The purpose of this request is to determine what changed after adding:
+
+Workers AI → Read
+
+Capture safe/redacted information only:
+
+- timestamp
+- control-plane status
+- gateway status
+- gateway request ID
+- provider
+- model
+- wholesale
+- BYOK
+- input tokens
+- output tokens
+- cost
+- cache status if available
+- safe Cloudflare error code/message if it fails
+- whether the request reached model inference
+- whether Google provider authorization was absent
+
+Never log:
+
+- API token
+- Google API key
+- Authorization header
+- user prompt
+- generated application source
+- secrets
+
+==================================================
+TASK 3: INTERPRET THE RESULT CAREFULLY
+==================================================
+
+There are several possible outcomes.
+
+----------------------------------------
+OUTCOME A
+----------------------------------------
+
+If the request now reaches Cloudflare-managed Unified Billing and fails
+specifically because the Unified Billing balance is zero:
+
+STOP.
+
+Classify:
+
+UNIFIED BILLING PROVEN — OWNER FUNDING REQUIRED
+
+Give me exact funding instructions and recommend the smallest practical
+staging top-up.
+
+A tentative target discussed previously was $25, but verify whether that
+is a valid/practical amount before recommending it.
+
+We only need enough for:
+
+- generation tests
+- edit tests
+- 3 complete staging acceptance cycles
+- one Replit-off acceptance cycle
+
+Do NOT purchase credits yourself.
+
+----------------------------------------
+OUTCOME B
+----------------------------------------
+
+If the request SUCCESSFULLY performs inference even though the displayed
+credit balance is zero:
+
+Do not assume anything.
+
+Determine how it was billed.
+
+Specifically verify whether it used:
+
+- Cloudflare Unified Billing
+- some Cloudflare free allowance
+- BYOK
+- direct provider billing
+- another account/billing mechanism
+
+We must prove billing identity before declaring success.
+
+----------------------------------------
+OUTCOME C
+----------------------------------------
+
+If the request still returns 403:
+
+Capture the new request ID and all safe error information.
+
+Compare it with the previous request:
+
+707e47a25d3831a3312332ba73379868f43e8d0c990c80b40a716f2579531b3a
+
+Determine whether:
+
+- the permission update had no effect
+- the Worker is still using an old token
+- account/resource policy is still wrong
+- the REST authentication method is wrong
+- the model/provider path is wrong
+- the account lacks a required Unified Billing entitlement
+- another Cloudflare authorization boundary exists
+
+Do NOT make another speculative change.
+
+Do NOT send a third request.
+
+STOP and report.
+
+----------------------------------------
+OUTCOME D
+----------------------------------------
+
+If we receive a different error:
+
+Do not treat that as failure automatically.
+
+A different error may prove we passed the previous authorization gate.
+
+Determine exactly what stage we reached and report it.
+
+==================================================
+TASK 4: PROVE UNIFIED BILLING IDENTITY
+==================================================
+
+Our acceptance requirement is NOT merely:
+
+"request went through AI Gateway."
+
+AI Gateway can also use BYOK.
+
+We specifically want:
+
+CLOUDFLARE-MANAGED UNIFIED BILLING
+
+The strongest evidence available should establish:
+
+- request went through buildcustom-think-unified-staging
+- provider/model were selected
+- no Google BYOK provider configuration was used
+- native Think did not send GOOGLE_AI_STUDIO_API_KEY
+- Cloudflare treated the request as Unified Billing / wholesale billing
+- Cloudflare, rather than our Google account, is responsible for provider
+  inference billing
+
+If Cloudflare uses a field other than `wholesale` as the authoritative
+billing indicator, document that.
+
+Do not infer Unified Billing solely from gateway transit.
+
+==================================================
+TASK 5: IF FUNDING IS NOW THE ONLY BLOCKER
+==================================================
+
+If the request conclusively proves Unified Billing and conclusively shows
+that insufficient credits are now the blocker:
+
+STOP and give me exact owner instructions.
+
+I want simple steps:
+
+1. Open Cloudflare
+2. Select the isolated account
+3. Go to AI Gateway
+4. Go to Credits Available / Manage
+5. Add payment method if required
+6. Top up the recommended SMALL staging amount
+7. Do not enable auto top-up yet
+8. Confirm payment
+9. Return to Replit
+
+Do not proceed until I tell you funding is complete.
+
+==================================================
+TASK 6: DO NOT CHANGE THE INFERENCE ARCHITECTURE
+==================================================
+
+Do NOT:
+
+- return to direct Google billing
+- add Google BYOK to the gateway
+- add OpenAI
+- add Anthropic
+- add OpenRouter
+- add LiteLLM
+- build a custom model router
+- add user model selection
+- add customer BYOK
+- build fallback routing
+
+For launch, we want the existing native ThinkAgent model working through
+Cloudflare Unified Billing.
+
+==================================================
+TASK 7: DO NOT DEBUG THE OLD GOOGLE ERROR
+==================================================
+
+The old direct-Google:
+
+Payment Required
+
+error is no longer relevant to our chosen launch architecture.
+
+Do not investigate it further.
+
+==================================================
+TASK 8: DO NOT BUILD CUSTOMER BILLING
+==================================================
+
+Do not implement BuildCustom AI credits yet.
+
+Future architecture will associate AI usage with:
+
+- user
+- project
+- agent
+- operation
+
+Future customer charge:
+
+RAW_MODEL_COST × 1.20
+
+If the new successful/failed Gateway request exposes useful metering
+fields, simply record what is available.
+
+Do not build the ledger.
+
+==================================================
+TASK 9: DO NOT TOUCH SEO
+==================================================
+
+BuildCustom control-plane SEO AI is a separate feature.
+
+Its future GOOGLE_AI_STUDIO_API_KEY requirement is unrelated to native
+Think Unified Billing.
+
+Do not change SEO during this task.
+
+==================================================
+TASK 10: DO NOT TOUCH PUBLISHING
+==================================================
+
+Publishing is already considered proven.
+
+Do not modify:
+
+- *.staging.buildcustom.ai
+- staging apps gateway
+- route KV
+- Browser Rendering
+- screenshots
+- publish readiness
+- generated-app deployment
+- releases
+- custom domains
+
+==================================================
+TASK 11: DO NOT TOUCH THE DURABLE OBJECT ISSUE YET
+==================================================
+
+The intermittent:
+
+Durable Object instance is no longer active
+
+edit failure remains a separate issue.
+
+Do not investigate it during this task.
+
+First get generation billing working.
+
+==================================================
+TASK 12: DO NOT TOUCH PRODUCTION
+==================================================
+
+Do NOT modify:
+
+- production VibeSDK Worker
+- production control plane
+- production D1
+- active production ThinkDO namespaces
+- active production SpaceDO namespaces
+- production AI configuration
+- production AI Gateway
+- production route KV
+- production dispatch namespace
+- production custom domains
+- *.apps.buildcustom.ai
+- app.buildcustom.ai
+- Test1
+- TaskFlow
+- Buyer Magnets
+
+==================================================
+TASK 13: FROZEN RESTORE FIXES REMAIN FROZEN
+==================================================
+
+Do not modify:
+
+- SpaceDO restore fix
+- ThinkAgent synchronization fix
+
+==================================================
+TASK 14: DO NOT REOPEN SOURCE ARCHAEOLOGY
+==================================================
+
+We already know the borrowed candidate checkout does not exactly match
+the serving staging Worker and has incomplete dependencies.
+
+Do not turn this into historical source reconstruction.
+
+Continue using the existing rollback-safe isolated staging approach.
+
+Current Unified Billing staging Worker:
+
+0815f983-7730-41ee-a497-c24d8d93e172
+
+Previous rollback Worker:
+
+e8a7042e-8b17-4d6b-ac1a-f02e77c3511f
+
+Preserve both.
+
+==================================================
+TASK 15: CLEAN UP THE DISPOSABLE TEST
+==================================================
+
+After the single controlled request, clean up ONLY disposable resources
+created specifically for that request where cleanup is already known to
+be safe.
+
+Do not delete shared runtime resources.
+
+Do not delete active DO namespaces.
+
+Do not delete Test1 or any retained state.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Confirmation owner added Workers AI → Read
+2. Whether the Worker is using the expected credential
+3. Whether a Worker secret update was required
+4. Controlled request timestamp
+5. Control-plane status
+6. Gateway status
+7. Gateway request ID
+8. Provider
+9. Model
+10. wholesale value
+11. BYOK value
+12. input/output tokens
+13. cost
+14. safe Cloudflare error code/message
+15. whether inference actually began
+16. whether Google provider authorization was absent
+17. whether the previous 403 authorization gate was passed
+18. whether Cloudflare-managed Unified Billing is now conclusively proven
+19. whether zero credits are now conclusively the blocker
+20. whether owner funding is required
+21. recommended smallest staging top-up if appropriate
+22. exact funding instructions if appropriate
+23. useful usage/cost metadata available for future BuildCustom metering
+24. current staging Worker version
+25. rollback Worker version
+26. confirmation production was untouched
+27. exact next task
+
+Use ONE classification:
+
+A. UNIFIED BILLING PROVEN — OWNER FUNDING REQUIRED
+
+B. UNIFIED BILLING PROVEN — INFERENCE SUCCEEDED
+
+C. PERMISSION FIX PASSED PREVIOUS GATE — NEW BLOCKER IDENTIFIED
+
+D. 403 PERSISTS — STOPPED AFTER ONE RETEST
+
+E. CREDENTIAL UPDATE DID NOT REACH WORKER — OWNER ACTION REQUIRED
+
+F. BILLING IDENTITY STILL INCONCLUSIVE — STOPPED SAFELY
+
+==================================================
+STOP
+==================================================
+
+Perform exactly ONE controlled native Think request.
+
+Do not buy credits.
+Do not run 3 acceptance cycles.
+Do not run Replit-off.
+Do not touch production.
+
+If Unified Billing is proven and zero credits are the only blocker,
+STOP and wait for me to fund the staging account.
