@@ -1,0 +1,436 @@
+The owner completed the ONE token verification request.
+
+RESULT:
+
+{
+  "verificationHttpStatus": 200,
+  "verified": true,
+  "tokenId": "535d12b0fc46004ca29fd8c937a60f75",
+  "tokenStatus": "active"
+}
+
+HTTP 200
+
+This conclusively proves:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+contains the Cloudflare Account API Token:
+
+newtestworkersai
+
+Token ID:
+
+535d12b0fc46004ca29fd8c937a60f75
+
+The token is active.
+
+The owner has already updated this exact token so its current permissions
+include:
+
+- Workers AI Read
+- Workers AI Write
+- AI Gateway Run
+
+Therefore the token-identity ambiguity is resolved.
+
+==================================================
+GOAL
+==================================================
+
+Proceed with ONE controlled staging-only experiment to determine whether
+enabling authenticated AI Gateway is the missing prerequisite for
+Cloudflare-managed Google Unified Billing.
+
+We want to test ONLY:
+
+authentication:false
+
+versus:
+
+authentication:true
+
+Everything else must remain constant.
+
+==================================================
+CURRENT PROVEN STATE
+==================================================
+
+Dedicated gateway:
+
+buildcustom-think-unified-staging
+
+Current gateway:
+
+authentication: false
+byok_only: false
+stored provider configurations: 0
+
+Cloudflare prepaid credit balance is positive.
+
+Dedicated Think credential:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+is conclusively:
+
+newtestworkersai
+
+token ID:
+
+535d12b0fc46004ca29fd8c937a60f75
+
+and has:
+
+Workers AI Read
+Workers AI Write
+AI Gateway Run
+
+==================================================
+WORKERS AI CONTROL
+==================================================
+
+This exact Worker-held token previously succeeded through:
+
+Cloudflare account-scoped AI REST
+→ buildcustom-think-unified-staging
+→ Workers AI
+→ @cf/meta/llama-3.2-1b-instruct
+
+with:
+
+HTTP 200
+21 input tokens
+7 output tokens
+real inference
+cost recorded
+
+==================================================
+GOOGLE CONTROL FAILURE
+==================================================
+
+The minimal Google REST diagnostic, independent of ThinkAgent, used:
+
+POST
+/client/v4/accounts/{account_id}/ai/v1/chat/completions
+
+Authorization:
+Bearer BUILDCUSTOM_THINK_API_TOKEN
+
+cf-aig-gateway-id:
+buildcustom-think-unified-staging
+
+Content-Type:
+application/json
+
+model:
+google/gemini-3.6-flash
+
+No Google API key.
+No Google provider credential.
+No Vertex credential.
+
+Result:
+
+HTTP 403
+errorCode: 2049
+tokens: 0
+cost: 0
+
+Gateway recorded:
+
+provider:
+google-vertex-ai
+
+model:
+google/gemini-3.6-flash
+
+byok:
+null
+
+The owner's Google AI Studio balance is irrelevant to this intended
+Cloudflare-managed billing path and must NOT be used.
+
+==================================================
+PHASE 1 — REMOVE TOKEN VERIFICATION ROUTE
+==================================================
+
+The temporary route:
+
+POST /__internal/buildcustom/verify-think-token
+
+has completed its purpose.
+
+Remove ONLY this token-verification route and code solely supporting it.
+
+Do NOT call it again.
+
+Do NOT make another token verification request.
+
+The existing secret:
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+
+should remain bound because we will reuse it for the Google diagnostic
+route.
+
+Preserve all normal modules/bindings.
+
+==================================================
+PHASE 2 — RESTORE PREVIOUSLY REVIEWED GOOGLE
+DIAGNOSTIC ROUTE
+==================================================
+
+Restore the SAME previously reviewed temporary route:
+
+POST
+/__internal/buildcustom/google-unified-diagnostic
+
+Protect it using the EXISTING:
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+
+Do NOT create a new secret.
+
+Do NOT inspect or expose its value.
+
+The route must use ONLY:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+for the outbound Cloudflare AI REST request.
+
+The route must call exactly:
+
+POST
+/client/v4/accounts/{account_id}/ai/v1/chat/completions
+
+with:
+
+Authorization:
+Bearer BUILDCUSTOM_THINK_API_TOKEN
+
+cf-aig-gateway-id:
+buildcustom-think-unified-staging
+
+Content-Type:
+application/json
+
+model:
+google/gemini-3.6-flash
+
+messages:
+one short user message requesting exactly:
+
+GEMINI_UNIFIED_OK
+
+small output limit, same as previous diagnostic.
+
+Do NOT use:
+
+GOOGLE_AI_STUDIO_API_KEY
+CLOUDFLARE_API_TOKEN
+Google BYOK
+stored provider credentials
+Vertex credentials
+ThinkAgent
+
+NO RETRIES.
+NO FALLBACKS.
+
+Validate locally with mocked network calls only.
+
+==================================================
+PHASE 3 — DEPLOY ROUTE
+==================================================
+
+Deploy the temporary Google diagnostic route ONLY to:
+
+buildcustom-vibesdk-migration-staging
+
+Preserve all existing normal bindings and modules.
+
+Verify from metadata/bundle only:
+
+- token-verification route is absent
+- Google diagnostic route is present
+- BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET exists
+- BUILDCUSTOM_THINK_API_TOKEN exists
+- normal bindings/modules intact
+- production untouched
+
+Do NOT call the live route.
+
+==================================================
+PHASE 4 — ENABLE AUTHENTICATED GATEWAY
+==================================================
+
+Before changing the gateway, record its complete relevant configuration
+so it can be restored exactly if necessary.
+
+Then change ONLY:
+
+authentication: false
+
+to:
+
+authentication: true
+
+on:
+
+buildcustom-think-unified-staging
+
+Do NOT change:
+
+- byok_only
+- stored provider credentials
+- model
+- gateway identity
+- Workers AI billing mode
+- caching
+- logging
+- rate limits
+- spend limits
+- ZDR
+- retries
+- Worker secrets
+- Worker normal code
+- Cloudflare credits
+- Google credits
+- production
+
+After the change, verify read-only:
+
+authentication: true
+
+and confirm every other relevant gateway setting is unchanged.
+
+==================================================
+PHASE 5 — STOP FOR OWNER'S ONE REQUEST
+==================================================
+
+Replit must send ZERO live inference requests.
+
+Once:
+
+- Google diagnostic route is deployed
+- token-verification route is removed
+- authentication is true
+- configuration is verified
+
+STOP.
+
+Give the owner ONE exact one-line Mac Terminal command to invoke:
+
+POST
+https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev/__internal/buildcustom/google-unified-diagnostic
+
+The command must:
+
+- invisibly prompt for the existing
+  BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+- validate 64 lowercase hexadecimal characters
+- send exactly one POST
+- no retries
+- no redirects
+- reasonable timeout
+- print response body
+- print HTTP status
+- never expose/store the diagnostic secret
+- never place the secret value directly in shell history
+
+Tell the owner:
+
+RUN IT EXACTLY ONCE.
+
+If it times out, DO NOT retry.
+
+==================================================
+RESULT INTERPRETATION
+==================================================
+
+IF OWNER GETS:
+
+HTTP 200
+and GEMINI_UNIFIED_OK
+
+then:
+
+authenticated gateway configuration is strongly supported as the
+missing prerequisite for Cloudflare-managed Google Unified Billing.
+
+DO NOT revert authentication.
+
+DO NOT send another request.
+
+Wait for cleanup/finalization instructions.
+
+IF OWNER GETS:
+
+HTTP 403
+errorCode 2049
+
+then:
+
+the authentication-toggle hypothesis is strongly ruled out.
+
+DO NOT retry.
+
+Wait for cleanup instructions.
+
+We will then restore authentication:false and move the investigation to
+Cloudflare account/model access or another Cloudflare-side restriction.
+
+IF OWNER GETS ANOTHER STATUS:
+
+DO NOT retry.
+
+Wait for instructions.
+
+==================================================
+ABSOLUTE LIMITS
+==================================================
+
+Replit must send:
+
+ZERO AI inference requests.
+
+Do NOT:
+
+- invoke Google diagnostic
+- invoke Workers AI
+- invoke ThinkAgent
+- invoke another model
+- add Google credentials
+- add Google credits
+- add Cloudflare credits
+- modify token permissions
+- modify BUILDCUSTOM_THINK_API_TOKEN
+- modify diagnostic secret
+- modify production
+- contact Cloudflare support
+
+==================================================
+FINAL RESPONSE FOR THIS TASK
+==================================================
+
+Return:
+
+1. confirmation token verification route removed
+2. Google diagnostic Worker version deployed
+3. confirmation Google diagnostic route present
+4. confirmation normal bindings/modules intact
+5. original gateway authentication setting
+6. new gateway authentication setting
+7. confirmation all other gateway settings unchanged
+8. confirmation BUILDCUSTOM_THINK_API_TOKEN remains the verified binding
+9. confirmation Replit sent zero inference
+10. exact ONE-LINE Terminal command for owner
+11. explicit instruction to run it exactly once
+12. confirmation production untouched
+
+Then STOP.
+
+Do not clean up the Google diagnostic yet.
+Do not invoke it.
+Wait for the owner's result.
