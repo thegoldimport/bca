@@ -1,0 +1,42 @@
+Searched the web for "What is Cloudflare AI Gateway spend limits list API endpoint to read rules for gateway?"
+Examining API spend limits
+
+Examining API spend limits
+
+Searched the web for "Cloudflare AI Gateway spend limit rules API list gateway GET rules endpoint"
+
+5 actions
+
+Searched the web for "Cloudflare authenticated AI Gateway REST API authorization Workers AI Read versus AI Gateway Run permission when authentication setting enabled"
+
+2 actions
+Gateway authentication is a documented prerequisite mismatch, but it is not a proven explanation for the Google 403. Cloudflare’s current Unified Billing guide says to authenticate the gateway. The dedicated staging gateway has authentication: false. Yet Cloudflare’s authentication guide also says a gateway with authentication off and an authorization header present can serve a request. Neither page says explicitly whether third-party Unified Billing is blocked in that combination, and neither identifies AI error 2049.
+
+Current staging gateway
+Setting	Read-only result	Relevance
+Authentication	Off	Does not match the Unified Billing guide’s linked authenticated-gateway setup
+Require provider credentials (byok_only)	Off	Does not block Cloudflare-managed billing fallback
+Stored provider configurations	0	No stored Google key found
+Workers AI billing mode	postpaid	Its Unified billing setting is required to charge Workers AI to prepaid credits, not stated as a prerequisite for third-party models
+Gateway wholesale	true	Gateway setting; not proof that the failed request reached billing. Its log recorded wholesale: false
+Logging	On; retention limit 10,000,000, DELETE_OLDEST; logpush off	The failed event was logged
+Caching / rate limits	Cache TTL 0; rate interval and limit both 0	No configured cache or request-rate limit indicated
+Spend limits	No spend_limits field in gateway detail or list metadata	Cannot certify from that omission that no separate rule exists; documented spend-limit blocks return 429, rather than the observed 403
+ZDR / retries	ZDR off; retry settings null	No configured ZDR or gateway retry indicated
+Provider/model restrictions	No restriction fields exposed in gateway metadata	Account-specific model access remains unverified
+Authentication and documented prerequisites
+Requirement or condition	This request / gateway	Assessment
+Sufficient prepaid Cloudflare credits	Credit-balance API returned a positive balance: 1000 in API units	Matches the positive-balance requirement; does not establish model entitlement
+Authenticated gateway	Gateway toggle off	Documented mismatch, with unproven effect on this REST path
+REST request authentication	Cloudflare bearer token used; Workers AI control succeeded through the same account endpoint	Matches the documented request format
+Third-party billing fallback	byok_only: false; no stored provider config or Google key supplied	Matches documented fallback conditions
+Model in catalog	google/gemini-3.6-flash is listed	Matches catalog listing; account-specific availability is unknown
+Custom gateway selection	cf-aig-gateway-id: buildcustom-think-unified-staging	Matches the REST API guide
+Workers AI prepaid billing	Gateway is postpaid	Not a stated third-party prerequisite
+“Authenticate your AI Gateway” links to instructions that create a token and turn on the Authenticated Gateway toggle. A Cloudflare bearer token authenticates the individual account-scoped REST request; it does not turn that gateway setting on. If the toggle were enabled, the documented REST header would remain Authorization: Bearer <Cloudflare API token>. Cloudflare specifies cf-aig-authorization for provider-native gateway.ai.cloudflare.com endpoints, not this account-scoped REST endpoint. The REST guide specifies Workers AI Read permission for /accounts/{account}/ai/*, including third-party models. I cannot verify read-only whether the existing Worker-held token would satisfy every check after a gateway setting change.
+
+I found account-scoped third-party REST examples, custom-gateway selection examples, and an authenticated-gateway REST example in Cloudflare’s docs, but not one explicit example combining all three with the toggle on. Nor did I find an explicit statement that authentication: false permits or forbids third-party Unified Billing. Code 2049 remains undocumented in the Cloudflare AI sources inspected; I did not apply an unrelated subsystem’s definition.
+
+Smallest safe next action: keep the gateway unchanged and treat the authentication toggle as a specific, unresolved lead. A later separately approved staging-only comparison could test causality, but another inference is not needed for this read-only finding and none is authorized now.
+
+I sent zero inference requests and changed nothing.
