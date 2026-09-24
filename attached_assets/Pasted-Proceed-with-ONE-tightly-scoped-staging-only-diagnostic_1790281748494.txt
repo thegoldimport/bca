@@ -1,0 +1,266 @@
+Proceed with ONE tightly scoped staging-only diagnostic to distinguish
+the VibeSDK/ThinkAgent request path from Cloudflare's documented minimal
+REST request for Unified Billing.
+
+This is NOT a ThinkAgent generation test.
+
+==================================================
+GOAL
+==================================================
+
+Determine whether this exact minimal path works:
+
+BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST API
+→ AI Gateway buildcustom-think-unified-staging
+→ google/gemini-3.6-flash
+→ Cloudflare-managed billing
+
+We already proved the same Cloudflare credential + account AI REST +
+gateway architecture works with Workers AI.
+
+The existing ThinkAgent Google request returns HTTP 403 before inference.
+
+We now want exactly ONE minimal documented Google request, independent
+of ThinkAgent/VibeSDK request construction.
+
+==================================================
+REQUEST REQUIREMENTS
+==================================================
+
+Use the Worker-held secret:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+Do NOT expose, print, return, log, or copy the secret anywhere.
+
+Do NOT use:
+
+GOOGLE_AI_STUDIO_API_KEY
+
+Do NOT use:
+
+CLOUDFLARE_API_TOKEN
+
+Do NOT use a stored Google provider credential.
+
+Do NOT use Google AI Studio billing.
+
+Do NOT use Google Vertex credentials.
+
+The request must go to Cloudflare's documented account-scoped endpoint:
+
+POST
+/client/v4/accounts/{account_id}/ai/v1/chat/completions
+
+using the isolated staging Cloudflare account.
+
+Authorization:
+
+Bearer BUILDCUSTOM_THINK_API_TOKEN
+
+Gateway selection:
+
+cf-aig-gateway-id: buildcustom-think-unified-staging
+
+Content-Type:
+
+application/json
+
+Use model:
+
+google/gemini-3.6-flash
+
+Use the smallest valid OpenAI-compatible body possible, conceptually:
+
+{
+  "model": "google/gemini-3.6-flash",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Reply with exactly: GEMINI_UNIFIED_OK"
+    }
+  ],
+  "max_tokens": 20
+}
+
+Use Cloudflare's CURRENT documented field names if they differ from the
+conceptual body above.
+
+==================================================
+IMPORTANT: EXACTLY ONE INFERENCE
+==================================================
+
+There must be:
+
+- exactly ONE authorized Google inference request
+- zero retries
+- zero fallback requests
+- zero ThinkAgent requests
+- zero Workers AI requests
+
+If anything prevents you from safely making exactly one request, STOP
+before inference and report the blocker.
+
+==================================================
+SECURE EXECUTION
+==================================================
+
+Because BUILDCUSTOM_THINK_API_TOKEN exists only as a Worker secret and
+must not be extracted, implement the smallest possible TEMPORARY
+staging-only mechanism necessary to execute this one request.
+
+Reuse the security lessons from the previous diagnostic.
+
+Requirements:
+
+- inaccessible without a fresh temporary high-entropy diagnostic secret
+- staging only
+- exact expected hostname
+- exact expected account
+- exact expected gateway
+- POST only
+- no retries
+- no redirects
+- no secret values in responses/logs
+- no production access
+- no ThinkAgent involvement
+
+IMPORTANT:
+
+Do NOT reuse BUILDCUSTOM_DIAGNOSTIC_SECRET.
+
+That previous diagnostic is complete and should be considered retired.
+
+Create a NEW temporary diagnostic secret binding with a clearly distinct
+name specifically for this Google Unified Billing test.
+
+Do not generate or expose its value to me unless owner action is
+required to install it.
+
+If owner action is required before the request can safely be made,
+STOP before deployment/inference and give the owner the exact smallest
+action required.
+
+==================================================
+CAPTURE SAFE EVIDENCE
+==================================================
+
+For the ONE Google request capture only safe information:
+
+- HTTP status
+- Cloudflare success/error code if available
+- sanitized error message if available
+- gateway request/log ID
+- provider recorded by gateway
+- model recorded by gateway
+- token counts
+- cost
+- wholesale field
+- byok field
+- cache status
+- duration
+
+Do NOT expose:
+
+- Cloudflare API tokens
+- Authorization headers
+- Google keys
+- diagnostic secret
+
+==================================================
+INTERPRETATION
+==================================================
+
+If HTTP 200:
+
+This proves the minimal Cloudflare-managed Google path works.
+
+Then the existing ThinkAgent/VibeSDK request construction becomes the
+primary area to investigate.
+
+Do NOT immediately modify ThinkAgent.
+
+If HTTP 403:
+
+This proves the failure exists even with the minimal documented REST
+request and is therefore not caused by ThinkAgent's normal request body
+or generation flow.
+
+Do NOT retry.
+
+Do NOT switch to Google BYOK.
+
+Do NOT add Google credits.
+
+If another status occurs:
+
+Capture it once and stop.
+
+==================================================
+CLEANUP
+==================================================
+
+After the single request and evidence collection:
+
+remove the temporary Google diagnostic route/code and deploy the clean
+staging Worker again.
+
+Verify from bundle/metadata without calling the removed route:
+
+- diagnostic route absent
+- clean Worker serving 100%
+- normal bindings/modules intact
+- BUILDCUSTOM_THINK_API_TOKEN intact
+- normal staging configuration intact
+- production untouched
+
+Tell me when the NEW temporary diagnostic secret binding can safely be
+deleted.
+
+Do not delete unrelated secrets.
+
+==================================================
+DO NOT
+==================================================
+
+Do NOT:
+
+- modify production
+- modify native Think behavior
+- modify the existing Google routing branch
+- change gateway authentication
+- change gateway configuration
+- add a Google provider key
+- add Google credits
+- add Cloudflare credits
+- change models
+- change account settings
+- contact Cloudflare support
+- perform more than one inference
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact sanitized request shape used
+2. HTTP result
+3. safe response/error information
+4. gateway log metadata
+5. whether Cloudflare recorded inference tokens
+6. whether Cloudflare recorded cost
+7. whether BYOK was involved
+8. whether the minimal documented Google path works
+9. what this proves about the existing ThinkAgent 403
+10. clean Worker version after cleanup
+11. confirmation temporary route is gone
+12. whether the temporary diagnostic secret can be deleted
+13. confirmation exactly one Google inference was attempted
+14. confirmation zero ThinkAgent inference was attempted
+15. confirmation production was untouched
+
+STOP after this test and cleanup.
+
+Do not implement a permanent fix yet.
