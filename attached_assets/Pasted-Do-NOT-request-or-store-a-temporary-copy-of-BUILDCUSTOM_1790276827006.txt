@@ -1,0 +1,275 @@
+Do NOT request or store a temporary copy of BUILDCUSTOM_THINK_API_TOKEN
+in Replit.
+
+The dedicated credential intentionally exists ONLY as a Cloudflare
+Worker secret. Keep it that way.
+
+We will perform the diagnostic from inside the isolated staging Worker,
+where env.BUILDCUSTOM_THINK_API_TOKEN already exists.
+
+==================================================
+GOAL
+==================================================
+
+Create a TEMPORARY, tightly restricted diagnostic path in the isolated
+staging Worker that makes exactly ONE Workers AI request using:
+
+env.BUILDCUSTOM_THINK_API_TOKEN
+
+→ Cloudflare account-scoped AI REST API
+→ buildcustom-think-unified-staging
+→ @cf/meta/llama-3.2-1b-instruct
+
+Then remove the diagnostic path after capturing the result.
+
+This test is specifically designed to determine whether:
+
+- the dedicated API token works
+- Cloudflare REST AI authentication works
+- the AI Gateway works
+- a Cloudflare Workers AI model works
+- the funded Cloudflare account can perform inference
+
+It must NOT invoke VibeSDK ThinkAgent.
+
+==================================================
+SECURITY REQUIREMENTS
+==================================================
+
+The temporary diagnostic endpoint MUST NOT be publicly usable.
+
+Use the safest existing staging administrative authentication mechanism
+available in the serving Worker.
+
+If no suitable authenticated internal route exists, DO NOT create an
+unauthenticated public endpoint.
+
+Instead stop and report that constraint.
+
+Never:
+
+- return the token
+- log the token
+- expose Authorization headers
+- expose Worker secrets
+- persist the token anywhere
+- copy the token into Replit
+- put the token in source code
+
+==================================================
+TEMPORARY DIAGNOSTIC
+==================================================
+
+The diagnostic should make exactly ONE request to the documented
+Cloudflare account-scoped AI REST endpoint.
+
+Use:
+
+Authorization:
+Bearer env.BUILDCUSTOM_THINK_API_TOKEN
+
+Gateway:
+
+buildcustom-think-unified-staging
+
+via the documented:
+
+cf-aig-gateway-id
+
+header/mechanism.
+
+Model:
+
+@cf/meta/llama-3.2-1b-instruct
+
+Prompt:
+
+Reply with exactly: CLOUDFLARE_AI_OK
+
+Do not include BuildCustom project data.
+
+==================================================
+IMPORTANT
+==================================================
+
+This must use the SAME:
+
+env.BUILDCUSTOM_THINK_API_TOKEN
+
+that native Think currently uses.
+
+Do NOT use:
+
+env.CLOUDFLARE_API_TOKEN
+
+Do NOT use:
+
+GOOGLE_AI_STUDIO_API_KEY
+
+Do NOT use:
+
+env.AI
+
+unless the documented REST request itself requires it.
+
+Do NOT call Google.
+
+Do NOT call Vertex AI.
+
+Do NOT use Google BYOK.
+
+==================================================
+ONE REQUEST ONLY
+==================================================
+
+Deploy the temporary staging diagnostic.
+
+Call it exactly ONCE.
+
+No retries.
+
+Capture safe results:
+
+- HTTP status
+- gateway request ID
+- provider
+- model
+- response text if successful
+- input tokens
+- output tokens
+- cost
+- wholesale/billing indicator
+- BYOK indicator
+- Cloudflare balance before
+- Cloudflare balance after
+- safe error code/message if unsuccessful
+
+==================================================
+INTERPRETATION
+==================================================
+
+If it succeeds:
+
+Classify:
+
+A. WORKERS AI + CLOUDFLARE AUTH PATH PROVEN
+
+This proves the dedicated token, REST endpoint, gateway, and basic
+Cloudflare AI inference path work.
+
+Then our existing 403 is narrowed specifically toward the third-party
+Google / Unified Billing path.
+
+Do not run Google afterward.
+
+--------------------------------------------------
+
+If it returns the SAME 403:
+
+Classify:
+
+C. SAME 403 ON WORKERS AI
+
+This means the problem is above the Google provider layer.
+
+Do not retry.
+
+--------------------------------------------------
+
+If it returns a DIFFERENT error:
+
+Classify:
+
+D. DIFFERENT WORKERS AI ERROR
+
+Capture the exact safe error and stop.
+
+==================================================
+REMOVE THE DIAGNOSTIC
+==================================================
+
+After the ONE request:
+
+REMOVE the temporary diagnostic route/code.
+
+Deploy the cleaned staging Worker again.
+
+Verify:
+
+- temporary route no longer exists
+- native Think still uses BUILDCUSTOM_THINK_API_TOKEN
+- CLOUDFLARE_API_TOKEN remains unchanged
+- all previous bindings remain
+- gateway configuration remains unchanged
+
+Preserve the diagnostic Worker version in deployment history for
+forensics/rollback, but do not leave it serving.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do not modify:
+
+- the value of BUILDCUSTOM_THINK_API_TOKEN
+- CLOUDFLARE_API_TOKEN
+- Google credentials
+- gateway configuration
+- ThinkAgent behavior
+- production
+- publishing
+- custom domains
+- restore
+- SEO
+- Stripe
+- customer credits
+
+Do not add money anywhere.
+
+Do not contact support.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Whether a safe authenticated diagnostic route was possible
+2. Temporary diagnostic Worker version
+3. Exact Workers AI model
+4. Endpoint used
+5. Gateway selected
+6. HTTP status
+7. Gateway request ID
+8. Provider/model recorded by gateway
+9. Response text if successful
+10. input/output tokens
+11. cost
+12. wholesale/billing indicator
+13. BYOK indicator
+14. balance before/after
+15. safe error if unsuccessful
+16. whether inference occurred
+17. whether dedicated credential is proven
+18. whether Cloudflare REST AI path is proven
+19. what this tells us about the Google 403
+20. cleaned Worker version restored after diagnostic removal
+21. confirmation temporary route no longer exists
+22. confirmation no token was copied to Replit
+23. confirmation Google was untouched
+24. confirmation production was untouched
+25. exact next task
+
+Classify as ONE:
+
+A. WORKERS AI + CLOUDFLARE AUTH PATH PROVEN
+
+B. WORKERS AI WORKS — BILLING DETAIL INCONCLUSIVE
+
+C. SAME 403 ON WORKERS AI
+
+D. DIFFERENT WORKERS AI ERROR
+
+Exactly ONE inference request.
+
+Do not retry.

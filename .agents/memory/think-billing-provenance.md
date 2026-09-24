@@ -32,3 +32,9 @@ A funded isolated staging request using the separate Think-only binding still pr
 **Why:** Cloudflare reported a positive credit balance and successful first top-up both before and after the single authorized retest. Its gateway response-head retrieval failed, leaving no rejection detail and no independent proof that the hidden token passed authorization.
 
 **How to apply:** Preserve the isolation; obtain Cloudflare's specific rejection reason for the failed gateway request and, if possible, owner-only token activity metadata before making another inference attempt or changing permissions, billing, or gateway configuration.
+
+For in-Worker diagnostic requests, do not assume that a normal VibeSDK bearer token or API-key exchange is administrative authentication. Stop rather than expose an inference trigger when the serving Worker has no suitable privileged internal route.
+
+**Why:** The examined isolated VibeSDK serving bundle had user-scoped authentication and app-ownership checks, but no administrative role or route; the staging control plane's separate super-admin session does not automatically protect the VibeSDK Worker.
+
+**How to apply:** Recheck the live serving bundle first. If no privileged internal entry point exists, obtain an explicitly approved secure access design before deploying any temporary diagnostic or sending an inference request.
