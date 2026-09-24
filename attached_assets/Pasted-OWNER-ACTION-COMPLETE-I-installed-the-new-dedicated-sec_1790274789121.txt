@@ -1,0 +1,369 @@
+OWNER ACTION COMPLETE.
+
+I installed the new dedicated secret directly in the isolated staging
+Cloudflare Worker:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+The value is the new Account API Token:
+
+buildcustom-think-staging
+
+with only:
+
+Account → Workers AI → Read
+
+scoped to the isolated staging Cloudflare account.
+
+I did NOT modify:
+
+CLOUDFLARE_API_TOKEN
+
+Do not ask for or expose either secret value.
+
+Proceed with ONE controlled native ThinkAgent inference test.
+
+==================================================
+GOAL
+==================================================
+
+We now have a deliberately isolated credential path:
+
+BuildCustom
+→ VibeSDK ThinkAgent
+→ BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare REST AI API
+→ buildcustom-think-unified-staging
+→ google/gemini-3.6-flash
+→ Cloudflare-managed Unified Billing
+
+We need to determine whether:
+
+1. the new dedicated token is accepted;
+2. the previous 403 disappears;
+3. Cloudflare-managed Unified Billing is conclusively selected;
+4. the zero Unified Billing credit balance becomes the remaining blocker.
+
+Do NOT make architecture changes during this task.
+
+==================================================
+1. VERIFY THE NEW DEPLOYMENT FIRST
+==================================================
+
+Before inference, perform read-only verification.
+
+Confirm:
+
+- a new Worker version was created by my secret deployment;
+- it is serving at 100%;
+- BUILDCUSTOM_THINK_API_TOKEN exists as a secret binding;
+- CLOUDFLARE_API_TOKEN still exists unchanged;
+- the Think Unified Billing branch reads only
+  BUILDCUSTOM_THINK_API_TOKEN;
+- other existing paths continue using CLOUDFLARE_API_TOKEN as before;
+- gateway remains buildcustom-think-unified-staging;
+- gateway has no Google BYOK provider configuration;
+- model remains google/gemini-3.6-flash;
+- production is untouched.
+
+Do not print secret values.
+
+==================================================
+2. PERFORM EXACTLY ONE CONTROLLED GENERATION
+==================================================
+
+After verification, send exactly ONE native BuildCustom generation
+through the normal isolated staging control-plane path.
+
+Do not:
+
+- retry;
+- edit;
+- preview;
+- publish;
+- run acceptance cycles;
+- run Replit-off.
+
+Capture safe information:
+
+- timestamp
+- control-plane HTTP status
+- gateway HTTP status
+- gateway request ID
+- provider
+- model
+- wholesale / Unified Billing indicator
+- BYOK indicator
+- input tokens
+- output tokens
+- cost
+- cache status if available
+- safe Cloudflare error code/message
+- whether inference began
+- whether the dedicated Think credential was the selected code path
+
+Never expose:
+
+- either API token
+- Authorization headers
+- prompts
+- generated source
+- user secrets
+
+==================================================
+3. CHECK THE CLOUDFLARE TOKEN USAGE SIGNAL
+==================================================
+
+Because this is now a dedicated token used only for Think inference,
+determine whether Cloudflare exposes evidence that this credential was
+used.
+
+If its Last Used timestamp or equivalent metadata is accessible safely,
+record whether it updated after this request.
+
+Do NOT expose or retrieve the token value.
+
+This is supporting evidence only.
+
+The gateway request itself remains the primary evidence.
+
+==================================================
+4. INTERPRET THE RESULT
+==================================================
+
+OUTCOME A:
+
+If the old 403 disappears and Cloudflare explicitly rejects the request
+for insufficient Unified Billing credits:
+
+Classify:
+
+UNIFIED BILLING PROVEN — OWNER FUNDING REQUIRED
+
+STOP.
+
+Tell me exactly how much you recommend adding for staging.
+
+Do not buy credits.
+
+--------------------------------------------------
+
+OUTCOME B:
+
+If inference succeeds:
+
+Verify how it was billed.
+
+Do not call it Unified Billing merely because AI Gateway was involved.
+
+Prove Cloudflare-managed billing rather than:
+
+- Google BYOK
+- direct Google
+- another provider credential
+- another billing mechanism
+
+If Unified Billing is proven, report success.
+
+--------------------------------------------------
+
+OUTCOME C:
+
+If we get a DIFFERENT error:
+
+Determine whether the new dedicated credential passed the previous
+authorization boundary.
+
+If it did, report the new blocker.
+
+Do not make another request.
+
+--------------------------------------------------
+
+OUTCOME D:
+
+If the exact same 403 remains:
+
+Do NOT retry.
+
+We now have a known dedicated Account API Token with Workers AI → Read.
+
+Capture all safe Cloudflare evidence and determine what remaining
+authorization/account/endpoint restriction could cause it.
+
+STOP before changing anything else.
+
+==================================================
+5. UNIFIED BILLING PROOF
+==================================================
+
+We specifically need:
+
+CLOUDFLARE-MANAGED UNIFIED BILLING
+
+Not merely AI Gateway transit.
+
+Confirm as much as Cloudflare exposes about:
+
+- wholesale billing
+- provider/model
+- BYOK status
+- billing source
+- Unified Billing status
+- cost
+- request ID
+
+The gateway should have:
+
+NO Google BYOK configuration.
+
+The Think branch should:
+
+NOT use GOOGLE_AI_STUDIO_API_KEY.
+
+==================================================
+6. IF ZERO CREDITS ARE FINALLY THE BLOCKER
+==================================================
+
+If this request conclusively establishes:
+
+dedicated credential accepted
++
+Unified Billing selected
++
+zero/insufficient credits preventing inference
+
+then STOP and give me exact funding instructions.
+
+Recommend a SMALL staging amount sufficient for approximately:
+
+- several generation tests
+- several edit tests
+- 3 complete staging acceptance cycles
+- one Replit-off acceptance cycle
+
+If $25 remains a reasonable test amount, say so.
+
+Do not enable auto top-up yet.
+
+Do not purchase anything automatically.
+
+==================================================
+7. NO MORE CREDENTIAL CHANGES
+==================================================
+
+Do not modify:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+Do not modify:
+
+CLOUDFLARE_API_TOKEN
+
+Do not create another token.
+
+Do not add Google BYOK.
+
+Do not return to direct Google billing.
+
+==================================================
+8. DO NOT TOUCH OTHER WORK
+==================================================
+
+Do not touch:
+
+- publishing
+- *.staging.buildcustom.ai
+- generated-app gateway
+- custom domains
+- SEO
+- customer AI credits
+- Stripe
+- model selection
+- OpenRouter
+- LiteLLM
+- direct provider routing
+- Durable Object edit investigation
+- restore fixes
+
+==================================================
+9. PRODUCTION REMAINS OFF LIMITS
+==================================================
+
+Do not modify:
+
+- production VibeSDK Worker
+- production control plane
+- production D1
+- active production DO namespaces
+- production AI configuration
+- production gateway
+- production routes
+- Test1
+- TaskFlow
+- Buyer Magnets
+- app.buildcustom.ai
+- *.apps.buildcustom.ai
+
+==================================================
+10. CLEANUP
+==================================================
+
+Clean up only disposable test resources created by this one generation
+where existing cleanup behavior is already known safe.
+
+Do not delete shared runtime state.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. New Worker version created by the secret deployment
+2. Confirmation it serves 100%
+3. Confirmation BUILDCUSTOM_THINK_API_TOKEN binding exists
+4. Confirmation CLOUDFLARE_API_TOKEN remains present
+5. Confirmation Think uses the dedicated binding
+6. Controlled request timestamp
+7. Control-plane status
+8. Gateway status
+9. Gateway request ID
+10. Provider/model
+11. wholesale / Unified Billing indicator
+12. BYOK indicator
+13. input/output tokens
+14. cost
+15. safe Cloudflare error
+16. whether inference began
+17. whether the previous 403 was passed
+18. whether dedicated-token usage can be independently observed
+19. whether Cloudflare-managed Unified Billing is conclusively proven
+20. whether zero credits are conclusively the remaining blocker
+21. whether owner funding is now appropriate
+22. smallest recommended staging top-up, if appropriate
+23. exact funding steps, if appropriate
+24. current staging Worker version
+25. rollback versions
+26. confirmation production was untouched
+27. exact next task
+
+Classify as ONE:
+
+A. UNIFIED BILLING PROVEN — OWNER FUNDING REQUIRED
+
+B. UNIFIED BILLING PROVEN — INFERENCE SUCCEEDED
+
+C. DEDICATED CREDENTIAL ACCEPTED — NEW BLOCKER IDENTIFIED
+
+D. 403 STILL PERSISTS WITH KNOWN DEDICATED CREDENTIAL
+
+E. BILLING IDENTITY STILL INCONCLUSIVE
+
+STOP after this ONE request.
+
+Do not fund the account.
+Do not retry.
+Do not run acceptance cycles.
+Do not run Replit-off.
+Do not touch production.
