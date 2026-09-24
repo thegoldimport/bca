@@ -33,6 +33,12 @@ A funded isolated staging request using the separate Think-only binding still pr
 
 **How to apply:** Preserve the isolation; obtain Cloudflare's specific rejection reason for the failed gateway request and, if possible, owner-only token activity metadata before making another inference attempt or changing permissions, billing, or gateway configuration.
 
+An independent minimal Google REST request can reproduce the pre-inference 403 even after a Workers AI request succeeds with the same Worker-held credential and gateway. Cloudflare returned error code 2049 for the minimal Google request, but its public AI error references do not define that code. Do not attribute this pattern to ThinkAgent construction, a drained credit balance, or a specific account entitlement without an account-specific rejection reason.
+
+**Why:** Both Google requests shared the same provider/model, gateway log path, 403 status, and zero token/cost usage; the second bypassed ThinkAgent entirely. The account still had a positive prepaid balance, while a catalog listing alone did not prove account-specific access.
+
+**How to apply:** Seek safe account-specific model-access or billing-denial details before altering ThinkAgent, changing gateway authentication, adding Google credentials, or spending credits on another inference attempt.
+
 For in-Worker diagnostic requests, do not assume that a normal VibeSDK bearer token or API-key exchange is administrative authentication. Stop rather than expose an inference trigger when the serving Worker has no suitable privileged internal route.
 
 **Why:** The examined isolated VibeSDK serving bundle had user-scoped authentication and app-ownership checks, but no administrative role or route; the staging control plane's separate super-admin session does not automatically protect the VibeSDK Worker.

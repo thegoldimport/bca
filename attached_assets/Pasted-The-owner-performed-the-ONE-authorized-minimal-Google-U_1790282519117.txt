@@ -1,0 +1,277 @@
+The owner performed the ONE authorized minimal Google Unified Billing
+diagnostic.
+
+DO NOT run it again.
+
+RESULT:
+
+HTTP 403
+
+Response:
+
+{
+  "upstreamStatus": 403,
+  "gatewayRequestId": null,
+  "requestedProvider": "google",
+  "requestedModel": "google/gemini-3.6-flash",
+  "responseMatchesExpected": false,
+  "errorCode": 2049,
+  "errorMessage": null
+}
+
+This was the minimal documented REST request, NOT ThinkAgent.
+
+Therefore we have now reproduced the Google failure independently of
+VibeSDK/ThinkAgent request construction.
+
+==================================================
+WHAT IS NOW PROVEN
+==================================================
+
+Working control:
+
+BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST API
+→ AI Gateway buildcustom-think-unified-staging
+→ Workers AI
+→ @cf/meta/llama-3.2-1b-instruct
+→ HTTP 200
+
+Failed minimal Google test:
+
+BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST API
+→ same AI Gateway
+→ google/gemini-3.6-flash
+→ HTTP 403
+→ Cloudflare errorCode 2049
+→ zero successful inference
+
+No ThinkAgent/VibeSDK generation logic was involved in the failed
+minimal request.
+
+No GOOGLE_AI_STUDIO_API_KEY was involved.
+
+Do NOT send another inference request.
+
+==================================================
+STEP 1 — INVESTIGATE ERROR 2049 READ-ONLY
+==================================================
+
+Research CURRENT Cloudflare documentation and other authoritative
+Cloudflare material for:
+
+Cloudflare AI error code 2049
+
+Specifically investigate it in the context of:
+
+- account-scoped AI REST API
+- AI Gateway
+- Unified Billing
+- third-party models
+- Google Gemini
+- model catalog access
+- prepaid Cloudflare credits
+- account/model entitlement
+- provider availability
+
+Do not guess from generic HTTP 403 semantics.
+
+Find out whether Cloudflare explicitly documents error 2049 and, if so:
+
+1. exact meaning
+2. subsystem that generates it
+3. conditions that trigger it
+4. whether it is related to:
+   - insufficient Cloudflare credits
+   - model/provider entitlement
+   - Unified Billing eligibility
+   - gateway authentication
+   - token permissions
+   - account restrictions
+   - provider availability
+   - model identifier
+   - something else
+
+If Cloudflare does NOT publicly document 2049, say so clearly.
+
+==================================================
+STEP 2 — INSPECT THE EXISTING FAILED EVENT
+==================================================
+
+Use existing logs/metadata only.
+
+Do not send another request.
+
+Locate the gateway event corresponding to this one Google diagnostic.
+
+Capture all safe metadata Cloudflare exposes:
+
+- timestamp
+- HTTP status
+- log/request ID
+- provider
+- model
+- path
+- error code
+- sanitized error body/message if retained
+- token counts
+- cost
+- wholesale
+- byok
+- cached
+- duration
+- any billing-related metadata
+- any entitlement/access metadata
+- any provider-response metadata
+
+Compare it against:
+
+A. the successful Workers AI diagnostic
+
+and
+
+B. the previous ThinkAgent Google 403.
+
+Determine whether both Google failures show the same underlying
+Cloudflare rejection.
+
+==================================================
+STEP 3 — RECHECK UNIFIED BILLING ELIGIBILITY
+==================================================
+
+Using CURRENT Cloudflare documentation, verify whether:
+
+google/gemini-3.6-flash
+
+is merely LISTED in the Cloudflare model catalog or is actually
+AVAILABLE to this type of account through Cloudflare-managed Unified
+Billing.
+
+Distinguish:
+
+"model exists in catalog"
+
+from:
+
+"this account is entitled to purchase/invoke it through Unified Billing."
+
+Check for any:
+
+- plan restrictions
+- beta requirements
+- account eligibility
+- regional restrictions
+- provider restrictions
+- explicit enablement requirements
+- prepaid credit requirements
+- Unified Billing activation steps
+- terms acceptance
+- model-specific access requirements
+
+Also determine whether there is any Cloudflare dashboard setting that
+must explicitly enable third-party model billing beyond simply adding
+Cloudflare credits.
+
+==================================================
+STEP 4 — GOOGLE BILLING QUESTION
+==================================================
+
+Reconfirm from documentation:
+
+Should the owner's Google AI Studio balance have ANY effect on this
+minimal request?
+
+Remember:
+
+- no Google API key was supplied
+- no stored Google provider credential was configured
+- the request was intended to use Cloudflare-managed billing
+
+Do NOT recommend adding Google credits unless evidence now specifically
+shows that Cloudflare's documented path requires the owner's Google
+billing account.
+
+==================================================
+STEP 5 — CLEAN UP TEMPORARY ROUTE
+==================================================
+
+After collecting the existing evidence, remove ONLY the temporary:
+
+POST /__internal/buildcustom/google-unified-diagnostic
+
+and code solely supporting that route.
+
+Deploy the clean staging Worker.
+
+Do NOT modify the native Think branch.
+
+Do NOT modify the gateway.
+
+Do NOT change models.
+
+Do NOT change tokens.
+
+Do NOT add credentials.
+
+Do NOT add credits.
+
+Verify without invoking the removed route:
+
+- clean version serving 100%
+- Google diagnostic route absent
+- normal modules/bindings intact
+- BUILDCUSTOM_THINK_API_TOKEN intact
+- normal staging configuration intact
+- production untouched
+
+The temporary secret:
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+
+may remain bound until the owner deletes it separately.
+
+Tell us when it is safe to delete.
+
+==================================================
+DO NOT
+==================================================
+
+Do NOT:
+
+- send another Google inference
+- send Workers AI inference
+- send ThinkAgent generation
+- retry the diagnostic
+- change Unified Billing configuration
+- change gateway authentication
+- change API-token permissions
+- fund Google
+- add more Cloudflare credits
+- contact Cloudflare support
+- modify production
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. documented meaning of Cloudflare error 2049, if available
+2. complete safe metadata for this failed request
+3. comparison with previous Google 403
+4. comparison with successful Workers AI request
+5. whether both Google failures are now clearly the same issue
+6. whether model catalog listing equals Unified Billing availability
+7. any account/model entitlement requirement discovered
+8. whether the owner's Google AI Studio balance matters
+9. most likely evidence-supported root cause
+10. smallest safe next action
+11. whether another inference test is actually necessary
+12. clean staging Worker version after cleanup
+13. confirmation diagnostic route removed
+14. whether BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET can be deleted
+15. confirmation no additional inference was sent
+16. confirmation production untouched
+
+STOP after cleanup and the report.
