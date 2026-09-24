@@ -1,0 +1,183 @@
+The owner completed the ONE authorized diagnostic request.
+
+RESULT:
+
+HTTP 200
+
+Response:
+
+{
+  "upstreamStatus": 200,
+  "gatewayRequestId": null,
+  "requestedProvider": "workers-ai",
+  "requestedModel": "@cf/meta/llama-3.2-1b-instruct",
+  "responseText": "CLOUDFLARE_AI_OK",
+  "errorCode": null,
+  "errorMessage": null
+}
+
+This is a successful diagnostic.
+
+DO NOT run the diagnostic again.
+DO NOT send another inference request.
+
+==================================================
+WHAT THIS PROVES
+==================================================
+
+We have now proven that this path works:
+
+BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST API
+→ dedicated AI Gateway buildcustom-think-unified-staging
+→ Cloudflare Workers AI
+→ @cf/meta/llama-3.2-1b-instruct
+→ successful inference
+
+Therefore the earlier 403 on:
+
+google-vertex-ai
+google/gemini-3.6-flash
+
+is NOT a generic failure of:
+
+- BUILDCUSTOM_THINK_API_TOKEN
+- the Cloudflare account-scoped AI REST endpoint
+- the dedicated staging AI Gateway
+- basic AI Gateway routing
+- the staging account's ability to perform AI inference
+
+The remaining issue is specifically the third-party Google / Unified Billing path or configuration.
+
+==================================================
+STEP 1 — READ-ONLY EVIDENCE COLLECTION
+==================================================
+
+Before removing the diagnostic route, inspect Cloudflare metadata/logs
+for the successful Workers AI request if available.
+
+Do NOT send another request.
+
+Record whatever Cloudflare already exposes for the successful request:
+
+- timestamp
+- provider
+- model
+- HTTP status
+- gateway request ID if Cloudflare generated one
+- token counts
+- cost
+- wholesale / Unified Billing indicators
+- BYOK indicator
+- cached status
+- duration
+
+Then compare the existing successful Workers AI event with the already
+recorded failed Google event:
+
+Failed Google request:
+
+request ID:
+6e409d52a950665f83deb796ed1b0b234cd4d4be0b882514eb87d4228c7fcfd9
+
+provider:
+google-vertex-ai
+
+model:
+google/gemini-3.6-flash
+
+status:
+403
+
+wholesale:
+false
+
+byok:
+null
+
+input/output:
+0
+
+cost:
+0
+
+cached:
+false
+
+duration:
+732ms
+
+Do not speculate beyond what the metadata supports.
+
+Determine whether the difference reveals anything concrete about why
+Cloudflare accepts Workers AI but rejects the Google Unified Billing
+request.
+
+==================================================
+STEP 2 — REMOVE THE TEMPORARY DIAGNOSTIC
+==================================================
+
+The temporary diagnostic has served its purpose.
+
+Remove ONLY:
+
+POST /__internal/buildcustom/workers-ai-diagnostic
+
+and any code that exists solely for that temporary diagnostic.
+
+Do NOT change the native Think Unified Billing branch yet.
+
+Do NOT change:
+
+- BUILDCUSTOM_THINK_API_TOKEN
+- CLOUDFLARE_API_TOKEN
+- AI Gateway configuration
+- account configuration
+- model configuration
+- ThinkAgent behavior
+- production
+
+Deploy the cleaned staging Worker.
+
+After deployment verify WITHOUT inference:
+
+1. cleaned version serves at 100%
+2. temporary diagnostic route is absent from serving bundle
+3. all normal staging modules/bindings remain intact
+4. BUILDCUSTOM_THINK_API_TOKEN remains present
+5. CLOUDFLARE_API_TOKEN remains present
+6. normal staging configuration remains intact
+7. production untouched
+
+Do not call the removed endpoint to verify 404.
+Verify its absence from the serving bundle/code instead.
+
+==================================================
+STEP 3 — DIAGNOSTIC SECRET CLEANUP
+==================================================
+
+After the cleaned Worker is confirmed serving and the route is absent,
+tell me whether BUILDCUSTOM_DIAGNOSTIC_SECRET can now safely be deleted
+from the staging Worker.
+
+Do not delete it yourself unless I explicitly authorize that separately.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. successful Workers AI gateway metadata
+2. comparison with failed Google request
+3. anything concretely learned about the Google 403
+4. cleaned staging Worker version
+5. confirmation diagnostic route is removed
+6. confirmation no additional inference was sent
+7. confirmation normal bindings/modules remain intact
+8. whether BUILDCUSTOM_DIAGNOSTIC_SECRET can now be deleted
+9. confirmation production untouched
+
+STOP there.
+
+Do not attempt to fix the Google path yet.
