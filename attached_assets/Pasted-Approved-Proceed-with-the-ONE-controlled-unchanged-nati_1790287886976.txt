@@ -1,0 +1,367 @@
+Approved.
+
+Proceed with the ONE controlled unchanged native Think generation
+described in the read-only investigation.
+
+This experiment is specifically intended to determine whether the
+previous Cloudflare wholesale 429 is reproducible after a quiet period.
+
+DO NOT make any code, gateway, model, credential, billing, pacing,
+retry, or prompt changes before this test.
+
+==================================================
+CURRENT PROVEN STATE
+==================================================
+
+Cloudflare Unified Billing works.
+
+Authenticated AI Gateway works.
+
+Native ThinkAgent successfully uses:
+
+BuildCustom native ThinkAgent
+→ BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST
+→ authenticated AI Gateway
+→ google/gemini-3.6-flash
+→ Cloudflare-managed billing
+
+Previous native generation:
+
+11 successful model calls
+then
+3 wholesale 429 attempts
+
+Error:
+
+"Wholesale rate limit exceeded for this gateway. Please reduce request
+rate or use BYOK."
+
+The previous run occurred well before this new test, so a meaningful
+quiet period has already elapsed.
+
+==================================================
+EXPERIMENT RULE
+==================================================
+
+Change NOTHING.
+
+We want the cleanest possible comparison against the previous run.
+
+Keep:
+
+- same native Think implementation
+- same model
+- same authenticated gateway
+- same Unified Billing path
+- same retry behavior
+- same prompt/context behavior
+- same skill behavior
+- same staging infrastructure
+
+Do NOT add pacing.
+
+Do NOT add instrumentation that requires a deployment.
+
+Use existing gateway logs and runtime information only.
+
+==================================================
+PRE-TEST CHECK
+==================================================
+
+Before inference, verify READ ONLY:
+
+1. clean staging Worker is still serving:
+
+713a1a73-cdad-4f00-bf4e-a656f4a2959d
+
+or, if a different version is serving, STOP and explain why before
+testing.
+
+2. gateway:
+
+buildcustom-think-unified-staging
+
+still has:
+
+authentication: true
+
+3. BUILDCUSTOM_THINK_API_TOKEN binding exists.
+
+4. native Think Unified Billing branch remains enabled.
+
+5. model remains:
+
+google/gemini-3.6-flash
+
+6. no stored Google provider credentials exist.
+
+7. no unrelated AI Gateway traffic has occurred recently enough to make
+the quiet-period test obviously contaminated.
+
+If any material configuration changed:
+
+STOP.
+
+Do not run inference.
+
+==================================================
+CREATE DISPOSABLE TEST STATE
+==================================================
+
+Create a completely fresh disposable staging project/agent.
+
+Do NOT use:
+
+- Test1
+- preserved projects
+- production data
+- previous disposable agent state
+
+Use the minimum synthetic user/session/project state necessary to
+exercise the real native BuildCustom generation path.
+
+Record exactly what disposable records/resources are created so they
+can be safely cleaned afterward.
+
+==================================================
+ONE GENERATION ONLY
+==================================================
+
+Make exactly ONE client-side native generation request.
+
+Use the same minimal intent as the previous test:
+
+Create a minimal valid buildable app that visibly displays:
+
+BUILDCUSTOM_UNIFIED_OK
+
+Keep the user request minimal.
+
+Do NOT intentionally simplify or alter the native agent's normal
+behavior.
+
+The purpose is to allow ThinkAgent to behave naturally.
+
+==================================================
+NO RETRY FROM THE CLIENT
+==================================================
+
+The client/harness must make exactly ONE generation request.
+
+If the runtime/AI SDK internally retries a model request according to
+its existing unchanged behavior, record that accurately.
+
+Do NOT perform another client generation.
+
+Do NOT manually retry anything.
+
+==================================================
+OBSERVE GATEWAY CALLS
+==================================================
+
+After the generation completes or fails, inspect the gateway records.
+
+For every model call belonging to this generation record:
+
+- sequence
+- timestamp
+- HTTP status
+- provider
+- model
+- input tokens
+- output tokens
+- cost
+- wholesale
+- byok
+- duration
+- safe error message if failed
+
+Do not expose prompts, secrets, or credentials.
+
+Especially determine:
+
+- how many successful model calls occurred before any 429
+- whether a wholesale 429 occurred
+- whether it occurred near the previous call count
+- whether the agent made more than 11 successful calls
+- whether the generation reached a final non-tool response
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+The strongest success is:
+
+1. native generation completes
+2. no wholesale 429 prevents completion
+3. persisted generated files contain:
+
+BUILDCUSTOM_UNIFIED_OK
+
+4. fresh reconnect sees the same persisted files/state
+5. generated app is buildable
+6. preview works if preview verification requires NO additional AI call
+7. gateway logs show Cloudflare-managed Google usage
+8. wholesale:true
+9. byok:null
+10. real token usage and cost recorded
+
+If the generation makes MORE THAN 11 successful model calls before
+finishing, explicitly call that out because it demonstrates the
+previous run was not simply subject to an unavoidable fixed
+"11 successful calls then block" rule.
+
+==================================================
+FAILURE CRITERIA
+==================================================
+
+If the generation again encounters:
+
+"Wholesale rate limit exceeded for this gateway"
+
+STOP.
+
+Do not retry.
+
+Record:
+
+- number of successful calls before first 429
+- elapsed time from first model call to first 429
+- input/output tokens before failure
+- cumulative model cost
+- exact gateway log IDs for 429s
+- whether internal SDK retries occurred
+- timing between retry attempts
+
+Compare this directly against the previous:
+
+11 successes
+then wholesale 429
+then two internal retries
+
+If failure occurs at a materially similar point, explicitly state that
+the wholesale restriction is now reproducible across two isolated
+native generations separated by a quiet period.
+
+Do not automatically conclude whether the limiter is request-based or
+token-based.
+
+==================================================
+OTHER ERRORS
+==================================================
+
+If another unrelated error occurs:
+
+STOP.
+
+Do not retry.
+
+Report it separately.
+
+Do not classify the wholesale experiment as success or failure unless
+the evidence supports that.
+
+==================================================
+CLEANUP
+==================================================
+
+After collecting all evidence:
+
+Delete ONLY disposable resources created specifically for this test.
+
+Before deleting synthetic users/sessions:
+
+verify they own no remaining projects.
+
+Do NOT touch:
+
+- Test1
+- preserved projects
+- shared runtime infrastructure
+- active namespaces
+- production resources
+
+Verify disposable cleanup afterward.
+
+==================================================
+DO NOT CHANGE ANYTHING
+==================================================
+
+This experiment authorizes ONE native generation.
+
+It does NOT authorize:
+
+- code changes
+- deployments
+- pacing
+- retry changes
+- model changes
+- gateway changes
+- authentication changes
+- credential changes
+- provider changes
+- BYOK
+- billing changes
+- credit changes
+- context optimization
+- skill changes
+- another generation
+
+==================================================
+DECISION AFTER TEST
+==================================================
+
+IF THE GENERATION COMPLETES:
+
+Report success and stop.
+
+Do NOT immediately change architecture.
+
+We will decide whether another validation run is necessary.
+
+IF THE SAME WHOLESALE 429 RECURS:
+
+Report the comparison and stop.
+
+Do NOT retry.
+
+The likely next experiment will be a separately approved
+staging-only pacing and/or wholesale-429 handling experiment.
+
+IF SOMETHING ELSE FAILS:
+
+Report it and stop.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. preflight configuration confirmation
+2. exact generation request
+3. client-side generation count
+4. generation success/failure
+5. full gateway-call sequence
+6. number of successful calls before any 429
+7. whether wholesale 429 occurred
+8. elapsed time to first 429 if applicable
+9. total input tokens
+10. total output tokens
+11. total model cost
+12. whether wholesale:true
+13. whether byok:null
+14. persisted marker result
+15. reconnect result
+16. preview/build result if applicable
+17. comparison with previous run
+18. whether the wholesale failure is now reproducible
+19. disposable cleanup confirmation
+20. confirmation no code/config/deployment changes were made
+21. confirmation exactly ONE client generation was attempted
+22. confirmation production untouched
+
+Then STOP.
+
+Do not perform another experiment.
