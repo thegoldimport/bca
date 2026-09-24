@@ -38,3 +38,9 @@ For in-Worker diagnostic requests, do not assume that a normal VibeSDK bearer to
 **Why:** The examined isolated VibeSDK serving bundle had user-scoped authentication and app-ownership checks, but no administrative role or route; the staging control plane's separate super-admin session does not automatically protect the VibeSDK Worker.
 
 **How to apply:** Recheck the live serving bundle first. If no privileged internal entry point exists, obtain an explicitly approved secure access design before deploying any temporary diagnostic or sending an inference request.
+
+For a future isolated staging diagnostic, the owner chose a separate, high-entropy Cloudflare-only authorization secret rather than weakening VibeSDK user authentication or copying the dedicated Think token into Replit.
+
+**Why:** The Think credential is intentionally confined to the Worker, while normal VibeSDK bearer/API-key accounts are not an administrative authorization boundary for a cost-incurring diagnostic route.
+
+**How to apply:** Keep both diagnostic and Think secrets out of Replit. Prepare and review any staging-only route offline; wait for separate owner approval before deploying or invoking it, and remove it immediately after the single authorized test.

@@ -1,0 +1,211 @@
+Good stop. Do not weaken the existing VibeSDK authentication model.
+
+We will authorize ONE temporary diagnostic using a separate
+Cloudflare-only diagnostic secret.
+
+IMPORTANT:
+
+BUILDCUSTOM_THINK_API_TOKEN must remain stored only in Cloudflare.
+Its value must never be copied into Replit.
+
+==================================================
+DESIGN THE TEMPORARY DIAGNOSTIC
+==================================================
+
+Prepare, but DO NOT DEPLOY YET, a staging-only diagnostic endpoint:
+
+POST /__internal/buildcustom/workers-ai-diagnostic
+
+It must require a separate secret:
+
+BUILDCUSTOM_DIAGNOSTIC_SECRET
+
+Authorization should require:
+
+Authorization: Bearer <BUILDCUSTOM_DIAGNOSTIC_SECRET>
+
+Use constant-time comparison if practical in the existing runtime.
+
+If:
+
+- the secret binding is missing
+- Authorization is missing
+- Authorization is incorrect
+
+return 404.
+
+Do not return 401/403 or reveal that the diagnostic exists.
+
+==================================================
+ADDITIONAL SAFETY
+==================================================
+
+The route must:
+
+- accept POST only
+- exist only in the isolated staging Worker
+- never exist in production
+- never return either secret
+- never log Authorization
+- never log secret values
+- never persist either secret
+- never expose environment variables
+- contain no BuildCustom user/project data
+
+Add an in-memory / Durable Object / KV one-use lock ONLY if an existing
+safe primitive already exists and can be reused trivially.
+
+Do NOT create new infrastructure merely for the lock.
+
+The primary safety mechanism is:
+
+- unadvertised staging route
+- separate high-entropy authorization secret
+- extremely short lifetime
+- immediate removal after one invocation
+
+==================================================
+THE ACTUAL TEST
+==================================================
+
+When eventually invoked successfully, the route should make exactly ONE
+request using:
+
+env.BUILDCUSTOM_THINK_API_TOKEN
+
+to Cloudflare's documented account-scoped AI REST endpoint.
+
+Gateway:
+
+buildcustom-think-unified-staging
+
+using:
+
+cf-aig-gateway-id
+
+Model:
+
+@cf/meta/llama-3.2-1b-instruct
+
+Prompt:
+
+Reply with exactly: CLOUDFLARE_AI_OK
+
+This request must NOT use:
+
+- CLOUDFLARE_API_TOKEN
+- GOOGLE_AI_STUDIO_API_KEY
+- Google
+- Vertex AI
+- ThinkAgent
+- BuildCustom project data
+
+==================================================
+RESPONSE
+==================================================
+
+The temporary diagnostic route may return ONLY safe diagnostic data:
+
+- upstream HTTP status
+- gateway request ID if available
+- provider/model
+- response text if successful
+- safe error code/message
+
+Do not return:
+
+- request headers
+- Authorization
+- environment variables
+- secret values
+- raw Cloudflare configuration
+
+==================================================
+IMPORTANT: DO NOT DEPLOY YET
+==================================================
+
+For this task:
+
+1. Prepare/review the exact staging-only patch.
+2. Verify it cannot compile into or deploy to production accidentally.
+3. Verify BUILDCUSTOM_THINK_API_TOKEN remains the inference credential.
+4. Verify CLOUDFLARE_API_TOKEN remains untouched.
+5. Determine the exact Cloudflare dashboard steps for me to add:
+
+BUILDCUSTOM_DIAGNOSTIC_SECRET
+
+directly to:
+
+buildcustom-vibesdk-migration-staging
+
+6. Tell me whether adding that secret creates a new Worker version.
+7. Tell me how I should generate a sufficiently random secret locally
+without sending it to Replit.
+8. Tell me how I will invoke the diagnostic WITHOUT exposing the
+diagnostic secret to Replit.
+
+For invocation, prefer a method where I can execute a curl command
+locally on my Mac Terminal using the diagnostic secret locally.
+
+Give me the command TEMPLATE but use:
+
+<DIAGNOSTIC_SECRET>
+
+as the placeholder.
+
+Do NOT ask me to paste the real value anywhere.
+
+==================================================
+AFTER THE FUTURE TEST
+==================================================
+
+The future sequence will be:
+
+1. I create the random diagnostic secret locally.
+2. I add it directly to the staging Worker in Cloudflare as
+   BUILDCUSTOM_DIAGNOSTIC_SECRET.
+3. You deploy the reviewed temporary route.
+4. I invoke it ONCE from my Mac Terminal.
+5. You inspect only safe Cloudflare gateway metadata.
+6. You immediately remove the temporary route.
+7. You deploy the cleaned Worker.
+8. We verify the route returns 404.
+9. BUILDCUSTOM_DIAGNOSTIC_SECRET can then be deleted from Cloudflare.
+
+Do NOT perform those steps yet.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do not:
+
+- send inference
+- deploy the diagnostic
+- change existing authentication
+- change BUILDCUSTOM_THINK_API_TOKEN
+- change CLOUDFLARE_API_TOKEN
+- change gateway configuration
+- change Google
+- add credits
+- modify production
+- modify ThinkAgent behavior
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Return only:
+
+1. whether this temporary diagnostic design is safe with the serving Worker
+2. exact patch prepared
+3. confirmation production cannot receive the route
+4. exact Cloudflare steps for adding BUILDCUSTOM_DIAGNOSTIC_SECRET
+5. exact local Mac command to generate the secret
+6. exact curl TEMPLATE I will eventually use
+7. deployment/version implications
+8. cleanup/rollback procedure
+9. confirmation no inference was sent
+10. confirmation nothing was deployed
+
+STOP and wait for owner approval.
