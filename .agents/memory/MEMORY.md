@@ -12,6 +12,7 @@
 - [Published metadata injection](published-metadata-injection.md) — apply per-project SEO and favicon settings at the gateway because runtime workspace files are read-only.
 - [Iterative task rebases](iterative-task-rebases.md) — later fix commits can conflict again and regress nearby lines already resolved in earlier rebase rounds.
 - [Cloudflare module uploads](cloudflare-module-uploads.md) — multipart Worker uploads must name the file exactly as main_module and preserve existing bindings.
+- [Cloudflare secret versions](cloudflare-secret-versions.md) — a dashboard secret replacement can create an undeployed version; binding presence does not prove its new value serves.
 - [SaaS custom-host routing](saas-custom-host-routing.md) — Cloudflare for SaaS Worker-as-origin needs a zone-wide route; pass platform hosts through and dispatch only verified hostname mappings.
 - [Nameserver activation verification](nameserver-activation-verification.md) — gate activation on parent delegation plus direct authoritative answers; recursive DNS is informational only.
 - [Custom-domain Live gate](custom-domain-live-gate.md) — verify traffic through the customer hostname itself before exposing a domain as Live.

@@ -1,0 +1,163 @@
+The owner invoked the deployed diagnostic exactly once using the
+validated one-line command you provided.
+
+Result:
+
+HTTP 404
+
+The command accepted the diagnostic secret as valid 64-character
+lowercase hex, so the request WAS sent.
+
+DO NOT invoke the diagnostic again.
+
+DO NOT send any inference request.
+
+We need to determine exactly WHICH guard returned this 404 before we
+attempt anything else.
+
+==================================================
+INVESTIGATE READ-ONLY
+==================================================
+
+Inspect the exact serving diagnostic Worker version and the temporary
+diagnostic route code.
+
+Current diagnostic version previously reported:
+
+683ed2ed-24d1-4172-a791-891685e20ba0
+
+NOTE:
+
+The owner subsequently replaced the value of
+BUILDCUSTOM_DIAGNOSTIC_SECRET through the Cloudflare dashboard, which
+may have created another Worker version.
+
+First identify the CURRENT serving version at 100%.
+
+Then inspect the diagnostic route's guard conditions and determine which
+of these could have produced the owner's 404:
+
+- request method
+- pathname
+- hostname
+- staging account check
+- gateway check
+- missing BUILDCUSTOM_DIAGNOSTIC_SECRET
+- Authorization parsing
+- diagnostic-secret comparison
+- any other staging-only safeguard
+
+The owner called:
+
+POST
+
+https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev/__internal/buildcustom/workers-ai-diagnostic
+
+with:
+
+Authorization: Bearer <the currently installed diagnostic secret>
+
+and:
+
+Content-Type: application/json
+
+body:
+
+{}
+
+The command validated that the entered secret was exactly 64 lowercase
+hex characters before sending.
+
+==================================================
+IMPORTANT SECRET CONSTRAINT
+==================================================
+
+Do NOT ask for the diagnostic secret.
+
+Do NOT attempt to read its value.
+
+Do NOT replace it.
+
+Do NOT log Authorization.
+
+Do NOT weaken authentication.
+
+You may verify that the secret binding EXISTS and inspect all non-secret
+route logic.
+
+==================================================
+IMPORTANT: NO MORE REQUESTS
+==================================================
+
+Do NOT:
+
+- call the diagnostic route
+- make an unauthorized route test
+- send Workers AI inference
+- send ThinkAgent generation
+- retry curl
+- deploy anything
+- modify the patch
+- change any secret
+- change the gateway
+
+This task is READ-ONLY investigation only.
+
+==================================================
+KEY QUESTION
+==================================================
+
+We need one precise answer:
+
+Why did the correctly formed owner request return 404 before reaching
+the inference branch?
+
+Pay particular attention to the hostname guard.
+
+The owner invoked the actual workers.dev hostname:
+
+buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev
+
+Compare that exact hostname with whatever hostname the diagnostic guard
+expects.
+
+Also check whether replacing BUILDCUSTOM_DIAGNOSTIC_SECRET through the
+Cloudflare dashboard created a new serving version that preserved the
+temporary diagnostic route.
+
+This is important:
+
+If adding/replacing the secret created a new Worker version based on a
+different source version and accidentally removed the diagnostic route,
+that alone could explain the 404.
+
+Determine whether the CURRENT serving bundle actually still contains:
+
+POST /__internal/buildcustom/workers-ai-diagnostic
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Return:
+
+1. current serving Worker version
+2. whether the diagnostic route is actually present in that serving version
+3. whether BUILDCUSTOM_DIAGNOSTIC_SECRET binding exists
+4. every guard protecting the route
+5. exact guard that caused or most directly explains the owner's 404
+6. whether the hostname used by the owner matches the guard
+7. whether the secret replacement changed/replaced the diagnostic code version
+8. whether the inference branch was reached
+9. whether any AI request was sent
+10. whether any AI credits were consumed
+11. smallest safe correction required
+12. whether that correction requires a new Worker deployment
+13. confirmation nothing was changed during this investigation
+14. confirmation production was untouched
+
+Do not deploy the correction.
+
+Do not run another request.
+
+STOP after identifying the cause.
