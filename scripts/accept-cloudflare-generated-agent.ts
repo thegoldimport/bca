@@ -9,6 +9,7 @@
  * Usage:
  *   npx tsx scripts/accept-cloudflare-generated-agent.ts
  *   STAGING_GATEWAY_URL=https://... npx tsx scripts/accept-cloudflare-generated-agent.ts --publish
+ *   npx tsx scripts/accept-cloudflare-generated-agent.ts --billing-probe
  */
 import { execFileSync } from "node:child_process";
 import { verifyStagingSpaNavigation } from "./verify-staging-spa-navigation";
@@ -26,6 +27,7 @@ const RUNTIME = "https://buildcustom-vibesdk-migration-staging.thegoldimport.wor
 const GATEWAY = "https://buildcustom-apps-gateway-staging.thegoldimport.workers.dev";
 const ORIGIN = new URL(TARGET).origin;
 const publishRequested = process.argv.includes("--publish");
+const billingProbe = process.argv.includes("--billing-probe");
 const hostnameRequested = process.argv.includes("--hostname");
 const allowMissingSeo = process.argv.includes("--allow-missing-seo");
 const gatewayArg = process.argv.find((value) => value.startsWith("--gateway="))?.slice("--gateway=".length);
@@ -216,6 +218,9 @@ function renderPublicPage(url: string): string {
 
 async function main() {
   guardConfig();
+  if (billingProbe && (publishRequested || hostnameRequested || allowMissingSeo || configuredGateway)) {
+    throw new Error("BILLING_PROBE_REQUIRES_NO_PUBLISH_OPTIONS");
+  }
   if (publishRequested && !gateway) {
     block("managed publish", "pass --gateway=... or set STAGING_GATEWAY_URL; no direct runtime URL counts");
     process.exitCode = 1;
@@ -269,18 +274,34 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
     expect("generated-agent project create", created.status === 201 && Number.isSafeInteger(projectId) && projectId > 0);
     if (!projectId) return;
 
-    const settings = await request(superJar, `/api/projects/${projectId}/runtime/publishing-settings`, "PUT", {
-      subdomainSlug: slug, hostingProvider: "buildcustom",
-    });
-    expect("generated-agent staging publishing settings", settings.status === 200 && settings.data?.subdomainSlug === slug);
+    if (!billingProbe) {
+      const settings = await request(superJar, `/api/projects/${projectId}/runtime/publishing-settings`, "PUT", {
+        subdomainSlug: slug, hostingProvider: "buildcustom",
+      });
+      expect("generated-agent staging publishing settings", settings.status === 200 && settings.data?.subdomainSlug === slug);
+    }
 
+    const startedAt = Date.now();
     const build = await request(superJar, `/api/projects/${projectId}/runtime/messages`, "POST", {
       mode: "build",
-      message: hostnameRequested
+      message: billingProbe
+        ? "Create a small, valid website with a heading and a stylesheet. Keep it buildable."
+        : hostnameRequested
         ? `Create a buildable React SPA with Home at / and About at /about. Use local JavaScript in /app.js and local CSS in /styles.css, referenced from the HTML with root-relative URLs. Do not use CDN scripts or inline JavaScript. Add a visible link href="/about" and client-side navigation. Render exactly ${aboutMarker} on About only and exactly ${marker} on Home only, including on direct refresh.`
         : `Create a small valid website with a heading, a paragraph, and a stylesheet. Keep the app buildable. Include this exact visible marker in the generated app content: ${marker}`,
-      displayMessage: "Create an isolated acceptance website",
+      displayMessage: billingProbe ? "Isolated staging billing check" : "Create an isolated acceptance website",
     });
+    if (billingProbe) {
+      console.log("BILLING_PROBE " + JSON.stringify({
+        status: build.status,
+        durationMs: Date.now() - startedAt,
+        cfRay: build.headers.get("cf-ray") || null,
+        turnPresent: Boolean(build.data?.turn),
+        agentIdPresent: Boolean(build.data?.agentId || build.data?.turn?.agentId),
+      }));
+      if (!statusIn(build, [200, 201])) block("billing probe", `HTTP ${build.status}`);
+      return;
+    }
     if (!statusIn(build, [200, 201])) {
       block("generated-agent build", `runtime returned HTTP ${build.status}${typeof build.data?.message === "string" ? `: ${build.data.message.slice(0, 200)}` : ""}`);
       return;
@@ -487,6 +508,7 @@ DELETE FROM users WHERE id IN (${sqlQuote(superId)},${sqlQuote(userId)});`);
 }
 
 main().catch((error) => {
-  console.log(`FAIL generated-agent harness (${error instanceof Error ? error.message : "unexpected error"})`);
+  console.log(billingProbe ? "FAIL billing probe (unexpected setup or cleanup error)" :
+    `FAIL generated-agent harness (${error instanceof Error ? error.message : "unexpected error"})`);
   process.exitCode = 1;
 });

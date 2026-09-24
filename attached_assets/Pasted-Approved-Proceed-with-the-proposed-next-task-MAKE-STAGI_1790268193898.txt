@@ -1,0 +1,382 @@
+Approved. Proceed with the proposed next task:
+
+MAKE STAGING AI GENERATION USE CLOUDFLARE UNIFIED BILLING.
+
+We have now confirmed that the deployed isolated staging VibeSDK
+ThinkAgent currently uses direct Google AI Studio inference:
+
+ThinkAgent
+→ OpenAI-compatible client
+→ generativelanguage.googleapis.com/v1beta/openai/
+→ GOOGLE_AI_STUDIO_API_KEY
+→ Google bills us directly
+
+That is NOT the architecture we want for initial BuildCustom launch.
+
+Our chosen initial architecture is:
+
+BuildCustom
+→ VibeSDK / ThinkAgent
+→ Cloudflare AI Gateway / Cloudflare-managed Unified Billing
+→ supported model provider
+
+BuildCustom will later meter customer AI usage separately at:
+
+RAW MODEL COST × 1.20
+
+Do NOT build that customer ledger yet.
+
+==================================================
+GOAL
+==================================================
+
+Make ONLY the isolated STAGING native ThinkAgent use a verified
+Cloudflare-managed Unified Billing path.
+
+The key acceptance requirement is:
+
+A successful or billing-blocked ThinkAgent request must be demonstrably
+going through Cloudflare-managed Unified Billing and NOT through our
+Google provider key.
+
+Do not assume that merely routing through AI Gateway means Unified
+Billing is active.
+
+AI Gateway + Google BYOK would still bill Google directly.
+
+We specifically want CLOUDFLARE-MANAGED UNIFIED BILLING.
+
+==================================================
+1. VERIFY EXACT CLOUDFLARE PATH FIRST
+==================================================
+
+Before changing code, determine the correct Cloudflare-supported method
+for the current ThinkAgent model/provider to use Unified Billing.
+
+Current model discovered:
+
+gemini-3.6-flash
+Provider:
+Google AI Studio
+
+Verify whether this EXACT model can be called through Cloudflare Unified
+Billing.
+
+Do not infer compatibility just because Google AI Studio generally has
+AI Gateway support.
+
+If gemini-3.6-flash is NOT available through Unified Billing, STOP and
+report that before changing the runtime.
+
+If it IS supported, document the exact:
+
+- Cloudflare endpoint/path
+- provider identifier
+- model identifier
+- required authentication
+- AI Gateway configuration
+- Worker binding/configuration
+- whether env.AI is involved
+- whether a gateway name is required
+- whether any provider API key must be omitted
+
+==================================================
+2. PRESERVE THE CURRENT DIRECT PATH FOR ROLLBACK
+==================================================
+
+The deployed staging Worker currently has:
+
+directOverride: true
+
+and the candidate source differs from the deployed bundle.
+
+Do NOT casually overwrite this Worker from candidate source.
+
+Before changing anything:
+
+- identify the exact deployed logic controlling directOverride
+- identify the smallest source/config change
+- preserve a rollback-safe version
+- record current staging Worker version/config
+- confirm protected production Worker is completely untouched
+
+We are changing STAGING ONLY.
+
+==================================================
+3. SWITCH NATIVE THINK TO UNIFIED BILLING
+==================================================
+
+Make the smallest safe staging-only change necessary so native
+ThinkAgent no longer selects the direct Google provider path.
+
+Requirements:
+
+- disable/remove the direct routing override for native Think
+- configure the appropriate isolated staging AI Gateway path
+- use Cloudflare-managed Unified Billing
+- do NOT send GOOGLE_AI_STUDIO_API_KEY as provider authorization
+- do NOT configure Google BYOK in the Gateway for this native path
+- do NOT accidentally fall back to direct Google billing
+- do NOT modify the separate BuildCustom control-plane SEO Google key
+
+The VibeSDK runtime may retain the Google secret temporarily if another
+feature needs it, but native Think must not use it.
+
+Do not delete credentials merely for cleanup during this task.
+
+==================================================
+4. PROVE BILLING IDENTITY BEFORE WE FUND IT
+==================================================
+
+Once routing is changed, perform ONE controlled native generation
+attempt.
+
+Because our Unified Billing balance is currently zero, a billing failure
+is acceptable and may actually be useful evidence.
+
+We want to prove:
+
+ThinkAgent request
+→ Cloudflare AI Gateway
+→ Cloudflare-managed Unified Billing
+→ blocked because Unified Billing balance is insufficient
+
+Capture safe/redacted evidence such as:
+
+- request ID
+- gateway name
+- provider
+- model
+- timestamp
+- Cloudflare status/error code
+- billing identity/path
+- confirmation no Google BYOK/provider credential was used
+
+Never log secrets, Authorization headers, prompts, generated code, or
+full sensitive request bodies.
+
+==================================================
+5. DO NOT FUND IT YET
+==================================================
+
+Do NOT purchase credits.
+
+Once the request is conclusively proven to use Unified Billing, STOP.
+
+Then tell me exactly how to fund the isolated Cloudflare account.
+
+Give me simple instructions such as:
+
+1. Open Cloudflare
+2. Click ...
+3. Click ...
+4. Add the smallest practical amount
+5. Confirm ...
+6. Return to Replit
+
+Recommend the smallest practical amount needed for:
+
+- several generations
+- several edits
+- 3 complete staging acceptance cycles
+- one Replit-off acceptance cycle
+
+Do not recommend a production-sized balance.
+
+==================================================
+6. DO NOT DEBUG THE OLD GOOGLE PAYMENT ERROR
+==================================================
+
+Unless something from it is directly required for rollback safety, stop
+investigating the old direct-Google `Payment Required` error.
+
+We have chosen Unified Billing for launch.
+
+Do not spend time fixing an inference path we intend to replace.
+
+==================================================
+7. DO NOT BUILD MODEL SELECTION
+==================================================
+
+Do not add:
+
+- OpenRouter
+- LiteLLM
+- direct Anthropic routing
+- direct OpenAI routing
+- user model selector
+- custom inference harness
+- customer BYOK
+- fallback model routing
+
+Those can come later.
+
+For now we need ONE native ThinkAgent model working reliably through
+Unified Billing.
+
+==================================================
+8. DO NOT BUILD CUSTOMER AI CREDITS YET
+==================================================
+
+Future architecture:
+
+Cloudflare Unified Billing
+= BuildCustom's backend inference pool
+
+BuildCustom AI Credits
+= customer-facing accounting system
+
+Future customer charge:
+
+RAW MODEL COST × 1.20
+
+Do not implement this now.
+
+However, while testing the Gateway, record what Cloudflare gives us for:
+
+- request ID
+- provider
+- model
+- input tokens
+- output tokens
+- cached tokens if applicable
+- raw inference cost
+- total Cloudflare cost if exposed
+- status
+- latency
+- metadata/custom metadata
+
+We want to know whether later we can tag requests with:
+
+- BuildCustom user ID
+- project ID
+- agent ID
+- operation ID
+
+Do not build the ledger yet.
+
+==================================================
+9. KEEP SEO SEPARATE
+==================================================
+
+The BuildCustom control-plane SEO feature has a separate future
+GOOGLE_AI_STUDIO_API_KEY requirement.
+
+Do not copy the VibeSDK Google key into the control plane.
+
+Do not change SEO during this task.
+
+==================================================
+10. DO NOT TOUCH PUBLISHING
+==================================================
+
+Publishing is already proven.
+
+Do not modify:
+
+- *.staging.buildcustom.ai
+- staging apps gateway
+- route KV
+- Browser Rendering
+- screenshots
+- publish readiness
+- releases
+- generated-app deployment architecture
+
+==================================================
+11. DO NOT TOUCH PRODUCTION
+==================================================
+
+Do not modify:
+
+- production control plane
+- production D1
+- active production VibeSDK namespaces
+- protected production VibeSDK Worker
+- Test1
+- TaskFlow
+- Buyer Magnets
+- production gateway
+- production route KV
+- production dispatch namespace
+- *.apps.buildcustom.ai
+- app.buildcustom.ai
+- production custom hostnames
+
+==================================================
+12. FROZEN RESTORE FIXES STAY FROZEN
+==================================================
+
+Do not modify:
+
+- SpaceDO restore fix
+- ThinkAgent synchronization fix
+
+==================================================
+13. TESTS
+==================================================
+
+After the staging-only routing change:
+
+- run relevant unit tests
+- run typecheck
+- run VibeSDK/runtime build
+- run Cloudflare dry-run/config validation
+- verify staging Worker deployment
+
+Then perform ONLY ONE controlled native Think generation to establish
+billing identity.
+
+Do not run the 3 full acceptance cycles yet.
+
+Do not run Replit-off yet.
+
+Those come AFTER I fund Unified Billing.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Whether gemini-3.6-flash is confirmed supported by Unified Billing
+2. Exact Cloudflare Unified Billing inference path selected
+3. Whether env.AI is used
+4. Gateway name/configuration
+5. Exact staging-only change made
+6. Previous staging Worker version/config preserved for rollback
+7. Confirmation directOverride is no longer controlling native Think
+8. Confirmation native Think did NOT send GOOGLE_AI_STUDIO_API_KEY
+9. Confirmation no Google BYOK credential was used
+10. Controlled generation result
+11. Gateway request ID
+12. Provider/model seen by Cloudflare
+13. Exact billing-related status/error
+14. Evidence the request used Cloudflare-managed Unified Billing
+15. Whether zero Cloudflare credits are NOW the blocker
+16. Smallest recommended staging credit purchase
+17. Exact owner funding instructions
+18. Usage/cost metadata Cloudflare exposes
+19. Whether custom BuildCustom metadata can be attached to requests
+20. Tests/build/typecheck results
+21. Staging Worker version deployed
+22. Confirmation production was untouched
+23. Exact next task after I fund the account
+
+Classify the result as:
+
+A. UNIFIED BILLING ROUTING PROVEN — FUNDING REQUIRED
+
+B. EXACT MODEL NOT SUPPORTED BY UNIFIED BILLING — STOPPED SAFELY
+
+C. UNIFIED BILLING CONFIGURATION BLOCKER — OWNER ACTION REQUIRED
+
+D. UNIFIED BILLING ROUTING FAILED — CODE/CONFIG INVESTIGATION REQUIRED
+
+E. UNIFIED BILLING ROUTING PROVEN AND ACCOUNT ALREADY ABLE TO INFER
+
+STOP after this report.
+
+Do not purchase credits.
+Do not continue into acceptance cycles.
+Do not touch production.

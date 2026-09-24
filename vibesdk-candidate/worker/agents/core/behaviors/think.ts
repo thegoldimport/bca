@@ -28,6 +28,7 @@ import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
 import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
+import { getUnifiedBillingThinkModel, isUnifiedBillingEnabled } from '../../think/unified-billing';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
@@ -224,6 +225,25 @@ export class ThinkCodingBehavior
 		const aiModelConfig = THINK_MODEL_CONFIG;
 
 		let conf: { baseURL: string; apiKey: string; defaultHeaders?: Record<string, string> };
+		if (isUnifiedBillingEnabled(this.env as unknown as { BUILDCUSTOM_UNIFIED_BILLING?: string })) {
+			// This explicit staging path intentionally bypasses model configuration:
+			// no Google key or stored AI Gateway credentials may enter the request.
+			const config: ThinkAgentConfig = {
+				userId,
+				model: getUnifiedBillingThinkModel(this.env as unknown as {
+					BUILDCUSTOM_UNIFIED_BILLING?: string;
+					CLOUDFLARE_ACCOUNT_ID?: string;
+					CLOUDFLARE_API_TOKEN?: string;
+					CLOUDFLARE_AI_GATEWAY?: string;
+				}),
+				systemPrompt: this.buildSystemPrompt('gemini-3.6-flash', 'google'),
+				previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
+			};
+			const stub = await this.getThinkStub();
+			await stub.configureVibe(config);
+			return;
+		}
+
 		try {
 			conf = await getConfigurationForModel(
 				aiModelConfig,
