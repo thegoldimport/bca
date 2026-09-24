@@ -1,0 +1,328 @@
+SUCCESS.
+
+The owner performed the ONE authorized Google Unified Billing diagnostic
+with authenticated gateway enabled.
+
+RESULT:
+
+{
+  "upstreamStatus": 200,
+  "gatewayRequestId": null,
+  "requestedProvider": "google-vertex-ai",
+  "requestedModel": "google/gemini-3.6-flash",
+  "responseText": "GEM",
+  "errorCode": null,
+  "errorMessage": null
+}
+
+HTTP 200
+
+DO NOT run the diagnostic again.
+
+==================================================
+WHAT THIS PROVES
+==================================================
+
+We now have a controlled A/B result.
+
+BEFORE:
+
+Gateway authentication:
+false
+
+Same verified BUILDCUSTOM_THINK_API_TOKEN
+Same account-scoped AI REST endpoint
+Same gateway
+Same model
+Same minimal request
+Same Cloudflare-funded architecture
+
+Result:
+
+HTTP 403
+errorCode 2049
+0 tokens
+0 cost
+
+AFTER:
+
+Gateway authentication:
+true
+
+Everything else held constant.
+
+Result:
+
+HTTP 200
+real Google model output
+no error
+
+Therefore authenticated AI Gateway is strongly established as the
+missing prerequisite for this Cloudflare-managed Google Unified Billing
+path.
+
+KEEP:
+
+authentication: true
+
+Do NOT revert it.
+
+The owner's Google AI Studio account was not funded for this successful
+request and no Google provider credential was intentionally supplied.
+
+The intended architecture is now proven at the minimal REST level:
+
+BuildCustom
+→ BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST
+→ authenticated AI Gateway
+→ google/gemini-3.6-flash
+→ Cloudflare-managed billing
+
+==================================================
+PHASE 1 — CAPTURE EXISTING SUCCESS EVIDENCE
+==================================================
+
+READ ONLY.
+
+Locate the gateway event corresponding to this successful request.
+
+Do NOT send another inference.
+
+Capture safe metadata:
+
+- timestamp
+- HTTP status
+- gateway log ID
+- provider
+- model
+- path
+- input tokens
+- output tokens
+- cost
+- wholesale
+- byok
+- cached
+- duration
+- any safe billing metadata
+
+Confirm whether Cloudflare recorded actual token usage and cost.
+
+Also inspect the Cloudflare prepaid balance if a read-only API is
+available and record it.
+
+Do not infer more than the metadata supports.
+
+==================================================
+PHASE 2 — REMOVE TEMPORARY GOOGLE DIAGNOSTIC
+==================================================
+
+Remove ONLY:
+
+POST /__internal/buildcustom/google-unified-diagnostic
+
+and code solely supporting that temporary route.
+
+Deploy the clean isolated staging Worker.
+
+Verify WITHOUT calling the removed route:
+
+- clean Worker serving 100%
+- Google diagnostic route absent
+- token-verification route absent
+- all normal modules intact
+- all normal bindings intact
+- BUILDCUSTOM_THINK_API_TOKEN intact
+- native Think Unified Billing branch intact
+- gateway remains authentication:true
+- production untouched
+
+Do NOT delete:
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+
+yet.
+
+Tell the owner when that secret can safely be deleted manually.
+
+==================================================
+PHASE 3 — VERIFY NATIVE THINK CONFIGURATION
+==================================================
+
+READ ONLY FIRST.
+
+Inspect the currently deployed native Think Unified Billing branch and
+confirm it still uses:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+→ Cloudflare account-scoped AI REST
+→ cf-aig-gateway-id: buildcustom-think-unified-staging
+→ google/gemini-3.6-flash
+
+Confirm:
+
+- GOOGLE_AI_STUDIO_API_KEY is NOT used by this staging native Think path
+- no Google BYOK credential is used
+- no stored Google provider credential is used
+- no Vertex credential is used
+- directOverride/legacy Google path is bypassed while the staging
+  Unified Billing branch is enabled
+
+Do NOT modify native Think unless this inspection discovers that it no
+longer matches the previously reviewed Unified Billing branch.
+
+If it does not match, STOP and report the mismatch before inference.
+
+==================================================
+PHASE 4 — ONE REAL NATIVE THINK TEST
+==================================================
+
+If Phase 3 confirms the native Think path is correctly configured,
+perform exactly ONE controlled staging native Think generation.
+
+This is now the important end-to-end test.
+
+Use a fresh disposable staging project/agent.
+
+Do NOT use Test1 or any preserved customer/project state.
+
+Use the smallest valid generation request that exercises the actual
+native VibeSDK ThinkAgent path.
+
+Request a minimal valid buildable app.
+
+For example:
+
+Create a minimal app that displays:
+
+BUILDCUSTOM_UNIFIED_OK
+
+Requirements:
+
+- actual native ThinkAgent
+- actual staging Unified Billing branch
+- google/gemini-3.6-flash
+- authenticated gateway
+- no GOOGLE_AI_STUDIO_API_KEY
+- no Google BYOK
+- no Vertex credential
+- no retry if generation fails
+- no fallback provider
+- no second generation
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+Do NOT treat generation_complete alone as success.
+
+Success requires:
+
+1. native Think request succeeds
+2. no relevant runtime/build error
+3. generated files are persisted
+4. expected marker exists in persisted project state
+5. fresh reconnect sees the same persisted state
+6. gateway log shows successful Google inference
+7. gateway records nonzero token usage
+8. gateway records model cost
+9. no Google credential was used
+10. Cloudflare-managed billing path is confirmed
+
+If preview can be checked without causing another AI request, also
+verify the generated app is buildable/previewable.
+
+Do not turn preview failure into another generation attempt.
+
+==================================================
+FAILURE BEHAVIOR
+==================================================
+
+If native Think returns any error:
+
+STOP.
+
+Do NOT retry.
+
+Capture:
+
+- control-plane status
+- runtime error
+- gateway status
+- gateway log ID
+- provider
+- model
+- token usage
+- cost
+- safe error information
+
+Do not change anything automatically.
+
+==================================================
+IMPORTANT LIMITS
+==================================================
+
+Exactly ONE native Think generation is authorized.
+
+Do NOT:
+
+- run the minimal diagnostic again
+- run Workers AI
+- run another Google REST diagnostic
+- run a second Think generation
+- use existing preserved Test1 state
+- change gateway authentication
+- change byok_only
+- change provider credentials
+- change model
+- change API token permissions
+- add Google credits
+- add Cloudflare credits
+- modify production
+
+==================================================
+CLEANUP OF DISPOSABLE TEST
+==================================================
+
+After collecting evidence from the single native Think test, clean up
+ONLY disposable project/runtime resources created specifically for this
+test if doing so cannot affect preserved state.
+
+Do not delete shared runtime infrastructure.
+
+Do not touch Test1.
+
+Do not touch production.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. successful minimal Google diagnostic gateway metadata
+2. whether Cloudflare recorded tokens and cost
+3. prepaid balance before/after if safely available
+4. clean staging Worker version after diagnostic removal
+5. confirmation both temporary diagnostic routes are absent
+6. whether BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET can now be deleted
+7. native Think configuration verified
+8. native Think generation result
+9. generated/persisted marker verification
+10. reconnect verification
+11. preview/build result if checked
+12. native Think gateway metadata
+13. native Think token usage
+14. native Think model cost
+15. confirmation GOOGLE_AI_STUDIO_API_KEY was not used
+16. confirmation Google BYOK/provider credentials were not used
+17. whether Cloudflare-managed Gemini billing is now proven end-to-end
+18. whether the original Payment Required / 403 blocker is resolved
+19. any remaining blocker before continuing BuildCustom migration
+20. confirmation exactly ONE native Think generation was attempted
+21. confirmation production was untouched
+
+STOP after this test.
+
+Do not proceed into billing/Stripe/customer credits yet.

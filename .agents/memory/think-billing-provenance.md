@@ -33,11 +33,17 @@ A funded isolated staging request using the separate Think-only binding still pr
 
 **How to apply:** Preserve the isolation; obtain Cloudflare's specific rejection reason for the failed gateway request and, if possible, owner-only token activity metadata before making another inference attempt or changing permissions, billing, or gateway configuration.
 
-An independent minimal Google REST request can reproduce the pre-inference 403 even after a Workers AI request succeeds with the same Worker-held credential and gateway. Cloudflare returned error code 2049 for the minimal Google request, but its public AI error references do not define that code. Do not attribute this pattern to ThinkAgent construction, a drained credit balance, or a specific account entitlement without an account-specific rejection reason.
+An independent minimal Google REST request reproduced a pre-inference 403 even after a Workers AI request succeeded with the same Worker-held credential and gateway. Cloudflare returned error code 2049, which its public AI error references do not define. Later, owner-only token verification established the Worker-held account token identity; with an authenticated gateway and the token's updated permissions, Google REST succeeded with nonzero usage, `wholesale: true`, no BYOK, and Cloudflare-billed cost. Authentication is strongly supported as a prerequisite in this staging configuration, but the intervening token-policy update prevents claiming that authentication alone was the sole cause of the earlier 403.
 
-**Why:** Both Google requests shared the same provider/model, gateway log path, 403 status, and zero token/cost usage; the second bypassed ThinkAgent entirely. The account still had a positive prepaid balance, while a catalog listing alone did not prove account-specific access.
+**Why:** The failing minimal request bypassed ThinkAgent yet matched the native 403/zero-usage pattern. After the token and gateway changes, successful Google requests were recorded as authenticated, wholesale, and billed against prepaid credits.
 
-**How to apply:** Seek safe account-specific model-access or billing-denial details before altering ThinkAgent, changing gateway authentication, adding Google credentials, or spending credits on another inference attempt.
+**How to apply:** Preserve authenticated gateway mode for this isolated Unified Billing path, keep third-party provider credentials out of it, and verify both token identity and current permissions before interpreting a future failure. Do not call the earlier requests a strict single-variable A/B test.
+
+A single native generation may invoke the model repeatedly and eventually fail on provider-side 429 even when earlier calls within that generation were successful and billed; client-side "one request" does not guarantee one upstream model call or no internal retries.
+
+**Why:** The native staging build reached the authenticated Google model and incurred Cloudflare-managed charges before the runtime reported "Too Many Requests" after internal attempts. Its failed build did not prove that the authenticated billing path failed.
+
+**How to apply:** On a native failure, stop rather than retrying the generation. Inspect gateway events and persisted project state separately; report completed/billed model calls distinctly from whether the whole build, file persistence, reconnect, and preview succeeded.
 
 For in-Worker diagnostic requests, do not assume that a normal VibeSDK bearer token or API-key exchange is administrative authentication. Stop rather than expose an inference trigger when the serving Worker has no suitable privileged internal route.
 

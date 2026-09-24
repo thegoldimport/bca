@@ -251,6 +251,7 @@ async function main() {
   let projectDeleteSucceeded = false;
   const marker = `GENERATED_ACCEPTANCE_MARKER_${slug}`;
   const aboutMarker = `ABOUT_ROUTE_MARKER_${slug}`;
+  const billingMarker = "BUILDCUSTOM_UNIFIED_OK";
   const superHash = await bcrypt.hash(superPassword, 10);
   const userHash = await bcrypt.hash(userPassword, 10);
 
@@ -285,19 +286,27 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
     const build = await request(superJar, `/api/projects/${projectId}/runtime/messages`, "POST", {
       mode: "build",
       message: billingProbe
-        ? "Create a small, valid website with a heading and a stylesheet. Keep it buildable."
+        ? `Create a minimal buildable website with a visible heading displaying exactly ${billingMarker}. Include a stylesheet. Keep it small.`
         : hostnameRequested
         ? `Create a buildable React SPA with Home at / and About at /about. Use local JavaScript in /app.js and local CSS in /styles.css, referenced from the HTML with root-relative URLs. Do not use CDN scripts or inline JavaScript. Add a visible link href="/about" and client-side navigation. Render exactly ${aboutMarker} on About only and exactly ${marker} on Home only, including on direct refresh.`
         : `Create a small valid website with a heading, a paragraph, and a stylesheet. Keep the app buildable. Include this exact visible marker in the generated app content: ${marker}`,
       displayMessage: billingProbe ? "Isolated staging billing check" : "Create an isolated acceptance website",
     });
     if (billingProbe) {
+      const rawCode = build.data?.code ?? build.data?.error?.code;
+      const rawMessage = build.data?.message ?? build.data?.error?.message;
       console.log("BILLING_PROBE " + JSON.stringify({
         status: build.status,
         durationMs: Date.now() - startedAt,
         cfRay: build.headers.get("cf-ray") || null,
         turnPresent: Boolean(build.data?.turn),
         agentIdPresent: Boolean(build.data?.agentId || build.data?.turn?.agentId),
+        errorCode: typeof rawCode === "number" && Number.isSafeInteger(rawCode) ? rawCode
+          : typeof rawCode === "string" && /^[A-Z0-9_]{1,48}$/.test(rawCode) ? rawCode : null,
+        errorMessage: typeof rawMessage === "string" &&
+          /^[a-zA-Z0-9 ,.'():/-]{1,180}$/.test(rawMessage) &&
+          !/authorization|bearer|token|secret|api.key|credential|password|https?:|header/i.test(rawMessage)
+          ? rawMessage : null,
       }));
       if (!statusIn(build, [200, 201])) {
         block("billing probe", `HTTP ${build.status}`);
@@ -309,8 +318,8 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
       let runtimeStatus = 0;
       let turnsStatus = 0;
       let turnCount = 0;
-      let samplePath: string | undefined;
-      let sampleHash: string | undefined;
+      let markerPath: string | undefined;
+      let markerHash: string | undefined;
       while (Date.now() < end) {
         const [status, files, turns] = await Promise.all([
           request(superJar, `/api/projects/${projectId}/runtime/status`),
@@ -322,22 +331,25 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
         turnsStatus = turns.status;
         turnCount = Array.isArray(turns.data?.turns) ? turns.data.turns.length : 0;
         fileList = responseFiles(files.data);
-        samplePath = fileList.find((file) => typeof file.path === "string" && /\.(tsx?|jsx?|html?|css)$/i.test(file.path))?.path;
-        if (samplePath) {
-          const content = await request(superJar, `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(samplePath)}`);
-          if (content.status === 200 && typeof content.data?.content === "string") {
-            sampleHash = createHash("sha256").update(content.data.content).digest("hex");
+        for (const file of fileList.filter((item) => typeof item.path === "string" &&
+            /\.(tsx?|jsx?|html?)$/i.test(item.path)).slice(0, 40)) {
+          const content = await request(superJar, `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(file.path!)}`);
+          if (content.status === 200 && typeof content.data?.content === "string" &&
+              content.data.content.includes(billingMarker)) {
+            markerPath = file.path;
+            markerHash = createHash("sha256").update(content.data.content).digest("hex");
+            break;
           }
         }
-        if (sampleHash && turnCount > 0) break;
+        if (markerHash && turnCount > 0) break;
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
       console.log("BILLING_PROBE_RESULT " + JSON.stringify({
         runtimeStatus, fileStatus, fileCount: fileList.length, turnsStatus, turnCount,
-        persistedContent: Boolean(sampleHash),
+        persistedMarker: Boolean(markerHash), markerPath: markerPath || null,
       }));
-      if (!samplePath || !sampleHash) {
-        block("billing probe persisted files", "no readable generated file before cleanup");
+      if (!markerPath || !markerHash || turnCount === 0) {
+        block("billing probe persisted marker", "expected marker or builder turn missing before cleanup");
         return;
       }
       const reconnectJar = new Jar();
@@ -345,7 +357,7 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
       const [reopenedFiles, reopenedContent] = login.status === 200
         ? await Promise.all([
             request(reconnectJar, `/api/projects/${projectId}/runtime/files`),
-            request(reconnectJar, `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(samplePath)}`),
+            request(reconnectJar, `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(markerPath)}`),
           ])
         : [{ status: 0, data: null }, { status: 0, data: null }];
       const reconnectHash = typeof reopenedContent.data?.content === "string"
@@ -354,9 +366,21 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
         fileList.map((file) => file.path).sort().join("\n") === responseFiles(reopenedFiles.data).map((file) => file.path).sort().join("\n");
       console.log("BILLING_PROBE_RECONNECT " + JSON.stringify({
         loginStatus: login.status, fileStatus: reopenedFiles.status, contentStatus: reopenedContent.status,
-        sameFiles, sameContent: Boolean(reconnectHash && reconnectHash === sampleHash),
+        sameFiles, sameContent: Boolean(reconnectHash && reconnectHash === markerHash),
+        markerAfterReconnect: typeof reopenedContent.data?.content === "string" &&
+          reopenedContent.data.content.includes(billingMarker),
       }));
-      expect("billing probe reconnect files", sameFiles && reconnectHash === sampleHash);
+      const reconnected = sameFiles && reconnectHash === markerHash &&
+        typeof reopenedContent.data?.content === "string" && reopenedContent.data.content.includes(billingMarker);
+      expect("billing probe reconnect files and marker", reconnected);
+      if (reconnected) {
+        // Preview deploys the existing files; it does not request another generation.
+        const preview = await request(superJar, `/api/projects/${projectId}/runtime/previews`, "POST", {});
+        console.log("BILLING_PROBE_PREVIEW " + JSON.stringify({
+          status: preview.status, urlPresent: typeof preview.data?.url === "string",
+        }));
+        expect("billing probe buildable preview", preview.status === 201 && typeof preview.data?.url === "string");
+      }
       return;
     }
     if (!statusIn(build, [200, 201])) {
