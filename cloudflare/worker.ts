@@ -8,6 +8,7 @@ import { handleContentRoute } from "./content-routes";
 import { handleDomainRoute } from "./domain-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
 import { capturePreviewImage, imageDataUri, previewImageKey, verifyPublicHostnameRoute, type BrowserRunBinding } from "./staging/preview-image";
+import { StagingPublishNotReadyError, waitForStagingAppReady } from "./staging/published-readiness";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -340,22 +341,31 @@ export default {
         }
         if (operation === "stop" && request.method === "POST") return json(await adapter.stop(runtimeProject));
         if (operation === "deployments" && request.method === "POST") {
+          const stagingTiming: Record<string, number> = {};
+          if (env.ENVIRONMENT === "staging") stagingTiming.requestStartedAt = Date.now();
           if (!canPublishInStaging(user.role)) return json({ message: "Staging publish requires a super administrator." }, { status: 403 });
           if (env.ENVIRONMENT === "staging" && !hasExactStagingGatewayConfig(env.STAGING_MANAGED_GATEWAY_URL, env.STAGING_GATEWAY, env.STAGING_MANAGED_HOSTNAME_SUFFIX)) {
             return json({ message: "Staging managed gateway is not configured." }, { status: 503 });
           }
           const settings = await env.DB.prepare("SELECT * FROM runtime_project_links WHERE project_id=?").bind(id).first<any>();
           if (settings?.hosting_provider === "custom") return json({ message: "Automatic publishing is available with BuildCustom.Ai Hosting. External hosting uses your provider's deployment process." }, { status: 409 });
-           const result = await adapter.deploy(runtimeProject);
+          const pendingKey = `pending-deployment:${id}`;
+          const pendingRaw = env.ENVIRONMENT === "staging" ? await env.STAGING_ROUTES.get(pendingKey) : null;
+          const pending = pendingRaw ? JSON.parse(pendingRaw) as {
+            slug: string; scriptName: string; result: Awaited<ReturnType<typeof adapter.deploy>>; deployedAt: number;
+          } : null;
+          const slug = settings?.subdomain_slug || project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+          if (!validSlug(slug) || (pending && pending.slug !== slug)) return json({ message: "Choose a valid publishing address or resolve the pending staging deployment." }, { status: 409 });
+          const result = pending?.result || await adapter.deploy(runtimeProject);
+          if (env.ENVIRONMENT === "staging") stagingTiming.deploymentCompletedAt = pending?.deployedAt || Date.now();
           const deploymentUrl = new URL(result.url);
           const runtimeUrl = new URL(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
           if (deploymentUrl.origin !== runtimeUrl.origin || !deploymentUrl.pathname.startsWith("/deployed/")) {
             throw new VibeSdkAdapterError("VibeSDK returned a deployment outside the isolated staging runtime.", "RUNTIME_UPSTREAM_ERROR");
           }
           if (!result.commitHash) throw new VibeSdkAdapterError("VibeSDK did not return a restorable deployment revision.", "RUNTIME_UPSTREAM_ERROR");
-          const slug = settings?.subdomain_slug || project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-          if (!validSlug(slug)) return json({ message: "Choose a valid publishing address." }, { status: 400 });
           const scriptName = deploymentScriptName(result.workersUrl, result.url);
+          if (pending && scriptName !== pending.scriptName) throw new Error("Pending staging deployment script mismatch.");
           const seo = await env.DB.prepare("SELECT * FROM seo_settings WHERE project_id=?").bind(id).first<any>();
           const previousRoute = await env.STAGING_ROUTES.get(slug);
           const previousPreview = await env.STAGING_ROUTES.get(previewImageKey(slug), "arrayBuffer");
@@ -371,8 +381,22 @@ export default {
             : env.STAGING_MANAGED_GATEWAY_URL
               ? managedStagingPublishUrl(env.STAGING_MANAGED_GATEWAY_URL, slug, env.STAGING_MANAGED_HOSTNAME_SUFFIX)
               : result.url;
+          if (pending && settings?.deployment_script_name === scriptName && settings?.deployment_url === publicUrl) {
+            const existing = await env.DB.prepare("SELECT * FROM runtime_releases WHERE project_id=? AND commit_hash=? ORDER BY id DESC LIMIT 1")
+              .bind(id, result.commitHash).first<any>();
+            if (existing) {
+              await env.STAGING_ROUTES.delete(pendingKey);
+              return json({ ...result, url: publicUrl, originUrl: result.url, release: serializeRelease(existing),
+                stagingTiming: { ...stagingTiming, alreadyCommitted: true } }, { status: 200 });
+            }
+          }
+          if (env.ENVIRONMENT === "staging" && !pending) {
+            await env.STAGING_ROUTES.put(pendingKey, JSON.stringify({ slug, scriptName, result, deployedAt: stagingTiming.deploymentCompletedAt }),
+              { expirationTtl: 3600 });
+          }
           try {
             await writePublishedRoute(env, slug, scriptName, routeMetadata(prospectiveSeo));
+            if (env.ENVIRONMENT === "staging") stagingTiming.routeKvWrittenAt = Date.now();
           } catch (error) {
             if (previousRoute === null) await env.STAGING_ROUTES.delete(slug);
             else await env.STAGING_ROUTES.put(slug, previousRoute);
@@ -382,14 +406,29 @@ export default {
           }
           if (env.ENVIRONMENT === "staging") {
             try {
-              await verifyManagedStagingRoute(env.STAGING_GATEWAY!, publicUrl, slug, scriptName);
-              if (env.STAGING_MANAGED_HOSTNAME_SUFFIX) await verifyPublicHostnameRoute(env.BROWSER, publicUrl, slug, scriptName);
+              const ready = await waitForStagingAppReady(publicUrl, env.STAGING_GATEWAY!, env.BROWSER, async () => {
+                await verifyManagedStagingRoute(env.STAGING_GATEWAY!, publicUrl, slug, scriptName);
+                stagingTiming.gatewayRouteCheckedAt ||= Date.now();
+                if (env.STAGING_MANAGED_HOSTNAME_SUFFIX) {
+                  await verifyPublicHostnameRoute(env.BROWSER, publicUrl, slug, scriptName);
+                  stagingTiming.publicHostnameCheckedAt ||= Date.now();
+                }
+              });
+              stagingTiming.readyAt = ready.firstReadyAt;
+              stagingTiming.readinessAttempts = ready.attempts;
+              stagingTiming.readinessElapsedMs = ready.elapsedMs;
+              stagingTiming.verifiedAssets = ready.assets;
             }
             catch (error) {
               if (previousRoute === null) await env.STAGING_ROUTES.delete(slug);
               else await env.STAGING_ROUTES.put(slug, previousRoute);
               if (previousPreview === null) await env.STAGING_ROUTES.delete(previewImageKey(slug));
               else await env.STAGING_ROUTES.put(previewImageKey(slug), previousPreview);
+              if (error instanceof StagingPublishNotReadyError) {
+                return json({ message: error.message, code: "PUBLISH_NOT_READY", retryAfterSeconds: 5,
+                  readiness: { attempts: error.attempts, elapsedMs: error.elapsedMs, failure: error.failure } },
+                { status: 503 });
+              }
               throw error;
             }
             try {
@@ -426,6 +465,10 @@ export default {
             );
             const results = await env.DB.batch(statements);
             release = results[results.length - 1].results?.[0];
+            if (env.ENVIRONMENT === "staging") {
+              try { await env.STAGING_ROUTES.delete(pendingKey); }
+              catch (error) { console.warn("Staging pending deployment cleanup failed:", error instanceof Error ? error.name : "unknown"); }
+            }
           } catch (error) {
             if (previousRoute === null) await env.STAGING_ROUTES.delete(slug);
             else await env.STAGING_ROUTES.put(slug, previousRoute);
@@ -433,7 +476,8 @@ export default {
             else await env.STAGING_ROUTES.put(previewImageKey(slug), previousPreview);
             throw error;
           }
-          return json({ ...result, url: publicUrl, originUrl: result.url, release: serializeRelease(release) }, { status: 201 });
+          return json({ ...result, url: publicUrl, originUrl: result.url, release: serializeRelease(release),
+            ...(env.ENVIRONMENT === "staging" ? { stagingTiming: { ...stagingTiming, releaseCommittedAt: Date.now() } } : {}) }, { status: 201 });
         }
         const turnRestore = operation.match(/^turns\/(\d+)\/restore$/);
         if (turnRestore && request.method === "POST") {

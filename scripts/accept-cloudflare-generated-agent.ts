@@ -11,6 +11,7 @@
  *   STAGING_GATEWAY_URL=https://... npx tsx scripts/accept-cloudflare-generated-agent.ts --publish
  */
 import { execFileSync } from "node:child_process";
+import { verifyStagingSpaNavigation } from "./verify-staging-spa-navigation";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,6 +27,7 @@ const GATEWAY = "https://buildcustom-apps-gateway-staging.thegoldimport.workers.
 const ORIGIN = new URL(TARGET).origin;
 const publishRequested = process.argv.includes("--publish");
 const hostnameRequested = process.argv.includes("--hostname");
+const allowMissingSeo = process.argv.includes("--allow-missing-seo");
 const gatewayArg = process.argv.find((value) => value.startsWith("--gateway="))?.slice("--gateway=".length);
 const configuredGateway = gatewayArg || process.env.STAGING_GATEWAY_URL;
 if (configuredGateway && configuredGateway.replace(/\/+$/, "") !== GATEWAY) throw new Error("STAGING_GATEWAY_URL_MUST_BE_EXACT_STAGING_GATEWAY");
@@ -116,7 +118,7 @@ async function request(jar: Jar, path: string, method = "GET", body?: unknown) {
 }
 function expect(category: string, ok: boolean, detail?: string) {
   if (ok) console.log(`PASS ${category}`);
-  else { failures.push(category); console.log(`FAIL ${category}${detail ? ` (${detail})` : ""}`); }
+  else { failures.push(category); process.exitCode = 1; console.log(`FAIL ${category}${detail ? ` (${detail})` : ""}`); }
 }
 function skip(category: string, detail: string) {
   blockers.push(`${category}:${detail}`);
@@ -124,6 +126,7 @@ function skip(category: string, detail: string) {
 }
 function block(category: string, detail: string) {
   blockers.push(`${category}:${detail}`);
+  process.exitCode = 1;
   console.log(`BLOCKER ${category} (${detail})`);
 }
 function statusIn(result: { status: number }, values: number[]) { return values.includes(result.status); }
@@ -135,8 +138,10 @@ async function checkPublicPage(url: string) {
   const response = await fetch(url, { redirect: "manual" });
   const type = response.headers.get("content-type") || "";
   const html = type.includes("text/html") ? await response.text() : "";
-  const references = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/gi)]
-    .map((match) => match[1]).filter((value) => {
+  const withoutScriptBodies = html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script>/gi, "$1</script>");
+  const references = [...withoutScriptBodies.matchAll(/<(link|script|img|source)\b[^>]*>/gi)]
+    .map(([tag]) => tag.match(/\b(?:src|href)=["']([^"']+)["']/i)?.[1])
+    .filter((value): value is string => {
       if (!value || value.startsWith("#") || /^(?:data:|mailto:|javascript:)/i.test(value)) return false;
       try {
         const target = new URL(value, url);
@@ -144,8 +149,62 @@ async function checkPublicPage(url: string) {
       } catch { return false; }
     }).filter((value, index, all) => all.indexOf(value) === index);
   const assets = await Promise.all(references.map((path) => fetch(new URL(path, url), { redirect: "manual" })
-    .then((item) => ({ status: item.status, type: item.headers.get("content-type") || "" }))));
+    .then((item) => ({ status: item.status, type: item.headers.get("content-type") || "",
+      cache: item.headers.get("cf-cache-status"), age: item.headers.get("age") }))));
   return { response, html, references, assets };
+}
+
+function responseMeta(response: Response) {
+  return { status: response.status, type: response.headers.get("content-type"),
+    cache: response.headers.get("cf-cache-status"), age: response.headers.get("age"),
+    cacheControl: response.headers.get("cache-control") };
+}
+
+async function observeReadiness(url: string, originUrl: string, marker: string, aboutMarker: string) {
+  const started = Date.now();
+  const seen = new Set<string>();
+  let last: unknown;
+  for (let attempt = 0; attempt < 12 && Date.now() - started < 45000; attempt++) {
+    const elapsed = Date.now() - started;
+    const origin = await fetch(originUrl, { redirect: "manual" });
+    const route = await fetch(new URL("_buildcustom/route-check", url), { redirect: "manual" });
+    const page = await checkPublicPage(url);
+    const assets = page.references.map((ref, index) => ({ path: new URL(ref, url).pathname, ...page.assets[index] }));
+    const css = assets.filter((asset) => /\.css$/i.test(asset.path));
+    const js = assets.filter((asset) => /\.js$/i.test(asset.path));
+    const scripts = await Promise.all(js.filter((asset) => asset.status === 200 && /javascript|ecmascript/i.test(asset.type))
+      .map((asset) => fetch(new URL(asset.path, url)).then((response) => response.text())));
+    const htmlOkay = page.response.status === 200 && page.response.headers.get("content-type")?.includes("text/html");
+    const cssOkay = css.length > 0 && css.every((asset) => asset.status === 200 && asset.type.includes("text/css"));
+    const jsOkay = js.length > 0 && js.every((asset) => asset.status === 200 && /javascript|ecmascript/i.test(asset.type));
+    const checks = { script: origin.status === 200, route: route.status === 200, html: Boolean(htmlOkay), css: cssOkay, js: jsOkay,
+      marker: page.html.includes(marker) || scripts.some((body) => body.includes(marker)) };
+    for (const [layer, okay] of Object.entries(checks)) if (okay && !seen.has(layer)) {
+      console.log(`READY ${layer} elapsedMs=${elapsed}`);
+      seen.add(layer);
+    }
+    if (attempt === 0 || !Object.values(checks).every(Boolean)) {
+      last = { elapsedMs: elapsed, origin: responseMeta(origin), route: responseMeta(route),
+        html: responseMeta(page.response), assets: assets.slice(0, 12), checks };
+      console.log(`READINESS_SAMPLE ${JSON.stringify(last)}`);
+    }
+    if (Object.values(checks).every(Boolean)) {
+      try {
+        const home = renderPublicPage(url).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+        const about = renderPublicPage(new URL("about", url).toString()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+        if (home.includes(marker) && !home.includes(aboutMarker) && about.includes(aboutMarker) && !about.includes(marker)) {
+          console.log(`READY browser-render elapsedMs=${Date.now() - started}`);
+          return { ready: true, elapsedMs: Date.now() - started };
+        }
+        console.log(`READINESS_RENDER elapsedMs=${Date.now() - started} homeMarker=${home.includes(marker)} aboutMarker=${about.includes(aboutMarker)}`);
+      } catch (error) {
+        console.log(`READINESS_RENDER_ERROR elapsedMs=${Date.now() - started} kind=${error instanceof Error ? error.name : "unknown"}`);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(2000, 500 + attempt * 250)));
+  }
+  console.log(`READINESS_TIMEOUT elapsedMs=${Date.now() - started} last=${JSON.stringify(last)}`);
+  return { ready: false, elapsedMs: Date.now() - started };
 }
 
 function renderPublicPage(url: string): string {
@@ -218,12 +277,12 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
     const build = await request(superJar, `/api/projects/${projectId}/runtime/messages`, "POST", {
       mode: "build",
       message: hostnameRequested
-        ? `Create a buildable React SPA with a home page at / and an About page at /about. Include a visible root-relative link href="/about" on the home page. Render the exact text ${aboutMarker} on the About page only, including on direct refresh. Use a stylesheet. Keep this exact visible marker on the home page only: ${marker}`
+        ? `Create a buildable React SPA with Home at / and About at /about. Use local JavaScript in /app.js and local CSS in /styles.css, referenced from the HTML with root-relative URLs. Do not use CDN scripts or inline JavaScript. Add a visible link href="/about" and client-side navigation. Render exactly ${aboutMarker} on About only and exactly ${marker} on Home only, including on direct refresh.`
         : `Create a small valid website with a heading, a paragraph, and a stylesheet. Keep the app buildable. Include this exact visible marker in the generated app content: ${marker}`,
       displayMessage: "Create an isolated acceptance website",
     });
     if (!statusIn(build, [200, 201])) {
-      block("generated-agent build", `runtime returned HTTP ${build.status}`);
+      block("generated-agent build", `runtime returned HTTP ${build.status}${typeof build.data?.message === "string" ? `: ${build.data.message.slice(0, 200)}` : ""}`);
       return;
     }
     agentId = build.data?.agentId || build.data?.turn?.agentId;
@@ -260,7 +319,8 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
         : "Add one short sentence to the page while keeping the app buildable.",
       displayMessage: "Make a small isolated edit",
     });
-    expect("generated-agent normal edit", statusIn(edit, [200, 201]) && Boolean(edit.data?.turn || edit.data?.message));
+    expect("generated-agent normal edit", statusIn(edit, [200, 201]) && Boolean(edit.data?.turn || edit.data?.message),
+      `HTTP ${edit.status}${typeof edit.data?.message === "string" ? `: ${edit.data.message.slice(0, 160)}` : ""}`);
     const preview = await request(superJar, `/api/projects/${projectId}/runtime/previews`, "POST", {});
     expect("generated-agent preview", statusIn(preview, [200, 201]) && typeof preview.data?.url === "string");
 
@@ -270,7 +330,8 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
     if (ownerSuggestions.status === 200) {
       expect("SEO suggestions provider response", Boolean(ownerSuggestions.data?.projectSummary && ownerSuggestions.data?.metaTitle));
     } else if (ownerSuggestions.status === 503) {
-      skip("SEO suggestions provider response", "staging provider secret is not configured");
+      if (allowMissingSeo) console.log("SKIP SEO suggestions provider response (staging provider secret is not configured; separate owner action)");
+      else skip("SEO suggestions provider response", "staging provider secret is not configured");
     } else if (ownerSuggestions.status === 502) {
       block("SEO suggestions provider failure", "provider returned HTTP 502");
     } else {
@@ -289,7 +350,10 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
     if (!publishRequested) {
       skip("managed publish", "optional; rerun with --publish and an isolated STAGING_GATEWAY_URL");
     } else {
+      const publishRequestedAt = Date.now();
       const published = await request(superJar, `/api/projects/${projectId}/runtime/deployments`, "POST", {});
+      console.log(`PUBLISH_TIMING ${JSON.stringify({ clientRequestCompletedAt: Date.now(), clientRequestStartedAt: publishRequestedAt,
+        ...(published.data?.stagingTiming || {}) })}`);
       if (!statusIn(published, [200, 201])) {
         const detail = typeof published.data?.message === "string" ? published.data.message.slice(0, 200) : "no error detail";
         block("managed publish", `runtime returned HTTP ${published.status}: ${detail}`);
@@ -297,6 +361,10 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
         const release = published.data?.release;
         const route = runKvGet(slug);
         const publicUrl = hostnameRequested ? `https://${slug}.staging.buildcustom.ai/` : `${gateway}/p/${slug}/`;
+        if (hostnameRequested && typeof published.data?.originUrl === "string") {
+          const observed = await observeReadiness(publicUrl, published.data.originUrl, marker, aboutMarker);
+          expect("managed publish bounded public readiness", observed.ready);
+        }
         const returnedScript = [published.data?.workersUrl, published.data?.originUrl, published.data?.url]
           .map((value) => typeof value === "string" ? value.match(/\/deployed\/([^/]+)/)?.[1] : null)
           .find(Boolean);
@@ -310,6 +378,8 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
           && releases.data.releases.some((item: any) => item.deploymentUrl === publicUrl && item.commitHash === release?.commitHash));
         if (!route.supported) block("managed publish route KV", "KV CLI read failed");
         else expect("managed publish route KV", route.present && routeValue?.scriptName === returnedScript);
+        const pendingAfterPublish = runKvGet(`pending-deployment:${projectId}`);
+        expect("managed publish pending marker cleared", pendingAfterPublish.supported && !pendingAfterPublish.present);
         const routeCheck = await fetch(`${publicUrl}_buildcustom/route-check`, { redirect: "manual" });
         let routeCheckData: any = null;
         try { routeCheckData = await routeCheck.json(); } catch { /* invalid route-check */ }
@@ -326,6 +396,7 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
         const scriptBodies = await Promise.all(appScripts.map((ref) => fetch(new URL(ref, publicUrl)).then((response) => response.text())));
         expect("managed publish expected generated app", page.html.includes(marker) || scriptBodies.some((body) => body.includes(marker)));
         if (hostnameRequested) {
+          expect("managed publish local JavaScript", appScripts.length > 0);
           const nested = await fetch(`${publicUrl}about?from=direct`, { redirect: "manual" });
           expect("managed publish hostname-root nested request", nested.status === 200 && (nested.headers.get("content-type") || "").includes("text/html"));
           expect("managed publish hostname-root stylesheet", page.references.some((ref) =>
@@ -335,6 +406,8 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
           expect("managed publish hostname-root rendered SPA navigation",
             homeDom.includes(marker) && !homeDom.includes(aboutMarker)
             && aboutDom.includes(aboutMarker) && !aboutDom.includes(marker));
+          const navigation = await verifyStagingSpaNavigation(publicUrl, marker, aboutMarker);
+          expect("managed publish SPA click and About refresh", navigation.home && navigation.click && navigation.refresh);
         }
         expect("managed publish SEO route metadata", routeValue?.metadata?.title === seoTitle
           && routeValue?.metadata?.allowIndexing === false && page.html.includes(seoTitle));
@@ -396,7 +469,8 @@ DELETE FROM users WHERE id IN (${sqlQuote(superId)},${sqlQuote(userId)});`);
       }
       // Route and preview deletion are owned by the control-plane delete flow.
       // Never delete guessed keys here; verify both are absent instead.
-      const cleanupKv = [slug, `preview:${slug}`].map((key) => ({ key, result: runKvGet(key) }));
+      const cleanupKv = [slug, `preview:${slug}`, `pending-deployment:${projectId}`]
+        .map((key) => ({ key, result: runKvGet(key) }));
       for (const { key, result: route } of cleanupKv) {
         if (!route.supported) block("generated-agent KV cleanup", `${key} verification unavailable`);
         else if (route.present) block("generated-agent KV cleanup", `${key} remains after API deletion`);

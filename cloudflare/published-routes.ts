@@ -71,6 +71,7 @@ export async function deleteProjectWithRoutes(env: RoutesEnv & { DB: D1Database 
   if (slug && !slugPattern.test(slug)) throw new Error("Invalid stored publishing address; route cleanup is required before deleting this project");
   const keys = [
     ...(slug && slugPattern.test(slug) ? [slug, `preview:${slug}`] : []),
+    ...(env.ENVIRONMENT === "staging" ? [`pending-deployment:${projectId}`] : []),
     ...claims.map(claim => `hostname:${claim.hostname}`),
   ];
   const saved = new Map<string, string | null>();

@@ -1,0 +1,426 @@
+Good. Continue from the latest staging report.
+
+Do NOT reopen completed architecture work.
+
+We now know:
+
+- *.staging.buildcustom.ai is live.
+- Wildcard DNS works.
+- Wildcard TLS works.
+- The staging gateway is publicly reachable.
+- Unmapped hostnames correctly return Project not found.
+- Publish creates and persists a root hostname URL.
+- Public gateway identity verification works.
+- Published root returned HTTP 200 HTML.
+- /about returned HTML.
+- Route KV works.
+- Release/deployment metadata works.
+- Screenshot/preview works.
+- Cleanup works.
+- A later probe of the SAME generated script successfully returned the
+  stylesheet as text/css and rendered distinct Home/About markers.
+- 114 automated tests pass.
+- Typecheck/build/dry-runs pass.
+- Replit-off baseline acceptance passes.
+
+The remaining immediate generated-app failure therefore appears to be
+related to READINESS / TIMING immediately after publish until proven
+otherwise.
+
+TASK:
+
+Resolve that specific issue and complete Test A.
+
+Do NOT work on external customer custom domains in this task.
+
+Do NOT create another domain.
+
+Do NOT change production.
+
+Do NOT work on the old VibeSDK source.
+
+Do NOT modify the frozen restore fixes.
+
+==================================================
+1. REPRODUCE THE IMMEDIATE POST-PUBLISH CONDITION
+==================================================
+
+Using a disposable staging generated app:
+
+publish normally through BuildCustom.
+
+Immediately record timestamps for:
+
+- VibeSDK deployment completion
+- dispatch script availability
+- route KV write
+- gateway route-check
+- public hostname first request
+- HTML first success
+- CSS first success
+- JS first success
+- browser-render first success
+
+We need to determine exactly WHICH layer becomes ready later than the
+others.
+
+Do not use arbitrary long sleeps to hide the issue.
+
+==================================================
+2. CLASSIFY THE FAILURE
+==================================================
+
+Determine whether the temporary failure is caused by:
+
+A. Workers for Platforms deployment propagation
+
+B. dispatch namespace/script propagation
+
+C. staging gateway routing/cache propagation
+
+D. route KV propagation
+
+E. generated app asset generation/build completion
+
+F. HTML becoming available before JS/CSS assets
+
+G. Browser Rendering starting before the generated app is actually ready
+
+H. another specific cause
+
+Capture the actual HTTP status, content type, and small diagnostic
+response metadata for failed readiness checks.
+
+Do not dump generated application contents unnecessarily.
+
+==================================================
+3. DEFINE "PUBLISHED AND READY"
+==================================================
+
+A BuildCustom publish should NOT be considered fully ready merely because
+the deployment API returned success.
+
+Define a bounded readiness invariant.
+
+For a normal generated web app, publication readiness should verify at
+minimum:
+
+1. managed hostname resolves through the staging gateway
+2. root request returns expected successful HTML
+3. referenced required JS/CSS assets return successful responses
+4. returned MIME types are appropriate
+5. generated application can render through Browser Rendering
+6. the expected application marker/content is present after render
+
+For an SPA test app also verify:
+
+7. a nested client route renders correctly
+8. refreshing the nested route works
+
+Do not hardcode assumptions that every generated app must have a
+specific filename such as /style.css or /main.js.
+
+Parse the published HTML or use the generated-app metadata to identify
+the actual required assets.
+
+==================================================
+4. IMPLEMENT BOUNDED READINESS VERIFICATION
+==================================================
+
+If the issue is normal Cloudflare propagation/eventual readiness,
+implement the SMALLEST appropriate readiness mechanism.
+
+Requirements:
+
+- bounded
+- deterministic
+- short retry interval
+- maximum timeout
+- clear failure
+- no infinite polling
+- no arbitrary fixed 30/60 second sleep
+- no duplicate deployment
+- no duplicate release
+- no duplicate route creation
+
+Example conceptually:
+
+deployment completes
+→ route created
+→ poll managed hostname readiness
+→ validate required assets
+→ validate rendered app
+→ mark publish ready
+
+Use reasonable backoff/polling based on the observed propagation time.
+
+Do not over-engineer this into a workflow/orchestration system.
+
+==================================================
+5. DISTINGUISH DEPLOYED FROM READY
+==================================================
+
+Inspect the current BuildCustom publish API contract.
+
+If the current endpoint tells the frontend "publish succeeded" before
+the managed app is actually usable, correct that behavior in the
+smallest compatible way.
+
+The frontend should not receive a confidently usable published URL until
+the bounded readiness requirement has succeeded.
+
+If readiness times out:
+
+return a useful non-destructive error/status.
+
+Do NOT automatically create another deployment.
+
+The original deployment may still become healthy.
+
+Do not leave duplicate releases/routes.
+
+==================================================
+6. CACHE CHECK
+==================================================
+
+Explicitly determine whether Cloudflare caching contributes to the
+immediate mismatch.
+
+Check:
+
+- gateway responses
+- HTML
+- JS
+- CSS
+- route lookup behavior
+
+If stale/error responses are being cached during propagation, fix the
+specific caching behavior.
+
+Do NOT broadly disable Cloudflare caching without evidence.
+
+==================================================
+7. TEST WITH A REALISTIC SPA
+==================================================
+
+Use a disposable staging application that contains:
+
+- Home page
+- About page
+- CSS
+- JavaScript
+- client-side navigation
+- at least one root-relative asset if appropriate
+
+Publish it to something like:
+
+<slug>.staging.buildcustom.ai
+
+Verify through the actual public hostname:
+
+- /
+- HTML
+- CSS
+- JS
+- assets
+- rendered Home marker
+- navigation to About
+- /about direct request
+- browser refresh on /about
+- rendered About marker
+
+Do not use /p/<slug>/ as the acceptance URL.
+
+==================================================
+8. REPEATABILITY TEST
+==================================================
+
+Once the readiness behavior is fixed:
+
+perform at least 3 fresh disposable publish cycles.
+
+For EACH cycle verify:
+
+publish
+→ hostname ready
+→ HTML
+→ JS
+→ CSS
+→ Browser Render
+→ nested SPA route
+→ screenshot
+→ release metadata
+→ cleanup
+
+The acceptance should pass without a human waiting and retrying later.
+
+Report actual observed readiness time for each run.
+
+This gives us evidence that the fix is deterministic rather than a
+lucky retry.
+
+==================================================
+9. REPLIT-OFF TEST
+==================================================
+
+After the 3-cycle staging test passes:
+
+stop the Replit development server.
+
+Unset DATABASE_URL from the acceptance environment.
+
+Perform one additional complete disposable generated-app cycle.
+
+Verify:
+
+agent creation
+→ generation
+→ edit
+→ files
+→ preview
+→ publish
+→ hostname readiness
+→ HTML/assets
+→ Browser Render
+→ nested route
+→ screenshot
+→ cleanup
+
+No request may fall back to:
+
+ai-build-studio.replit.app
+
+Restore the Replit development server afterward.
+
+==================================================
+10. SEO KEY
+==================================================
+
+Do not let the missing staging Google key block this readiness task.
+
+At the END, check whether an appropriate staging
+GOOGLE_AI_STUDIO_API_KEY is already securely available.
+
+Do not print it.
+
+If none exists, simply report:
+
+OWNER ACTION REQUIRED — GOOGLE_AI_STUDIO_API_KEY
+
+and tell me the simplest exact action needed.
+
+We will close that separately.
+
+==================================================
+11. EXTERNAL CUSTOM DOMAINS
+==================================================
+
+Do NOT attempt Test B during this task.
+
+We already have separate evidence that the Buyer Magnets custom-domain
+architecture works.
+
+The inability to safely create another Cloudflare for SaaS hostname
+inside the protected production zone should NOT block completion of the
+BuildCustom-hosted staging environment.
+
+Record external customer custom-domain staging as:
+
+SEPARATE PRODUCTION/CUTOVER VALIDATION
+
+not as a blocker for resolving Test A.
+
+Do not modify Buyer Magnets.
+
+==================================================
+12. PRODUCTION SAFETY
+==================================================
+
+Do NOT modify:
+
+- production control plane
+- production D1
+- active production VibeSDK namespaces
+- protected VibeSDK Worker
+- Test1
+- TaskFlow
+- Buyer Magnets
+- production gateway
+- production route KV
+- production dispatch namespace
+- *.apps.buildcustom.ai
+- app.buildcustom.ai
+- production custom hostnames
+
+Everything in this task stays isolated staging.
+
+==================================================
+13. TESTS
+==================================================
+
+Run:
+
+- existing automated tests
+- new readiness regression tests
+- typecheck
+- Node production build
+- Cloudflare build
+- Wrangler staging dry-runs
+- live staging acceptance
+
+Do not weaken an assertion just to make acceptance pass.
+
+==================================================
+14. FINAL REPORT
+==================================================
+
+Return:
+
+1. exact immediate post-publish failure cause
+2. layer that was not ready
+3. evidence
+4. observed propagation/readiness timing
+5. code change made
+6. readiness invariant
+7. retry/backoff behavior
+8. timeout behavior
+9. caching findings
+10. SPA test result
+11. root HTML result
+12. CSS result
+13. JS result
+14. nested route result
+15. Browser Rendering result
+16. screenshot result
+17. three-cycle repeatability results with readiness times
+18. Replit-off generated-app result
+19. automated test count
+20. typecheck/build results
+21. cleanup result
+22. SEO key status
+23. remaining blockers
+24. final classification
+
+Use one of:
+
+A. TEST A COMPLETE
+
+B. TEST A COMPLETE — SEO OWNER ACTION REQUIRED
+
+C. TEST A NOT COMPLETE
+
+==================================================
+15. STOP
+==================================================
+
+If Test A passes, STOP.
+
+Do not proceed to production.
+
+Do not attach app.buildcustom.ai.
+
+Do not deploy the frozen VibeSDK fixes to production.
+
+Do not perform external custom-domain Test B.
+
+The next production migration step will be separately approved.

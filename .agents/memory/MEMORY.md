@@ -25,3 +25,4 @@
 - [Exact patch artifacts](exact-patch-artifacts.md) — command output capture can change whitespace; verify generated unified diffs apply to their pinned base.
 - [External Worker provenance](external-worker-provenance.md) — a matching bundle method and asset list can narrow source candidates, not identify a deleted upload checkout.
 - [Cloudflare container sizing](cloudflare-container-sizing.md) — container validation requires enough memory per vCPU and caps disk relative to memory.
+- [Staging readiness evidence](staging-readiness-evidence.md) — do not infer propagation from raw HTML markers in a JS SPA; timestamp asset, route, and rendered checks separately.
