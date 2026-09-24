@@ -1,0 +1,532 @@
+Good. We accept the latest report.
+
+IMPORTANT:
+
+The staging HOSTNAME + PUBLISH path is now considered PROVEN unless new
+evidence shows an actual defect.
+
+Three fresh publish sequences passed:
+
+- *.staging.buildcustom.ai hostname routing
+- route identity
+- HTTP 200 HTML
+- CSS with correct MIME
+- JS with correct MIME
+- Browser Rendering
+- Home view
+- About view
+- /about direct refresh
+- SPA click navigation
+- screenshot
+- release metadata
+- cleanup
+
+Observed server-side readiness checks:
+
+4.155 s
+10.392 s
+4.031 s
+
+The readiness gate is implemented.
+
+118 automated tests pass.
+
+DO NOT keep investigating publish propagation.
+
+DO NOT redesign the gateway.
+
+DO NOT redesign hostname routing.
+
+DO NOT work on external custom domains.
+
+We now have TWO actual runtime blockers:
+
+1. generation sometimes returns:
+   HTTP 409: Payment Required
+
+2. editing sometimes returns:
+   HTTP 409: Durable Object instance is no longer active
+
+TASK:
+
+Find and fix ONLY these isolated staging VibeSDK runtime failures, then
+rerun clean end-to-end acceptance.
+
+==================================================
+1. PAYMENT REQUIRED — TRACE EXACT SOURCE
+==================================================
+
+First reproduce or trace:
+
+HTTP 409: Payment Required
+
+Do NOT assume what it means.
+
+Determine EXACTLY which component generates this response.
+
+Trace:
+
+BuildCustom staging control plane
+→ VibeSDK adapter
+→ staging VibeSDK Worker
+→ ThinkAgent
+→ AI/provider/gateway
+→ response
+
+Identify:
+
+- exact HTTP request that receives 409
+- which Worker/component returns it
+- whether the body originates in BuildCustom, VibeSDK, AI Gateway,
+  provider, quota system, or another service
+- relevant structured error/code
+- whether it occurs before ThinkAgent generation begins or during model
+  execution
+- whether it is tied to account/provider quota, credits, credentials,
+  AI Gateway configuration, model access, or application logic
+
+Do not expose secret values.
+
+Do not "fix" this by converting the error to 200.
+
+We need the actual source.
+
+==================================================
+2. CHECK STAGING AI CONFIGURATION
+==================================================
+
+Inventory ONLY the names/configuration paths involved in staging
+generation.
+
+Check:
+
+- model/provider selected
+- AI Gateway configuration
+- provider credential presence
+- account/billing/quota status that can be safely inspected
+- staging Worker bindings
+- staging Worker secrets
+- VibeSDK provider configuration
+- ThinkAgent model configuration
+
+Compare WORKING staging generation requests with the failing request.
+
+Look for a configuration difference.
+
+Do not change production credentials.
+
+Do not print secrets.
+
+==================================================
+3. DETERMINE WHETHER PAYMENT REQUIRED IS OUR CODE
+==================================================
+
+Search the BuildCustom and VibeSDK source for:
+
+Payment Required
+
+and:
+
+402
+409
+PAYMENT_REQUIRED
+credits
+quota
+billing
+balance
+
+Determine whether our code intentionally maps any upstream condition to:
+
+409 Payment Required
+
+If so, document:
+
+original upstream status
+original upstream error class
+mapping location
+reason for mapping
+
+Do not preserve a misleading 409 if it is accidentally masking the real
+upstream error.
+
+If this is an error-mapping bug, fix the mapping narrowly.
+
+==================================================
+4. DETERMINE WHETHER PAYMENT REQUIRED IS PROVIDER-SIDE
+==================================================
+
+If the error originates from the AI provider / AI Gateway:
+
+identify exactly what is missing or exhausted.
+
+Examples could include:
+
+- provider billing
+- provider credits
+- AI Gateway configuration
+- provider API key
+- model access
+- account quota
+
+Do NOT guess.
+
+If OWNER ACTION is required, stop changing code for this blocker and
+report the exact owner action.
+
+==================================================
+5. DURABLE OBJECT EDIT FAILURE
+==================================================
+
+Separately investigate:
+
+HTTP 409
+"Durable Object instance is no longer active"
+
+This happened during a normal edit against the isolated staging runtime.
+
+Trace the complete edit path:
+
+BuildCustom control plane
+→ VibeSDK adapter
+→ ThinkAgent lookup
+→ Durable Object instance
+→ edit execution
+
+Determine why the DO reference/session is stale or inactive.
+
+==================================================
+6. CLASSIFY THE DO FAILURE
+==================================================
+
+Determine whether the failure is caused by:
+
+A. stale Durable Object stub/reference
+
+B. DO eviction/restart
+
+C. Worker deployment replacing an active runtime instance
+
+D. stale WebSocket/session
+
+E. agent reconnect logic
+
+F. request routed to obsolete runtime state
+
+G. test cleanup racing with edit
+
+H. staging deployment occurring between generation and edit
+
+I. another specific cause
+
+Do not speculate in the final report.
+
+Find evidence.
+
+==================================================
+7. EXPECTED DURABLE OBJECT BEHAVIOR
+==================================================
+
+A normal Durable Object restart/eviction should not permanently break a
+BuildCustom project.
+
+The durable identity/state should survive while the runtime reconnects
+to the appropriate instance.
+
+Determine whether the current VibeSDK client/adapter incorrectly treats:
+
+"Durable Object instance is no longer active"
+
+as a permanent application error when it should perform a safe
+reconnect/retry.
+
+If Cloudflare documents this as a transient condition and retry is
+appropriate, implement the SMALLEST safe retry/reconnect behavior.
+
+Requirements:
+
+- bounded
+- idempotent where required
+- no duplicate user edit
+- no duplicate generation
+- no duplicate release
+- no duplicate agent
+- no state corruption
+- clear terminal error if reconnect fails
+
+Do not add a queue/workflow/orchestration layer.
+
+==================================================
+8. CHECK WHETHER OUR ACCEPTANCE HARNESS CAUSES IT
+==================================================
+
+The acceptance harness has created/deleted multiple disposable projects,
+agents, scripts, browser sessions, and staging deployments.
+
+Determine whether the DO error occurs in the PRODUCT or is caused by the
+TEST HARNESS.
+
+Specifically check whether the harness:
+
+- deletes something too early
+- closes an agent/session before edit
+- redeploys VibeSDK between operations
+- uses a stale agent ID
+- uses a stale WebSocket
+- races cleanup
+- races Worker deployment
+- reuses disposed state
+
+If this is a harness defect:
+
+fix the harness.
+
+Do NOT change product runtime behavior to compensate for a broken test.
+
+==================================================
+9. DO NOT TOUCH THE FROZEN RESTORE FIXES
+==================================================
+
+The existing verified:
+
+- SpaceDO restore fix
+- ThinkAgent synchronization fix
+
+remain frozen.
+
+Do not refactor them.
+
+Do not reopen restore investigation.
+
+If the DO failure happens near those code paths, inspect carefully, but
+do not modify them unless you can demonstrate they are the direct cause.
+
+==================================================
+10. DO NOT TOUCH PUBLISHING UNLESS NECESSARY
+==================================================
+
+The new readiness gate remains.
+
+Do not change:
+
+- *.staging.buildcustom.ai architecture
+- staging gateway
+- route KV architecture
+- screenshot architecture
+- release architecture
+- publish readiness invariant
+
+unless the runtime investigation produces direct evidence that one of
+them causes the runtime failure.
+
+==================================================
+11. AFTER FIXING THE TWO BLOCKERS
+==================================================
+
+Run THREE fresh COMPLETE end-to-end staging cycles.
+
+Not merely publish cycles.
+
+Each cycle must perform:
+
+1. authenticate
+2. create project
+3. create/reconnect generated agent
+4. generation
+5. verify generation completes
+6. list files
+7. read generated files
+8. preview
+9. normal edit
+10. verify edit persisted
+11. publish
+12. hostname readiness
+13. root HTML
+14. CSS
+15. JS
+16. Browser Rendering
+17. Home marker
+18. About marker
+19. /about refresh
+20. screenshot
+21. release metadata
+22. cleanup
+
+ALL THREE must pass without:
+
+- Payment Required
+- inactive Durable Object
+- manual retry
+- human waiting
+- restarting Workers
+- rerunning a failed test manually
+
+Record timing for:
+
+generation
+edit
+publish readiness
+
+==================================================
+12. THEN RUN REPLIT-OFF CYCLE
+==================================================
+
+Only after 3/3 complete cycles pass:
+
+stop the Replit development server.
+
+Unset DATABASE_URL.
+
+Run ONE additional complete cycle:
+
+auth
+→ project
+→ agent
+→ generation
+→ files
+→ preview
+→ edit
+→ publish
+→ hostname
+→ HTML/assets
+→ Browser Render
+→ nested route
+→ screenshot
+→ release
+→ cleanup
+
+No request may use:
+
+ai-build-studio.replit.app
+
+Restore Replit development server afterward.
+
+==================================================
+13. GOOGLE SEO KEY
+==================================================
+
+Do NOT let SEO block investigation of these runtime failures.
+
+We already know:
+
+OWNER ACTION REQUIRED — GOOGLE_AI_STUDIO_API_KEY
+
+Do not copy an unconfirmed Replit key into Cloudflare automatically.
+
+At the end, remind me of the owner action.
+
+We will configure the staging SEO key separately.
+
+==================================================
+14. EXTERNAL CUSTOM DOMAINS
+==================================================
+
+Do NOT work on external custom-domain Test B.
+
+It remains:
+
+SEPARATE PRODUCTION/CUTOVER VALIDATION
+
+Do not create another zone/domain.
+
+Do not touch Buyer Magnets.
+
+==================================================
+15. PRODUCTION SAFETY
+==================================================
+
+Do NOT modify:
+
+- production control plane
+- production D1
+- active production VibeSDK namespaces
+- protected production VibeSDK Worker
+- Test1
+- TaskFlow
+- Buyer Magnets
+- production gateway
+- production route KV
+- production dispatch namespace
+- *.apps.buildcustom.ai
+- app.buildcustom.ai
+- production custom hostnames
+
+Everything stays in isolated staging.
+
+==================================================
+16. TESTS
+==================================================
+
+After any fix run:
+
+- full automated tests
+- runtime regression tests
+- readiness regression tests
+- typecheck
+- Node production build
+- Cloudflare build
+- Wrangler staging dry-runs
+
+Do not weaken assertions to make acceptance pass.
+
+==================================================
+17. FINAL REPORT
+==================================================
+
+Return:
+
+1. Payment Required root cause
+2. component producing it
+3. original status/error if remapped
+4. configuration issue if any
+5. code change if any
+6. owner action if any
+7. inactive Durable Object root cause
+8. whether product or harness caused it
+9. reconnect/retry behavior if changed
+10. duplicate-operation protections
+11. Cycle 1 generation result/time
+12. Cycle 1 edit result/time
+13. Cycle 1 publish result/time
+14. Cycle 2 generation result/time
+15. Cycle 2 edit result/time
+16. Cycle 2 publish result/time
+17. Cycle 3 generation result/time
+18. Cycle 3 edit result/time
+19. Cycle 3 publish result/time
+20. Replit-off cycle result
+21. automated test count
+22. typecheck/build results
+23. cleanup result
+24. remaining blockers
+25. exact owner action for staging Google SEO key
+26. final classification
+
+Use:
+
+A. RUNTIME ACCEPTANCE COMPLETE
+
+only if 3/3 complete cycles plus the Replit-off cycle pass.
+
+B. RUNTIME CODE COMPLETE — OWNER ACTION REQUIRED
+
+if the only remaining runtime blocker is confirmed external
+billing/quota/credential configuration requiring me.
+
+C. RUNTIME ACCEPTANCE NOT COMPLETE
+
+if generation/edit remains unreliable.
+
+==================================================
+18. STOP
+==================================================
+
+Do not proceed into production.
+
+Do not attach app.buildcustom.ai.
+
+Do not deploy the frozen VibeSDK fixes to production.
+
+Do not perform external custom-domain Test B.
+
+Find and resolve the generation/edit runtime blockers, prove repeatable
+end-to-end staging operation, and STOP.

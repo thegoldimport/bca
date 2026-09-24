@@ -32,6 +32,13 @@ export class VibeSdkAdapterError extends Error {
   }
 }
 
+export function runtimeBuildFailure(lastError?: string, stopped = false): VibeSdkAdapterError | null {
+  // A WebSocket error does not carry the upstream HTTP status. It is not a project conflict.
+  if (lastError) return new VibeSdkAdapterError(lastError, "RUNTIME_UPSTREAM_ERROR");
+  if (stopped) return new VibeSdkAdapterError("Build stopped.", "RUNTIME_UPSTREAM_ERROR", 409);
+  return null;
+}
+
 export function validateRuntimeConfig(env: VibeSdkEnv): { runtimeUrl: string; apiKey: string } {
   const runtimeUrl = env.VIBESDK_RUNTIME_URL?.trim().replace(/\/+$/, "");
   const apiKey = env.VIBESDK_API_KEY?.trim();
@@ -385,7 +392,8 @@ export function createVibeSdkAdapter(env: VibeSdkEnv) {
         session.send(initialGeneration ? { type: "generate_all" } : { type: "user_suggestion", message, images });
         await completed;
         const state = session.state.generation;
-        if (state.status === "stopped" || session.state.lastError) throw new VibeSdkAdapterError(session.state.lastError || "Build stopped.", "RUNTIME_UPSTREAM_ERROR", 409);
+        const failure = runtimeBuildFailure(session.state.lastError, state.status === "stopped");
+        if (failure) throw failure;
         const changedFiles = [...session.files.entries()].filter(([path, content]) => before.get(path) !== content).map(([path, content]) => ({ path, change: before.has(path) ? "modified" : "added", size: content.length }));
         return { agentId: session.agentId, message: session.state.lastConversationResponse?.message || "Completed your request.", files: session.files.size, previewUrl: session.state.preview?.previewURL || null, changedFiles, commitHash: session.state.lastDeployedCommit || null, activity: [] as RuntimeActivity[] };
       });

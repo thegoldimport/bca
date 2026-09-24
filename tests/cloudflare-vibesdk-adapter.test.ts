@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hydratedGenerationRunning, parseNdjson, publicRuntimeConfig, serviceBindingUrl, validateRuntimeConfig, VibeSdkAdapterError } from "../cloudflare/staging/vibesdk-adapter";
+import { hydratedGenerationRunning, parseNdjson, publicRuntimeConfig, runtimeBuildFailure, serviceBindingUrl, validateRuntimeConfig, VibeSdkAdapterError } from "../cloudflare/staging/vibesdk-adapter";
 
 test("requires an HTTPS runtime and API key", () => {
   assert.throws(() => validateRuntimeConfig({}), (error: unknown) => error instanceof VibeSdkAdapterError && error.code === "RUNTIME_UNCONFIGURED");
@@ -32,4 +32,13 @@ test("reads active generation from nested VibeSDK hydration state", () => {
   assert.equal(hydratedGenerationRunning({ type: "agent_connected", state: { shouldBeGenerating: true } }), true);
   assert.equal(hydratedGenerationRunning({ type: "cf_agent_state", state: { shouldBeGenerating: false } }), false);
   assert.equal(hydratedGenerationRunning({ type: "agent_connected", state: {} }), null);
+});
+
+test("runtime WebSocket errors are upstream failures, not project conflicts", () => {
+  const failure = runtimeBuildFailure("Payment Required");
+  assert.equal(failure?.message, "Payment Required");
+  assert.equal(failure?.code, "RUNTIME_UPSTREAM_ERROR");
+  assert.equal(failure?.status, 502);
+  assert.equal(runtimeBuildFailure(undefined, true)?.status, 409);
+  assert.equal(runtimeBuildFailure(), null);
 });
