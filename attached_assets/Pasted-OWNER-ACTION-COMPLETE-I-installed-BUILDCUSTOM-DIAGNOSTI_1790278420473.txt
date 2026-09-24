@@ -1,0 +1,214 @@
+OWNER ACTION COMPLETE.
+
+I installed:
+
+BUILDCUSTOM_DIAGNOSTIC_SECRET
+
+directly into the isolated staging Cloudflare Worker.
+
+I did not share its value with Replit and will not share it.
+
+You previously prepared and locally validated:
+
+scripts/staging-workers-ai-diagnostic-patch.mjs
+
+We are now authorizing deployment of that EXACT reviewed temporary
+diagnostic patch.
+
+==================================================
+GOAL
+==================================================
+
+Deploy the temporary staging-only diagnostic route:
+
+POST /__internal/buildcustom/workers-ai-diagnostic
+
+so I can invoke it exactly once from my Mac.
+
+DO NOT invoke the route yourself.
+
+DO NOT send any inference request.
+
+==================================================
+1. PREFLIGHT
+==================================================
+
+Before deployment verify read-only:
+
+- BUILDCUSTOM_DIAGNOSTIC_SECRET exists as a Worker secret binding
+- BUILDCUSTOM_THINK_API_TOKEN still exists
+- CLOUDFLARE_API_TOKEN still exists
+- current Worker version created by my diagnostic-secret deployment is
+  serving 100%
+- gateway remains buildcustom-think-unified-staging
+- no Google BYOK/provider key was added
+- production remains untouched
+
+Do not inspect or print secret values.
+
+==================================================
+2. PATCH INTEGRITY
+==================================================
+
+Use ONLY the already-reviewed patch:
+
+scripts/staging-workers-ai-diagnostic-patch.mjs
+
+Reverify that it matches the serving bundle/hash it was designed for.
+
+Do not expand its functionality.
+
+The route must continue to:
+
+- accept POST only
+- require BUILDCUSTOM_DIAGNOSTIC_SECRET
+- return 404 for missing/incorrect authorization
+- return 404 for wrong method/host/account
+- never expose or log secrets
+- never expose Authorization
+- exist only in isolated staging
+
+The diagnostic inference must use:
+
+env.BUILDCUSTOM_THINK_API_TOKEN
+
+It must NOT use:
+
+env.CLOUDFLARE_API_TOKEN
+GOOGLE_AI_STUDIO_API_KEY
+Google
+Vertex AI
+ThinkAgent
+BuildCustom project data
+
+==================================================
+3. DIAGNOSTIC REQUEST CONFIGURATION
+==================================================
+
+When I eventually invoke the route, it must make exactly ONE request to
+Cloudflare's account-scoped AI REST API.
+
+Gateway:
+
+buildcustom-think-unified-staging
+
+Model:
+
+@cf/meta/llama-3.2-1b-instruct
+
+Prompt:
+
+Reply with exactly: CLOUDFLARE_AI_OK
+
+Use the documented cf-aig-gateway-id mechanism.
+
+==================================================
+4. DEPLOY
+==================================================
+
+Deploy the temporary diagnostic Worker version to the isolated staging
+Worker only.
+
+Preserve EVERY existing binding, including:
+
+BUILDCUSTOM_DIAGNOSTIC_SECRET
+BUILDCUSTOM_THINK_API_TOKEN
+CLOUDFLARE_API_TOKEN
+
+Do not change gateway configuration.
+
+Do not change any other Worker behavior.
+
+Do not deploy to production.
+
+After deployment verify the diagnostic version serves 100%.
+
+==================================================
+5. SAFE ROUTE CHECK ONLY
+==================================================
+
+You may verify that an UNAUTHORIZED request returns 404 ONLY if doing so
+does not trigger the inference branch.
+
+Do NOT make an authorized request.
+
+Do NOT obtain the diagnostic secret.
+
+Do NOT send inference.
+
+Do NOT test the Workers AI model yourself.
+
+==================================================
+6. STOP BEFORE INVOCATION
+==================================================
+
+Once the diagnostic Worker is serving:
+
+STOP.
+
+Do not invoke it.
+
+I will invoke it manually from my Mac using the diagnostic secret that
+only I possess.
+
+Return the exact curl TEMPLATE again using:
+
+<DIAGNOSTIC_SECRET>
+
+as the placeholder.
+
+Do not ask me for its value.
+
+==================================================
+7. IMPORTANT NEXT SEQUENCE
+==================================================
+
+After you stop, I will:
+
+1. run the authorized curl once from my Mac;
+2. send you only the safe response/result;
+3. then we will immediately remove the temporary diagnostic route;
+4. deploy the clean Worker;
+5. verify the route returns 404;
+6. delete BUILDCUSTOM_DIAGNOSTIC_SECRET afterward.
+
+Do NOT perform cleanup yet because I have not invoked the diagnostic.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do not:
+
+- send inference
+- invoke the authorized diagnostic
+- modify either secret value
+- modify CLOUDFLARE_API_TOKEN
+- modify BUILDCUSTOM_THINK_API_TOKEN
+- modify BUILDCUSTOM_DIAGNOSTIC_SECRET
+- change gateway configuration
+- change Google
+- add credits
+- run BuildCustom generation
+- run ThinkAgent
+- publish an app
+- modify production
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Return ONLY:
+
+1. current pre-deployment Worker version
+2. confirmation all three secret bindings exist
+3. diagnostic Worker version deployed
+4. confirmation it serves 100%
+5. confirmation patch/hash validation passed
+6. confirmation unauthorized route behavior is 404, if safely tested
+7. confirmation authorized route was NOT invoked
+8. confirmation zero inference requests were sent
+9. exact Mac curl TEMPLATE using <DIAGNOSTIC_SECRET>
+10. confirmation production was untouched
+
+Then STOP and wait for my manual invocation.
