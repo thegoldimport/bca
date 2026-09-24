@@ -1,0 +1,310 @@
+Proceed with the next task:
+
+RESOLVE THE ISOLATED STAGING UNIFIED BILLING 403.
+
+We have successfully proven:
+
+ThinkAgent
+→ Cloudflare REST AI endpoint
+→ dedicated gateway buildcustom-think-unified-staging
+→ google/gemini-3.6-flash
+
+The native Think branch does NOT resolve/send GOOGLE_AI_STUDIO_API_KEY.
+The gateway has no Google BYOK credential.
+Production is untouched.
+
+However, the one controlled request returned:
+
+Gateway: HTTP 403
+Control plane: HTTP 502
+wholesale: false
+tokens: 0
+cost: 0
+
+Therefore Unified Billing is NOT yet proven and we must NOT fund the
+account yet.
+
+==================================================
+GOAL
+==================================================
+
+Determine exactly why Cloudflare rejected the isolated staging request
+with HTTP 403 and make the smallest staging-only fix necessary to reach
+Cloudflare-managed Unified Billing.
+
+Do NOT redesign the inference architecture.
+
+Do NOT return to direct Google billing.
+
+Do NOT purchase credits.
+
+==================================================
+1. VERIFY THE CLOUDFLARE CREDENTIAL
+==================================================
+
+Inspect the credential used by the staging VibeSDK Worker for this
+Cloudflare REST AI request.
+
+WITHOUT exposing the token, determine:
+
+- which Cloudflare account it belongs to
+- whether it is active
+- exact relevant permissions/scopes
+- whether it has Workers AI → Read
+- whether it is authorized for the isolated account
+- whether the account ID in the REST URL matches the token's account
+- whether any resource/account restriction prevents this request
+
+Do not rotate or replace the token unless necessary.
+
+Do not print the token.
+
+If the required permission is missing, classify that clearly as an
+OWNER ACTION if I need to change/create a Cloudflare token.
+
+If Replit can safely change a non-sensitive configuration itself, explain
+the change before making anything broader than staging.
+
+==================================================
+2. INVESTIGATE THE EXACT 403
+==================================================
+
+Do not assume the 403 is a permission problem.
+
+Determine the strongest available reason for the rejection.
+
+Inspect:
+
+- Cloudflare response headers
+- safe/redacted response body if available
+- AI Gateway logs
+- Workers AI / AI Gateway logs
+- request configuration
+- REST endpoint
+- account ID
+- Authorization scheme
+- cf-aig-gateway-id
+- model identifier
+- provider identifier
+- Unified Billing requirements
+- account billing/entitlement state
+
+Compare the actual request against Cloudflare's documented REST API
+requirements.
+
+We need to distinguish among:
+
+A. token permission/scope problem
+B. token/account mismatch
+C. wrong endpoint/authentication
+D. gateway configuration problem
+E. model/provider configuration problem
+F. Unified Billing/account entitlement problem
+G. zero-credit behavior
+H. another Cloudflare rejection
+
+Do not guess.
+
+==================================================
+3. CHECK WHETHER ZERO CREDITS CAN CAUSE THIS 403
+==================================================
+
+The account currently has zero Unified Billing credits.
+
+Determine from Cloudflare documentation and/or safe account metadata
+whether a zero balance can prevent the request BEFORE it is marked as
+wholesale billing.
+
+If Cloudflare requires a positive balance before `wholesale` becomes
+true, establish that with evidence.
+
+If that is conclusively the behavior, then we may have enough evidence
+to fund the account.
+
+But do NOT purchase anything during this task.
+
+If zero credits are NOT the cause of this specific 403, continue finding
+the actual cause.
+
+==================================================
+4. MAKE ONLY A PROVEN MINIMAL FIX
+==================================================
+
+If the 403 has a code/config cause that is conclusively identified and
+safe to fix in isolated staging, make the smallest necessary fix.
+
+Do NOT make speculative changes.
+
+Preserve rollback to:
+
+previous staging Worker:
+e8a7042e-8b17-4d6b-ac1a-f02e77c3511f
+
+current Unified Billing staging Worker:
+0815f983-7730-41ee-a497-c24d8d93e172
+
+Do not touch production.
+
+==================================================
+5. ONE CONTROLLED RETEST MAXIMUM
+==================================================
+
+If and ONLY IF you identify and fix a concrete cause of the 403, perform
+ONE additional controlled native Think request.
+
+Do not repeatedly retry.
+
+For that request capture safe evidence:
+
+- timestamp
+- gateway request ID
+- HTTP status
+- provider
+- model
+- wholesale value
+- BYOK value
+- token usage if any
+- cost if any
+- safe Cloudflare billing/error code
+- whether Google provider authorization was absent
+
+Success for this task does NOT require actual inference if the account
+has zero credits.
+
+A very useful result would be:
+
+request accepted as Cloudflare-managed Unified Billing
+→ wholesale/billing identity proven
+→ rejected specifically for insufficient Unified Billing credits
+
+That would mean we are ready for owner funding.
+
+==================================================
+6. IF OWNER TOKEN ACTION IS REQUIRED
+==================================================
+
+If the staging credential lacks the required Cloudflare permission and I
+must fix it manually, STOP.
+
+Give me simple exact instructions:
+
+1. Open Cloudflare
+2. Go to ...
+3. Open/create ...
+4. Enable exactly ...
+5. Restrict it to exactly ...
+6. Save
+7. Where to place/update it WITHOUT pasting it into chat
+8. Tell Replit when complete
+
+Do not ask me to paste any API token into Replit chat.
+
+Use the least privilege necessary.
+
+==================================================
+7. DO NOT REOPEN OTHER WORK
+==================================================
+
+Do not investigate:
+
+- the old direct-Google Payment Required error
+- publishing
+- custom domains
+- restore
+- customer billing
+- BuildCustom AI credit ledger
+- model selection
+- OpenRouter
+- LiteLLM
+- direct-provider routing
+- SEO
+- intermittent Durable Object edit issue
+
+Those are outside this task.
+
+==================================================
+8. CANDIDATE SOURCE ISSUE
+==================================================
+
+The report correctly states that the borrowed candidate checkout has
+incomplete dependencies and therefore its Vitest/typecheck/full runtime
+build/Wrangler dry-run cannot currently be claimed as passing.
+
+Do NOT turn this task into source archaeology.
+
+Continue using the rollback-safe serving-bundle patch strategy for this
+isolated diagnostic if necessary.
+
+Do not try to reconstruct historical VibeSDK source just to solve this
+403.
+
+==================================================
+9. PRODUCTION SAFETY
+==================================================
+
+Do NOT modify:
+
+- production VibeSDK Worker
+- production control plane
+- production D1
+- active production DO namespaces
+- production AI configuration
+- production gateway
+- production routes
+- production custom domains
+- app.buildcustom.ai
+- *.apps.buildcustom.ai
+- Test1 / TaskFlow / Buyer Magnets
+
+Frozen restore fixes remain frozen.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Exact credential type used by the staging REST request
+2. Whether Workers AI → Read is present
+3. Whether credential account matches REST account ID
+4. Relevant resource restrictions
+5. Exact safe 403 response details discovered
+6. Root cause of 403, if established
+7. Whether zero credits can produce this behavior
+8. Whether a code/config change was made
+9. Exact change
+10. Whether owner action is required
+11. If so, exact owner instructions
+12. Whether a second controlled request was performed
+13. Second request gateway ID
+14. Second request status
+15. wholesale value
+16. BYOK value
+17. provider/model
+18. tokens/cost
+19. whether Cloudflare-managed Unified Billing is now conclusively proven
+20. whether funding is now the only remaining inference blocker
+21. recommended staging top-up ONLY if funding is now proven necessary
+22. current staging Worker version
+23. rollback version(s)
+24. confirmation production was untouched
+25. exact next task
+
+Classify as:
+
+A. 403 RESOLVED — UNIFIED BILLING PROVEN — OWNER FUNDING REQUIRED
+
+B. CLOUDFLARE TOKEN PERMISSION OWNER ACTION REQUIRED
+
+C. 403 RESOLVED — DIFFERENT BLOCKER FOUND
+
+D. 403 ROOT CAUSE IDENTIFIED — CODE/CONFIG FIX REQUIRED
+
+E. 403 STILL UNCONFIRMED — STOPPED SAFELY
+
+STOP after this report.
+
+Do not buy credits.
+Do not run full acceptance cycles.
+Do not run Replit-off.
+Do not touch production.
