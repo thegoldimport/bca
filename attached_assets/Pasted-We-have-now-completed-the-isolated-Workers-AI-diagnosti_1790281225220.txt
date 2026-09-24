@@ -1,0 +1,399 @@
+We have now completed the isolated Workers AI diagnostic and removed the
+temporary diagnostic route.
+
+DO NOT send any AI inference during this task.
+
+This task is READ-ONLY investigation of why Cloudflare's third-party
+Google model path is returning HTTP 403 while Workers AI succeeds through
+the same account-scoped AI REST path and dedicated AI Gateway.
+
+==================================================
+CURRENT PROVEN STATE
+==================================================
+
+CLEAN STAGING WORKER
+
+Current clean staging version:
+
+d6a006be-fd7a-4a04-9cc3-cd375c875524
+
+serving at 100%.
+
+The temporary diagnostic route has been removed.
+
+All 34 bindings and seven modules remain intact.
+
+Production is untouched.
+
+==================================================
+SUCCESSFUL CONTROL TEST
+==================================================
+
+The owner manually performed exactly one Workers AI diagnostic.
+
+Cloudflare AI Gateway recorded:
+
+timestamp:
+2026-09-24 20:10:43.555 UTC
+
+status:
+200
+
+provider:
+workers-ai
+
+model:
+@cf/meta/llama-3.2-1b-instruct
+
+input tokens:
+21
+
+output tokens:
+7
+
+cost:
+0.0000019730074470862746
+
+cached:
+false
+
+duration:
+465 ms
+
+wholesale:
+false
+
+byok:
+null
+
+gateway log ID:
+01M3AGNCDW6M0SPM58FEREZJT5
+
+This proves:
+
+BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST API
+→ AI Gateway buildcustom-think-unified-staging
+→ Workers AI
+→ successful inference
+
+Therefore do NOT investigate generic token validity, generic AI Gateway
+connectivity, or generic account AI access unless evidence specifically
+requires it.
+
+==================================================
+FAILED GOOGLE TEST
+==================================================
+
+Our existing Google test produced:
+
+gateway request ID:
+6e409d52a950665f83deb796ed1b0b234cd4d4be0b882514eb87d4228c7fcfd9
+
+provider:
+google-vertex-ai
+
+model:
+google/gemini-3.6-flash
+
+status:
+403
+
+input tokens:
+0
+
+output tokens:
+0
+
+cost:
+0
+
+cached:
+false
+
+duration:
+732 ms
+
+wholesale:
+false
+
+byok:
+null
+
+The isolated Cloudflare account currently has $10 in Cloudflare credits.
+
+The owner's personal Google AI Studio account is currently out of
+credits, but our intended architecture MUST NOT depend on that account.
+
+Desired launch architecture:
+
+BuildCustom
+→ VibeSDK / ThinkAgent
+→ Cloudflare AI Gateway / Cloudflare-managed billing
+→ third-party model provider
+
+The BuildCustom customer should consume BuildCustom's centrally funded
+model pool.
+
+We specifically do NOT want:
+
+BuildCustom
+→ owner's GOOGLE_AI_STUDIO_API_KEY
+→ owner's Google billing account
+
+The existing GOOGLE_AI_STUDIO_API_KEY is for legacy/direct paths and
+must not be used to make this test pass.
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+Why does:
+
+Cloudflare account AI REST
+→ dedicated AI Gateway
+→ Workers AI
+
+succeed,
+
+while:
+
+Cloudflare account AI REST
+→ same dedicated AI Gateway
+→ google-vertex-ai / google/gemini-3.6-flash
+
+returns 403 before inference?
+
+We need to determine whether our assumed Cloudflare Unified Billing
+architecture for this Google model is actually supported and, if so,
+what exact request/configuration is required.
+
+==================================================
+INVESTIGATION A — CURRENT CLOUDFLARE DOCUMENTATION
+==================================================
+
+Research CURRENT Cloudflare documentation.
+
+Do not rely solely on assumptions from the existing code.
+
+Determine:
+
+1. Does Cloudflare AI Gateway currently support Cloudflare-managed
+   billing / Unified Billing for Google Gemini or Google Vertex AI?
+
+2. If yes, which provider path is supported?
+
+   For example, distinguish carefully between:
+
+   - Google AI Studio / Gemini API
+   - Google Vertex AI
+   - Cloudflare Workers AI
+   - OpenAI-compatible AI Gateway endpoints
+   - Unified Billing catalog models
+
+3. Does Cloudflare-managed billing for Google require:
+
+   - no provider API key
+   - a Cloudflare API token only
+   - a stored provider credential
+   - a Google API key
+   - Google Cloud project credentials
+   - Vertex service account credentials
+   - some separate Cloudflare billing entitlement
+   - a particular endpoint or request format
+
+4. Is:
+
+   google/gemini-3.6-flash
+
+   actually a valid Cloudflare-managed Unified Billing model identifier
+   for the endpoint we are using?
+
+5. Is provider:
+
+   google-vertex-ai
+
+   correct for Cloudflare-managed billing?
+
+6. Does Cloudflare distinguish Google AI Studio from Google Vertex AI
+   for Unified Billing?
+
+7. Is the account-scoped endpoint we are currently calling:
+
+   POST /client/v4/accounts/{account_id}/ai/v1/chat/completions
+
+   actually the correct endpoint for third-party Unified Billing?
+
+8. Does using:
+
+   cf-aig-gateway-id: buildcustom-think-unified-staging
+
+   correctly attach that request to AI Gateway for third-party
+   Cloudflare-managed inference?
+
+9. Are there account-plan, region, model availability, billing,
+   entitlement, beta, or allowlist requirements that could explain a
+   403 before inference?
+
+10. Does Cloudflare document what:
+
+   wholesale: false
+
+   means in this context?
+
+Do not infer undocumented meanings.
+
+==================================================
+INVESTIGATION B — INSPECT OUR EXACT FAILED REQUEST
+==================================================
+
+Inspect the staging code that generated the Google request.
+
+Do NOT execute it.
+
+Document the exact request shape, excluding secret values:
+
+- URL
+- HTTP method
+- headers
+- model
+- provider
+- body shape
+- gateway selection
+- authorization source
+
+Confirm specifically:
+
+1. GOOGLE_AI_STUDIO_API_KEY is NOT placed in the request.
+
+2. No Google provider credential is being resolved.
+
+3. BUILDCUSTOM_THINK_API_TOKEN is the Cloudflare Bearer credential.
+
+4. The request does not accidentally identify itself as BYOK Google.
+
+5. Whether our model/provider combination causes Cloudflare to interpret
+   the request as Vertex AI rather than Cloudflare-managed Google
+   inference.
+
+==================================================
+INVESTIGATION C — COMPARE AGAINST CLOUDFLARE'S
+DOCUMENTED WORKING REQUEST
+==================================================
+
+Find Cloudflare's CURRENT documented example for invoking a third-party
+Google Gemini model using Cloudflare-managed billing / Unified Billing.
+
+Compare it field-by-field against our failed request.
+
+Create a concise difference table:
+
+OUR REQUEST
+vs
+CLOUDFLARE DOCUMENTED REQUEST
+
+Include:
+
+- endpoint
+- auth
+- gateway selection
+- provider
+- model identifier
+- request schema
+- required headers
+- required account configuration
+- billing configuration
+
+Identify any concrete mismatch.
+
+==================================================
+INVESTIGATION D — BILLING INDEPENDENCE
+==================================================
+
+Answer this explicitly:
+
+If Cloudflare-managed Unified Billing is configured correctly, should
+the owner's personal Google AI Studio credit balance have ANY effect on
+this request?
+
+If the answer is no, state that clearly.
+
+If Cloudflare documentation shows that Google still requires our own
+provider credential/billing account for this model/path, state that
+clearly instead.
+
+Do NOT add money to Google.
+
+Do NOT modify GOOGLE_AI_STUDIO_API_KEY.
+
+==================================================
+IMPORTANT SAFETY RULES
+==================================================
+
+READ-ONLY ONLY.
+
+Do NOT:
+
+- send Workers AI inference
+- send Google inference
+- send ThinkAgent generation
+- call the removed diagnostic
+- redeploy the Worker
+- change Worker code
+- change Worker bindings
+- change API tokens
+- change secrets
+- change gateway configuration
+- add provider credentials
+- add Google credits
+- add Cloudflare credits
+- modify production
+
+Do not contact Cloudflare support.
+
+Do not guess.
+
+If Cloudflare documentation is ambiguous or contradictory, identify the
+ambiguity explicitly.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return ONE concise report containing:
+
+1. Whether Cloudflare-managed billing for Google Gemini is actually
+   supported today.
+
+2. The exact supported Google provider/model path.
+
+3. The exact documented endpoint/request format.
+
+4. Whether our current request matches it.
+
+5. Every concrete mismatch you found.
+
+6. Most likely evidence-supported reason for our 403.
+
+7. Whether the owner's empty Google AI Studio balance matters.
+
+8. Whether GOOGLE_AI_STUDIO_API_KEY should be involved.
+
+9. Whether our $10 Cloudflare credit balance is sufficient to perform
+   the test.
+
+10. The smallest safe correction needed.
+
+11. Whether that correction is code, configuration, account
+    entitlement, model selection, or something else.
+
+12. The exact ONE next test you recommend AFTER we approve the
+    correction.
+
+13. Confirmation that you sent zero inference requests.
+
+14. Confirmation that you changed nothing in staging or production.
+
+Do not implement the correction yet.
+
+STOP after the report.
