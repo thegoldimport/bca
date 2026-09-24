@@ -1,0 +1,179 @@
+We have one additional lead to investigate before any more inference.
+
+DO NOT send another inference request.
+DO NOT change the gateway yet.
+
+Cloudflare's current Unified Billing documentation (updated Sep 23,
+2026) explicitly lists this prerequisite:
+
+"Ensure you have authenticated your AI Gateway."
+
+Our dedicated staging gateway:
+
+buildcustom-think-unified-staging
+
+currently has:
+
+authentication: OFF
+
+We need to determine whether this is the missing prerequisite for
+third-party Unified Billing through the account-scoped REST API.
+
+IMPORTANT:
+
+Do not assume that it is.
+
+Our Workers AI control succeeded through this gateway, so we need to
+understand precisely how gateway authentication interacts with:
+
+POST /client/v4/accounts/{account_id}/ai/v1/chat/completions
+
+and the:
+
+Authorization: Bearer <Cloudflare API token>
+
+used by that REST endpoint.
+
+==================================================
+READ-ONLY INVESTIGATION
+==================================================
+
+Using CURRENT Cloudflare documentation and the current gateway metadata,
+inspect every setting on:
+
+buildcustom-think-unified-staging
+
+relevant to Unified Billing.
+
+Report at minimum:
+
+- authentication
+- byok_only / Require provider credentials
+- Workers AI billing mode
+- logging
+- caching
+- rate limits
+- spend limits
+- ZDR
+- any provider restrictions
+- any model restrictions
+- any other setting affecting third-party Unified Billing
+
+Do not expose secret values.
+
+==================================================
+AUTHENTICATION QUESTION
+==================================================
+
+Determine precisely what Cloudflare means by:
+
+"Ensure you have authenticated your AI Gateway"
+
+in the Unified Billing prerequisites.
+
+Specifically answer:
+
+1. Does this mean the gateway's `authentication` setting must be ON?
+
+2. Or does authenticating the account-scoped REST request with:
+
+   Authorization: Bearer <Cloudflare API token>
+
+   already satisfy this prerequisite?
+
+3. If gateway `authentication` is ON, does the account-scoped REST API
+   require any additional header such as:
+
+   cf-aig-authorization
+
+   or is the normal Cloudflare Authorization bearer token sufficient?
+
+4. Is `cf-aig-authorization` only for the provider-native
+   gateway.ai.cloudflare.com endpoints?
+
+5. Can you find an explicit Cloudflare example of:
+
+   /client/v4/accounts/{account}/ai/v1/chat/completions
+
+   + third-party Unified Billing
+   + a custom gateway
+   + authentication enabled?
+
+6. Does Cloudflare explicitly document whether a custom gateway with
+   `authentication: false` can use third-party Unified Billing?
+
+==================================================
+COMPARE OUR GATEWAY TO DOCUMENTED PREREQUISITES
+==================================================
+
+Create a short table:
+
+REQUIREMENT
+OUR SETTING
+MATCH / MISMATCH / AMBIGUOUS
+
+Include every documented prerequisite for third-party Unified Billing.
+
+Pay special attention to:
+
+- positive prepaid credit balance
+- gateway authentication
+- byok_only
+- provider credentials
+- REST authentication
+- model catalog availability
+- custom gateway selection
+
+==================================================
+ERROR 2049
+==================================================
+
+Do NOT use the unrelated Zero Trust/WARP definition of error 2049.
+
+Cloudflare numeric error codes may be subsystem-specific.
+
+Unless an authoritative Cloudflare AI / Workers AI / AI Gateway source
+defines 2049 in this context, treat its meaning as undocumented.
+
+==================================================
+NO CHANGES
+==================================================
+
+Do NOT:
+
+- enable gateway authentication
+- disable anything
+- change byok_only
+- add provider credentials
+- change tokens
+- change models
+- add credits
+- send Google inference
+- send Workers AI inference
+- send ThinkAgent generation
+- deploy Worker code
+- modify production
+
+==================================================
+FINAL ANSWER
+==================================================
+
+Return:
+
+1. exact current relevant gateway settings
+2. exact current Cloudflare Unified Billing prerequisites
+3. whether each prerequisite is satisfied
+4. exact meaning of "authenticate your AI Gateway" according to current
+   documentation
+5. whether authentication: OFF is a proven problem, a likely problem,
+   or merely an ambiguity
+6. if authentication must be enabled, exactly what would change in our
+   REST request
+7. smallest safe next action
+8. whether another inference request is needed to verify it
+9. confirmation zero inference was sent
+10. confirmation nothing was changed
+
+Do not implement anything.
+
+STOP after the report.
