@@ -1,0 +1,152 @@
+I created `buildcustom-think-staging` as an Account API Token with only
+Workers AI → Read in the isolated staging account.
+
+I have securely saved the token value.
+
+I HAVE NOT installed it into the Worker.
+
+Proceed with preparing the staging-only ThinkAgent credential separation.
+
+Requirements:
+
+1. KEEP the existing `CLOUDFLARE_API_TOKEN` completely unchanged.
+
+It is used by other serving VibeSDK paths including provisioning,
+deployment, and image handling.
+
+Do not rename it.
+Do not overwrite it.
+Do not rotate it.
+Do not change any code paths currently relying on it.
+
+2. Add a NEW dedicated secret binding for native Think inference.
+
+Use this binding name:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+This secret will contain the new `buildcustom-think-staging` Account API
+Token that has only:
+
+Account → Workers AI → Read
+
+Do NOT put the secret value in source code, configuration committed to
+Git, logs, documentation, Replit chat, or command output.
+
+3. Modify ONLY the isolated staging Unified Billing Think branch so its
+Cloudflare REST AI request uses:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+instead of:
+
+CLOUDFLARE_API_TOKEN
+
+The rest of VibeSDK must continue using the existing
+`CLOUDFLARE_API_TOKEN` exactly as it does now.
+
+4. Do NOT change:
+
+- Think model
+- gateway
+- REST endpoint
+- Unified Billing routing
+- directOverride fallback
+- Google credential configuration
+- publishing
+- provisioning
+- image handling
+- generated-app deployment
+- restore fixes
+- control plane
+- production
+
+The current intended Think path remains:
+
+BuildCustom
+→ VibeSDK ThinkAgent
+→ BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare REST AI API
+→ buildcustom-think-unified-staging
+→ google/gemini-3.6-flash
+→ Cloudflare Unified Billing
+
+5. Prepare the staging-only Worker change BEFORE requiring the secret.
+
+Verify that the new Think branch reads:
+
+env.BUILDCUSTOM_THINK_API_TOKEN
+
+and that no other runtime path reads that binding.
+
+Verify the existing:
+
+env.CLOUDFLARE_API_TOKEN
+
+remains unchanged everywhere else.
+
+6. DO NOT run inference yet.
+
+Once the Worker/code/configuration is ready for the new binding, STOP
+and tell me exactly how to install the secret value directly through the
+Cloudflare dashboard.
+
+I will enter it myself without exposing it to Replit.
+
+If Cloudflare requires the secret to exist before the new Worker version
+can be deployed, structure the process safely and tell me the correct
+order of operations.
+
+7. Preserve rollback.
+
+Current serving staging version:
+
+0815f983-7730-41ee-a497-c24d8d93e172
+
+Previous rollback version:
+
+e8a7042e-8b17-4d6b-ac1a-f02e77c3511f
+
+Record whatever new staging version is created.
+
+Do not touch production.
+
+8. Once I install the new Think-only secret, we will perform exactly ONE
+controlled native Think generation.
+
+That future test must verify:
+
+- the new dedicated token was actually used
+- Cloudflare accepts Workers AI authorization
+- request reaches buildcustom-think-unified-staging
+- Google BYOK is absent
+- GOOGLE_AI_STUDIO_API_KEY is not used
+- provider/model
+- wholesale billing status
+- token usage
+- cost
+- whether zero Unified Billing credits are finally the only blocker
+
+Do NOT run that request now.
+
+9. Do not buy Unified Billing credits yet.
+
+We will fund the account only after the dedicated credential is proven
+to work and Cloudflare-managed Unified Billing is conclusively
+established.
+
+FINAL RESPONSE:
+
+Tell me:
+
+- exact staging-only code/config change prepared
+- confirmation CLOUDFLARE_API_TOKEN remains untouched
+- confirmation only native Think uses BUILDCUSTOM_THINK_API_TOKEN
+- whether the new binding must exist before deployment
+- exact Cloudflare dashboard steps for me to install the secret
+- whether installing it creates/deploys a new Worker version
+- current rollback state
+- confirmation no inference was sent
+- confirmation production was untouched
+
+Then STOP and wait for me to install the secret.
