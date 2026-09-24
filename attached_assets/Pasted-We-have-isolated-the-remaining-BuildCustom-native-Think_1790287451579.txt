@@ -1,0 +1,617 @@
+We have isolated the remaining BuildCustom native Think blocker.
+
+IMPORTANT STRATEGY CHANGE:
+
+Cloudflare Support is a LAST RESORT.
+
+Do NOT make "contact Cloudflare support" the default next step simply
+because a limit is undocumented.
+
+Our preferred troubleshooting order for BuildCustom is:
+
+1. Understand the exact failure
+2. Find every safe self-service solution
+3. Determine which solution is most likely
+4. Make the smallest controlled change
+5. Test once
+6. Continue iterating ourselves while there are reasonable technical
+   fixes available
+7. Contact Cloudflare Support ONLY after we have exhausted practical
+   self-service options or proven that Cloudflare must change something
+   account-side that we cannot change ourselves
+
+We want to solve this ourselves if reasonably possible.
+
+DO NOT send another AI inference request during this investigation.
+
+==================================================
+CURRENT PROVEN STATE
+==================================================
+
+Cloudflare Unified Billing is working.
+
+Authenticated AI Gateway is working.
+
+Native ThinkAgent successfully made 11 Cloudflare-managed Google calls
+through:
+
+BuildCustom native ThinkAgent
+→ BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare account-scoped AI REST
+→ authenticated AI Gateway
+→ google/gemini-3.6-flash
+→ Cloudflare-managed billing
+
+Those 11 successful calls totaled:
+
+141,094 input tokens
+1,969 output tokens
+$0.0454599 model cost
+
+They were:
+
+wholesale: true
+byok: null
+
+The build then encountered three HTTP 429 responses.
+
+All three contained:
+
+"Wholesale rate limit exceeded for this gateway. Please reduce request
+rate or use BYOK."
+
+429 gateway log IDs:
+
+1244cfb8c50b3cbea29eb2a2edde855900c93e6028fc7dab3b6ab313e390d701
+
+a699b585f7b045e678d9e20338bef56e5b57e369225caaf77824ff9ca3de7f50
+
+a1b8c78d1b9f761251a0f42296f7c78e5a8a1ab8241b16f47caaabe89ebafbda
+
+The published AI Gateway limit of 200 Unified Billing requests per
+60 seconds does NOT explain this run because only 14 gateway calls
+occurred.
+
+The native agent made 11 successful sequential calls over roughly
+18 seconds before the wholesale limiter rejected the next call.
+
+The AI SDK then retried the rejected model request twice internally,
+resulting in three total 429 gateway records.
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+What is the best SELF-SERVICE way to prevent this wholesale limiter
+from killing normal BuildCustom coding-agent runs?
+
+We are NOT looking for a support ticket yet.
+
+We want to understand every practical fix available to us first.
+
+==================================================
+PART 1 — UNDERSTAND THE WHOLESALE LIMITER
+==================================================
+
+Research current Cloudflare documentation, APIs, source material,
+account metadata, AI Gateway behavior, and other reliable technical
+sources for:
+
+- AI Gateway Unified Billing wholesale limits
+- wholesale rate limits
+- wholesale quotas
+- wholesale burst limits
+- provider-specific wholesale limits
+- Google/Gemini Unified Billing limits
+- account-specific Unified Billing limits
+- rate-limit windows
+- token-based limits
+- request-based limits
+- concurrent request limits
+- temporary provider-capacity throttling
+- account tiers
+- usage tiers
+- prepaid/postpaid differences
+- new-account restrictions
+- gateway-specific limits
+- model-specific limits
+
+Determine everything we can about the limiter that generated:
+
+"Wholesale rate limit exceeded for this gateway."
+
+Specifically try to determine:
+
+- unit being limited
+- threshold
+- window
+- reset behavior
+- scope
+- whether it is gateway/account/provider/model specific
+- whether it is a burst limiter
+- whether it automatically resets
+- whether sustained account usage changes the limit
+
+Clearly distinguish:
+
+DOCUMENTED FACT
+
+OBSERVED FACT
+
+STRONG INFERENCE
+
+UNKNOWN
+
+Do not turn unknowns into assumptions.
+
+==================================================
+PART 2 — INSPECT OUR ACCOUNT
+==================================================
+
+READ ONLY.
+
+Inspect every relevant available setting/metadata for our isolated
+staging Cloudflare account.
+
+Look for:
+
+- Unified Billing limits
+- wholesale allocations
+- AI Gateway limits
+- provider quotas
+- model quotas
+- account AI limits
+- billing tier
+- usage tier
+- gateway rate limits
+- spend limits
+- burst limits
+- prepaid balance
+- postpaid settings
+- provider configuration
+- concurrency limits
+
+Check both:
+
+- account-level configuration
+- buildcustom-think-unified-staging gateway configuration
+
+Do NOT modify anything.
+
+Report anything that could influence the wholesale limiter.
+
+==================================================
+PART 3 — FIND ALL SELF-SERVICE SOLUTIONS
+==================================================
+
+This is the MOST IMPORTANT section.
+
+Before considering Cloudflare Support, investigate every reasonable
+solution we could implement ourselves.
+
+At minimum investigate:
+
+--------------------------------------------------
+A. WAIT / NATURAL RESET
+--------------------------------------------------
+
+Could this simply be a short wholesale burst window?
+
+Could waiting between agent steps prevent it?
+
+Does the limiter reset automatically?
+
+Is there evidence that our 11 calls in ~18 seconds crossed a burst
+threshold?
+
+Could a small delay between ThinkAgent model calls avoid the limiter
+without materially hurting UX?
+
+--------------------------------------------------
+B. PACING / THROTTLING
+--------------------------------------------------
+
+Could BuildCustom intentionally pace native Think model calls?
+
+For example:
+
+model call
+→ tool execution
+→ minimum delay if necessary
+→ next model call
+
+Determine where the smallest pacing mechanism could live.
+
+Do NOT implement it.
+
+Estimate whether something like:
+
+500ms
+1 second
+2 seconds
+or another interval
+
+could plausibly avoid a burst limiter based on available evidence.
+
+Do not invent a specific interval if evidence does not support it.
+
+--------------------------------------------------
+C. SMART 429 HANDLING
+--------------------------------------------------
+
+Current AI SDK behavior appears to be:
+
+initial request
+→ 429
+→ ~2 sec
+→ retry
+→ 429
+→ ~4 sec
+→ retry
+→ 429
+→ failure
+
+Investigate whether we could improve this ourselves.
+
+Check:
+
+- Retry-After support
+- Retry-After-Ms support
+- longer exponential backoff
+- jitter
+- delayed continuation
+- pause-and-resume behavior
+- retry budget
+- treating wholesale-limit 429 differently from generic 429
+- whether the agent turn can safely resume after waiting
+
+Determine whether a wholesale-limit error could be handled gracefully
+instead of failing the entire generation.
+
+Do NOT change code.
+
+--------------------------------------------------
+D. GATEWAY CONFIGURATION
+--------------------------------------------------
+
+Inspect whether any gateway setting affects wholesale capacity.
+
+Check:
+
+- gateway rate limits
+- authentication
+- caching
+- billing mode
+- provider routing
+- fallback configuration
+- spend limits
+- gateway-level settings
+- multiple gateways
+
+Determine whether any self-service configuration change could increase
+or avoid the wholesale limiter.
+
+Do NOT modify settings.
+
+--------------------------------------------------
+E. MULTIPLE GATEWAYS
+--------------------------------------------------
+
+Investigate whether wholesale limiting is actually scoped per gateway.
+
+If it is:
+
+Would multiple BuildCustom gateways legitimately distribute traffic?
+
+Would this violate the intended purpose of Cloudflare's limiter?
+
+Would it create billing/accounting problems?
+
+Would it actually work, or is the wholesale limit ultimately
+account/provider scoped?
+
+Do NOT create another gateway.
+
+We are NOT trying to circumvent an intentional Cloudflare restriction.
+
+We only want to understand architecture/scoping.
+
+--------------------------------------------------
+F. DIFFERENT CLOUDFLARE-MANAGED MODEL
+--------------------------------------------------
+
+Investigate whether the wholesale limiter differs by:
+
+- model
+- provider
+- Gemini model
+- Workers AI models
+- Anthropic
+- OpenAI
+- other Unified Billing providers
+
+Could BuildCustom use another Cloudflare-managed coding-capable model
+while retaining:
+
+Cloudflare AI Gateway
++
+Unified Billing
++
+BuildCustom metering?
+
+Identify reasonable alternatives if documented.
+
+Do NOT switch models.
+
+--------------------------------------------------
+G. MODEL ROUTING / FALLBACK
+--------------------------------------------------
+
+Could BuildCustom use Cloudflare-managed Gemini normally and
+automatically fall back to another Cloudflare-managed model when the
+wholesale limiter is hit?
+
+Would this preserve agent state safely?
+
+Would VibeSDK's model/tool protocol allow this?
+
+Would model differences make continuation unsafe?
+
+Do NOT implement it.
+
+--------------------------------------------------
+H. DIRECT PROVIDER BILLING
+--------------------------------------------------
+
+Investigate what would change if BuildCustom eventually used its own
+provider API credentials while still routing through AI Gateway.
+
+For example:
+
+BuildCustom
+→ AI Gateway
+→ BuildCustom-owned Google/Anthropic/OpenAI credential
+
+Determine:
+
+- whether this avoids Cloudflare wholesale limits
+- whether AI Gateway logging remains
+- whether BuildCustom still gets token usage
+- whether BuildCustom can still meter customers
+- billing implications
+- operational complexity
+
+This is a fallback, NOT the preferred solution.
+
+Do NOT configure BYOK.
+
+--------------------------------------------------
+I. DIRECT PROVIDER ROUTER
+--------------------------------------------------
+
+As another fallback, investigate:
+
+BuildCustom
+→ BuildCustom model router
+→ provider APIs
+
+while keeping Cloudflare for the rest of the platform.
+
+Determine whether this would remove wholesale dependency entirely.
+
+Again:
+
+DO NOT IMPLEMENT.
+
+--------------------------------------------------
+J. CONTEXT / TOKEN OPTIMIZATION
+--------------------------------------------------
+
+We already observed:
+
+calls 1-2:
+~6.6k input tokens
+
+after activate_skill:
+~13k+
+
+later:
+~15k
+
+The activated skill injected approximately 22.3k characters.
+
+Determine whether reducing repeated context could materially reduce
+pressure on a wholesale limiter IF that limiter is token-based.
+
+However:
+
+Do NOT optimize VibeSDK merely because 141k cumulative tokens looks
+large.
+
+Only recommend context optimization for this blocker if there is
+evidence the wholesale limiter is token-sensitive.
+
+Otherwise treat this as later cost/performance optimization.
+
+==================================================
+PART 4 — LOOK AT CLOUDFLARE/VIBESDK SOURCE
+==================================================
+
+Inspect the relevant open-source VibeSDK and Cloudflare integration
+code READ ONLY.
+
+Determine the smallest code locations where we COULD later implement:
+
+- pacing
+- wholesale-specific backoff
+- model fallback
+- provider routing
+- context optimization
+
+Do not modify anything.
+
+The goal is to understand how invasive each solution would be.
+
+==================================================
+PART 5 — RANK THE SELF-SERVICE OPTIONS
+==================================================
+
+After gathering evidence, rank the practical SELF-SERVICE solutions
+from:
+
+1. smallest / safest / most likely
+
+to
+
+least desirable.
+
+For each include:
+
+- evidence supporting it
+- expected impact
+- implementation difficulty
+- architecture impact
+- whether it preserves Cloudflare Unified Billing
+- whether it requires another inference test
+- major downside
+
+IMPORTANT:
+
+Do NOT rank "contact Cloudflare support" alongside these.
+
+Support is not a normal solution candidate.
+
+==================================================
+PART 6 — DETERMINE THE NEXT EXPERIMENT
+==================================================
+
+Recommend ONE smallest controlled experiment we should perform next.
+
+The experiment should maximize information while minimizing:
+
+- inference cost
+- code changes
+- infrastructure changes
+- risk
+- production impact
+
+Examples might include:
+
+- wait for reset then run one controlled generation
+- introduce minimal pacing then run one generation
+- modify only wholesale-specific retry timing
+- test one alternate Cloudflare-managed model
+- another evidence-supported experiment
+
+Choose based on evidence.
+
+Do NOT perform it.
+
+Give us the exact proposed change and exact success/failure criteria.
+
+==================================================
+PART 7 — SUPPORT ESCALATION THRESHOLD
+==================================================
+
+ONLY AFTER completing all investigation above:
+
+Define the point at which contacting Cloudflare Support would actually
+be justified.
+
+For example:
+
+"Contact support only if X, Y and Z self-service experiments fail and
+the remaining evidence indicates an account-side quota that BuildCustom
+cannot modify."
+
+Do NOT recommend contacting support merely because the wholesale
+threshold is undocumented.
+
+Do NOT contact support.
+
+Do NOT prepare a support ticket unless the evidence shows there is
+literally no reasonable self-service experiment remaining.
+
+==================================================
+CURRENT STATE
+==================================================
+
+Clean staging Worker:
+
+713a1a73-cdad-4f00-bf4e-a656f4a2959d
+
+Gateway:
+
+buildcustom-think-unified-staging
+
+Gateway authentication:
+
+TRUE
+
+Keep it TRUE.
+
+Cloudflare-managed Gemini billing is proven working.
+
+Temporary diagnostic routes are removed.
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET remains bound.
+
+Production is untouched.
+
+==================================================
+ABSOLUTE RESTRICTIONS
+==================================================
+
+During this investigation:
+
+ZERO inference requests.
+
+ZERO generation attempts.
+
+ZERO deployments.
+
+ZERO configuration changes.
+
+ZERO gateway changes.
+
+ZERO model changes.
+
+ZERO token changes.
+
+ZERO billing changes.
+
+ZERO credit changes.
+
+Do not delete anything.
+
+Do not touch production.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. best explanation of the wholesale limiter
+2. documented vs observed vs unknown details
+3. relevant account-visible limits/settings
+4. every realistic self-service solution
+5. whether pacing is likely to help
+6. whether smarter 429 handling is likely to help
+7. whether another Cloudflare-managed model could help
+8. whether multiple gateways are relevant or inappropriate
+9. whether context/token reduction is relevant to THIS blocker
+10. fallback architecture if wholesale ultimately cannot support us
+11. ranked self-service options
+12. ONE recommended next controlled experiment
+13. exact proposed change for that experiment
+14. exact success criteria
+15. exact failure criteria
+16. when support would FINALLY become justified
+17. confirmation ZERO inference requests were made
+18. confirmation ZERO changes/deployments were made
+19. confirmation production untouched
+
+Do not implement the recommendation.
+
+Stop and wait for owner approval.
