@@ -26,3 +26,9 @@ Do not replace the existing staging Worker's shared Cloudflare API secret with a
 **Why:** The actual serving Worker, not merely the differing candidate checkout, references the shared credential across non-Think paths such as resource provisioning, deployment, and image handling. A token restricted to Workers AI Read could break those functions even if inference authorization improves.
 
 **How to apply:** Keep the shared secret and both rollback versions intact; request approval for a staging-only dedicated binding and Think branch before installing or testing the new token. A dashboard secret deployment creates a new serving version, so verify binding parity and rollback after that separate change.
+
+A funded isolated staging request using the separate Think-only binding still produced the same gateway 403 with `wholesale: false`, no BYOK selection, and zero usage. Do not attribute that specific failure to an empty prepaid balance alone, even after the owner reports a funded account and added Workers AI permissions.
+
+**Why:** Cloudflare reported a positive credit balance and successful first top-up both before and after the single authorized retest. Its gateway response-head retrieval failed, leaving no rejection detail and no independent proof that the hidden token passed authorization.
+
+**How to apply:** Preserve the isolation; obtain Cloudflare's specific rejection reason for the failed gateway request and, if possible, owner-only token activity metadata before making another inference attempt or changing permissions, billing, or gateway configuration.

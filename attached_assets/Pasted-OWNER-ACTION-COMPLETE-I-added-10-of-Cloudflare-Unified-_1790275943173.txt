@@ -1,0 +1,254 @@
+OWNER ACTION COMPLETE.
+
+I added $10 of Cloudflare Unified Billing credits to the isolated
+staging account.
+
+Do not change any configuration before testing.
+
+Current intended native Think path:
+
+BuildCustom
+→ VibeSDK ThinkAgent
+→ BUILDCUSTOM_THINK_API_TOKEN
+→ Cloudflare REST AI API
+→ buildcustom-think-unified-staging
+→ google/gemini-3.6-flash
+→ Cloudflare Unified Billing
+
+The dedicated Account API Token now has:
+
+Workers AI → Read
+Workers AI → Edit
+
+The gateway has no Google BYOK configuration.
+
+==================================================
+GOAL
+==================================================
+
+Determine whether funding Unified Billing resolves the previous 403.
+
+Run EXACTLY ONE controlled native ThinkAgent generation.
+
+Do not retry regardless of the result.
+
+==================================================
+1. PREFLIGHT
+==================================================
+
+Before the request, read-only verify:
+
+- current staging Worker is serving 100%
+- BUILDCUSTOM_THINK_API_TOKEN exists
+- CLOUDFLARE_API_TOKEN remains present and unchanged
+- native Think uses BUILDCUSTOM_THINK_API_TOKEN
+- gateway remains buildcustom-think-unified-staging
+- gateway has no provider/BYOK key configured
+- model remains google/gemini-3.6-flash
+- Unified Billing balance is now funded if that information is
+  available read-only
+- production is untouched
+
+Do not print secret values.
+
+==================================================
+2. ONE GENERATION
+==================================================
+
+Send exactly ONE normal native BuildCustom generation through the
+isolated staging control plane.
+
+Do not:
+
+- retry
+- edit
+- preview
+- publish
+- run another generation
+- run an acceptance cycle
+- run Replit-off
+
+Capture:
+
+- timestamp
+- control-plane HTTP status
+- gateway HTTP status
+- gateway request ID
+- provider
+- model
+- wholesale status
+- BYOK status
+- input tokens
+- output tokens
+- cost
+- duration
+- cache status
+- safe error information if any
+- whether actual inference occurred
+- whether generated files were persisted
+
+Never expose:
+
+- API tokens
+- Authorization headers
+- prompts containing secrets
+- private credentials
+
+==================================================
+3. BILLING PROOF
+==================================================
+
+If the request succeeds, prove as much as possible that it was actually
+Cloudflare-managed Unified Billing.
+
+We want evidence of:
+
+- successful gateway request
+- provider = Google / Google Vertex AI as expected
+- model = google/gemini-3.6-flash
+- BYOK absent/null
+- nonzero token usage
+- nonzero cost if Cloudflare exposes it
+- wholesale/Unified Billing indicator
+- reduction in available Cloudflare credits if observable
+- no GOOGLE_AI_STUDIO_API_KEY usage
+- no direct Google authorization path
+
+Do not call it proven merely because the request passed through AI
+Gateway.
+
+==================================================
+4. IF IT SUCCEEDS
+==================================================
+
+If generation succeeds:
+
+Classify:
+
+A. UNIFIED BILLING PROVEN — GENERATION SUCCEEDED
+
+Then verify ONLY the immediate generation result:
+
+- generation completed normally
+- generated files exist in SpaceDO
+- reconnect sees those same files
+- no relevant runtime error occurred
+
+Do NOT proceed to edit/preview/publish yet.
+
+Clean up the disposable project using the already-proven safe cleanup
+path.
+
+Then STOP.
+
+==================================================
+5. IF 403 REMAINS
+==================================================
+
+If the exact same 403 remains:
+
+STOP.
+
+Do not retry.
+
+Do not change credentials.
+
+Do not add more money.
+
+Do not change gateway configuration.
+
+Classify:
+
+D. 403 PERSISTS AFTER FUNDING
+
+At that point we have eliminated zero credits as the likely explanation
+and should escalate the exact request to Cloudflare.
+
+==================================================
+6. IF A DIFFERENT ERROR OCCURS
+==================================================
+
+If the 403 disappears but another error occurs:
+
+Classify:
+
+C. BILLING/AUTHORIZATION BOUNDARY PASSED — NEW BLOCKER
+
+Capture the new error and determine which layer produced it.
+
+Do not fix it yet.
+
+Do not send another inference request.
+
+==================================================
+7. DO NOT TOUCH
+==================================================
+
+Do not modify:
+
+- BUILDCUSTOM_THINK_API_TOKEN
+- CLOUDFLARE_API_TOKEN
+- gateway configuration
+- Google credentials
+- model
+- publishing
+- custom domains
+- SEO
+- Stripe
+- customer credits
+- production
+- Test1
+- TaskFlow
+- Buyer Magnets
+- app.buildcustom.ai
+- *.apps.buildcustom.ai
+- restore fixes
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Current Worker version
+2. Confirmation dedicated Think binding is active
+3. Confirmation gateway has no BYOK provider key
+4. Confirmation account is funded
+5. Request timestamp
+6. Control-plane status
+7. Gateway status
+8. Gateway request ID
+9. Provider/model
+10. wholesale status
+11. BYOK status
+12. input/output tokens
+13. cost
+14. whether credits changed, if observable
+15. whether inference occurred
+16. whether generation completed
+17. whether generated files persisted
+18. whether reconnect sees the same files
+19. whether the previous 403 disappeared
+20. whether Cloudflare-managed Unified Billing is now conclusively proven
+21. cleanup result
+22. production untouched
+23. exact next task
+
+Classify as ONE:
+
+A. UNIFIED BILLING PROVEN — GENERATION SUCCEEDED
+
+B. GENERATION SUCCEEDED — BILLING IDENTITY STILL INCONCLUSIVE
+
+C. BILLING/AUTHORIZATION BOUNDARY PASSED — NEW BLOCKER
+
+D. 403 PERSISTS AFTER FUNDING
+
+STOP after the single generation.
+
+No retry.
+No edit.
+No preview.
+No publish.
+No additional funding.
+No production changes.

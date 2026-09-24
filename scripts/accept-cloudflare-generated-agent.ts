@@ -13,7 +13,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { verifyStagingSpaNavigation } from "./verify-staging-spa-navigation";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -299,7 +299,64 @@ INSERT INTO users(id,username,email,password,role) VALUES(${sqlQuote(userId)},${
         turnPresent: Boolean(build.data?.turn),
         agentIdPresent: Boolean(build.data?.agentId || build.data?.turn?.agentId),
       }));
-      if (!statusIn(build, [200, 201])) block("billing probe", `HTTP ${build.status}`);
+      if (!statusIn(build, [200, 201])) {
+        block("billing probe", `HTTP ${build.status}`);
+        return;
+      }
+      const end = Date.now() + 90_000;
+      let fileList: Array<{ path?: string }> = [];
+      let fileStatus = 0;
+      let runtimeStatus = 0;
+      let turnsStatus = 0;
+      let turnCount = 0;
+      let samplePath: string | undefined;
+      let sampleHash: string | undefined;
+      while (Date.now() < end) {
+        const [status, files, turns] = await Promise.all([
+          request(superJar, `/api/projects/${projectId}/runtime/status`),
+          request(superJar, `/api/projects/${projectId}/runtime/files`),
+          request(superJar, `/api/projects/${projectId}/runtime/turns`),
+        ]);
+        runtimeStatus = status.status;
+        fileStatus = files.status;
+        turnsStatus = turns.status;
+        turnCount = Array.isArray(turns.data?.turns) ? turns.data.turns.length : 0;
+        fileList = responseFiles(files.data);
+        samplePath = fileList.find((file) => typeof file.path === "string" && /\.(tsx?|jsx?|html?|css)$/i.test(file.path))?.path;
+        if (samplePath) {
+          const content = await request(superJar, `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(samplePath)}`);
+          if (content.status === 200 && typeof content.data?.content === "string") {
+            sampleHash = createHash("sha256").update(content.data.content).digest("hex");
+          }
+        }
+        if (sampleHash && turnCount > 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+      console.log("BILLING_PROBE_RESULT " + JSON.stringify({
+        runtimeStatus, fileStatus, fileCount: fileList.length, turnsStatus, turnCount,
+        persistedContent: Boolean(sampleHash),
+      }));
+      if (!samplePath || !sampleHash) {
+        block("billing probe persisted files", "no readable generated file before cleanup");
+        return;
+      }
+      const reconnectJar = new Jar();
+      const login = await request(reconnectJar, "/api/auth/login", "POST", { email: superEmail, password: superPassword });
+      const [reopenedFiles, reopenedContent] = login.status === 200
+        ? await Promise.all([
+            request(reconnectJar, `/api/projects/${projectId}/runtime/files`),
+            request(reconnectJar, `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(samplePath)}`),
+          ])
+        : [{ status: 0, data: null }, { status: 0, data: null }];
+      const reconnectHash = typeof reopenedContent.data?.content === "string"
+        ? createHash("sha256").update(reopenedContent.data.content).digest("hex") : null;
+      const sameFiles = reopenedFiles.status === 200 &&
+        fileList.map((file) => file.path).sort().join("\n") === responseFiles(reopenedFiles.data).map((file) => file.path).sort().join("\n");
+      console.log("BILLING_PROBE_RECONNECT " + JSON.stringify({
+        loginStatus: login.status, fileStatus: reopenedFiles.status, contentStatus: reopenedContent.status,
+        sameFiles, sameContent: Boolean(reconnectHash && reconnectHash === sampleHash),
+      }));
+      expect("billing probe reconnect files", sameFiles && reconnectHash === sampleHash);
       return;
     }
     if (!statusIn(build, [200, 201])) {
