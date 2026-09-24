@@ -177,6 +177,12 @@ Preferred communication style: Simple, everyday language.
 - **Google Fonts** — Inter, Outfit, Plus Jakarta Sans, Space Grotesk via CDN
 - **Replit Plugins** — Vite dev/error plugins (dev-only)
 
+## Initial-launch AI billing decision
+
+- Native VibeSDK/ThinkAgent inference should use Cloudflare AI Gateway Unified Billing. This is the intended launch architecture, not a claim that the currently deployed staging runtime already uses it. Do not build a direct-provider model router for this migration.
+- BuildCustom will later maintain its own customer-facing **BuildCustom AI Credits** ledger. The planned customer usage charge is raw underlying model cost × 1.20; Cloudflare's Unified Billing fee is BuildCustom's cost of goods, not a customer-facing Cloudflare credit. Customer billing, plans, subscriptions, model selection, and that ledger are separate future work.
+- The BuildCustom control-plane SEO suggestions feature has a separate Google AI Studio credential requirement. Do not conflate that key with native ThinkAgent inference credentials or copy an unconfirmed key between services.
+
 ## Brand
 
 - **Gradient**: `#00c9b7` (teal) → `#22d3ee` (cyan) → `#6366f1` (indigo) → `#a855f7` (purple) → `#ec4899` (pink)

@@ -1,0 +1,458 @@
+We have made a product/architecture decision for the INITIAL BuildCustom launch.
+
+For now, we WANT to use:
+
+VibeSDK / ThinkAgent
+→ Cloudflare AI Gateway Unified Billing
+→ supported model providers
+
+We are intentionally choosing Cloudflare Unified Billing for launch
+instead of building our own direct-provider model router right now.
+
+Later, we may move to direct provider API keys to recover the additional
+Cloudflare fee, but that is NOT part of this migration.
+
+==================================================
+BUILDCUSTOM AI PRICING DECISION
+==================================================
+
+For customer-facing BuildCustom AI usage, our initial pricing rule will
+be:
+
+CUSTOMER AI USAGE CHARGE
+=
+RAW UNDERLYING MODEL COST × 1.20
+
+Example:
+
+Raw model inference cost:
+$10.00
+
+BuildCustom customer AI-credit usage:
+$12.00
+
+Cloudflare's Unified Billing fee is part of BuildCustom's COGS.
+
+Do NOT expose Cloudflare credits to customers.
+
+Customers will eventually see:
+
+BuildCustom AI Credits
+
+BuildCustom will maintain its own customer credit/usage ledger.
+
+Cloudflare Unified Billing is only the backend master inference pool.
+
+IMPORTANT:
+
+Do NOT build the BuildCustom customer credit ledger, Stripe billing,
+plans, subscriptions, or AI-credit UI during this task.
+
+That comes later.
+
+For this task we are ONLY making sure the native VibeSDK/ThinkAgent
+runtime is correctly using Cloudflare Unified Billing and completing
+staging acceptance.
+
+==================================================
+CURRENT PROBLEM
+==================================================
+
+Our isolated staging VibeSDK runtime is currently failing generation
+with:
+
+Payment Required
+
+We also know:
+
+- BuildCustom reaches the VibeSDK runtime successfully.
+- Code generation starts.
+- VibeSDK emits Payment Required through a WebSocket error frame.
+- BuildCustom now correctly surfaces runtime build errors as HTTP 502
+  instead of incorrectly converting them to HTTP 409.
+- The isolated Cloudflare account reports ZERO AI Gateway credits.
+- Earlier staging generations worked.
+- The staging runtime has an AI binding.
+- The staging runtime also has a GOOGLE_AI_STUDIO_API_KEY binding.
+- We had not yet proven whether the failed request actually used
+  Unified Billing.
+
+Because we have now CHOSEN Unified Billing for launch, determine whether
+the current VibeSDK/ThinkAgent generation path is already configured to
+use it correctly.
+
+Do not redesign anything yet.
+
+==================================================
+TASK 1: VERIFY THE CURRENT INFERENCE PATH
+==================================================
+
+Perform a focused inspection of the isolated STAGING VibeSDK runtime.
+
+Determine the exact current path for native ThinkAgent generation.
+
+Answer:
+
+1. What model is ThinkAgent currently using?
+2. What provider is that model from?
+3. What code initiates the model request?
+4. Does the request use env.AI?
+5. Does it go through Cloudflare AI Gateway?
+6. Does it use Cloudflare Unified Billing?
+7. Does it currently send/use GOOGLE_AI_STUDIO_API_KEY?
+8. Is the Google key required for this native generation path?
+9. Does Cloudflare Unified Billing support the exact current model/path?
+10. Is the current Payment Required error consistent with the zero
+    Unified Billing balance?
+
+Trace the actual execution path.
+
+Do not infer the answer merely from environment-variable names.
+
+==================================================
+TASK 2: DETERMINE WHETHER WE CURRENTLY HAVE MIXED BILLING
+==================================================
+
+We do NOT want an accidental configuration where some native agent calls
+use:
+
+Google direct billing
+
+while others use:
+
+Cloudflare Unified Billing
+
+unless there is a deliberate technical reason.
+
+Inspect whether the current runtime has mixed provider/billing paths.
+
+Classify each relevant credential/binding as:
+
+A. REQUIRED FOR UNIFIED BILLING
+
+B. DIRECT-PROVIDER BYOK ONLY
+
+C. REQUIRED FOR ANOTHER VIBESDK FEATURE
+
+D. UNUSED / LEGACY
+
+Do NOT delete anything yet.
+
+Specifically classify:
+
+- AI binding
+- GOOGLE_AI_STUDIO_API_KEY
+- any AI Gateway configuration
+- any model/provider configuration
+- any other provider keys used by native ThinkAgent generation
+
+==================================================
+TASK 3: CONFIRM THE PAYMENT REQUIRED CAUSE
+==================================================
+
+Before asking me to purchase anything, get the strongest evidence
+available that the failed generation is using the Unified Billing path.
+
+If necessary, add minimal REDACTED diagnostics to isolated staging only.
+
+We want to know whether:
+
+Payment Required
+
+is actually Cloudflare refusing inference because the Unified Billing
+credit balance is zero.
+
+Do not log:
+
+- API keys
+- Authorization headers
+- prompts
+- generated source
+- user secrets
+
+If you can conclusively establish:
+
+Unified Billing request
++
+zero available balance
++
+billing/payment failure
+
+then classify the generation blocker as:
+
+OWNER ACTION REQUIRED — FUND CLOUDFLARE UNIFIED BILLING
+
+Do NOT keep changing BuildCustom/VibeSDK code trying to solve a billing
+problem.
+
+==================================================
+TASK 4: TELL ME EXACTLY HOW TO FUND IT
+==================================================
+
+If Unified Billing funding is the blocker, STOP before purchasing
+anything.
+
+Give me extremely simple owner instructions.
+
+Tell me exactly where in Cloudflare to go.
+
+For example:
+
+1. Open Cloudflare
+2. Go to ...
+3. Click ...
+4. Add $___ in credits
+5. Confirm ...
+6. Tell Replit when complete
+
+Recommend the SMALLEST reasonable amount for staging acceptance.
+
+We do not need a large production balance yet.
+
+The purpose is simply to:
+
+- prove generation
+- prove editing
+- run the remaining staging acceptance cycles
+
+Do not purchase anything automatically.
+
+==================================================
+TASK 5: UNIFIED BILLING CONFIGURATION
+==================================================
+
+If the runtime is NOT currently using Unified Billing correctly, identify
+the smallest change needed to make native ThinkAgent generation use:
+
+Cloudflare AI Gateway Unified Billing
+
+Do NOT build a new model router.
+
+Do NOT add LiteLLM.
+
+Do NOT add OpenRouter.
+
+Do NOT implement direct OpenAI/Anthropic/Google provider routing.
+
+Do NOT build customer billing.
+
+Use the Cloudflare/VibeSDK-native path wherever possible.
+
+Before making a meaningful inference architecture change, report what is
+wrong and the exact small change required.
+
+If it is merely configuration, prefer configuration over code changes.
+
+==================================================
+TASK 6: MODEL CHOICE
+==================================================
+
+Do not expand this task into user-selectable models yet.
+
+For launch we only need the existing native ThinkAgent generation model
+working correctly through Unified Billing.
+
+However, document:
+
+- current model
+- current provider
+- whether Unified Billing supports it
+- raw provider pricing source/path if available
+- whether Cloudflare exposes actual usage/cost information that
+  BuildCustom can later use for our customer credit ledger
+
+We will build model selection later.
+
+==================================================
+TASK 7: FUTURE BUILDCUSTOM CREDIT ACCOUNTING
+==================================================
+
+Do NOT implement this now.
+
+But inspect whether Cloudflare/VibeSDK gives us enough usage information
+to later calculate:
+
+RAW_MODEL_COST
+
+for each generation/edit operation.
+
+Our future formula is:
+
+BUILDCUSTOM_CUSTOMER_CHARGE
+=
+RAW_MODEL_COST × 1.20
+
+We need to eventually associate AI cost with:
+
+user
+project
+agent
+operation
+
+For now ONLY report what usage/cost metadata is available.
+
+Examples:
+
+- input tokens
+- output tokens
+- model
+- provider
+- cached tokens
+- request ID
+- Cloudflare cost
+- provider cost
+- Gateway analytics identifier
+
+Do not build the ledger yet.
+
+==================================================
+TASK 8: GOOGLE SEO KEY IS SEPARATE
+==================================================
+
+Do NOT confuse native ThinkAgent inference with BuildCustom SEO
+suggestions.
+
+The BuildCustom staging CONTROL PLANE still needs an appropriate:
+
+GOOGLE_AI_STUDIO_API_KEY
+
+for the separate SEO suggestions feature unless we deliberately migrate
+that feature later.
+
+That is a separate issue.
+
+Do not let the SEO secret affect the native ThinkAgent Unified Billing
+investigation.
+
+==================================================
+TASK 9: AFTER UNIFIED BILLING IS FUNDED
+==================================================
+
+If owner funding is required:
+
+STOP and wait for me.
+
+Do NOT continue automatically.
+
+After I confirm the staging Unified Billing balance is funded, the NEXT
+task will be:
+
+1. verify native generation
+2. verify normal edit
+3. investigate the intermittent inactive Durable Object error if it
+   occurs again
+4. run 3 complete end-to-end staging cycles
+5. run the Replit-off cycle
+
+Do not run those before the billing issue is resolved.
+
+==================================================
+DO NOT TOUCH PUBLISHING
+==================================================
+
+The staging publishing system is considered proven.
+
+Do NOT modify:
+
+- *.staging.buildcustom.ai
+- staging gateway architecture
+- route KV architecture
+- Browser Rendering
+- screenshots
+- publish readiness gate
+- release architecture
+
+==================================================
+DO NOT TOUCH PRODUCTION
+==================================================
+
+Do NOT modify:
+
+- production control plane
+- production D1
+- active production VibeSDK namespaces
+- protected production VibeSDK Worker
+- Test1
+- TaskFlow
+- Buyer Magnets
+- production gateway
+- production route KV
+- production dispatch namespace
+- *.apps.buildcustom.ai
+- app.buildcustom.ai
+- production custom hostnames
+
+Everything remains isolated staging.
+
+==================================================
+DO NOT MODIFY THE FROZEN RESTORE FIXES
+==================================================
+
+Do not modify:
+
+- SpaceDO restore fix
+- ThinkAgent synchronization fix
+
+They remain frozen.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current ThinkAgent model
+2. current provider
+3. exact inference request path
+4. whether env.AI is used
+5. whether AI Gateway is used
+6. whether Unified Billing is used
+7. whether GOOGLE_AI_STUDIO_API_KEY is used for native generation
+8. whether mixed billing paths currently exist
+9. classification of each AI credential/binding
+10. whether the exact current model is supported by Unified Billing
+11. strongest evidence for the Payment Required cause
+12. whether zero Unified Billing credits are the confirmed blocker
+13. whether any code change is actually necessary
+14. exact configuration change if necessary
+15. owner action required
+16. exact Cloudflare funding instructions if required
+17. smallest recommended staging credit purchase
+18. usage metadata available for future BuildCustom metering
+19. whether per-operation raw model cost can be calculated
+20. confirmation that future customer pricing will be handled separately
+    by BuildCustom
+21. confirmation that production was untouched
+22. exact next task
+
+Use one of:
+
+A. UNIFIED BILLING CONFIRMED — OWNER FUNDING REQUIRED
+
+B. UNIFIED BILLING CONFIRMED — CONFIGURATION CHANGE REQUIRED
+
+C. UNIFIED BILLING CONFIRMED — DIFFERENT BLOCKER FOUND
+
+D. CURRENT RUNTIME IS NOT USING UNIFIED BILLING
+
+E. INFERENCE PATH STILL UNCONFIRMED
+
+==================================================
+STOP
+==================================================
+
+Do not proceed into production.
+
+Do not attach app.buildcustom.ai.
+
+Do not purchase credits.
+
+Do not build customer billing.
+
+Do not build model selection.
+
+Do not build a new inference harness.
+
+Determine whether our chosen Unified Billing architecture is already
+what VibeSDK is using, determine whether the zero balance is causing
+Payment Required, and STOP for owner action if funding is required.

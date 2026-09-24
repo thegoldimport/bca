@@ -1,0 +1,33 @@
+46 actions
+The control-plane code turns any runtime WebSocket build error into a 409, so Payment Required is not itself evidence that BuildCustom returned a provider HTTP status. I also found that the isolated Cloudflare account reports a zero AI Gateway credit balance, but that alone does not prove which request failed. I’ll capture the staging runtime’s error path and check whether the inactive-object message comes from a workspace operation or from the test harness.
+
+
+23 actions
+A fresh disposable staging generation reproduced the failure. The request reached the runtime and started code generation; the adapter then returned the runtime’s Payment Required error as HTTP 409. The live Worker has a 402 status label in its bundle, but the available logs do not include the original AI request or response, so I cannot yet attribute the failure to a specific billing or credential cause. I found no VibeSDK deployment between the earlier working runs and these failures. I’ll correct the proven misleading 409 mapping, then keep the full acceptance runs gated until the upstream cause is confirmed.
+
+
+28 actions
+C. RUNTIME ACCEPTANCE NOT COMPLETE. I corrected a misleading staging error status, but generation still fails and the edit failure’s cause is not proven. I did not count the previously successful publish sequences as complete runtime cycles.
+
+#	Requested result	Finding
+1	Payment Required root cause	Unconfirmed. A fresh disposable generation failed with Payment Required after code generation started. The available runtime logs do not contain the original AI request or response.
+2	Component producing it	POST /api/projects/:id/runtime/messages returned HTTP 409 from the BuildCustom staging control plane. Its adapter received the message in a VibeSDK WebSocket error frame.
+3	Original status/error	Not recoverable from that frame: it carries a message, not an HTTP status or structured provider error. The live bundle contains the generic label 402: Payment Required, but that does not prove this request received a provider 402.
+4	Configuration issue	The isolated Worker has an AI binding and a GOOGLE_AI_STUDIO_API_KEY secret binding. No explicit AI Gateway slug or URL binding was found. The Cloudflare account reports zero AI Gateway credits, but without a request log I cannot establish that this balance caused the failure. The Worker had no deployment between the earlier working runs and this failure.
+5	Code change	Fixed the proven mapping bug: a runtime WebSocket build error now returns HTTP 502, rather than being mislabeled as a project conflict (409). This narrow change was deployed to the staging control plane only; it does not turn a failed generation into a success.
+6	Runtime owner action	No responsible billing, quota, credential, or model-access setting is confirmed yet, so I cannot responsibly prescribe a top-up or key replacement. The next needed evidence is the redacted upstream AI/Gateway response status and error code for the failed staging request at approximately 2026-09-24 16:00:52 UTC. Do not share a key.
+7	Inactive Durable Object root cause	Unconfirmed. The reported SQL connection-closed message is consistent with a failure inside the VibeSDK workspace/DO operation, but there is no operation-level stack or timestamped trace to identify why that instance became inactive. No isolated VibeSDK Worker deployment occurred during the affected runs.
+8	Product or harness	Not established. The harness performs generation and edit sequentially and cleans up afterward; I found no evidence that it deletes the project or reuses a closed WebSocket before edit. That does not, by itself, prove a product cause.
+9	Reconnect/retry change	None. Replaying an edit after its outcome becomes unknown could apply it twice.
+10	Duplicate-operation protections	No edit, generation, agent, or release retry was added.
+11–13	Cycle 1 generation / edit / publish and times	Not run as a qualifying complete cycle; fresh diagnostic generation failed. Times: N/A.
+14–16	Cycle 2 generation / edit / publish and times	Not run. Times: N/A.
+17–19	Cycle 3 generation / edit / publish and times	Not run. Times: N/A.
+20	Replit-off cycle	Not run; its required 3/3 complete-cycle prerequisite was not met. The development server is running.
+21	Automated tests	119 passed, including the new error-mapping regression test.
+22	Typecheck/builds	Typecheck, Node production build, Cloudflare build, and staging control-plane and gateway Wrangler dry-runs passed. The staging control plane and local app both returned HTTP 200 after deployment/restart.
+23	Cleanup	The diagnostic disposable project deletion passed, and the temporary runtime log tail was stopped. I did not verify deletion of its underlying VibeSDK agent.
+24	Remaining blockers	Original upstream Payment Required status/code and cause; operation-level evidence for the intermittent DO edit failure; then three complete staging cycles and the gated Replit-off cycle.
+25	Separate Google SEO-key owner action	Confirm the intended Google AI Studio key, then configure GOOGLE_AI_STUDIO_API_KEY as a secret on buildcustom-control-plane-staging. That binding is currently absent there. I did not copy the unconfirmed Replit key.
+26	Final classification	C. RUNTIME ACCEPTANCE NOT COMPLETE.
+No production Worker, namespace, route, or domain was changed.
