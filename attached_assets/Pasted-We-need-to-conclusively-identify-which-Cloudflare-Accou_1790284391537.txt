@@ -1,0 +1,333 @@
+We need to conclusively identify which Cloudflare Account API Token is
+currently stored in the staging Worker secret:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+Do NOT proceed with the gateway-authentication experiment yet.
+
+This task is ONLY to prove the identity of that Worker-held token.
+
+This is NOT an AI inference test.
+
+==================================================
+KNOWN TOKEN IDS
+==================================================
+
+Cloudflare Account API Token:
+
+newtestworkersai
+
+Token ID:
+
+535d12b0fc46004ca29fd8c937a60f75
+
+Current permissions:
+
+- AI Gateway Run
+- Workers AI Read
+- Workers AI Write
+
+Current last_used_on:
+
+null
+
+
+Cloudflare Account API Token:
+
+bcatest
+
+Token ID:
+
+4ba05963fa1c436c5f031a4ac3d4da88
+
+This token is also used for unrelated Cloudflare management/deployment
+operations.
+
+Do NOT modify either token.
+
+==================================================
+CURRENT WORKER STATE
+==================================================
+
+Isolated staging Worker:
+
+buildcustom-vibesdk-migration-staging
+
+Current clean version previously reported:
+
+800935d2-510a-4a9d-bb99-68024db61a78
+
+The Worker contains secret:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+but Cloudflare binding metadata does not identify which Account API
+Token value is stored inside it.
+
+The Worker also still contains:
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+
+The owner still has that diagnostic secret locally.
+
+Reuse that existing diagnostic secret to protect this temporary
+verification route.
+
+Do NOT create another diagnostic secret.
+
+==================================================
+GOAL
+==================================================
+
+Use Cloudflare's Account Token Verify API to determine the ID of the
+token stored in:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+Cloudflare documents a token verification endpoint that returns
+metadata about the bearer token used to authenticate the request.
+
+Use the CURRENT documented Account Token Verify endpoint and response
+format.
+
+The request must use:
+
+Authorization: Bearer <BUILDCUSTOM_THINK_API_TOKEN>
+
+The token value must NEVER leave the Worker.
+
+We only need the SAFE returned token identity/metadata necessary to
+determine which Account API Token it is.
+
+==================================================
+PHASE 1 — VERIFY DOCUMENTATION
+==================================================
+
+Before changing anything, confirm from current Cloudflare documentation:
+
+1. exact Account Token Verify endpoint
+2. exact HTTP method
+3. that it accepts an Account API Token as Bearer authentication
+4. that the response returns a token ID or other safe stable identifier
+5. that this request does NOT perform AI inference
+6. that this request does NOT consume AI credits
+7. that verification does not mutate the token
+
+If any of these are false or unclear enough that the mechanism is not
+safe, STOP before deployment and report the issue.
+
+==================================================
+PHASE 2 — TEMPORARY PROTECTED ROUTE
+==================================================
+
+If documentation confirms the approach, add ONE temporary staging-only
+route:
+
+POST
+/__internal/buildcustom/verify-think-token
+
+Protect it using the EXISTING:
+
+BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+
+Do not inspect or expose that diagnostic secret.
+
+The route must require:
+
+- POST
+- exact expected staging hostname
+- exact expected staging account
+- bearer diagnostic-secret authentication
+- valid 64-character lowercase hex diagnostic-secret format
+- secure comparison
+- staging only
+
+The route must then:
+
+1. read BUILDCUSTOM_THINK_API_TOKEN internally
+2. call Cloudflare's documented Account Token Verify endpoint using it
+   as the Bearer token
+3. make NO other outbound request
+4. return ONLY safe verification information
+
+The response may contain:
+
+- verification HTTP status
+- success/failure
+- token ID
+- token status if Cloudflare returns it
+- safe non-secret metadata needed to identify the token
+
+The response MUST NOT contain:
+
+- BUILDCUSTOM_THINK_API_TOKEN value
+- Authorization header
+- diagnostic secret
+- any token secret
+- unrelated account information
+- request headers
+
+NO RETRIES.
+NO REDIRECTS.
+ONE verification request only.
+
+==================================================
+IMPORTANT
+==================================================
+
+This route must NOT:
+
+- call Workers AI
+- call Google
+- call Gemini
+- call AI Gateway inference
+- call ThinkAgent
+- consume Cloudflare AI credits
+- use GOOGLE_AI_STUDIO_API_KEY
+- use CLOUDFLARE_API_TOKEN
+- change any Cloudflare token
+- change any gateway setting
+
+==================================================
+PHASE 3 — LOCAL VALIDATION
+==================================================
+
+Validate the temporary route locally using mocked responses only.
+
+Confirm that a mocked Cloudflare verify response containing:
+
+{
+  "id": "535d12b0fc46004ca29fd8c937a60f75"
+}
+
+results in a sanitized response containing that ID but no secret.
+
+Also verify unauthorized requests cannot reach the verification branch.
+
+Do not make a live verification request from Replit.
+
+==================================================
+PHASE 4 — DEPLOY
+==================================================
+
+Deploy the temporary verification route ONLY to:
+
+buildcustom-vibesdk-migration-staging
+
+Preserve every existing normal module and binding.
+
+Do NOT modify:
+
+- AI Gateway settings
+- authentication toggle
+- byok_only
+- model configuration
+- BUILDCUSTOM_THINK_API_TOKEN
+- BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+- CLOUDFLARE_API_TOKEN
+- GOOGLE_AI_STUDIO_API_KEY
+- production
+
+Verify through bundle/metadata only:
+
+- temporary route is present
+- expected Worker version serves 100%
+- existing bindings/modules remain intact
+- gateway remains authentication:false
+- production untouched
+
+==================================================
+PHASE 5 — STOP FOR OWNER
+==================================================
+
+Replit must NOT call the live verification route.
+
+Once safely deployed, STOP and give the owner ONE exact Mac Terminal
+command.
+
+The command must:
+
+- prompt invisibly for the existing
+  BUILDCUSTOM_GOOGLE_UNIFIED_DIAGNOSTIC_SECRET
+- validate 64 lowercase hexadecimal characters
+- POST exactly once to:
+
+https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev/__internal/buildcustom/verify-think-token
+
+- no retries
+- no redirects
+- reasonable timeout
+- print response body
+- print HTTP status
+- never print/store the diagnostic secret
+- never put the secret value directly into shell history
+
+Tell the owner to run it EXACTLY ONCE.
+
+==================================================
+EXPECTED INTERPRETATION
+==================================================
+
+If returned token ID is:
+
+535d12b0fc46004ca29fd8c937a60f75
+
+then:
+
+BUILDCUSTOM_THINK_API_TOKEN = newtestworkersai
+
+and the intended dedicated token identity is proven.
+
+If returned token ID is:
+
+4ba05963fa1c436c5f031a4ac3d4da88
+
+then:
+
+BUILDCUSTOM_THINK_API_TOKEN = bcatest
+
+and we must NOT proceed with the authentication experiment until the
+binding is corrected.
+
+If another token ID is returned:
+
+STOP.
+
+Do not change anything.
+
+We will identify it separately.
+
+==================================================
+DO NOT CLEAN UP YET
+==================================================
+
+Leave the temporary verification route deployed until the owner reports
+the result.
+
+Do not enable gateway authentication.
+
+Do not restore the Google inference diagnostic.
+
+Do not send any AI inference.
+
+Do not alter any token.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Return:
+
+1. documented verification endpoint used
+2. confirmation it is non-inference and non-mutating
+3. temporary Worker version
+4. confirmation verification route is present
+5. confirmation existing bindings/modules are intact
+6. confirmation gateway authentication remains false
+7. confirmation Replit made zero live verification calls
+8. confirmation Replit made zero AI inference calls
+9. exact ONE-LINE Terminal command for the owner
+10. explicit instruction to run it exactly once
+11. confirmation production untouched
+
+Then STOP and wait for the owner's result.

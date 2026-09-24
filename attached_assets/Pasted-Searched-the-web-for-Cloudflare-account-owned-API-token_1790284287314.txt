@@ -1,0 +1,23 @@
+Searched the web for "Cloudflare account-owned API token verify endpoint returns token id for bearer token"
+
+3 actions
+I found that audit records identify the token used for Worker deployment operations, while the three AI Gateway events expose only an authentication flag, not a token ID. I’ll make one final read-only check of the named tokens’ permission metadata to see whether it rules out bcatest as the Think credential.
+
+
+2 actions
+
+Searched the web for "Does Cloudflare Workers AI Write permission include Workers AI Read for AI REST inference endpoints?"
+The Worker-held Think token’s identity is not proven. newtestworkersai remains a possibility, and bcatest can neither be proven nor conclusively ruled out from the available metadata. The authenticated-gateway experiment should remain stopped.
+
+What the read-only records show
+Item	Safe finding
+newtestworkersai	Account token ID 535d12b0fc46004ca29fd8c937a60f75; created Sep 24, 18:11:29 UTC; modified 18:46:13 and 21:03:29 UTC; last_used_on is null. Its current policy includes AI Gateway Run and Workers AI Read/Write. The 21:03 update occurred after both diagnostic requests.
+bcatest	Account token ID 4ba05963fa1c436c5f031a4ac3d4da88; created Sep 18, 18:18:09 UTC. Its last-used time advanced to Sep 24, 21:07:54 UTC during this read-only investigation. Its policy lists Workers AI Write but not an explicit Workers AI Read group; the records do not establish whether Write satisfies this endpoint’s effective permission check.
+Think Worker binding	First appears in a Worker version annotated “Add secret: BUILDCUSTOM_THINK_API_TOKEN,” deployed Sep 24, 18:31:58 UTC. Later versions retain the binding; none inspected identifies the Account API Token whose value it contains. Secret metadata supplies a name and type, not a token ID or fingerprint.
+Audit records	Worker deployments at 20:38 and 20:44 UTC identify bcatest as the deployment API actor. This demonstrates unrelated control-plane use of bcatest; it does not identify the Think secret. No audit record in the inspected period identifies an authenticating token for either AI diagnostic.
+AI Gateway events	The Workers AI success at 20:10:43 UTC and Google failures at 18:55:15 and 20:40:45 UTC report authentication: false, but expose no Account API Token ID or usable token fingerprint. I did not inspect potentially sensitive request-header contents.
+Cloudflare defines last_used_on as the last time a token was used, so a successfully authenticated account API call would ordinarily be expected to contribute to it. I found no published update interval or endpoint-specific guarantee for this field. bcatest’s recent use is explained at least in part by identified deployment operations and read-only management calls; its timestamp cannot be attributed to inference. Conversely, newtestworkersai showing “—” after the earlier requests is a reason to question the assumed binding, not proof that it was not used. The metadata does not establish how promptly those AI REST calls would appear there.
+
+Smallest safe way to prove identity, later and only with separate approval: Cloudflare’s read-only Account Token Verify endpoint returns the ID of the bearer token presented to it. If the owner still has the exact value installed in the Think binding locally, they could verify that value without sharing it. If it exists only inside the Worker, proving its ID would require a separately approved, protected staging-only Worker-side verification mechanism that returns only the token ID, never the value. Neither method was run here.
+
+Do not proceed with gateway authentication or restore the inference route yet. I sent zero inference requests, changed nothing, and did not touch production.
