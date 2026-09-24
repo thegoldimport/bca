@@ -1,0 +1,291 @@
+We found an important new clue and want ONE isolated diagnostic test.
+
+The owner's old direct Google AI Studio billing account is currently
+negative/suspended, but DO NOT modify or fund Google.
+
+We are NOT testing the BuildCustom ThinkAgent again yet.
+
+Instead, test Cloudflare Unified Billing directly using a Cloudflare
+Workers AI model.
+
+==================================================
+GOAL
+==================================================
+
+Determine whether this already-funded Cloudflare account can successfully
+perform inference through:
+
+dedicated BuildCustom Think API token
+→ Cloudflare AI REST API
+→ buildcustom-think-unified-staging
+→ Workers AI model
+→ Cloudflare prepaid/Unified Billing credits
+
+This test must bypass:
+
+- VibeSDK ThinkAgent
+- Google
+- Google AI Studio
+- Google Vertex AI
+- GOOGLE_AI_STUDIO_API_KEY
+- provider BYOK
+
+Do not modify BuildCustom code.
+
+==================================================
+CURRENT STATE
+==================================================
+
+Cloudflare account has approximately:
+
+$10 prepaid Unified Billing credits
+
+Dedicated secret:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+Token permissions currently include:
+
+Workers AI → Read
+Workers AI → Edit
+
+Gateway:
+
+buildcustom-think-unified-staging
+
+The gateway has no provider BYOK key configured.
+
+==================================================
+1. CHOOSE A CHEAP WORKERS AI MODEL
+==================================================
+
+Use Cloudflare's current model catalog to select a cheap text-generation
+Workers AI model that is currently supported by the AI REST API.
+
+The model MUST be a Cloudflare Workers AI model using the:
+
+@cf/...
+
+model namespace.
+
+Do not use:
+
+- Google
+- OpenAI
+- Anthropic
+- xAI
+- any third-party model
+
+Record the exact model selected.
+
+==================================================
+2. USE THE SAME REST AUTHENTICATION PATH
+==================================================
+
+Make ONE direct request to the Cloudflare AI REST API using the same
+dedicated Cloudflare credential represented by:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+Use the account-scoped REST API.
+
+Route it through:
+
+buildcustom-think-unified-staging
+
+using the documented:
+
+cf-aig-gateway-id
+
+mechanism.
+
+Use a trivial prompt such as:
+
+"Reply with exactly: CLOUDFLARE_AI_OK"
+
+Do not send any BuildCustom project information.
+
+==================================================
+3. EXACTLY ONE REQUEST
+==================================================
+
+Send ONE request only.
+
+Do not retry.
+
+Do not send a BuildCustom generation.
+
+Do not invoke ThinkAgent.
+
+Do not edit any Worker.
+
+Do not modify gateway configuration.
+
+Do not change credentials.
+
+==================================================
+4. CAPTURE SAFE RESULTS
+==================================================
+
+Record:
+
+- HTTP status
+- gateway request ID
+- model
+- provider
+- response text if successful
+- input tokens
+- output tokens
+- cost
+- wholesale / billing indicator
+- BYOK indicator
+- Cloudflare credit balance before
+- Cloudflare credit balance after
+- safe error code/message if unsuccessful
+
+Never print:
+
+- API token
+- Authorization header
+- secret values
+
+==================================================
+5. INTERPRETATION
+==================================================
+
+OUTCOME A:
+
+Workers AI inference succeeds and consumes Cloudflare prepaid credits.
+
+This proves:
+
+- dedicated API credential works
+- Cloudflare AI REST authentication works
+- gateway routing works
+- Cloudflare inference works
+- Cloudflare prepaid billing works
+
+Then the remaining 403 is specifically associated with the
+third-party Google model / Unified Billing path rather than basic
+Cloudflare authentication.
+
+STOP.
+
+--------------------------------------------------
+
+OUTCOME B:
+
+Workers AI inference succeeds but does not use the prepaid credits.
+
+Report exactly which billing mechanism Cloudflare says was used.
+
+STOP.
+
+--------------------------------------------------
+
+OUTCOME C:
+
+Workers AI returns the SAME 403 before inference.
+
+STOP.
+
+This would strongly indicate the problem is above the Google provider
+layer, such as:
+
+- Cloudflare API authorization
+- REST API authorization
+- gateway authorization/configuration
+- account-level AI configuration
+
+Do not speculate further or change anything.
+
+--------------------------------------------------
+
+OUTCOME D:
+
+A different error occurs.
+
+Capture it and STOP.
+
+Do not fix it yet.
+
+==================================================
+6. DO NOT TOUCH GOOGLE
+==================================================
+
+Do not:
+
+- add Google credits
+- change Google billing
+- use GOOGLE_AI_STUDIO_API_KEY
+- add Google BYOK
+- call Google directly
+- modify Google credentials
+
+The owner's negative Google AI Studio balance is separate from this test.
+
+==================================================
+7. DO NOT TOUCH BUILDCUSTOM
+==================================================
+
+Do not modify:
+
+- ThinkAgent
+- VibeSDK runtime
+- staging Worker code
+- BUILDCUSTOM_THINK_API_TOKEN
+- CLOUDFLARE_API_TOKEN
+- publishing
+- custom domains
+- restore
+- SEO
+- customer credits
+- Stripe
+- production
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Exact Workers AI model tested
+2. Endpoint used
+3. Confirmation cf-aig-gateway-id selected
+   buildcustom-think-unified-staging
+4. HTTP status
+5. Gateway request ID
+6. Provider/model recorded by gateway
+7. Response text if successful
+8. Input/output tokens
+9. Cost
+10. wholesale/billing indicator
+11. BYOK indicator
+12. Credit balance before
+13. Credit balance after
+14. Safe error if unsuccessful
+15. Whether actual inference occurred
+16. Whether dedicated API credential is now proven functional
+17. Whether Cloudflare REST AI path is proven functional
+18. Whether Cloudflare prepaid billing is proven functional
+19. What this tells us about the existing Google 403
+20. Confirmation no BuildCustom generation was sent
+21. Confirmation Google was untouched
+22. Confirmation production was untouched
+
+Classify as ONE:
+
+A. WORKERS AI + CLOUDFLARE BILLING PROVEN
+
+B. WORKERS AI WORKS — DIFFERENT BILLING PATH
+
+C. SAME 403 ON WORKERS AI
+
+D. DIFFERENT WORKERS AI ERROR
+
+Exactly ONE request.
+
+Do not retry.
+Do not change configuration.
+Do not run ThinkAgent.
+Do not contact support.
