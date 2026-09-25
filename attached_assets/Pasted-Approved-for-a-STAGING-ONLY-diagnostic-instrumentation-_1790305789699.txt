@@ -1,0 +1,396 @@
+Approved for a STAGING-ONLY diagnostic instrumentation step.
+
+DO NOT send inference.
+
+DO NOT call AI Gateway.
+
+The previous /compat proof did NOT test AI Gateway because Cloudflare
+recorded:
+
+scriptThrewException
+zero subrequests
+
+Therefore the temporary Worker route itself failed before an outbound
+gateway request was observed.
+
+We need to locate that failure without inference.
+
+==================================================
+GOAL
+==================================================
+
+Build a temporary protected staging diagnostic that executes the SAME
+local preparation path as the failed /compat diagnostic but STOPS
+immediately before fetch().
+
+It must tell us exactly which preparation stage succeeds or fails.
+
+This is NOT an inference test.
+
+==================================================
+AUTHORIZED ACTIONS
+==================================================
+
+Authorized:
+
+- ONE minimal staging diagnostic code change
+- ONE staging deployment
+- ONE invocation of the protected diagnostic route
+- sanitized Worker-side diagnostic output
+- cleanup of the temporary diagnostic afterward
+- cleanup deployment if required
+
+NOT authorized:
+
+- AI Gateway fetch
+- inference
+- Gemini request
+- native generation
+- pacing
+- model changes
+- gateway changes
+- credential changes
+- billing changes
+- credits
+- BYOK
+- production changes
+
+==================================================
+IMPORTANT SAFETY REQUIREMENT
+==================================================
+
+The diagnostic MUST NOT contain any code path capable of sending the
+model request.
+
+Do not merely use a flag such as:
+
+dryRun=true
+
+around an otherwise reachable fetch.
+
+For this diagnostic version, the route should terminate BEFORE fetch()
+and should not execute an outbound AI Gateway request.
+
+The goal is local Worker preparation only.
+
+==================================================
+STAGE THE DIAGNOSTIC
+==================================================
+
+Wrap EACH meaningful preparation stage independently.
+
+Return only sanitized information.
+
+Suggested stages:
+
+STAGE 1
+route recognized
+
+STAGE 2
+required non-secret configuration exists
+
+Verify presence only:
+
+- account ID
+- gateway ID/name
+
+Do not return account ID if unnecessary.
+
+STAGE 3
+diagnostic protection secret binding exists
+
+Return only:
+
+diagnosticSecretPresent: true/false
+
+NEVER return its value.
+
+STAGE 4
+incoming diagnostic authorization can be processed
+
+If hashing/comparison is used, isolate this operation because the prior
+uncaught exception may have occurred here.
+
+Return only:
+
+diagnosticAuthorizationProcessed: true
+
+Do not return hashes or credentials.
+
+STAGE 5
+BUILDCUSTOM_THINK_API_TOKEN binding exists
+
+Return only:
+
+thinkTokenPresent: true/false
+
+NEVER return the token.
+
+STAGE 6
+construct intended /compat URL
+
+Validate it with URL parsing.
+
+Return only a sanitized form such as:
+
+https://gateway.ai.cloudflare.com/v1/{account}/buildcustom-think-unified-staging/compat/chat/completions
+
+STAGE 7
+construct headers
+
+Verify presence of:
+
+Content-Type
+cf-aig-authorization
+
+Verify absence of:
+
+Authorization
+Google API key
+Vertex credential
+provider credential
+
+Return ONLY header names/presence.
+
+Never return header values.
+
+STAGE 8
+construct request body
+
+Use:
+
+model: google/gemini-3.6-flash
+messages: minimal diagnostic message
+max_tokens: very small
+stream: false
+
+Serialize with JSON.stringify.
+
+Do NOT return the message contents.
+
+Return safe metadata only:
+
+bodySerialized: true
+model: google/gemini-3.6-flash
+stream: false
+messageCount: 1
+
+STAGE 9
+READY_BEFORE_FETCH
+
+STOP HERE.
+
+Return HTTP 200 JSON.
+
+THERE MUST BE NO fetch() TO AI GATEWAY.
+
+==================================================
+ERROR HANDLING
+==================================================
+
+Every stage must be inside sanitized exception handling.
+
+If a stage throws, return:
+
+HTTP 500
+
+{
+  "ok": false,
+  "failedStage": "<stage-name>",
+  "errorName": "<safe JS error class>",
+  "errorMessage": "<sanitized message>",
+  "stackLocation": "<safe module/function/line if available>"
+}
+
+Do NOT return:
+
+- secrets
+- token values
+- Authorization values
+- hashes
+- complete environment dumps
+- user data
+
+Also ensure the OUTERMOST route handler has a final catch so another
+scriptThrewException cannot hide the diagnostic failure.
+
+We should receive structured JSON even if an unexpected local
+operation fails.
+
+==================================================
+CLOUDFLARE OBSERVABILITY
+==================================================
+
+If possible WITHOUT making a broader infrastructure change, ensure the
+temporary diagnostic itself records enough sanitized information to
+identify the stage.
+
+Do not enable broad production logging.
+
+Do not log secrets.
+
+The HTTP diagnostic response should be sufficient.
+
+==================================================
+DEPLOYMENT
+==================================================
+
+Deploy ONLY to isolated staging.
+
+Record:
+
+previous serving Worker version:
+713a1a73-cdad-4f00-bf4e-a656f4a2959d
+
+new diagnostic Worker version
+
+Verify:
+
+- expected seven modules remain
+- expected normal bindings remain
+- diagnostic secret binding exists
+- production untouched
+
+==================================================
+ONE LOCAL DIAGNOSTIC INVOCATION
+==================================================
+
+Invoke the protected diagnostic exactly ONCE.
+
+Again:
+
+THIS INVOCATION MUST NOT CALL AI GATEWAY.
+
+Afterward verify from Cloudflare metrics:
+
+subrequests = 0
+
+There should also be:
+
+NO new AI Gateway inference log
+NO model usage
+NO Cloudflare AI cost
+
+==================================================
+EXPECTED SUCCESS
+==================================================
+
+Ideal response:
+
+HTTP 200
+
+with all stages through:
+
+READY_BEFORE_FETCH
+
+successful.
+
+That proves the previous failure was not inherently caused by:
+
+- reading required bindings
+- diagnostic authentication
+- Think token access
+- account/gateway configuration
+- URL construction
+- header construction
+- body serialization
+
+If a stage fails:
+
+report the exact sanitized stage/error.
+
+DO NOT fix it automatically.
+
+==================================================
+IMPORTANT TOKEN CHECK
+==================================================
+
+We already established from official Cloudflare documentation that a
+Cloudflare API token with:
+
+AI Gateway → Run
+
+is a valid token type for:
+
+cf-aig-authorization
+
+Do NOT re-verify the token by making an AI request.
+
+This task only proves the Worker can read and construct the header from
+the binding.
+
+==================================================
+CLEANUP
+==================================================
+
+After collecting the diagnostic result:
+
+remove the temporary route/code.
+
+Return staging to the previous clean serving implementation if safely
+possible.
+
+Also investigate whether the old inactive diagnostic version:
+
+75346a54-3edd-46a8-a360-adf86c8d400d
+
+can now be safely deleted once another version exists.
+
+Delete an inactive diagnostic version ONLY if:
+
+- Cloudflare allows it safely
+- it is not referenced by the active deployment
+- deletion cannot affect serving traffic
+- it contains no state we need
+
+If there is uncertainty:
+
+leave it alone and report it.
+
+Do not risk serving staging merely to clean an inactive secret.
+
+==================================================
+DO NOT PROCEED TO INFERENCE
+==================================================
+
+Even if READY_BEFORE_FETCH passes:
+
+STOP.
+
+Do NOT add fetch() and test /compat.
+
+We will separately authorize the actual one-request inference test.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. previous serving Worker version
+2. diagnostic Worker version
+3. diagnostic invocation count
+4. HTTP result
+5. each preparation stage and PASS/FAIL
+6. exact failed stage if any
+7. sanitized error if any
+8. whether Think token binding was readable
+9. whether diagnostic secret was readable
+10. whether account/gateway configuration was available
+11. sanitized intended /compat URL
+12. safe header-name validation
+13. confirmation provider Authorization absent
+14. request-body serialization result
+15. whether READY_BEFORE_FETCH was reached
+16. Cloudflare subrequest count
+17. confirmation no AI Gateway log was created
+18. confirmation zero inference
+19. confirmation zero model cost
+20. cleanup result
+21. final serving Worker version
+22. status of inactive diagnostic version
+23. confirmation production untouched
+
+Then STOP.
+
+Do not perform the /compat inference test.
