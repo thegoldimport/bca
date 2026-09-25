@@ -1,0 +1,253 @@
+Before running the approved second generation test, I want to rule out one
+specific possibility.
+
+Because this is a completely fresh VibeSDK deployment and we intentionally
+removed/replaced upstream domain configuration during isolation, determine
+whether the first deploy_space/build failure could be caused by missing or
+incorrect DOMAIN / PREVIEW / GENERATED-APP configuration rather than by the
+generated project itself.
+
+DO NOT run another generation yet.
+
+DO NOT modify anything yet.
+
+This is READ ONLY.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Compare our CURRENT fresh lab configuration against the pinned stock
+cloudflare/vibesdk configuration and determine whether anything required
+for:
+
+ThinkAgent
+→ deploy_space
+→ createApp
+→ Dynamic Worker / SpaceDO preview
+
+is missing or incorrectly configured.
+
+Focus specifically on configuration that may have changed because we made
+this a fresh isolated deployment.
+
+==================================================
+CURRENT LAB DOMAIN STATE
+==================================================
+
+We currently set:
+
+CUSTOM_DOMAIN =
+bc-vibesdk-lab-20260925.thegoldimport.workers.dev
+
+We did NOT configure:
+
+CUSTOM_PREVIEW_DOMAIN
+
+We did NOT configure a wildcard preview domain.
+
+We did NOT configure:
+
+*.apps.buildcustom.ai
+
+We did NOT configure a generated-app production domain.
+
+The main stock VibeSDK runtime now loads successfully.
+
+The first project also historically returned HTTP 200 for a SpaceDO preview
+page and stylesheet before a later deploy_space/build failed.
+
+==================================================
+TRACE THE FAILED BUILD
+==================================================
+
+Trace:
+
+ThinkAgent deploy_space
+→ SpaceDO.deploy
+→ buildBranchDeployment
+→ @cloudflare/worker-bundler createApp
+
+Determine EXACTLY which environment variables, bindings, hostnames,
+domains, routes, or other deployment configuration this path depends on.
+
+For each dependency, report:
+
+- required or optional
+- current lab value/status
+- whether our lab satisfies it
+- whether absence/misconfiguration can cause createApp to throw
+- whether it is used BEFORE bundling
+- DURING bundling
+- or only AFTER a successful bundle when serving the preview
+
+==================================================
+DOMAIN QUESTIONS
+==================================================
+
+Answer specifically:
+
+1. Does createApp require CUSTOM_DOMAIN?
+
+2. Does createApp require CUSTOM_PREVIEW_DOMAIN?
+
+3. Does buildBranchDeployment require either?
+
+4. Does SpaceDO.deploy require a wildcard preview domain?
+
+5. Does the Dynamic Worker preview require a wildcard domain?
+
+6. Can the path-based:
+
+   /space/.../preview/...
+
+   architecture work completely with the current workers.dev CUSTOM_DOMAIN?
+
+7. Is a generated-app domain required only later for Workers for Platforms
+   publishing?
+
+8. Could absence of *.apps.buildcustom.ai or another generated-app domain
+   possibly produce the observed local:
+
+   deployment_failed: Build failed
+
+9. Could any hostname/domain configuration influence
+   @cloudflare/worker-bundler createApp itself?
+
+==================================================
+COMPARE OTHER STOCK CONFIGURATION TOO
+==================================================
+
+Do not limit this only to domains.
+
+Compare the current lab's relevant build/preview configuration against the
+pinned stock VibeSDK setup.
+
+Check:
+
+- Worker Loader / Dynamic Worker binding
+- SpaceDO binding
+- ThinkDO binding
+- Sandbox binding
+- dispatch namespace
+- compatibility flags/date
+- assets behavior
+- R2 templates
+- D1
+- KV
+- Browser binding if relevant
+- Container binding if relevant
+- Artifacts if relevant
+- any build-specific environment variable
+- any preview-specific environment variable
+
+We intentionally sanitized the upstream configuration before deployment.
+
+Determine whether we accidentally removed something stock VibeSDK expects
+for generated-app build/preview.
+
+==================================================
+IMPORTANT DISTINCTION
+==================================================
+
+Separate these stages:
+
+A. bundling generated project
+
+B. creating Dynamic Worker preview
+
+C. routing/serving preview
+
+D. Workers for Platforms publishing
+
+E. production generated-app custom domain routing
+
+I want to know which domain/configuration requirements belong to WHICH
+stage.
+
+Do not treat all of these as one deployment system.
+
+==================================================
+FIRST FAILURE
+==================================================
+
+Use what we already know:
+
+- inference succeeded
+- files were generated
+- marker existed
+- an earlier preview returned HTTP 200
+- later deploy_space emitted Build failed
+- createApp is where the source indicates a bundler exception can become
+  Build failed
+- captured UI snapshot had wrangler.json + public/index.html +
+  public/style.css
+- snapshot may NOT be complete SpaceDO state
+- no Workers-for-Platforms publish was attempted
+
+Based ONLY on source/configuration evidence, determine whether a domain or
+fresh-lab configuration problem remains a credible explanation.
+
+Do not guess.
+
+==================================================
+DO NOT CHANGE ANYTHING
+==================================================
+
+Do not:
+
+- run generation
+- trigger another build
+- modify domain variables
+- create DNS
+- create routes
+- change generated project
+- modify VibeSDK
+- modify inference
+- change gateway
+- change Unified Billing
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact dependencies of buildBranchDeployment/createApp
+
+2. exact dependencies of Dynamic Worker preview creation
+
+3. exact dependencies of preview routing
+
+4. exact dependencies of Workers for Platforms publishing
+
+5. domain variables used at each stage
+
+6. whether CUSTOM_PREVIEW_DOMAIN is required for our current preview flow
+
+7. whether a wildcard preview domain is required
+
+8. whether generated-app domain configuration is involved at all in the
+   failed build stage
+
+9. any missing lab binding/configuration compared with stock VibeSDK
+
+10. whether the fresh lab is correctly configured for:
+    - generation
+    - build
+    - preview
+
+11. whether DOMAIN/LAB CONFIGURATION remains a credible cause of the first
+    Build failed event
+
+12. if yes, the exact missing/misconfigured requirement
+
+13. if no, explain why the build failure occurs before those domain systems
+    matter
+
+14. whether we should correct configuration BEFORE spending money on a
+    second generation
+
+15. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
