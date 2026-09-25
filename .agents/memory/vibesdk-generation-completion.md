@@ -16,3 +16,9 @@ For a fresh disposable Think project, do not stop capturing the stream at the fi
 **Why:** One controlled run initially failed to bundle an assets-only project, then added a server entry and reached a successful deployment without a second generation request. Its immediate WebSocket handshake failed, but a later authorized ticket connected to the same project.
 
 **How to apply:** Preserve owner access, the entire tool-result stream, and the committed branch revisions; wait for the final generation state and verify the latest deployed revision. If the initial connection fails, reconnect to the existing agent only after confirming owner access.
+
+For this project's stock generation acceptance, an intermediate `deploy_space` build failure is not a blocker if the same generation autonomously corrects the app, publishes successfully, and the final preview passes.
+
+**Why:** The user explicitly accepted that behavior as a passing stock-agent result and asked to freeze the proven architecture rather than alter build or inference behavior.
+
+**How to apply:** Report both the original error and final successful revision; do not request an extra generation or change the runtime to eliminate an intermediate failure that the stock agent resolves.

@@ -1,0 +1,320 @@
+Excellent. Test 2 is a PASS.
+
+Freeze the currently proven architecture.
+
+Do NOT modify:
+
+- ThinkAgent
+- VibeSDK source
+- model resolver
+- model identifier
+- AI Gateway
+- Unified Billing
+- provider configuration
+- /compat transport
+- SpaceDO
+- build behavior
+- preview behavior
+- domain configuration
+
+The initial deploy_space failure is NOT a blocker.
+
+Stock ThinkAgent correctly observed the build error, added the missing server
+entry and Wrangler main, redeployed, and produced a working preview within
+the same generation.
+
+That is acceptable autonomous coding-agent behavior.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Publish the EXISTING successful Test 2 project through the STOCK VibeSDK
+Workers for Platforms / dispatch publishing flow.
+
+Do NOT create another project.
+
+Do NOT run another generation.
+
+Use:
+
+Project / Agent ID:
+89457e04-a6c7-4e02-9299-afe8d622a404
+
+Successful SpaceDO commit:
+
+66087c8f80736109e73ee44517dfa4206d8a41aa
+
+The authoritative project is already proven to build and preview.
+
+==================================================
+WHAT WE ARE TESTING
+==================================================
+
+We are testing:
+
+successful SpaceDO project
+→ stock VibeSDK publish flow
+→ Workers for Platforms
+→ fresh lab dispatch namespace
+→ deployed generated application
+→ public HTTP response
+
+This is NOT an inference test.
+
+There should be ZERO new AI Gateway inference requests.
+
+==================================================
+FIRST — TRACE THE STOCK PUBLISH PATH
+==================================================
+
+Before executing publish, inspect the pinned stock VibeSDK source and
+identify the normal publishing path used by the product.
+
+Determine:
+
+- API/action/tool used to publish
+- source of the built bundle
+- source of static assets
+- Workers for Platforms upload path
+- dispatch namespace used
+- generated Worker/script naming behavior
+- deployment/release metadata written
+- URL returned by stock VibeSDK
+- whether publishing itself requires a generated-app custom domain
+
+Do not invent a BuildCustom-specific publishing system.
+
+Use stock VibeSDK.
+
+==================================================
+SAFETY CHECK
+==================================================
+
+Confirm the publish target is ONLY the fresh lab dispatch namespace created
+for:
+
+bc-vibesdk-lab-20260925
+
+Confirm it does NOT target:
+
+- any existing BuildCustom dispatch namespace
+- any production Worker
+- any production route
+- *.apps.buildcustom.ai
+- *.staging.buildcustom.ai
+- customer domains
+- existing BuildCustom generated apps
+
+If the stock publishing configuration unexpectedly points at an existing
+BuildCustom/protected resource:
+
+STOP.
+
+Otherwise proceed.
+
+==================================================
+PUBLISH THE EXISTING PROJECT
+==================================================
+
+Publish the already-successful Test 2 project through the NORMAL stock
+VibeSDK publishing mechanism.
+
+Do not manually upload a Worker as a substitute.
+
+Do not bypass VibeSDK.
+
+Do not create a custom publishing endpoint.
+
+Do not modify the generated project.
+
+Do not rebuild the project unless the normal stock publish flow itself
+performs the required build as part of publishing.
+
+Use the existing authenticated owner/project context.
+
+==================================================
+PUBLISH SUCCESS CRITERIA
+==================================================
+
+PASS requires:
+
+1. stock VibeSDK publish action succeeds
+
+2. generated application is uploaded into the FRESH LAB Workers for
+   Platforms dispatch namespace
+
+3. a generated script/deployment identity exists
+
+4. static assets are available
+
+5. generated application responds successfully through whatever stock
+   lab-access mechanism VibeSDK provides
+
+6. root application response is HTTP 200
+
+7. stylesheet returns HTTP 200
+
+8. returned HTML contains:
+
+   BUILDCUSTOM_SECOND_TEST_OK
+
+9. rendered application uses the stylesheet
+
+10. no existing BuildCustom production resource was modified
+
+==================================================
+IMPORTANT DOMAIN DISTINCTION
+==================================================
+
+Do NOT configure production generated-app domains yet.
+
+Do NOT configure:
+
+*.apps.buildcustom.ai
+
+Do NOT configure:
+
+*.staging.buildcustom.ai
+
+Do NOT configure customer custom domains.
+
+If stock VibeSDK publishing can be validated through a workers.dev,
+dispatch, internal, or existing lab-access mechanism, use that.
+
+If Workers for Platforms publishing succeeds but the resulting generated
+app CANNOT be publicly accessed without configuring a generated-app
+hostname/domain:
+
+DO NOT treat that as a publishing failure.
+
+Instead:
+
+- verify the script exists in the lab dispatch namespace
+- verify upload/deployment metadata
+- verify assets
+- report that publishing passed but public routing requires the next domain
+  step
+
+Then STOP.
+
+Do not attach a BuildCustom domain without approval.
+
+==================================================
+IF PUBLISH FAILS
+==================================================
+
+If the stock publish action fails:
+
+STOP after the first publish attempt.
+
+Do NOT:
+
+- regenerate
+- ask ThinkAgent to modify the app
+- modify the generated project
+- create another deployment system
+- modify VibeSDK
+- change inference
+- change domains
+- retry blindly
+
+Capture the COMPLETE stock publishing error.
+
+Determine whether it is:
+
+A. generated-project problem
+
+B. stock VibeSDK publish problem
+
+C. fresh lab Workers-for-Platforms configuration problem
+
+D. Cloudflare authorization/permission problem
+
+E. public-routing/domain requirement
+
+F. other/unknown
+
+Recommend the smallest correction.
+
+Do not implement it yet.
+
+==================================================
+VERIFY ZERO INFERENCE
+==================================================
+
+Record the AI Gateway request count before and after publishing.
+
+Publishing this existing project should not require ThinkAgent inference.
+
+PASS requires zero additional inference requests.
+
+==================================================
+DO NOT CLEAN UP
+==================================================
+
+If publishing succeeds:
+
+leave the generated lab deployment intact.
+
+Do not delete:
+
+- project
+- SpaceDO state
+- generated WfP script
+- assets
+- deployment metadata
+
+We will use the successful deployment for the next domain/routing test.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact stock VibeSDK publish path used
+
+2. project/agent ID
+
+3. source commit/revision published
+
+4. dispatch namespace used
+
+5. generated script/deployment identity
+
+6. publish result
+
+7. complete publish error/details if failed
+
+8. assets uploaded/available yes/no
+
+9. URL/access mechanism returned by stock VibeSDK
+
+10. whether public routing required a custom generated-app domain
+
+11. root HTTP result if accessible
+
+12. stylesheet HTTP result if accessible
+
+13. BUILDCUSTOM_SECOND_TEST_OK verification
+
+14. rendered/style verification if accessible
+
+15. deployment/release metadata created
+
+16. AI Gateway request count before/after
+
+17. confirmation zero new inference requests
+
+18. confirmation no existing BuildCustom production resource changed
+
+19. whether Workers for Platforms publishing is now conclusively proven
+
+20. if anything failed, evidence-based classification
+
+21. smallest correction if required
+
+22. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
