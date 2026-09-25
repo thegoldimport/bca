@@ -35,3 +35,5 @@
 - [Stock Artifacts feature gate](stock-artifacts-feature-gate.md) — owner-authorized Artifacts REST can be account-gated; the private stock Git export remains an authoritative read path.
 - [Stock framework WebSocket envelopes](stock-framework-websocket-envelopes.md) — framework state can arrive JSON-encoded inside a frame type and must not be relayed to browser clients.
 - [Stock service-binding redirects](stock-service-binding-redirects.md) — use manual redirects with explicit rejection for owner-bound Worker-to-Worker requests.
+- [Offline completion validation](offline-completion-validation.md) — the stock coding loop is functionally accepted; validate missing completion signals by replay, not additional generation.
+- [Browser test watcher limits](browser-test-watcher-limits.md) — parallel Vite dev servers can exhaust inotify watches; serve a built client for Chromium recovery tests.

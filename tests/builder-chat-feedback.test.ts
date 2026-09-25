@@ -57,7 +57,6 @@ test("Builder chat follows assistant responses and live activity", () => {
 
 test("Builder progress omits the workspace inventory and puts checkpoints before build replies", () => {
   const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /queryKey: \["runtime-files", projectId\]/);
   assert.doesNotMatch(source, /data-testid=\{`button-file-\$\{file\.path\}`\}/);
   assert.match(source, /Loading current code…/);
   const checkpoint = source.indexOf("builder-turn-checkpoint-");

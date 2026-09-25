@@ -788,6 +788,120 @@ function BuildActivity({
   );
 }
 
+type NativeCompletionPhase = "idle" | "running" | "recovering" | "success" | "error";
+
+const NATIVE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
+const NATIVE_STREAM_QUIET_MS = 30_000;
+const NATIVE_REVISION_STABILITY_MS = 5_000;
+const NATIVE_RECOVERY_POLL_MS = 5_000;
+
+type NativeOperationBaseline = {
+  revision: string | null;
+  startedAt: number;
+  promptAttempted: boolean;
+  startingTurnCount?: number;
+  promptDigest?: string;
+  imageDigest?: string | null;
+};
+
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function runtimeTurnsFromResponse(data: any): any[] | null {
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data?.turns) ? data.turns : null;
+}
+
+function hasNativeOperationCorrelation(baseline: NativeOperationBaseline | null): baseline is NativeOperationBaseline & {
+  startingTurnCount: number;
+  promptDigest: string;
+  imageDigest: string | null;
+} {
+  return Boolean(
+    baseline
+    && Number.isInteger(baseline.startingTurnCount)
+    && (baseline.startingTurnCount as number) >= 0
+    && typeof baseline.promptDigest === "string"
+    && /^[a-f0-9]{64}$/.test(baseline.promptDigest)
+    && (baseline.imageDigest === null || (typeof baseline.imageDigest === "string" && /^[a-f0-9]{64}$/.test(baseline.imageDigest))),
+  );
+}
+
+async function hasCorrelatedNativeTurn(turns: any[], baseline: NativeOperationBaseline): Promise<boolean> {
+  if (!hasNativeOperationCorrelation(baseline) || turns.length <= baseline.startingTurnCount) return false;
+  const appended = turns.slice(baseline.startingTurnCount);
+  const matches: any[] = [];
+  for (const turn of appended) {
+    if (typeof turn?.prompt !== "string" || typeof turn?.response !== "string" || !turn.response.trim()) continue;
+    if (await sha256Hex(turn.prompt) !== baseline.promptDigest) continue;
+    const persistedImages = Array.isArray(turn.images) ? turn.images
+      : Array.isArray(turn.attachments) ? turn.attachments
+        : [];
+    if (baseline.imageDigest === null) {
+      if (persistedImages.length > 0) continue;
+    } else {
+      if (persistedImages.length === 0 || persistedImages.some((image: any) => (
+        typeof image?.filename !== "string"
+        || typeof image?.mimeType !== "string"
+        || typeof image?.size !== "number"
+        || typeof image?.base64Data !== "string"
+      ))) continue;
+      const normalizedImages = persistedImages.map((image: any) => ({
+        filename: image.filename,
+        mimeType: image.mimeType,
+        size: image.size,
+        base64Data: image.base64Data,
+      }));
+      if (await sha256Hex(JSON.stringify(normalizedImages)) !== baseline.imageDigest) continue;
+    }
+    matches.push(turn);
+  }
+  return matches.length === 1;
+}
+
+function nativeOperationStorageKey(projectId: number): string {
+  return `buildcustom:native-operation:${projectId}`;
+}
+
+function readNativeOperationBaseline(projectId: number): NativeOperationBaseline | null {
+  try {
+    const raw = window.sessionStorage.getItem(nativeOperationStorageKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.startedAt !== "number" || parsed.promptAttempted !== true
+      || !(typeof parsed.revision === "string" || parsed.revision === null)) return null;
+    return {
+      revision: parsed.revision,
+      startedAt: parsed.startedAt,
+      promptAttempted: true,
+      ...(Number.isInteger(parsed.startingTurnCount) ? { startingTurnCount: parsed.startingTurnCount } : {}),
+      ...(typeof parsed.promptDigest === "string" ? { promptDigest: parsed.promptDigest } : {}),
+      ...(typeof parsed.imageDigest === "string" || parsed.imageDigest === null ? { imageDigest: parsed.imageDigest } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeNativeOperationBaseline(projectId: number, value: NativeOperationBaseline): void {
+  try {
+    window.sessionStorage.setItem(nativeOperationStorageKey(projectId), JSON.stringify(value));
+  } catch {
+    // Storage is only a recovery baseline; stock remains authoritative.
+  }
+}
+
+function clearNativeOperationBaseline(projectId: number): void {
+  try {
+    window.sessionStorage.removeItem(nativeOperationStorageKey(projectId));
+  } catch {
+    // Ignore unavailable browser storage.
+  }
+}
+
 function EditorPage() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -798,6 +912,11 @@ function EditorPage() {
   const [runtimeCapabilityError, setRuntimeCapabilityError] = useState("");
   const currentRuntimeCapability = runtimeCapability?.projectId === projectId ? runtimeCapability : null;
   const nativeThink = currentRuntimeCapability?.nativeThink === true;
+  const runtimeGenerationStatus = String(currentRuntimeCapability?.status?.state?.generation?.status || "").toLowerCase();
+  const nativeRuntimeAlreadyWorking = nativeThink && (
+    currentRuntimeCapability?.status?.state?.shouldBeGenerating === true
+    || ["pending", "queued", "starting", "running", "building", "generating"].includes(runtimeGenerationStatus)
+  );
   const canManageProduction = Boolean(currentRuntimeCapability && !nativeThink);
   const [chatInput, setChatInput] = useState("");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -832,6 +951,9 @@ function EditorPage() {
   const [restoringRelease, setRestoringRelease] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
   const [sending, setSending] = useState(false);
+  const [nativeCompletionPhase, setNativeCompletionPhase] = useState<NativeCompletionPhase>("idle");
+  const [nativeCompletionMessage, setNativeCompletionMessage] = useState("");
+  const [nativeRecoveryUnverified, setNativeRecoveryUnverified] = useState(false);
   const [nativeProgress, setNativeProgress] = useState<string[]>([]);
   const [nativeConnected, setNativeConnected] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
@@ -849,6 +971,10 @@ function EditorPage() {
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const requestController = useRef<AbortController | null>(null);
   const nativeSocketRef = useRef<WebSocket | null>(null);
+  const nativeOperationControllerRef = useRef<AbortController | null>(null);
+  const nativeCancelRef = useRef<() => void>(() => undefined);
+  const nativeLifecycleRef = useRef(0);
+  const nativeMountedRef = useRef(false);
   const turnLoadSequenceRef = useRef(0);
   const activeProjectIdRef = useRef(projectId);
   activeProjectIdRef.current = projectId;
@@ -1066,9 +1192,20 @@ function EditorPage() {
     return () => { cancelled = true; };
   }, [projectId]);
 
-  useEffect(() => () => {
-    nativeSocketRef.current?.close(1000, "Project view closed");
-    nativeSocketRef.current = null;
+  useEffect(() => {
+    const lifecycle = ++nativeLifecycleRef.current;
+    nativeMountedRef.current = true;
+    return () => {
+      nativeMountedRef.current = false;
+      if (nativeLifecycleRef.current === lifecycle) nativeLifecycleRef.current += 1;
+      requestController.current?.abort();
+      requestController.current = null;
+      nativeOperationControllerRef.current?.abort();
+      nativeOperationControllerRef.current = null;
+      nativeCancelRef.current();
+      nativeSocketRef.current?.close(1000, "Project view closed");
+      nativeSocketRef.current = null;
+    };
   }, [projectId]);
 
   useEffect(() => {
@@ -1111,6 +1248,9 @@ function EditorPage() {
     requestController.current?.abort();
     requestController.current = null;
     setSending(false);
+    setNativeCompletionPhase("idle");
+    setNativeCompletionMessage("");
+    setNativeRecoveryUnverified(false);
     setTurns([]);
     setMessages([]);
     setChatInput("");
@@ -1130,6 +1270,248 @@ function EditorPage() {
     loadTurns().catch((error: any) => setRuntimeError(error.message || "Conversation history is unavailable."));
   }, [projectId, nativeThink]);
 
+  useEffect(() => {
+    if (!projectId || !nativeThink || !currentRuntimeCapability) return;
+    const savedBaseline = readNativeOperationBaseline(projectId);
+    const status = currentRuntimeCapability.status || {};
+    const state = status.state || {};
+    const generationStatus = String(state.generation?.status || state.generationStatus || state.status || "").toLowerCase();
+    const runtimeActive = state.shouldBeGenerating === true
+      || ["pending", "queued", "starting", "running", "building", "generating"].includes(generationStatus);
+    if (!savedBaseline && !runtimeActive) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const recoveryStartedAt = Date.now();
+    const recoveryDeadline = recoveryStartedAt + NATIVE_RECOVERY_WINDOW_MS;
+    let recoveryWaitTimer: number | null = null;
+    let finishRecoveryWait: (() => void) | null = null;
+    const wait = (ms: number) => new Promise<void>((resolve) => {
+      finishRecoveryWait = () => {
+        if (recoveryWaitTimer !== null) window.clearTimeout(recoveryWaitTimer);
+        recoveryWaitTimer = null;
+        finishRecoveryWait = null;
+        resolve();
+      };
+      recoveryWaitTimer = window.setTimeout(() => finishRecoveryWait?.(), ms);
+    });
+    const fetchRuntime = async (path: string, init?: RequestInit) => {
+      const response = await fetch(`/api/projects/${projectId}/runtime/${path}`, {
+        credentials: "same-origin",
+        ...init,
+        signal: controller.signal,
+        headers: { ...authHeaders(), ...(init?.headers || {}) },
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || `Unable to load ${path.replaceAll("/", " ")}.`);
+      return body;
+    };
+    const isIdle = (runtimeStatus: any) => {
+      const runtimeState = runtimeStatus?.state || {};
+      const generation = String(
+        runtimeState.generation?.status
+          || runtimeState.generationStatus
+          || runtimeState.generation_status
+          || runtimeStatus?.generation?.status
+          || runtimeStatus?.generationStatus
+          || runtimeStatus?.status
+          || "",
+      ).toLowerCase();
+      const shouldGenerate = typeof runtimeState.shouldBeGenerating === "boolean"
+        ? runtimeState.shouldBeGenerating
+        : runtimeStatus?.shouldBeGenerating;
+      return shouldGenerate === false && ["idle", "complete", "completed", "success", "succeeded"].includes(generation);
+    };
+    const terminalRuntimeError = (runtimeStatus: any): string | null => {
+      const runtimeState = runtimeStatus?.state || {};
+      const generation = String(
+        runtimeState.generation?.status
+          || runtimeState.generationStatus
+          || runtimeState.generation_status
+          || runtimeStatus?.generation?.status
+          || runtimeStatus?.generationStatus
+          || "",
+      ).toLowerCase();
+      return ["failed", "error", "stopped", "cancelled", "canceled"].includes(generation)
+        ? `The stock runtime reports that the previous operation ${generation}.`
+        : null;
+    };
+    const reconcile = async () => {
+      if (!savedBaseline) {
+        setNativeCompletionPhase("error");
+        setNativeCompletionMessage("This Agent was already working when the editor opened. No request was sent, but this session cannot verify its starting revision. Refresh to check its latest state.");
+        setNativeRecoveryUnverified(true);
+        setRuntimeError("The existing Agent operation has no saved revision baseline. It was not restarted.");
+        setSending(false);
+        return;
+      }
+      const baselineCorrelatable = hasNativeOperationCorrelation(savedBaseline);
+      setSending(true);
+      setNativeCompletionPhase("recovering");
+      setNativeCompletionMessage("Reopened during a build · checking stock runtime state…");
+      setRuntimeError("");
+      recordNativeProgress("Reopened editor · reconciling the existing Agent operation");
+      let candidateRevision: string | null = null;
+      let candidateSince = 0;
+      let lastError = baselineCorrelatable
+        ? "The existing Agent operation could not yet be verified."
+        : "The saved operation is missing its authoritative turn-count or prompt digest baseline.";
+
+      while (!cancelled && Date.now() < recoveryDeadline) {
+        try {
+          const [runtimeStatus, revisionData] = await Promise.all([
+            fetchRuntime("status"),
+            fetchRuntime("revision"),
+          ]);
+          if (cancelled || activeProjectIdRef.current !== projectId) return;
+          const terminalError = terminalRuntimeError(runtimeStatus);
+          if (terminalError) {
+            clearNativeOperationBaseline(projectId);
+            setNativeCompletionPhase("error");
+            setNativeCompletionMessage(terminalError);
+            setNativeRecoveryUnverified(false);
+            setRuntimeError(terminalError);
+            setSending(false);
+            return;
+          }
+          if (!isIdle(runtimeStatus)) {
+            candidateRevision = null;
+            candidateSince = 0;
+            setNativeCompletionMessage("The existing Agent is still working · checking again…");
+          } else {
+            const revision = typeof revisionData.commitHash === "string" ? revisionData.commitHash : null;
+            if (!revision || revision === savedBaseline.revision) {
+              candidateRevision = null;
+              candidateSince = 0;
+              lastError = "The Agent is idle, but there is no new committed revision for the saved operation.";
+            } else if (candidateRevision !== revision) {
+              candidateRevision = revision;
+              candidateSince = Date.now();
+              setNativeCompletionMessage("The Agent is idle · confirming its committed revision is stable…");
+            } else if (Date.now() - candidateSince >= NATIVE_STREAM_QUIET_MS) {
+              const [filesData, finalStatus, finalRevision] = await Promise.all([
+                fetchRuntime("files"),
+                fetchRuntime("status"),
+                fetchRuntime("revision"),
+              ]);
+              if (cancelled || activeProjectIdRef.current !== projectId) return;
+              const files = Array.isArray(filesData) ? filesData : Array.isArray(filesData.files) ? filesData.files : [];
+              if (isIdle(finalStatus) && files.length > 0 && finalRevision.commitHash === candidateRevision) {
+                if (!baselineCorrelatable) throw new Error(lastError);
+                const turnsBeforePreview = runtimeTurnsFromResponse(await fetchRuntime("turns"));
+                if (cancelled || activeProjectIdRef.current !== projectId) return;
+                if (!turnsBeforePreview || !await hasCorrelatedNativeTurn(turnsBeforePreview, savedBaseline)) {
+                  throw new Error("The changed revision is not yet correlated with this operation's appended prompt turn and assistant response.");
+                }
+                const previewState = finalStatus.state || {};
+                const deployedCommit = previewState.lastDeployedCommit || finalStatus.lastDeployedCommit;
+                const signedPreview = finalStatus.previewUrl || finalStatus.previewURL
+                  || previewState.previewUrl || previewState.previewURL || "";
+                let finalPreview = deployedCommit === candidateRevision && typeof signedPreview === "string" ? signedPreview : "";
+                if (!finalPreview) {
+                  const token = await csrfToken();
+                  const preview = await fetchRuntime("previews", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+                    body: JSON.stringify({}),
+                  });
+                  finalPreview = typeof preview.url === "string" ? preview.url : typeof preview.previewUrl === "string" ? preview.previewUrl : "";
+                }
+                if (!finalPreview) throw new Error("A preview URL is not available for the verified revision.");
+                const [turnsData, lastStatus, lastRevision] = await Promise.all([
+                  fetchRuntime("turns"),
+                  fetchRuntime("status"),
+                  fetchRuntime("revision"),
+                ]);
+                if (cancelled || activeProjectIdRef.current !== projectId) return;
+                const finalError = terminalRuntimeError(lastStatus);
+                if (finalError) {
+                  clearNativeOperationBaseline(projectId);
+                  setNativeCompletionPhase("error");
+                  setNativeCompletionMessage(finalError);
+                  setNativeRecoveryUnverified(false);
+                  setRuntimeError(finalError);
+                  setSending(false);
+                  return;
+                }
+                if (!isIdle(lastStatus) || lastRevision.commitHash !== candidateRevision) {
+                  candidateRevision = null;
+                  candidateSince = 0;
+                  lastError = "The runtime changed while its completed revision was being verified.";
+                } else {
+                  const finalTurns = runtimeTurnsFromResponse(turnsData);
+                  if (!finalTurns || !await hasCorrelatedNativeTurn(finalTurns, savedBaseline)) {
+                    lastError = "No newly appended user turn with this prompt fingerprint and a completed assistant response is verified yet.";
+                  } else {
+                    const [verifiedStatus, verifiedRevision] = await Promise.all([
+                      fetchRuntime("status"),
+                      fetchRuntime("revision"),
+                    ]);
+                    if (cancelled || activeProjectIdRef.current !== projectId) return;
+                    const verifiedError = terminalRuntimeError(verifiedStatus);
+                    if (verifiedError) {
+                      clearNativeOperationBaseline(projectId);
+                      setNativeCompletionPhase("error");
+                      setNativeCompletionMessage(verifiedError);
+                      setNativeRecoveryUnverified(false);
+                      setRuntimeError(verifiedError);
+                      setSending(false);
+                      return;
+                    }
+                    if (!isIdle(verifiedStatus) || verifiedRevision.commitHash !== candidateRevision) {
+                      candidateRevision = null;
+                      candidateSince = 0;
+                      lastError = "The runtime changed after turn correlation and preview verification.";
+                    } else {
+                      setTurns(finalTurns);
+                      setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
+                      setPreviewUrl(finalPreview);
+                      setPreviewEnvironment("development");
+                      setPreviewRevision((previous) => previous + 1);
+                      queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
+                      queryClient.invalidateQueries({ queryKey: ["runtime-files", projectId] });
+                      queryClient.invalidateQueries({ queryKey: ["runtime-file-content", projectId] });
+                      clearNativeOperationBaseline(projectId);
+                      setRuntimeError("");
+                      setNativeCompletionPhase("success");
+                      setNativeCompletionMessage("The completed build was recovered from the stock runtime.");
+                      setNativeRecoveryUnverified(false);
+                      recordNativeProgress(`${files.length} project files verified · preview ready`);
+                      setSending(false);
+                      return;
+                    }
+                  }
+                }
+              } else {
+                candidateRevision = null;
+                candidateSince = 0;
+                lastError = "The runtime is not yet stably idle with the same committed files.";
+              }
+            }
+          }
+        } catch (error: any) {
+          if (cancelled || error?.name === "AbortError") return;
+          lastError = error?.message || lastError;
+        }
+        await wait(NATIVE_RECOVERY_POLL_MS);
+      }
+
+      if (cancelled) return;
+      setNativeCompletionPhase("error");
+      setNativeCompletionMessage(`BuildCustom could not verify the last operation before the recovery window ended. Your project may still have saved work. Refresh the editor to check the latest stock state. ${lastError}`);
+      setNativeRecoveryUnverified(true);
+      setRuntimeError("The operation's final state is still unverified. Refresh to check the latest project state; no request was resent.");
+      setSending(false);
+    };
+
+    void reconcile();
+    return () => {
+      cancelled = true;
+      controller.abort();
+      finishRecoveryWait?.();
+    };
+  }, [projectId, nativeThink, currentRuntimeCapability?.status]);
+
   const recordNativeProgress = (label: string) => {
     const cleanLabel = label.trim();
     if (!cleanLabel) return;
@@ -1138,19 +1520,71 @@ function EditorPage() {
       : [...current.slice(-8), cleanLabel]);
   };
 
-  const streamNativeTurn = async (agentPrompt: string, images: ComposerImage[]) => {
-    const baselineResponse = await fetch(`/api/projects/${projectId}/runtime/revision`, {
-      credentials: "same-origin",
-      headers: authHeaders(),
-    });
-    const baselineData = await baselineResponse.json().catch(() => ({}));
+  const streamNativeTurn = async (agentPrompt: string, images: ComposerImage[], lifecycle: number) => {
+    const operationController = new AbortController();
+    nativeOperationControllerRef.current = operationController;
+    const isOperationActive = () => nativeMountedRef.current
+      && nativeLifecycleRef.current === lifecycle
+      && activeProjectIdRef.current === projectId;
+    const [baselineResponse, turnsResponse] = await Promise.all([
+      fetch(`/api/projects/${projectId}/runtime/revision`, {
+        credentials: "same-origin",
+        headers: authHeaders(),
+        signal: operationController.signal,
+      }),
+      fetch(`/api/projects/${projectId}/runtime/turns`, {
+        credentials: "same-origin",
+        headers: authHeaders(),
+        signal: operationController.signal,
+      }),
+    ]);
+    const [baselineData, startingTurnsData] = await Promise.all([
+      baselineResponse.json().catch(() => ({})),
+      turnsResponse.json().catch(() => ({})),
+    ]);
+    if (!isOperationActive()) {
+      operationController.abort();
+      return;
+    }
     if (!baselineResponse.ok) {
       throw new Error(baselineData.message || "Unable to read the current runtime revision. Your prompt was not sent.");
+    }
+    if (!turnsResponse.ok) {
+      throw new Error(startingTurnsData.message || "Unable to read the current conversation turns. Your prompt was not sent.");
+    }
+    const startingTurns = runtimeTurnsFromResponse(startingTurnsData);
+    if (!startingTurns) throw new Error("The current authoritative conversation turns could not be verified. Your prompt was not sent.");
+    const promptDigest = await sha256Hex(agentPrompt);
+    let imageDigest: string | null = null;
+    if (images.length) {
+      if (images.some((image) => typeof image.base64Data !== "string" || !image.base64Data
+        || typeof image.filename !== "string" || typeof image.mimeType !== "string" || typeof image.size !== "number")) {
+        throw new Error("The attached image turn cannot be fingerprinted safely. Your prompt was not sent.");
+      }
+      imageDigest = await sha256Hex(JSON.stringify(images.map((image) => ({
+        filename: image.filename,
+        mimeType: image.mimeType,
+        size: image.size,
+        base64Data: image.base64Data,
+      }))));
+    }
+    if (!isOperationActive()) {
+      operationController.abort();
+      return;
     }
     const baselineCommitHash = typeof baselineData.commitHash === "string"
       ? baselineData.commitHash
       : typeof baselineData.revision?.commitHash === "string" ? baselineData.revision.commitHash : null;
-    if (activeProjectIdRef.current !== projectId) return;
+    const startedAt = Date.now();
+    const operationBaseline: NativeOperationBaseline = {
+      revision: baselineCommitHash,
+      startedAt,
+      promptAttempted: false,
+      startingTurnCount: startingTurns.length,
+      promptDigest,
+      imageDigest,
+    };
+    writeNativeOperationBaseline(projectId, operationBaseline);
 
     const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const socketUrl = `${websocketProtocol}//${window.location.host}/api/projects/${projectId}/runtime/ws`;
@@ -1158,12 +1592,12 @@ function EditorPage() {
     await new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(socketUrl);
       nativeSocketRef.current = socket;
-      const startedAt = Date.now();
       let lastFrameAt = startedAt;
       let frameSequence = 0;
       let generationComplete = false;
       let assistantStreaming = false;
       let suggestionSent = false;
+      let promptAttempted = false;
       let recoveryStarted = false;
       let finished = false;
       let settleTimer: number | null = null;
@@ -1172,6 +1606,26 @@ function EditorPage() {
       let revisionCandidate: { commitHash: string; checkedAt: number; frameSequence: number } | null = null;
       const activeWork = new Set<string>();
       let settlementWaitReason = "The Agent did not reach a verifiable idle state.";
+      const cancelForLifecycle = () => {
+        if (finished) return;
+        finished = true;
+        if (settleTimer !== null) window.clearTimeout(settleTimer);
+        operationController.abort();
+        if (nativeOperationControllerRef.current === operationController) nativeOperationControllerRef.current = null;
+        if (nativeSocketRef.current === socket) nativeSocketRef.current = null;
+        if (nativeCancelRef.current === cancelForLifecycle) nativeCancelRef.current = () => undefined;
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        try {
+          socket.close(1000, "Editor closed; operation will be recovered from stock state");
+        } catch {
+          // Preserve the attempted-operation baseline for remount recovery.
+        }
+        resolve();
+      };
+      nativeCancelRef.current = cancelForLifecycle;
 
       const replaceAssistantMessage = (content: string) => {
         setMessages((current) => {
@@ -1185,20 +1639,27 @@ function EditorPage() {
         if (finished) return;
         finished = true;
         if (settleTimer !== null) window.clearTimeout(settleTimer);
+        operationController.abort();
+        if (nativeOperationControllerRef.current === operationController) nativeOperationControllerRef.current = null;
         const ownsSocket = nativeSocketRef.current === socket;
         if (ownsSocket) nativeSocketRef.current = null;
-        if (ownsSocket && activeProjectIdRef.current === projectId) setNativeConnected(false);
+        if (nativeCancelRef.current === cancelForLifecycle) nativeCancelRef.current = () => undefined;
+        if (ownsSocket && isOperationActive()) setNativeConnected(false);
         socket.close(1000, error ? "Build stream ended with an error" : "Build stream settled");
         if (error) reject(error);
         else resolve();
       };
 
-      const failTurn = (message: string) => {
+      const failTurn = (message: string, recoverable = false) => {
         const error = new Error(message);
-        if (activeProjectIdRef.current === projectId) {
+        if (isOperationActive()) {
           setRuntimeError(message);
           replaceAssistantMessage(message);
+          setNativeCompletionPhase("error");
+          setNativeCompletionMessage(recoverable ? "The result is not verified yet · refresh to check the latest project state." : message);
+          setNativeRecoveryUnverified(recoverable);
         }
+        if (!recoverable) clearNativeOperationBaseline(projectId);
         closeAndFinish(error);
       };
 
@@ -1206,6 +1667,7 @@ function EditorPage() {
         const response = await fetch(`/api/projects/${projectId}/runtime/${path}`, {
           credentials: "same-origin",
           ...init,
+          signal: operationController.signal,
           headers: { ...authHeaders(), ...(init?.headers || {}) },
         });
         const body = await response.json().catch(() => ({}));
@@ -1236,34 +1698,51 @@ function EditorPage() {
         if (generationSignal === true || runningStatuses.includes(generationStatus) || terminalErrors.includes(generationStatus)) return false;
         return generationSignal === false && settledStatuses.includes(generationStatus);
       };
+      const runtimeTerminalError = (runtimeStatus: any): string | null => {
+        const state = runtimeStatus?.state || {};
+        const status = String(
+          state.generation?.status
+            || state.generationStatus
+            || state.generation_status
+            || runtimeStatus?.generation?.status
+            || runtimeStatus?.generationStatus
+            || runtimeStatus?.generation_status
+            || "",
+        ).toLowerCase();
+        return ["failed", "error", "stopped", "cancelled", "canceled"].includes(status)
+          ? `The stock runtime reports that this operation ${status}.`
+          : null;
+      };
 
       const settle = async () => {
         if (finished) return;
+        if (!isOperationActive()) {
+          cancelForLifecycle();
+          return;
+        }
         if (settling) {
           settleAgain = true;
           return;
         }
-        if (activeProjectIdRef.current !== projectId) {
-          closeAndFinish();
+        if (!isOperationActive()) {
+          cancelForLifecycle();
           return;
         }
-        if (Date.now() - startedAt > 10 * 60 * 1000) {
-          failTurn(`${settlementWaitReason} No build was marked complete.`);
+        if (Date.now() - startedAt > NATIVE_RECOVERY_WINDOW_MS) {
+          failTurn(`BuildCustom could not verify the operation within the recovery window. Your project may still contain saved work. Refresh the editor to check the latest stock state. ${settlementWaitReason}`, true);
           return;
         }
-        const quietFallbackReady = suggestionSent
-          && !generationComplete
-          && !recoveryStarted
-          && Date.now() - lastFrameAt >= 30_000;
+        const quietFallbackReady = suggestionSent && Date.now() - lastFrameAt >= NATIVE_STREAM_QUIET_MS
+          && (!generationComplete || recoveryStarted || assistantStreaming || activeWork.size > 0);
         if (!generationComplete && !recoveryStarted && !quietFallbackReady) {
           if (suggestionSent) scheduleSettle();
           return;
         }
-        if (!quietFallbackReady && (assistantStreaming || activeWork.size > 0)) {
+        if (!quietFallbackReady && !recoveryStarted && (assistantStreaming || activeWork.size > 0)) {
           scheduleSettle();
           return;
         }
-        const requiredQuietMs = quietFallbackReady ? 30_000 : 5000;
+        const requiredQuietMs = quietFallbackReady || recoveryStarted ? NATIVE_STREAM_QUIET_MS : NATIVE_REVISION_STABILITY_MS;
         if (Date.now() - lastFrameAt < requiredQuietMs) {
           scheduleSettle();
           return;
@@ -1273,30 +1752,41 @@ function EditorPage() {
         const checkFrameSequence = frameSequence;
         try {
           const status = await fetchJson("status");
-          if (activeProjectIdRef.current !== projectId) {
-            closeAndFinish();
+          if (!isOperationActive()) {
+            cancelForLifecycle();
             return;
           }
           if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
             revisionCandidate = null;
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+            return;
+          }
+          const statusError = runtimeTerminalError(status);
+          if (statusError) {
+            failTurn(statusError);
             return;
           }
           if (!isRuntimeIdle(status)) {
             revisionCandidate = null;
             settlementWaitReason = "Runtime generation has not reported an idle or complete state.";
-            scheduleSettle();
+            if (isOperationActive()) {
+              setNativeCompletionPhase(recoveryStarted || quietFallbackReady ? "recovering" : "running");
+              setNativeCompletionMessage(recoveryStarted || quietFallbackReady
+                ? "Waiting for the stock runtime to stop changing before verification…"
+                : "The Agent is still working…");
+            }
+            scheduleSettle(quietFallbackReady || recoveryStarted ? NATIVE_RECOVERY_POLL_MS : 1200);
             return;
           }
 
           const revisionData = await fetchJson("revision");
-          if (activeProjectIdRef.current !== projectId) {
-            closeAndFinish();
+          if (!isOperationActive()) {
+            cancelForLifecycle();
             return;
           }
           if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
             revisionCandidate = null;
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
           const currentCommitHash = typeof revisionData.commitHash === "string"
@@ -1305,7 +1795,11 @@ function EditorPage() {
           if (!currentCommitHash || currentCommitHash === baselineCommitHash) {
             revisionCandidate = null;
             settlementWaitReason = "The Agent did not produce a new authoritative project revision.";
-            scheduleSettle();
+            if (quietFallbackReady || recoveryStarted) {
+              setNativeCompletionPhase("recovering");
+              setNativeCompletionMessage("The runtime is idle, but no new committed revision is verified yet…");
+            }
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
           if (!revisionCandidate
@@ -1313,11 +1807,11 @@ function EditorPage() {
             || revisionCandidate.commitHash !== currentCommitHash) {
             revisionCandidate = { commitHash: currentCommitHash, checkedAt: Date.now(), frameSequence: checkFrameSequence };
             settlementWaitReason = "Waiting to confirm the authoritative revision is stable.";
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
           if (Date.now() - revisionCandidate.checkedAt < 5000) {
-            scheduleSettle();
+            scheduleSettle(NATIVE_REVISION_STABILITY_MS);
             return;
           }
 
@@ -1325,31 +1819,36 @@ function EditorPage() {
             fetchJson("files"),
             fetchJson("status"),
           ]);
-          if (activeProjectIdRef.current !== projectId) {
-            closeAndFinish();
+          if (!isOperationActive()) {
+            cancelForLifecycle();
             return;
           }
           if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
             revisionCandidate = null;
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+            return;
+          }
+          const finalStatusError = runtimeTerminalError(latestStatus);
+          if (finalStatusError) {
+            failTurn(finalStatusError);
             return;
           }
           if (!isRuntimeIdle(latestStatus)) {
             revisionCandidate = null;
             settlementWaitReason = "Runtime generation did not remain idle while verifying the new revision.";
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
           const files = Array.isArray(fileData) ? fileData : Array.isArray(fileData.files) ? fileData.files : [];
           if (files.length === 0) {
             settlementWaitReason = "The new authoritative revision contains no verifiable project files.";
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
 
           const finalRevisionData = await fetchJson("revision");
-          if (activeProjectIdRef.current !== projectId) {
-            closeAndFinish();
+          if (!isOperationActive()) {
+            cancelForLifecycle();
             return;
           }
           const finalCommitHash = typeof finalRevisionData.commitHash === "string"
@@ -1357,13 +1856,27 @@ function EditorPage() {
             : typeof finalRevisionData.revision?.commitHash === "string" ? finalRevisionData.revision.commitHash : null;
           if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
             revisionCandidate = null;
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
           if (finalCommitHash !== currentCommitHash) {
             revisionCandidate = null;
             settlementWaitReason = "The authoritative project revision changed during verification.";
-            scheduleSettle();
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+            return;
+          }
+
+          const turnsBeforePreviewData = await fetchJson("turns");
+          if (!isOperationActive()) {
+            cancelForLifecycle();
+            return;
+          }
+          const turnsBeforePreview = runtimeTurnsFromResponse(turnsBeforePreviewData);
+          if (!turnsBeforePreview || !await hasCorrelatedNativeTurn(turnsBeforePreview, operationBaseline)) {
+            settlementWaitReason = "The revision is not yet correlated with an appended user turn matching this prompt and a completed assistant response.";
+            setNativeCompletionPhase("recovering");
+            setNativeCompletionMessage("The revision is saved · verifying its matching conversation turn before completion…");
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
 
@@ -1391,15 +1904,61 @@ function EditorPage() {
 
           const turnsSequence = ++turnLoadSequenceRef.current;
           const turnsData = await fetchJson("turns");
-          if (activeProjectIdRef.current !== projectId) {
-            closeAndFinish();
+          if (!isOperationActive()) {
+            cancelForLifecycle();
             return;
           }
-          if (turnsSequence === turnLoadSequenceRef.current) setTurns(Array.isArray(turnsData) ? turnsData : turnsData.turns || []);
+          const finalTurns = runtimeTurnsFromResponse(turnsData);
+          if (!finalTurns || turnsSequence !== turnLoadSequenceRef.current
+            || !await hasCorrelatedNativeTurn(finalTurns, operationBaseline)) {
+            settlementWaitReason = "The new revision is not yet correlated with an appended user turn matching this prompt and an assistant response.";
+            setNativeCompletionPhase("recovering");
+            setNativeCompletionMessage("The revision is saved · verifying its matching conversation turn before completion…");
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+            return;
+          }
+          const [verifiedStatus, verifiedRevision] = await Promise.all([
+            fetchJson("status"),
+            fetchJson("revision"),
+          ]);
+          if (!isOperationActive()) {
+            cancelForLifecycle();
+            return;
+          }
+          const verifiedStatusError = runtimeTerminalError(verifiedStatus);
+          if (verifiedStatusError) {
+            failTurn(verifiedStatusError);
+            return;
+          }
+          const verifiedCommitHash = typeof verifiedRevision.commitHash === "string"
+            ? verifiedRevision.commitHash
+            : typeof verifiedRevision.revision?.commitHash === "string" ? verifiedRevision.revision.commitHash : null;
+          if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
+            revisionCandidate = null;
+            settlementWaitReason = "Native progress resumed during final verification.";
+            setNativeCompletionPhase("recovering");
+            setNativeCompletionMessage("The Agent is still updating this project · checking again after activity settles.");
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+            return;
+          }
+          if (!isRuntimeIdle(verifiedStatus) || verifiedCommitHash !== currentCommitHash) {
+            revisionCandidate = null;
+            settlementWaitReason = "Runtime activity or a changed revision was detected after preview and turn verification.";
+            setNativeCompletionPhase("recovering");
+            setNativeCompletionMessage("The runtime changed after verification · checking its final state again…");
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+            return;
+          }
+          if (turnsSequence === turnLoadSequenceRef.current) setTurns(finalTurns);
+          setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
           setRuntimeError("");
           setMessages([]);
           setPreviewUrl(previewUrl);
           setPreviewEnvironment("development");
+          clearNativeOperationBaseline(projectId);
+          setNativeCompletionPhase("success");
+          setNativeCompletionMessage("Build complete · authoritative files and preview are verified.");
+          setNativeRecoveryUnverified(false);
           setPreviewRevision((revision) => revision + 1);
           queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
           const runtimeFilesQueryKey = ["runtime-files", projectId] as const;
@@ -1408,7 +1967,18 @@ function EditorPage() {
           recordNativeProgress(`${files.length} project file${files.length === 1 ? "" : "s"} verified · preview ready`);
           closeAndFinish();
         } catch (error: any) {
-          failTurn(error.message || "The completed build could not be verified from the runtime.");
+          if (!isOperationActive()) {
+            cancelForLifecycle();
+            return;
+          }
+          if (Date.now() - startedAt >= NATIVE_RECOVERY_WINDOW_MS) {
+            failTurn(`BuildCustom could not verify the operation within the recovery window. Your project may still contain saved work. Refresh the editor to check the latest stock state. ${error.message || settlementWaitReason}`, true);
+          } else {
+            settlementWaitReason = error.message || "Stock runtime verification is temporarily unavailable.";
+            setNativeCompletionPhase("recovering");
+            setNativeCompletionMessage("The Agent is done streaming · verifying the stock revision and preview…");
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+          }
         } finally {
           settling = false;
           if (settleAgain && !finished) {
@@ -1418,8 +1988,12 @@ function EditorPage() {
         }
       };
 
-      const scheduleSettle = () => {
+      const scheduleSettle = (delay = 1200) => {
         if (finished) return;
+        if (!isOperationActive()) {
+          cancelForLifecycle();
+          return;
+        }
         if (settling) {
           settleAgain = true;
           return;
@@ -1428,11 +2002,15 @@ function EditorPage() {
         settleTimer = window.setTimeout(() => {
           settleTimer = null;
           void settle();
-        }, 1200);
+        }, delay);
       };
 
       const beginRecovery = () => {
         if (finished || !suggestionSent) return false;
+        if (!isOperationActive()) {
+          cancelForLifecycle();
+          return false;
+        }
         if (recoveryStarted) return true;
         recoveryStarted = true;
         lastFrameAt = Date.now();
@@ -1441,8 +2019,10 @@ function EditorPage() {
         assistantStreaming = false;
         activeWork.clear();
         settlementWaitReason = "The runtime did not produce a verifiable committed revision after the connection was interrupted.";
-        if (activeProjectIdRef.current === projectId) {
+        if (isOperationActive()) {
           setNativeConnected(false);
+          setNativeCompletionPhase("recovering");
+          setNativeCompletionMessage("Connection interrupted · verifying the latest stock revision before marking this build complete…");
           replaceAssistantMessage("Connection interrupted. Verifying the committed revision before marking this build complete…");
           recordNativeProgress("Connection interrupted · verifying runtime status and revision");
         }
@@ -1457,18 +2037,12 @@ function EditorPage() {
 
       socket.onopen = () => {
         try {
-          if (activeProjectIdRef.current !== projectId) {
-            closeAndFinish();
+          if (!isOperationActive()) {
+            cancelForLifecycle();
             return;
           }
           setNativeConnected(true);
           socket.send(JSON.stringify({ type: "get_conversation_state" }));
-          socket.send(JSON.stringify({
-            type: "user_suggestion",
-            message: agentPrompt,
-            ...(images.length ? { images } : {}),
-          }));
-          suggestionSent = true;
           lastFrameAt = Date.now();
           scheduleSettle();
         } catch {
@@ -1477,6 +2051,10 @@ function EditorPage() {
       };
 
       socket.onmessage = (event) => {
+        if (!isOperationActive()) {
+          cancelForLifecycle();
+          return;
+        }
         let frame: any;
         try {
           frame = JSON.parse(String(event.data));
@@ -1484,8 +2062,8 @@ function EditorPage() {
           return;
         }
         if (!frame || typeof frame.type !== "string") return;
-        if (activeProjectIdRef.current !== projectId) {
-          closeAndFinish();
+        if (!isOperationActive()) {
+          cancelForLifecycle();
           return;
         }
         lastFrameAt = Date.now();
@@ -1502,6 +2080,36 @@ function EditorPage() {
         const toolKey = String(tool.id || `${toolName}:${toolPath}`);
 
         switch (frame.type) {
+          case "agent_connected": {
+            if (promptAttempted) break;
+            if (frame.state?.shouldBeGenerating === true) {
+              clearNativeOperationBaseline(projectId);
+              failTurn("This Agent is already working on another operation. No prompt was sent; refresh the editor to check its latest state.", true);
+              return;
+            }
+            if (typeof frame.state?.shouldBeGenerating !== "boolean") {
+              clearNativeOperationBaseline(projectId);
+              failTurn("The Agent connection did not confirm whether it was safe to send. No prompt was sent; refresh and try again.", true);
+              return;
+            }
+            promptAttempted = true;
+            writeNativeOperationBaseline(projectId, { ...operationBaseline, promptAttempted: true });
+            try {
+              socket.send(JSON.stringify({
+                type: "user_suggestion",
+                message: agentPrompt,
+                ...(images.length ? { images } : {}),
+              }));
+              suggestionSent = true;
+              lastFrameAt = Date.now();
+              setNativeCompletionPhase("running");
+              setNativeCompletionMessage("Agent started · streaming progress");
+            } catch {
+              failTurn("BuildCustom could not send the request. No automatic retry was attempted.", true);
+              return;
+            }
+            break;
+          }
           case "conversation_response": {
             if (typeof frame.message === "string" && frame.message) {
               setMessages((current) => {
@@ -1533,6 +2141,8 @@ function EditorPage() {
           case "generation_complete":
             generationComplete = true;
             activeWork.delete("generation");
+            setNativeCompletionPhase("recovering");
+            setNativeCompletionMessage("Agent reported completion · verifying committed files and preview…");
             recordNativeProgress("Agent reported generation complete · verifying files and preview");
             break;
           case "phase_generating":
@@ -1605,12 +2215,20 @@ function EditorPage() {
       };
 
       socket.onerror = () => {
+        if (!isOperationActive()) {
+          cancelForLifecycle();
+          return;
+        }
         if (!beginRecovery()) {
           failTurn("The native Agent connection failed before the prompt was sent. Your request was not automatically retried.");
         }
       };
 
       socket.onclose = () => {
+        if (!isOperationActive()) {
+          cancelForLifecycle();
+          return;
+        }
         if (nativeSocketRef.current === socket) {
           nativeSocketRef.current = null;
           setNativeConnected(false);
@@ -1649,7 +2267,15 @@ function EditorPage() {
   const handleSend = async (promptOverride?: string, planOverride?: boolean) => {
     const prompt = (promptOverride ?? chatInput).trim();
     const activePlanMode = nativeThink ? false : planOverride ?? planMode;
-    if (nativeThink && sending) return;
+    if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified)) {
+      if (!sending && nativeRuntimeAlreadyWorking) {
+        const message = "This Agent is already working. The existing operation was not restarted; refresh to check its latest state.";
+        setNativeCompletionPhase("recovering");
+        setNativeCompletionMessage(message);
+        setRuntimeError(message);
+      }
+      return;
+    }
     if (!prompt) return;
     if (!projectId) {
       setRuntimeError("Open Builder from a runtime-backed project to start an Agent session.");
@@ -1660,10 +2286,16 @@ function EditorPage() {
       return;
     }
     const sendingProjectId = projectId;
+    const sendingLifecycle = nativeLifecycleRef.current;
+    const isSendingContextActive = () => nativeMountedRef.current
+      && nativeLifecycleRef.current === sendingLifecycle
+      && activeProjectIdRef.current === sendingProjectId;
     setMessages((prev) => [
       ...prev,
       { role: "user" as const, content: prompt },
     ]);
+    setNativeCompletionPhase(nativeThink ? "running" : "idle");
+    setNativeCompletionMessage("");
     setChatInput("");
     setSending(true);
     setRuntimeError("");
@@ -1689,21 +2321,23 @@ function EditorPage() {
     if (nativeThink) {
       requestController.current = null;
       try {
-        await streamNativeTurn(agentPrompt, attachments);
-        if (activeProjectIdRef.current !== sendingProjectId) return;
+        await streamNativeTurn(agentPrompt, attachments, sendingLifecycle);
+        if (!isSendingContextActive()) return;
         setPendingPlan("");
         setAttachments([]);
         setTextContext([]);
         setSelectedElement(null);
       } catch (error: any) {
-        if (activeProjectIdRef.current !== sendingProjectId) return;
+        if (!isSendingContextActive()) return;
         const message = error?.message || "The native Agent could not complete the request.";
         setRuntimeError(message);
+        setNativeCompletionPhase("error");
+        setNativeCompletionMessage((current) => current || "The request could not be completed or verified.");
         setMessages((previous) => previous.map((item, index) => index === previous.length - 1 && item.role === "assistant"
           ? { ...item, content: message }
           : item));
       } finally {
-        if (activeProjectIdRef.current === sendingProjectId) setSending(false);
+        if (isSendingContextActive()) setSending(false);
       }
       return;
     }
@@ -2079,6 +2713,28 @@ function EditorPage() {
         }`}>
           <Zap size={18} className="text-purple-400" />
           <h2 className="font-display font-semibold text-brand-gradient">AI Builder</h2>
+          {nativeThink && nativeCompletionPhase !== "idle" && (
+            <span
+              role="status"
+              aria-live="polite"
+              data-testid="native-completion-state"
+              data-state={nativeCompletionPhase}
+              className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
+                nativeCompletionPhase === "success"
+                  ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                  : nativeCompletionPhase === "error"
+                    ? "border-red-400/30 bg-red-400/10 text-red-200"
+                    : nativeCompletionPhase === "recovering"
+                      ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-200"
+              }`}
+            >
+              {nativeCompletionPhase === "running" ? "RUNNING"
+                : nativeCompletionPhase === "recovering" ? "RECOVERING / VERIFYING"
+                  : nativeCompletionPhase === "success" ? "SUCCESS" : "ERROR"}
+              {nativeCompletionMessage ? ` · ${nativeCompletionMessage}` : ""}
+            </span>
+          )}
           <button
             onClick={() => setChatCollapsed(true)}
             className={`ml-auto p-1.5 rounded-md transition-colors ${
@@ -2396,7 +3052,7 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              disabled={!currentRuntimeCapability || (nativeThink && sending)}
+              disabled={!currentRuntimeCapability || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
               placeholder={currentRuntimeCapability ? "Describe what you want to build..." : "Checking project runtime…"}
               rows={1}
               className={`block w-full min-h-10 max-h-[220px] bg-transparent border-none outline-none resize-none text-sm leading-6 ${
@@ -2447,7 +3103,7 @@ function EditorPage() {
               ) : (
               <button
                 onClick={() => handleSend()}
-                disabled={!currentRuntimeCapability}
+                disabled={!currentRuntimeCapability || (nativeThink && (nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
                 className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
                 data-testid="button-send-chat"
               >

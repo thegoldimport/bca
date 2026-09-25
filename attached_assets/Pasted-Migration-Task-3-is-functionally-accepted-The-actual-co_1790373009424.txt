@@ -1,0 +1,514 @@
+Migration Task 3 is functionally accepted.
+
+The actual coding loop is proven:
+
+BuildCustom project
+→ same owner-linked ThinkAgent
+→ native streaming
+→ generation
+→ committed authoritative files
+→ preview
+→ follow-up edit
+→ persisted conversation
+→ fresh-session reopen
+
+The remaining issue is completion-state reliability.
+
+Do NOT begin Task 4 yet.
+
+Perform ONE narrow validation task:
+
+TASK 3 COMPLETION / RECOVERY VALIDATION
+
+NO NEW INFERENCE.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Prove that the BuildCustom editor correctly reaches a truthful final UI
+state in all three important completion scenarios:
+
+A. normal generation_complete received
+
+B. WebSocket closes unexpectedly after the runtime actually completed work
+
+C. runtime completes and persists a new revision but never sends
+   generation_complete
+
+We already observed B during the initial generation and C during the edit.
+
+Do NOT send another AI prompt.
+
+Do NOT generate another application.
+
+Do NOT edit the existing application.
+
+==================================================
+USE EXISTING EVIDENCE
+==================================================
+
+Use:
+
+Project:
+10
+
+Agent:
+758c1390-8c92-457d-bd85-560b2fab3c4b
+
+Initial committed revision:
+f8252595233caa93afc192a03a30d857279eae47
+
+Edited committed revision:
+b53e777aa0481108f8d8bcce09de73b23afe0da6
+
+The existing persisted conversation contains both real turns.
+
+Use captured/native frame sequences where available.
+
+If exact recorded WebSocket frame streams were retained, replay them.
+
+If they were not retained, build deterministic test fixtures from the
+actual frame types and state transitions observed during Task 3.
+
+Do NOT fabricate new runtime behavior.
+
+==================================================
+COMPLETION MODEL
+==================================================
+
+Inspect the current implementation first.
+
+The UI must have an explicit distinction between:
+
+RUNNING
+
+SUCCESS
+
+ERROR
+
+RECOVERING / VERIFYING
+
+Do not treat:
+
+- WebSocket close
+- silence
+- timeout
+- revision existence by itself
+
+as automatic success.
+
+==================================================
+NORMAL COMPLETION
+==================================================
+
+Scenario A:
+
+Replay/simulate the stock path where:
+
+- generation begins
+- native progress arrives
+- files/revision change
+- generation_complete arrives
+
+PASS requires:
+
+- UI transitions running → success
+- composer becomes usable
+- final authoritative revision is loaded
+- files refresh
+- preview refreshes appropriately
+- no fallback recovery path causes duplicate completion behavior
+
+==================================================
+UNEXPECTED SOCKET CLOSE
+==================================================
+
+Scenario B should model the actual initial Task 3 behavior:
+
+- generation starts
+- useful progress arrives
+- runtime persists a changed revision
+- preview becomes valid
+- WebSocket closes unexpectedly with code 1006
+- no trustworthy completion frame is received
+
+The UI must NOT immediately say success.
+
+Expected behavior:
+
+running
+→ recovering/verifying
+→ query authoritative runtime state
+→ verify changed stable revision
+→ verify runtime is no longer actively mutating
+→ quiet/stability period
+→ success
+
+PASS requires:
+
+- no duplicate generation
+- no new agent
+- no new inference
+- no false error if authoritative completion can be verified
+- no false success before verification
+- final files correspond to authoritative revision
+- composer becomes usable after verified recovery
+
+==================================================
+MISSING generation_complete
+==================================================
+
+Scenario C should model the actual Task 3 edit:
+
+- WebSocket remains usable
+- native response/progress frames arrive
+- new committed revision appears
+- deployment/preview state stabilizes
+- generation_complete never arrives
+
+Expected behavior:
+
+running
+→ after appropriate inactivity, recovering/verifying
+→ authoritative state check
+→ changed stable revision confirmed
+→ success
+
+PASS requires:
+
+- UI does not remain stuck forever
+- UI does not declare success merely because some arbitrary timer expired
+- authoritative revision MUST have changed from the operation's starting
+  revision
+- revision must remain stable for the chosen quiet period
+- runtime must show no continuing relevant activity
+- final files/preview reconcile to that revision
+
+==================================================
+NO-CHANGE CASE
+==================================================
+
+Add an important negative test:
+
+If:
+
+- generation_complete is missing
+- socket becomes quiet or closes
+- BUT authoritative revision did NOT change
+
+the UI must NOT declare successful generation/edit merely because the quiet
+period elapsed.
+
+It should produce an appropriate recoverable/error state.
+
+This protects us from false success when an operation actually died.
+
+==================================================
+ERROR CASE
+==================================================
+
+Verify that a real runtime error still wins over the fallback.
+
+For example:
+
+progress
+→ runtime error
+→ quiet state
+
+must result in ERROR, not success.
+
+A later idle/stable revision check must not erase a genuine terminal error
+from the same operation unless stock runtime state conclusively establishes
+a subsequent successful autonomous recovery.
+
+Keep this conservative.
+
+==================================================
+REVISION BASELINE
+==================================================
+
+At the beginning of every generation/edit operation, capture:
+
+starting revision
+
+The recovery fallback must compare against that operation-specific baseline.
+
+For a mutating request, success fallback requires:
+
+final revision != starting revision
+
+Do not compare against an arbitrary older revision.
+
+==================================================
+QUIET PERIOD
+==================================================
+
+Inspect the quiet/stability period currently implemented.
+
+Use the smallest reasonable value based on the native runtime behavior
+observed during Task 3.
+
+Do not make users wait an unnecessarily long time.
+
+Do not use a tiny interval that can fire between normal ThinkAgent tool
+operations.
+
+Document the chosen value and why.
+
+==================================================
+AUTHORITATIVE STATE
+==================================================
+
+Recovery verification should use the same authoritative interfaces proven
+in Task 3:
+
+- stock conversation/runtime state
+- current branch/revision
+- stock private Git project state
+- preview state where relevant
+
+Do NOT use the old file mirror.
+
+Do NOT use BuildCustom D1 as evidence that generation succeeded.
+
+==================================================
+RECONNECT
+==================================================
+
+If the socket closes unexpectedly while the runtime may still be active,
+use the smallest stock-compatible reconnect/reconciliation behavior.
+
+Do NOT:
+
+- resend the user's prompt automatically
+- start another generation
+- create another agent
+
+The original operation owns the result.
+
+If reconnect is supported safely, reconnect to observe/reconcile.
+
+Otherwise poll/check authoritative state within a bounded recovery window.
+
+==================================================
+BOUNDED RECOVERY
+==================================================
+
+The editor cannot remain in recovering forever.
+
+Define a bounded recovery window.
+
+If authoritative success cannot be established within that window:
+
+show a truthful recoverable error state.
+
+Something conceptually equivalent to:
+
+"We lost connection while BuildCustom was working. Your project is safe.
+Reconnect to check the latest state."
+
+Use BuildCustom-appropriate wording.
+
+Do not claim the operation failed if its final state is genuinely unknown.
+
+==================================================
+REFRESH DURING OPERATION
+==================================================
+
+Add a deterministic test for:
+
+operation running
+→ browser refresh/reopen
+
+The reopened editor should reconcile from stock authoritative state.
+
+It must not:
+
+- create another agent
+- resend the prompt
+- create duplicate conversation turns
+
+If the operation completed while the browser was gone, reopen should show
+the committed result.
+
+==================================================
+CONVERSATION DUPLICATION
+==================================================
+
+Verify recovery/reconnect does not duplicate:
+
+- user message
+- assistant response
+- conversation turn
+- generation request
+
+The two existing Task 3 turns should remain exactly the persisted runtime
+turns.
+
+==================================================
+FRAME FILTERING
+==================================================
+
+Retain the Task 3 behavior that filters framework state envelopes from the
+customer-facing stream.
+
+Verify that filtering those envelopes does NOT remove information required
+by the completion/recovery state machine.
+
+If some filtered state is internally required for reliable completion,
+consume it internally without rendering it to the customer.
+
+==================================================
+AUTOMATED BROWSER-LEVEL TESTS
+==================================================
+
+Add deterministic browser/client-level tests for:
+
+1. normal generation_complete
+
+2. unexpected 1006 after successful persisted revision
+
+3. missing generation_complete with successful stable revision
+
+4. missing completion with NO changed revision
+
+5. explicit runtime error
+
+6. refresh/reopen after runtime completion
+
+7. reconnect/recovery does not resend prompt
+
+8. recovery does not duplicate conversation turns
+
+9. recovery does not create another agent
+
+10. recovery does not invoke publish
+
+These tests should exercise the actual BuildCustom client state logic, not
+only isolated helper functions.
+
+==================================================
+ZERO INFERENCE
+==================================================
+
+Record AI Gateway request count before and after.
+
+PASS requires:
+
+ZERO new inference requests.
+
+Do not send any live prompt.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do NOT change:
+
+- ThinkAgent
+- VibeSDK runtime
+- Unified Billing
+- AI Gateway
+- model configuration
+- SpaceDO
+- generated application
+- project 10 files
+- publishing
+- production
+- DNS
+- customer domains
+
+This task is BuildCustom client/bridge reliability only.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+PASS requires:
+
+1. normal generation_complete reaches success correctly
+
+2. unexpected socket close does not cause false failure or false success
+
+3. completed persisted work can be authoritatively recovered
+
+4. missing generation_complete can recover from changed stable revision
+
+5. unchanged revision can NOT be mistaken for success
+
+6. explicit runtime error cannot be overwritten by idle fallback
+
+7. refresh/reopen reconciles existing runtime work
+
+8. prompt is never automatically resent
+
+9. no duplicate conversation turns
+
+10. no duplicate agents
+
+11. no inference
+
+12. no publish
+
+13. existing Task 1–3 tests still pass
+
+14. production untouched
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. completion state machine
+
+2. normal completion behavior
+
+3. socket-close recovery behavior
+
+4. missing-completion recovery behavior
+
+5. unchanged-revision behavior
+
+6. runtime-error behavior
+
+7. starting-revision baseline implementation
+
+8. quiet/stability period and rationale
+
+9. bounded recovery window
+
+10. reconnect strategy
+
+11. refresh/reopen result
+
+12. conversation duplication result
+
+13. agent duplication result
+
+14. browser/client tests added
+
+15. complete automated test count/results
+
+16. AI Gateway count before/after
+
+17. confirmation zero inference
+
+18. files changed
+
+19. confirmation generated app was not modified
+
+20. confirmation no publish occurred
+
+21. confirmation production untouched
+
+22. remaining limitations
+
+23. whether Task 3 can now be considered fully accepted
+
+24. recommendation for NEXT SINGLE STEP
+
+Then STOP.
+
+Do not begin Task 4.
