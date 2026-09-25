@@ -1,0 +1,255 @@
+Excellent. The primary infrastructure question is now answered.
+
+CLOUDFLARE UNIFIED BILLING THROUGH STOCK VIBESDK IS PROVEN.
+
+Freeze the successful inference architecture.
+
+Do NOT modify:
+
+- ThinkAgent
+- model resolver
+- model identifier
+- AI Gateway
+- /compat transport
+- Unified Billing configuration
+- gateway authentication
+- provider credential configuration
+- retry behavior
+- pacing behavior
+
+Do NOT add:
+
+- Google API key
+- BYOK
+- custom inference transport
+- diagnostic Worker
+- diagnostic inference endpoint
+
+The inference architecture is no longer under investigation.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Investigate ONLY why the EXISTING generated project:
+
+4b6bb16c-6a1a-4037-baca-375672449dcc
+
+produced:
+
+deployment_failed: Build failed
+
+Do NOT run another generation.
+
+Do NOT ask ThinkAgent to fix anything yet.
+
+Do NOT publish anything.
+
+We want the exact build failure first.
+
+==================================================
+STEP 1 — INSPECT THE EXISTING PROJECT FILES
+==================================================
+
+Retrieve the authoritative persisted files for the existing agent/project
+from the stock VibeSDK workspace/SpaceDO using the normal runtime APIs or
+existing inspection mechanisms.
+
+Inspect at minimum:
+
+wrangler.json
+
+public/index.html
+
+public/style.css
+
+Also enumerate ALL files in the project.
+
+Verify whether:
+
+BUILDCUSTOM_STOCK_VIBESDK_OK
+
+actually exists in the persisted file contents.
+
+Report its exact file location if present.
+
+Do not modify any files.
+
+==================================================
+STEP 2 — DETERMINE THE STOCK BUILD PATH
+==================================================
+
+Trace the pinned upstream VibeSDK code to identify exactly what happened
+after ThinkAgent created those files.
+
+Determine:
+
+1. what component initiated the preview build
+2. what build/deployment function was called
+3. what configuration/file structure it expected
+4. what command or Cloudflare API operation actually failed
+5. where the detailed build error should have been emitted or persisted
+6. why the WebSocket/session only surfaced:
+
+   deployment_failed: Build failed
+
+Do not change error handling yet.
+
+==================================================
+STEP 3 — RECOVER THE EXISTING BUILD ERROR
+==================================================
+
+Look for the detailed error from the ALREADY FAILED build in existing:
+
+- Worker logs
+- Durable Object logs/state
+- project/agent events
+- deployment records
+- build records
+- Cloudflare deployment output
+- VibeSDK runtime logs
+- persisted messages/events
+- applicable dispatch/dynamic-worker records
+
+This is READ ONLY.
+
+Do not trigger another build merely to obtain logs unless there is
+absolutely no existing evidence.
+
+==================================================
+STEP 4 — STATIC PROJECT VALIDATION
+==================================================
+
+Independently inspect the generated files and determine whether they satisfy
+the stock VibeSDK preview/build requirements.
+
+Check things such as:
+
+- wrangler.json validity
+- expected entrypoint
+- assets configuration
+- compatibility settings
+- required bindings
+- expected project structure
+- references to missing files
+- invalid JSON
+- invalid HTML/CSS references
+- unsupported Wrangler configuration
+
+Do not assume one of these is the problem.
+
+Establish it from the actual files and pinned upstream behavior.
+
+==================================================
+STEP 5 — CLASSIFY THE FAILURE
+==================================================
+
+Classify the root cause into ONE of these categories if evidence supports it:
+
+A. GENERATED APP DEFECT
+
+ThinkAgent produced an invalid/incomplete application.
+
+B. STOCK VIBESDK BUILD/PREVIEW DEFECT
+
+Generated files are valid but VibeSDK's preview/build pipeline failed.
+
+C. LAB CONFIGURATION DEFECT
+
+The generated application is valid, but our fresh VibeSDK environment is
+missing a required binding/config/resource.
+
+D. TRANSIENT CLOUDFLARE FAILURE
+
+The application and runtime configuration are valid, but the build failed
+because of a transient platform/runtime issue.
+
+E. UNKNOWN
+
+Existing evidence is insufficient.
+
+Do not force a classification without evidence.
+
+==================================================
+IMPORTANT
+
+The successful inference result is NOT part of this debugging task.
+
+We already proved:
+
+- 12 successful model requests
+- stock ThinkAgent
+- stock /compat
+- google-ai-studio/gemini-3.6-flash
+- observed google/gemini-3.6-flash
+- wholesale = true
+- no BYOK
+- no provider key
+- no 429
+- successful Cloudflare Unified Billing
+
+Do not reopen any of that.
+
+==================================================
+NO SECOND GENERATION YET
+==================================================
+
+Do NOT:
+
+- run another generation
+- ask ThinkAgent to repair the project
+- manually edit generated files
+- trigger another preview/build merely for diagnostics
+- publish through Workers for Platforms
+
+First determine what actually broke.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. complete persisted project file list
+
+2. relevant contents/structure of:
+   - wrangler.json
+   - public/index.html
+   - public/style.css
+
+3. whether BUILDCUSTOM_STOCK_VIBESDK_OK exists
+
+4. exact stock VibeSDK preview/build path used
+
+5. exact build/deployment component that failed
+
+6. detailed existing error, if recoverable
+
+7. whether the generated project is structurally valid for stock VibeSDK
+
+8. any missing/invalid file or configuration
+
+9. whether the failure is:
+   A generated-app defect
+   B stock VibeSDK build/preview defect
+   C lab configuration defect
+   D transient Cloudflare failure
+   E unknown
+
+10. evidence supporting that classification
+
+11. smallest corrective action
+
+12. whether that corrective action requires:
+    - generated project change
+    - VibeSDK runtime change
+    - lab configuration change
+    - no code change
+
+13. confirmation ZERO additional inference requests
+
+14. confirmation successful Unified Billing configuration remained untouched
+
+15. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
