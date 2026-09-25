@@ -1,0 +1,431 @@
+IMPORTANT STRATEGY RESET FOR BUILDCUSTOM.AI
+
+We have clarified the actual objective, and this substantially simplifies
+the migration.
+
+The existing BuildCustom test project, test agent state, test releases,
+test generated app, and historical VibeSDK staging state are NOT production
+customer data that must be preserved.
+
+They were created only to prove that BuildCustom could:
+
+- generate an application
+- edit it conversationally
+- preview it
+- deploy it
+- serve it on a BuildCustom subdomain
+- attach custom domains
+
+Those experiments succeeded.
+
+We do NOT care about preserving that test project.
+
+Do NOT delete or modify the old environment yet, but stop designing the
+new architecture around preserving it.
+
+==================================================
+NEW NORTH STAR
+==================================================
+
+We want BuildCustom.ai to become a clean production SaaS built on the
+CURRENT official Cloudflare VibeSDK architecture.
+
+We want to stay as close as practical to Cloudflare's intended VibeSDK
+deployment and runtime architecture.
+
+Do not invent custom infrastructure when VibeSDK or Cloudflare already
+provides the capability.
+
+The desired architecture is:
+
+buildcustom.ai
+→ marketing / sales website
+
+app.buildcustom.ai
+→ authenticated BuildCustom application
+→ dashboard
+→ projects
+→ native BuildCustom coding experience
+→ VibeSDK ThinkAgent/runtime underneath
+
+Generated production applications:
+
+<slug>.apps.buildcustom.ai
+
+Customer custom domains:
+
+customer-owned domains
+→ Cloudflare for SaaS
+→ BuildCustom generated application
+
+AI inference:
+
+VibeSDK ThinkAgent
+→ Cloudflare AI Gateway
+→ Cloudflare Unified Billing
+→ supported model provider
+
+The long-term requirement is that BuildCustom does NOT need to maintain
+thousands of individual provider API keys.
+
+Cloudflare should bill BuildCustom for supported inference through Unified
+Billing.
+
+BuildCustom will meter customer AI usage and charge customers a markup.
+
+Do NOT build customer billing yet.
+
+First establish the correct infrastructure.
+
+==================================================
+IMPORTANT LESSON FROM PREVIOUS WORK
+==================================================
+
+We spent significant time testing custom inference transports and temporary
+diagnostic routes because we believed we needed to preserve an existing
+VibeSDK environment.
+
+That preservation requirement no longer exists.
+
+Do NOT continue the temporary /compat diagnostic work.
+
+Do NOT continue debugging historical diagnostic Worker versions.
+
+Do NOT add pacing.
+
+Do NOT continue the custom BUILDCUSTOM_UNIFIED_BILLING implementation.
+
+Do NOT modify production.
+
+Instead, establish a CLEAN upstream baseline.
+
+==================================================
+PHASE 1 — CURRENT OFFICIAL VIBESDK RESEARCH
+==================================================
+
+READ ONLY FIRST.
+
+Use the CURRENT official Cloudflare VibeSDK repository and current
+Cloudflare documentation.
+
+Determine the exact recommended setup TODAY for a fresh VibeSDK deployment.
+
+Inspect:
+
+- official VibeSDK README
+- setup scripts
+- package scripts
+- wrangler configuration
+- environment configuration
+- ThinkAgent configuration
+- model configuration
+- AI Gateway configuration
+- Sandbox / Containers
+- Durable Objects
+- D1
+- KV
+- R2
+- Workers for Platforms
+- dispatch namespaces
+- generated-app deployment
+- preview architecture
+- required secrets
+- required Cloudflare permissions
+
+Do not rely on our historical BuildCustom implementation as the authority.
+
+The official current VibeSDK source is the authority.
+
+==================================================
+PHASE 2 — UNDERSTAND THE STOCK INFERENCE PATH
+==================================================
+
+Document exactly how a completely fresh VibeSDK installation performs
+ThinkAgent inference.
+
+Trace:
+
+ThinkAgent
+→ model resolver
+→ AI SDK/client
+→ AI Gateway if applicable
+→ provider
+
+Determine:
+
+- exact default model
+- exact model identifier
+- exact endpoint
+- exact authentication
+- whether AI Gateway is default
+- whether provider BYOK is default
+- how provider credentials are resolved
+- where Unified Billing can replace provider credentials
+- whether current VibeSDK directly supports Unified Billing configuration
+- whether any code modification is actually necessary
+
+This is extremely important.
+
+Do NOT assume our previous custom account-scoped REST implementation is
+needed.
+
+Do NOT assume our temporary /compat diagnostic is needed.
+
+Determine the intended Cloudflare-supported route first.
+
+==================================================
+PHASE 3 — UNIFIED BILLING
+==================================================
+
+Research current Cloudflare documentation for AI Gateway Unified Billing.
+
+Our desired production model is:
+
+BuildCustom
+→ AI Gateway
+→ Unified Billing
+→ supported provider/model
+
+with NO BuildCustom-owned Google API key required for supported Unified
+Billing models.
+
+Determine the smallest configuration difference between:
+
+STOCK VIBESDK
+
+and:
+
+STOCK VIBESDK + UNIFIED BILLING
+
+If this can be achieved entirely through configuration:
+
+DO NOT modify VibeSDK inference code.
+
+If a code change is genuinely required:
+
+identify the smallest possible change and explain why Cloudflare's stock
+configuration does not already support it.
+
+We strongly prefer configuration over custom transport code.
+
+==================================================
+PHASE 4 — CLEAN DISPOSABLE DEPLOYMENT PLAN
+==================================================
+
+Design a completely fresh disposable VibeSDK deployment.
+
+It must NOT reuse:
+
+- old ThinkAgent instances
+- old SpaceDO state
+- old generated projects
+- old test releases
+- old BuildCustom test project
+- old staging generated apps
+- old diagnostic routes
+
+Use fresh isolated resources wherever appropriate.
+
+Do NOT interfere with:
+
+buildcustom.ai
+
+app.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+existing production custom domains
+
+or the currently serving BuildCustom resources.
+
+Use clearly disposable names.
+
+==================================================
+PHASE 5 — BASELINE TEST ORDER
+==================================================
+
+Propose the smallest clean validation sequence.
+
+I expect something conceptually like:
+
+TEST 1
+
+Fresh stock VibeSDK
+→ official configuration
+→ generate tiny application
+→ confirm files
+→ confirm preview
+
+TEST 2
+
+Fresh VibeSDK
+→ AI Gateway
+→ Unified Billing
+→ generate tiny application
+→ verify gateway billing evidence
+
+TEST 3
+
+Deploy generated application
+→ fresh disposable BuildCustom-style hostname
+→ verify HTML/assets/navigation
+
+Only after those pass do we integrate BuildCustom's existing UI/control
+plane.
+
+Do not create temporary diagnostic Workers unless the stock runtime itself
+fails and we have evidence that one is necessary.
+
+==================================================
+PHASE 6 — BUILDCUSTOM INTEGRATION PLAN
+==================================================
+
+Once the clean runtime is proven, explain how our existing BuildCustom
+product layer should connect to it.
+
+BuildCustom should own:
+
+- users
+- authentication
+- dashboard
+- projects
+- project ownership
+- permissions
+- plans
+- customer usage
+- credits
+- Stripe billing
+- domain metadata
+- release metadata where appropriate
+
+VibeSDK / Cloudflare should own the actual coding runtime:
+
+- ThinkAgent
+- workspace/files
+- generation
+- editing
+- tool execution
+- preview
+- revisions/history where appropriate
+- Sandbox execution
+- generated-app deployment
+
+Avoid duplicating VibeSDK runtime state inside BuildCustom.
+
+==================================================
+PHASE 7 — DOMAIN ARCHITECTURE
+==================================================
+
+Target:
+
+buildcustom.ai
+marketing
+
+app.buildcustom.ai
+BuildCustom SaaS/dashboard/coding interface
+
+<slug>.apps.buildcustom.ai
+generated customer apps
+
+customer custom domains
+Cloudflare for SaaS → generated app
+
+We already proved custom domains and BuildCustom-hosted generated apps are
+possible.
+
+Do not spend time preserving the old test domain/project.
+
+We will retest this cleanly after the new runtime works.
+
+==================================================
+PHASE 8 — BILLING ARCHITECTURE, DESIGN ONLY
+==================================================
+
+DO NOT IMPLEMENT CUSTOMER BILLING YET.
+
+Document how we should eventually record:
+
+- raw model/provider cost
+- Cloudflare Unified Billing cost/fee
+- customer billable AI usage
+- BuildCustom markup
+- credits consumed
+- request/project/user attribution
+
+Cloudflare/AI Gateway should be the authoritative source for underlying
+inference cost where practical.
+
+Stripe will eventually be the source of truth for customer payments and
+subscriptions.
+
+BuildCustom D1 will track entitlements and usage.
+
+Do not implement this yet.
+
+==================================================
+IMPORTANT RESTRICTIONS
+==================================================
+
+For this task:
+
+DO NOT modify production.
+
+DO NOT delete the old environment.
+
+DO NOT deploy anything yet.
+
+DO NOT send inference requests yet.
+
+DO NOT modify AI Gateway.
+
+DO NOT modify billing.
+
+DO NOT modify DNS.
+
+DO NOT modify customer domains.
+
+DO NOT continue old diagnostic testing.
+
+DO NOT assume historical BuildCustom architecture is correct.
+
+This task is RESEARCH + CLEAN ARCHITECTURE PLAN ONLY.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current official VibeSDK installation flow
+2. current official VibeSDK Cloudflare architecture
+3. exact stock ThinkAgent inference path
+4. exact default model/provider configuration
+5. exact AI Gateway configuration
+6. how Unified Billing fits into that architecture
+7. whether Unified Billing requires VibeSDK code changes
+8. if yes, smallest required change and why
+9. if no, exact configuration required
+10. required Cloudflare resources
+11. required secrets
+12. required Cloudflare API permissions
+13. proposed fresh disposable resource names
+14. clean baseline deployment procedure
+15. Test 1 acceptance criteria
+16. Test 2 Unified Billing acceptance criteria
+17. Test 3 generated-app deployment acceptance criteria
+18. eventual BuildCustom integration architecture
+19. eventual customer usage/billing architecture
+20. what parts of our current custom implementation should be discarded
+21. what parts are still useful
+22. confirmation no deployments were performed
+23. confirmation no inference was performed
+24. confirmation production was untouched
+
+Most importantly:
+
+Tell me whether we can get back onto Cloudflare's normal supported VibeSDK
+path instead of continuing to maintain our custom inference/testing path.
+
+STOP after the report.
+
+Do not implement anything until I approve the plan.

@@ -18,7 +18,7 @@
 - [Custom-domain Live gate](custom-domain-live-gate.md) — verify traffic through the customer hostname itself before exposing a domain as Live.
 - [DNS import comparisons](dns-import-comparisons.md) — keep customer-provided Cloudflare imports read-only, source-labeled, and invalidated when either input changes.
 - [Migration snapshot compatibility](migration-snapshot-compatibility.md) — recovery guidance must work from older inventory-only snapshots, not assume newer derived fields exist.
-- [Cloudflare control-plane migration](cloudflare-control-plane-migration.md) — move only the control plane; preserve VibeSDK and publishing, with a hard post-canary Cloudflare-only rollback boundary.
+- [Clean VibeSDK production direction](cloudflare-control-plane-migration.md) — existing test runtime and projects are disposable; start from current upstream VibeSDK in isolated resources before integration.
 - [Isolated VibeSDK bootstrap](isolated-vibesdk-bootstrap.md) — Worker bundles omit D1/templates, and platform publish still demands an account-level Cloudflare token.
 - [Production VibeSDK transport gate](production-vibesdk-transport-gate.md) — isolated exact restore proves Think files can stay stale; production source remains unknown.
 - [Isolated VibeSDK bundle identity](isolated-vibesdk-bundle-identity.md) — a test checkout can silently bundle the untouched workspace package through shared node_modules; inspect dry-run output.

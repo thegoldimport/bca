@@ -1,16 +1,12 @@
 ---
-name: Cloudflare control-plane migration
-description: Durable architecture and safety decisions for moving BuildCustom production control-plane ownership off Replit.
+name: Clean VibeSDK production direction
+description: Current BuildCustom strategy for a fresh upstream VibeSDK baseline and safe isolation from the serving environment.
 ---
 
-Move only the BuildCustom control plane to Cloudflare. Preserve the existing ThinkAgent/VibeSDK, SpaceDO/Artifacts, Workers for Platforms, gateway/KV routing, generated Workers, hosted URLs, Cloudflare for SaaS hostnames, and customer DNS.
+The earlier preserve-the-existing-runtime migration plan has been superseded. The old BuildCustom test project, generated apps, historical releases, and VibeSDK staging state are disposable research data, not production customer data. Build a clean production SaaS from the current official VibeSDK architecture after proving it in fresh isolated resources. Do not delete or modify the serving environment until a separately approved cutover.
 
-Use D1 for relational control-plane data, a per-project Durable Object for serialization, and Cloudflare Workflows for durable multi-minute runtime operations. Use server-validated HttpOnly sessions; never preserve browser-supplied identity as a compatibility path.
+**Why:** The old preservation requirement drove custom inference transports and compatibility diagnostics that are no longer necessary. Starting upstream-first avoids carrying those assumptions into the new runtime.
 
-Migration staging requires a completely separate mutable VibeSDK stack, including runtime Worker, credentials, D1/R2/KV, Durable Objects, Worker Loader/Sandbox bindings, and generated-app dispatch namespace. The active resources containing “staging” in their names are production and cannot be used for staging mutation tests.
+**How to apply:** Research the current official source and Cloudflare docs first. Prove stock generation, preview, then Unified Billing by configuration if possible, then isolated generated-app publishing. Only after those pass connect BuildCustom's product-layer identity, project ownership, usage, and domains. Never treat a staging-looking name as an isolation boundary; use fresh resources and an account-level credential boundary for mutation tests.
 
-The first Cloudflare canary session is the point of no return for DNS rollback to the current Replit application. After that event, failures must roll forward or version-roll back entirely on Cloudflare because restoring Replit would reintroduce its insecure authentication boundary.
-
-**Why:** The proven publishing/runtime system already lives on Cloudflare and must not be rebuilt. The current Replit control plane combines PostgreSQL-only behavior, process-memory coordination, and browser-trusted identity. A broad migration would add unnecessary risk, while post-write rollback to that identity model would be a security regression.
-
-**How to apply:** Treat `docs/cloudflare-control-plane-migration-audit.md` as the approved design candidate. Keep implementation blocked on its explicit owner gates, use isolated staging, preserve all external IDs/mappings, and require full shutdown-test evidence before removing Replit standby.
+Keep the separate security principle: never carry browser-supplied identity forward as authentication. Any later production cutover needs its own rollback and data-ownership plan; the former preservation-first plan is no longer its authority.
