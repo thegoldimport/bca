@@ -1,0 +1,455 @@
+Approved.
+
+Perform the ONE minimal isolated /compat Unified Billing route proof
+designed in the previous investigation.
+
+DO NOT perform a full native BuildCustom generation.
+
+==================================================
+PURPOSE
+==================================================
+
+We want to prove this exact path:
+
+VibeSDK-compatible Chat Completions client
+→ Cloudflare AI Gateway /compat
+→ authenticated gateway
+→ NO Google provider credential
+→ Cloudflare Unified Billing
+→ google/gemini-3.6-flash
+→ Gemini response
+
+This experiment exists specifically to determine whether BuildCustom
+can use Cloudflare Unified Billing through VibeSDK's normal /compat
+transport without bringing our own Google API key.
+
+==================================================
+ABSOLUTE TEST LIMIT
+==================================================
+
+Authorize exactly:
+
+- ONE staging-only minimal code/config change if required
+- ONE staging deployment if required
+- ONE minimal inference request
+
+Do NOT:
+
+- perform a full app generation
+- run ThinkAgent's multi-step tool loop
+- retry from the client
+- add pacing
+- change retry behavior
+- switch to BYOK
+- add a Google provider key
+- change billing
+- add credits
+- change gateway settings unless the required preflight reveals the
+  gateway is not in the already-proven authenticated state
+- touch production
+
+If a material prerequisite is wrong:
+
+STOP instead of fixing it automatically.
+
+==================================================
+PHASE 1 — PREFLIGHT
+==================================================
+
+READ ONLY before changing anything.
+
+Verify:
+
+1. current isolated staging Worker version
+
+2. gateway:
+
+buildcustom-think-unified-staging
+
+3. gateway authentication is TRUE
+
+4. gateway has no stored Google provider/BYOK credential applicable to
+   this request
+
+5. "Require provider credentials" / BYOK-only behavior is OFF
+
+6. Cloudflare Unified Billing has positive available credits
+
+7. an AI Gateway token with:
+
+AI Gateway → Run
+
+is available to the staging Worker
+
+8. determine which existing secret binding should be used for normal
+   /compat gateway authentication
+
+Prefer the existing official VibeSDK binding:
+
+CLOUDFLARE_AI_GATEWAY_TOKEN
+
+if it exists and is valid.
+
+Do NOT expose token values.
+
+Do NOT reuse BUILDCUSTOM_THINK_API_TOKEN merely because it exists
+unless it is actually appropriate for /compat gateway authentication
+and there is a strong reason not to use the normal VibeSDK gateway
+token binding.
+
+==================================================
+PHASE 2 — CONSTRUCT NORMAL /compat ROUTE
+==================================================
+
+Use:
+
+https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat
+
+with the normal Chat Completions path.
+
+Gateway:
+
+buildcustom-think-unified-staging
+
+Model for THIS diagnostic:
+
+google/gemini-3.6-flash
+
+Use the existing VibeSDK-compatible OpenAI Chat Completions request
+shape.
+
+Authentication TO AI Gateway must use:
+
+cf-aig-authorization: Bearer <AI Gateway Run token>
+
+There must be:
+
+NO Google Authorization header
+NO Google API key
+NO stored Google BYOK credential
+NO provider credential
+
+The goal is intentionally to force credential selection to fall
+through to Cloudflare Unified Billing.
+
+==================================================
+IMPORTANT HEADER CHECK
+==================================================
+
+Before sending inference, inspect the constructed request.
+
+Confirm:
+
+PRESENT:
+
+cf-aig-authorization
+
+ABSENT:
+
+provider Authorization header
+Google API key
+Vertex credential
+stored provider key selection
+
+Do NOT print any secret values.
+
+Report only presence/absence.
+
+If a provider credential would be sent:
+
+STOP.
+
+Do not infer.
+
+==================================================
+PHASE 3 — MODEL ID
+==================================================
+
+Use:
+
+google/gemini-3.6-flash
+
+for this diagnostic.
+
+Do NOT assume:
+
+google-ai-studio/gemini-3.6-flash
+
+is equivalent.
+
+We are specifically testing the Cloudflare-managed catalog model
+identifier that previously succeeded through Unified Billing.
+
+==================================================
+PHASE 4 — MINIMAL STAGING IMPLEMENTATION
+==================================================
+
+If code is required for the diagnostic, make the smallest possible
+staging-only implementation.
+
+Prefer using the existing VibeSDK Chat Completions client and request
+handling.
+
+Do NOT create a new general-purpose inference architecture.
+
+Do NOT modify:
+
+- ThinkAgent loop
+- tools
+- prompts
+- context
+- skills
+- max steps
+- retries
+- SpaceDO
+- restore
+- preview
+- deployment
+- control plane
+- production
+
+If a temporary diagnostic route is necessary, protect it with the
+existing safe diagnostic mechanism or a new high-entropy staging-only
+secret.
+
+Never expose the diagnostic secret.
+
+==================================================
+PHASE 5 — DEPLOY STAGING IF REQUIRED
+==================================================
+
+If a staging deployment is required:
+
+record:
+
+- previous Worker version
+- new Worker version
+
+Verify:
+
+- expected modules remain
+- expected bindings remain
+- production unchanged
+
+Do not modify the AI Gateway itself.
+
+==================================================
+PHASE 6 — EXACTLY ONE INFERENCE
+==================================================
+
+Send ONE very small non-sensitive request.
+
+No tools.
+
+No streaming required.
+
+No multi-step agent loop.
+
+The response can simply be asked to return:
+
+COMPAT_UNIFIED_OK
+
+Keep token usage extremely small.
+
+No client retry.
+
+If the request fails:
+
+STOP.
+
+Do not retry.
+
+==================================================
+PHASE 7 — CORRELATE GATEWAY EVIDENCE
+==================================================
+
+Find the exact AI Gateway log corresponding to the request.
+
+Record:
+
+- timestamp
+- HTTP status
+- gateway log/request ID
+- requested model
+- actual provider
+- input tokens
+- output tokens
+- cost
+- wholesale
+- byok
+- duration
+- cached status
+- safe error information if failed
+
+Do not expose:
+
+- prompt
+- credentials
+- secrets
+
+==================================================
+SUCCESS REQUIRES MORE THAN HTTP 200
+==================================================
+
+For this experiment to PASS, establish:
+
+1. HTTP 200
+
+2. Gemini returned the expected minimal response or equivalent valid
+   response
+
+3. request went through:
+
+gateway.ai.cloudflare.com/.../compat
+
+4. AI Gateway authentication was used
+
+5. no Google provider credential was supplied
+
+6. no stored Google BYOK credential was selected
+
+7. gateway log shows:
+
+wholesale:true
+
+8. gateway log shows:
+
+byok:null
+
+9. nonzero input/output token usage
+
+10. nonzero model cost
+
+11. actual provider/model recorded
+
+12. Cloudflare Unified Billing was therefore responsible for provider
+    authentication/billing
+
+If the balance/credit ledger has sufficient precision to attribute a
+charge, record it.
+
+If the tiny request does not visibly move the rounded balance, DO NOT
+send another request just to prove the balance movement.
+
+The gateway's wholesale/byok/cost evidence is more important.
+
+==================================================
+FAILURE CASES
+==================================================
+
+CASE A — 401/403 gateway authentication failure
+
+STOP.
+
+Report authentication failure.
+
+Do not change token permissions automatically.
+
+
+CASE B — provider credential required
+
+STOP.
+
+This would be strong evidence that /compat cannot use this model via
+Unified Billing in the tested configuration.
+
+
+CASE C — model identifier rejected
+
+STOP.
+
+Do not try another model identifier automatically.
+
+
+CASE D — wholesale 429
+
+STOP.
+
+This would be extremely important.
+
+Record the exact wholesale error and gateway evidence.
+
+Do not retry.
+
+
+CASE E — other provider/model error
+
+STOP.
+
+Report exactly what occurred.
+
+==================================================
+PHASE 8 — CLEANUP
+==================================================
+
+After evidence is collected:
+
+Remove ONLY the temporary diagnostic route/code if one was added.
+
+If removing it requires a second staging deployment, that cleanup
+deployment is authorized.
+
+Record the final clean staging Worker version.
+
+Do NOT remove:
+
+- BUILDCUSTOM_THINK_API_TOKEN
+- existing Unified Billing rollback code
+- existing normal VibeSDK secrets
+- shared bindings
+
+We can clean those later after architecture is finalized.
+
+==================================================
+DO NOT RUN NATIVE GENERATION
+==================================================
+
+Even if the /compat diagnostic succeeds perfectly:
+
+STOP.
+
+Do NOT create a project.
+
+Do NOT invoke ThinkAgent generation.
+
+Do NOT test 12 calls.
+
+Do NOT test streaming/tools.
+
+That will be the next separately approved experiment.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. preflight result
+2. previous Worker version
+3. exact /compat endpoint shape used, redacted account if appropriate
+4. model identifier
+5. gateway authentication mechanism
+6. confirmation provider Authorization absent
+7. confirmation Google API key absent
+8. confirmation stored BYOK absent
+9. whether exactly ONE inference was made
+10. HTTP result
+11. response result
+12. gateway log ID
+13. actual provider
+14. actual model
+15. input/output tokens
+16. cost
+17. wholesale value
+18. byok value
+19. whether Cloudflare Unified Billing is conclusively proven through
+    /compat for this model
+20. whether credit movement was visible
+21. temporary diagnostic cleanup
+22. final clean staging Worker version
+23. confirmation no pacing
+24. confirmation no BYOK/provider key
+25. confirmation no native generation
+26. confirmation production untouched
+
+Then STOP.
