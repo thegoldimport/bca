@@ -1,0 +1,342 @@
+STOP.
+
+DO NOT retry /compat.
+
+DO NOT send any inference.
+
+We have now isolated the failure boundary:
+
+- all local preparation passed
+- READY_BEFORE_FETCH passed
+- BEFORE_FETCH passed
+- exactly one fetch() invocation was attempted
+- fetch() threw TypeError
+- location: index.js:378640:57
+- no upstream response existed
+- Cloudflare counted zero subrequests
+- AI Gateway recorded no request
+
+Therefore this is currently a Worker fetch-boundary problem.
+
+It is NOT yet evidence of:
+
+- AI Gateway failure
+- Unified Billing failure
+- Gemini failure
+- model routing failure
+- gateway authentication failure
+- wholesale rate limiting
+
+==================================================
+GOAL
+==================================================
+
+Determine the exact cause of the TypeError WITHOUT executing fetch()
+and WITHOUT inference.
+
+This task is READ ONLY.
+
+ZERO deployments.
+ZERO inference.
+ZERO outbound gateway requests.
+ZERO credential changes.
+ZERO gateway changes.
+ZERO billing changes.
+ZERO production changes.
+
+==================================================
+PHASE 1 — INSPECT THE EXACT DEPLOYED CODE LOCATION
+==================================================
+
+Diagnostic Worker version:
+
+fde46ec2-c2bd-459f-bb26-b8a79035f52f
+
+Failure location:
+
+index.js:378640:57
+
+Inspect the actual uploaded/deployed bundle for that version if
+Cloudflare permits retrieval.
+
+Do not rely only on current local source because the diagnostic has
+already been cleaned locally.
+
+Identify:
+
+- the exact statement at line 378640
+- surrounding function
+- surrounding 20-30 lines
+- exact expression at column 57
+- whether column 57 points to fetch itself or one of its arguments
+
+Map that generated bundle location back to source if source maps or
+build metadata permit it.
+
+Do not expose secret values.
+
+==================================================
+PHASE 2 — RECOVER THE TYPEERROR MESSAGE IF POSSIBLE
+==================================================
+
+The previous diagnostic intentionally suppressed the TypeError message.
+
+Before considering another invocation, determine whether the original
+message can be recovered READ ONLY from:
+
+- Worker logs
+- tail/observability history
+- Cloudflare issue records
+- deployment logs
+- source maps
+- Replit execution records
+- diagnostic client output
+- any local captured response/log artifact
+
+Do not deploy logging.
+
+Do not invoke the route.
+
+If the exact message cannot be recovered, say so.
+
+==================================================
+PHASE 3 — INSPECT THE EXACT FETCH CALL
+==================================================
+
+Reconstruct the exact call that was attempted:
+
+fetch(<input>, <init>)
+
+Inspect the runtime TYPES and safe metadata for every component from
+the source/deployed code.
+
+For fetch input determine:
+
+- string vs URL vs Request vs other
+- whether URL object came from another realm/library
+- URL length
+- protocol
+- hostname
+- pathname
+- presence of whitespace/control characters
+- whether interpolation could produce undefined/null/object text
+
+Do NOT print the account ID if unnecessary.
+
+For init determine:
+
+- method type/value
+- headers container type
+- body type
+- signal type if present
+- redirect value if present
+- duplex value if present
+- any nonstandard fields
+
+For headers determine:
+
+- Headers instance vs plain object vs array
+- header NAME list only
+- whether any value is undefined/null/non-string
+- whether cf-aig-authorization was created as a valid string
+- whether Content-Type was valid
+
+Do not print credential/header values.
+
+For body determine:
+
+- body runtime type
+- whether JSON.stringify returned a string
+- byte length
+- whether it contained unsupported objects/types
+
+==================================================
+PHASE 4 — LOOK FOR CLOUDFLARE WORKERS FETCH CONSTRAINTS
+==================================================
+
+Using current official Cloudflare Workers documentation, compare the
+exact fetch call against Workers runtime requirements.
+
+Specifically investigate TypeErrors that can occur SYNCHRONOUSLY before
+a subrequest is created.
+
+Check for issues involving:
+
+- invalid URL/input type
+- invalid Request object
+- malformed header names
+- malformed header values
+- forbidden/immutable headers
+- invalid fetch init properties
+- invalid signal
+- unsupported duplex option
+- body/method mismatch
+- credential characters rejected by Headers/fetch
+- Cloudflare-specific fetch restrictions
+- same-zone/self-request restrictions
+- global fetch being replaced/wrapped/shadowed
+- compatibility-date/nodejs_compat behavior
+
+We care especially about failures that explain:
+
+fetch() throws TypeError
+AND
+Cloudflare records zero subrequests.
+
+==================================================
+PHASE 5 — INSPECT WHETHER fetch IS ACTUALLY NATIVE fetch
+==================================================
+
+This is important.
+
+Determine from the deployed bundle whether the identifier/function
+called at:
+
+index.js:378640:57
+
+is actually the native Cloudflare Workers global fetch.
+
+Check whether:
+
+- fetch was imported
+- fetch was aliased
+- fetch was shadowed by a local variable
+- a library/polyfill replaced it
+- node-fetch/undici compatibility code is involved
+- an SDK wrapper is involved
+- the call is actually globalThis.fetch
+- bundling transformed the call
+
+The diagnostic was intended to perform ONE direct native Worker fetch.
+
+Prove whether that is what the deployed bundle actually did.
+
+==================================================
+PHASE 6 — COMPARE AGAINST A KNOWN WORKING OUTBOUND FETCH
+==================================================
+
+READ ONLY.
+
+This Worker/VibeSDK already performs other outbound HTTP requests.
+
+Find one known-working outbound fetch in the same deployed/runtime
+environment if available.
+
+Compare its construction to the diagnostic fetch:
+
+- native fetch reference
+- URL representation
+- Headers representation
+- auth header construction
+- body type
+- method
+- request init
+
+Do NOT execute either request.
+
+The goal is to identify a structural difference that could explain the
+synchronous TypeError.
+
+==================================================
+PHASE 7 — TOKEN STRING VALIDATION WITHOUT REVEALING IT
+==================================================
+
+Because cf-aig-authorization includes the Worker-held token, inspect
+ONLY safe properties of the construction.
+
+Determine from code whether it becomes:
+
+"Bearer " + token
+
+and whether the resulting value is guaranteed to be a string.
+
+If safe inspection of stored metadata can establish it without
+revealing the token, determine whether the secret could contain:
+
+- newline
+- carriage return
+- other characters prohibited in HTTP header values
+
+Do NOT print:
+
+- token
+- hash
+- prefix
+- suffix
+- length if that could materially aid credential recovery
+
+If this cannot be established without reading/exposing secret material,
+say UNKNOWN.
+
+Do not rotate or replace the token.
+
+==================================================
+PHASE 8 — DETERMINE ROOT CAUSE OR NARROWEST HYPOTHESIS
+==================================================
+
+At the end, classify the result as:
+
+A. ROOT CAUSE PROVEN
+
+or
+
+B. ROOT CAUSE NOT PROVEN
+
+Do not call a hypothesis proven merely because it is plausible.
+
+If proven, provide:
+
+- exact offending expression
+- exact reason Workers throws TypeError
+- smallest correction
+
+If not proven, provide:
+
+- what has been eliminated
+- remaining plausible causes
+- the SINGLE smallest zero-inference diagnostic needed to distinguish
+  them
+
+Prefer a diagnostic that does NOT execute fetch if possible.
+
+==================================================
+DO NOT IMPLEMENT ANY FIX
+==================================================
+
+Even if the bug is obvious:
+
+DO NOT change code.
+DO NOT deploy.
+DO NOT invoke anything.
+
+We will approve the correction separately.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact statement at index.js:378640:57
+2. source mapping if available
+3. whether exact TypeError message was recoverable
+4. whether called fetch was native global fetch
+5. fetch input runtime construction/type
+6. fetch init structure
+7. headers container type
+8. safe header names
+9. body runtime type
+10. signal/redirect/duplex information
+11. comparison against Workers fetch requirements
+12. comparison against known-working Worker fetch
+13. whether any synchronous TypeError cause is identified
+14. whether token/header construction is structurally valid
+15. ROOT CAUSE PROVEN or ROOT CAUSE NOT PROVEN
+16. exact root cause if proven
+17. smallest correction if proven
+18. if unproven, smallest next ZERO-INFERENCE diagnostic
+19. confirmation ZERO inference
+20. confirmation ZERO deployments/changes
+21. confirmation production untouched
+
+STOP.
