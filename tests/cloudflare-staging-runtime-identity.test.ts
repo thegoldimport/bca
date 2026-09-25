@@ -13,6 +13,7 @@ function database() {
   sqlite.exec("INSERT INTO projects(id,user_id,name) VALUES(1,'legacy','Existing project')");
   sqlite.exec("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES('legacy-session','legacy','2030-01-01')");
   sqlite.exec(readFileSync("migrations/d1/0002_staging_runtime_identity.sql", "utf8"));
+  sqlite.exec(readFileSync("migrations/d1/0003_staging_think_project_links.sql", "utf8"));
   const db = {
     prepare(sql: string) {
       let args: unknown[] = [];
@@ -35,6 +36,9 @@ function runtime(options: { silentLogout?: boolean } = {}) {
   const accounts = new Map<string, Account>();
   const sessions = new Map<string, { account: Account; id: string }>();
   const calls: string[] = [];
+  const agents = new Map<string, { owner: string; originalPrompt: string }>();
+  const failures = { nextCreateStatus: 0, loseNextResponse: false, nextStreamError: false };
+  let nextAgent = 0;
   let nextUser = 0;
   let nextSession = 0;
   const fetcher = {
@@ -44,6 +48,42 @@ function runtime(options: { silentLogout?: boolean } = {}) {
       const cookie = request.headers.get("Cookie") || "";
       const token = cookie.match(/(?:^|;\s*)accessToken=([^;]+)/)?.[1];
       const session = token ? sessions.get(token) : null;
+      if (path === "/api/agent" && request.method === "POST") {
+        if (!session) return Response.json({ success: false }, { status: 401 });
+        if (failures.nextCreateStatus) {
+          const status = failures.nextCreateStatus;
+          failures.nextCreateStatus = 0;
+          return Response.json({ success: false, error: "unavailable" }, { status });
+        }
+        const body = await request.json() as { query: string; behaviorType: string };
+        assert.equal(body.behaviorType, "think");
+        assert.match(body.query, /^BuildCustom project \d+ \[bc-project:\d+\]$/);
+        const agentId = `agent-${++nextAgent}`;
+        agents.set(agentId, { owner: session.account.id, originalPrompt: body.query });
+        if (failures.loseNextResponse) {
+          failures.loseNextResponse = false;
+          throw new Error("response lost after stock creation");
+        }
+        const streamError = failures.nextStreamError;
+        failures.nextStreamError = false;
+        return new Response(JSON.stringify({ agentId, behaviorType: "think" }) + "\n" +
+          (streamError ? JSON.stringify({ error: { message: "init failed" } }) + "\n" : ""), {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }
+      if (path === "/api/apps") {
+        if (!session) return Response.json({ success: false }, { status: 401 });
+        return Response.json({ success: true, data: { apps: [...agents].filter(([, agent]) =>
+          agent.owner === session.account.id).map(([id, agent]) => ({ id, originalPrompt: agent.originalPrompt })) } });
+      }
+      if (/^\/api\/agent\/[a-zA-Z0-9_-]+\/connect$/.test(path)) {
+        const agentId = path.split("/")[3];
+        const agent = agents.get(agentId);
+        if (!session) return Response.json({ success: false }, { status: 401 });
+        if (!agent) return Response.json({ success: false }, { status: 404 });
+        if (agent.owner !== session.account.id) return Response.json({ success: false }, { status: 403 });
+        return Response.json({ success: true, data: { agentId, websocketUrl: `wss://example.test/${agentId}` } });
+      }
       if (path === "/api/auth/csrf-token") {
         return new Response(JSON.stringify({ success: true, data: { token: "csrf-value" } }), {
           headers: { "Set-Cookie": "csrf-token=csrf-cookie; Path=/; Secure; HttpOnly; SameSite=Strict" },
@@ -91,7 +131,7 @@ function runtime(options: { silentLogout?: boolean } = {}) {
       return new Response("Unexpected runtime call", { status: 500 });
     },
   };
-  return { fetcher: fetcher as Fetcher, calls };
+  return { fetcher: fetcher as Fetcher, calls, agents, failures };
 }
 
 function browser(env: Env) {
@@ -120,7 +160,17 @@ function browser(env: Env) {
     const { token } = await csrf.json() as { token: string };
     return send(path, "POST", body, { "X-CSRF-Token": token });
   };
-  return { send, auth, jar };
+  const create = async (body: Record<string, unknown>, key = crypto.randomUUID()) => {
+    const csrf = await send("/api/auth/csrf-token");
+    const { token } = await csrf.json() as { token: string };
+    return send("/api/projects", "POST", body, { "X-CSRF-Token": token, "Idempotency-Key": key });
+  };
+  const initialize = async (id: number) => {
+    const csrf = await send("/api/auth/csrf-token");
+    const { token } = await csrf.json() as { token: string };
+    return send(`/api/projects/${id}/runtime/initialize`, "POST", {}, { "X-CSRF-Token": token });
+  };
+  return { send, auth, create, initialize, jar };
 }
 
 test("staging D1 migration retains legacy user, project and session without a password for new product users", () => {
@@ -167,24 +217,117 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal(sqlite.prepare("SELECT legacy_password_hash FROM users WHERE id=?").get(aMe.id)?.legacy_password_hash, null);
   assert.equal(a.jar.has("__Host-bc_session"), false);
 
-  const projectAResponse = await a.send("/api/projects", "POST", { name: "Project A", userId: bMe.id });
-  const projectBResponse = await b.send("/api/projects", "POST", { name: "Project B", userId: aMe.id });
+  const aKey = crypto.randomUUID(), bKey = crypto.randomUUID();
+  const projectAResponse = await a.create({ name: "Project A", userId: bMe.id }, aKey);
+  const projectBResponse = await b.create({ name: "Project B", userId: aMe.id }, bKey);
   assert.equal(projectAResponse.status, 201);
   assert.equal(projectBResponse.status, 201);
-  const projectA = await projectAResponse.json() as { id: number; userId: string };
-  const projectB = await projectBResponse.json() as { id: number; userId: string };
+  const projectA = await projectAResponse.json() as { id: number; userId: string; agentId: string; runtimeStatus: string };
+  const projectB = await projectBResponse.json() as { id: number; userId: string; agentId: string; runtimeStatus: string };
   assert.equal(projectA.userId, aMe.id);
   assert.equal(projectB.userId, bMe.id);
+  assert.equal(projectA.runtimeStatus, "ready");
+  assert.equal(projectB.runtimeStatus, "ready");
+  assert.notEqual(projectA.agentId, projectB.agentId);
+  assert.equal(stock.agents.get(projectA.agentId)?.owner, aMe.id);
+  assert.equal(stock.agents.get(projectB.agentId)?.owner, bMe.id);
+  assert.equal(sqlite.prepare("SELECT agent_id,runtime_provider FROM runtime_project_links WHERE project_id=?").get(projectA.id)?.agent_id, projectA.agentId);
+  assert.equal(sqlite.prepare("SELECT runtime_provider FROM runtime_project_links WHERE project_id=?").get(projectB.id)?.runtime_provider, "stock-think");
+  assert.equal((await a.create({ name: "Different name on retry" }, aKey)).status, 200);
+  const retry = await (await a.create({ name: "Project A" }, aKey)).json() as { id: number; agentId: string };
+  assert.equal(retry.id, projectA.id);
+  assert.equal(retry.agentId, projectA.agentId);
+  assert.equal(stock.agents.size, 2);
   assert.deepEqual((await (await a.send("/api/projects")).json() as any[]).map((p) => p.id), [projectA.id]);
   assert.deepEqual((await (await b.send("/api/projects")).json() as any[]).map((p) => p.id), [projectB.id]);
   assert.equal((await a.send(`/api/projects/${projectB.id}`)).status, 404);
   assert.equal((await b.send(`/api/projects/${projectA.id}`)).status, 404);
+  assert.equal((await a.send(`/api/projects/${projectB.id}/runtime/agent/${projectB.agentId}`)).status, 404);
+  assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/agent/${projectA.agentId}`)).status, 404);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/agent/${projectB.agentId}`)).status, 404);
+  assert.equal((await b.send(`/api/projects/${projectB.id}/runtime/agent/${projectA.agentId}`)).status, 404);
+  const stockRequest = (browserJar: Map<string, string>, agentId: string) => stock.fetcher.fetch(new Request(
+    `https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev/api/agent/${agentId}/connect`,
+    { headers: { Cookie: [...browserJar].map(([k, v]) => `${k}=${v}`).join("; ") } },
+  ));
+  assert.equal((await stockRequest(a.jar, projectA.agentId)).status, 200);
+  assert.equal((await stockRequest(b.jar, projectB.agentId)).status, 200);
+  assert.equal((await stockRequest(a.jar, projectB.agentId)).status, 403);
+  assert.equal((await stockRequest(b.jar, projectA.agentId)).status, 403);
   assert.equal((await a.send(`/api/projects/${projectA.id}`)).status, 200);
   assert.equal((await b.send(`/api/projects/${projectB.id}`)).status, 200);
+  const reloadA = browser(env), reloadB = browser(env);
+  for (const [key, value] of a.jar) reloadA.jar.set(key, value);
+  for (const [key, value] of b.jar) reloadB.jar.set(key, value);
+  assert.equal((await (await reloadA.send(`/api/projects/${projectA.id}`)).json() as any).agentId, projectA.agentId);
+  assert.equal((await (await reloadB.send(`/api/projects/${projectB.id}`)).json() as any).agentId, projectB.agentId);
+  assert.equal(stock.agents.size, 2);
+  assert.equal((await a.initialize(projectA.id)).status, 200);
+  assert.equal(stock.agents.size, 2);
+  const runtimeStatus = await (await a.send(`/api/projects/${projectA.id}/runtime/status`)).json() as any;
+  assert.equal(runtimeStatus.connected, true);
+  assert.equal(runtimeStatus.runtimeStatus, "ready");
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/files`)).status, 200);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/turns`)).status, 200);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/releases`)).status, 200);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/publishing-settings`)).status, 200);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/previews`, "POST", {})).status, 501);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/messages`, "POST", { prompt: "Do not send" })).status, 501);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/deployments`, "POST", {})).status, 501);
+  assert.equal(stock.agents.size, 2);
 
   assert.equal((await a.send("/api/projects", "POST", { name: "Forged" }, { "x-user-id": bMe.id })).status, 400);
-  assert.equal((await a.send("/api/projects", "POST", { name: "Forged", ownerId: bMe.id })).status, 201);
+  assert.equal((await a.create({ name: "Forged", ownerId: bMe.id })).status, 201);
   assert.equal(sqlite.prepare("SELECT user_id FROM projects WHERE name='Forged'").get()?.user_id, aMe.id);
+  assert.equal((await a.send("/api/projects", "POST", { name: "No CSRF" }, { "Idempotency-Key": crypto.randomUUID() })).status, 403);
+  assert.equal((await a.send("/api/projects", "POST", { name: "No key" }, { "X-CSRF-Token": "csrf-value" })).status, 400);
+
+  stock.failures.nextCreateStatus = 503;
+  const unavailable = await (await a.create({ name: "Unavailable" })).json() as any;
+  assert.equal(unavailable.runtimeStatus, "reconcile");
+  assert.equal(unavailable.status, "error");
+  assert.equal(unavailable.agentId, null);
+  assert.equal((await a.initialize(unavailable.id)).status, 200);
+  assert.equal(stock.agents.size, 3);
+  assert.equal((await (await a.send(`/api/projects/${unavailable.id}`)).json() as any).runtimeStatus, "reconcile");
+
+  stock.failures.loseNextResponse = true;
+  const recovered = await (await a.create({ name: "Recoverable" })).json() as any;
+  assert.equal(recovered.agentId, null);
+  assert.equal(recovered.runtimeStatus, "reconcile");
+  const resolved = await (await a.send(`/api/projects/${recovered.id}`)).json() as any;
+  assert.ok(resolved.agentId);
+  assert.equal(resolved.runtimeStatus, "ready");
+  assert.equal(stock.agents.size, 4);
+
+  stock.failures.nextStreamError = true;
+  const partial = await (await a.create({ name: "Initialization failed" })).json() as any;
+  assert.equal(partial.runtimeStatus, "error");
+  assert.ok(partial.agentId);
+  assert.equal((await (await a.send(`/api/projects/${partial.id}`)).json() as any).runtimeStatus, "error");
+  assert.equal((await a.initialize(partial.id)).status, 200);
+  assert.equal(stock.agents.size, 5);
+
+  const missingResult = sqlite.prepare("INSERT INTO projects(user_id,name,status) VALUES(?,?,'draft')").run(aMe.id, "Missing link");
+  const missingId = Number(missingResult.lastInsertRowid);
+  assert.equal((await (await a.send(`/api/projects/${missingId}`)).json() as any).runtimeStatus, "missing");
+  assert.equal((await a.initialize(missingId)).status, 200);
+  assert.equal((await (await a.send(`/api/projects/${missingId}`)).json() as any).runtimeStatus, "ready");
+  assert.equal(stock.agents.size, 6);
+
+  const gapId = Number(sqlite.prepare(
+    "INSERT INTO projects(user_id,name,status,creation_key) VALUES(?,?,'initializing',?)",
+  ).run(aMe.id, "New project before link claim", crypto.randomUUID()).lastInsertRowid);
+  const callsBeforeGap = stock.calls.filter((path) => path === "/api/agent").length;
+  assert.equal((await (await a.send(`/api/projects/${gapId}/runtime/status`)).json() as any).runtimeStatus, "missing");
+  assert.equal((await a.send(`/api/projects/${gapId}/runtime/previews`, "POST", {})).status, 501);
+  assert.equal((await a.send(`/api/projects/${gapId}/runtime/messages`, "POST", { prompt: "Do not send" })).status, 501);
+  assert.equal((await b.send(`/api/projects/${gapId}/runtime/status`)).status, 404);
+  assert.equal(stock.calls.filter((path) => path === "/api/agent").length, callsBeforeGap);
+  assert.equal((await a.initialize(gapId)).status, 200);
+  assert.equal((await (await a.send(`/api/projects/${gapId}`)).json() as any).runtimeStatus, "ready");
+  assert.equal(stock.agents.size, 7);
+  assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   assert.equal((await worker.fetch(new Request(`${origin}/api/projects`, {
     headers: { Cookie: "__Host-bc_session=legacy-session" },
   }), env)).status, 401);
@@ -202,6 +345,42 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await a.auth("/api/auth/login", { email: "a@example.test", password: "Str0ng!PasswordA" })).status, 200);
   assert.equal((await (await a.send("/api/auth/me")).json() as { id: string }).id, aMe.id);
   assert.equal((await a.send(`/api/projects/${projectA.id}`)).status, 200);
-  assert.equal(stock.calls.some((path) => path.startsWith("/api/agent")), false);
+  assert.equal(stock.calls.filter((path) => path === "/api/agent").length, 8);
+  sqlite.close();
+});
+
+test("concurrent project creates with one key claim only one stock Think agent", async () => {
+  const { sqlite, db } = database();
+  const stock = runtime();
+  const env = {
+    DB: db,
+    ENVIRONMENT: "staging",
+    AUTH_RUNTIME: stock.fetcher,
+    AUTH_RUNTIME_URL: "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev",
+    STAGING_RUNTIME_URL: "https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev",
+    STAGING_ROUTE_KV_ID: "e5e119fa2abc4c26a8c027e0d8a8d82c",
+    STAGING_DISPATCH_NAMESPACE: "buildcustom-vibesdk-migration-staging",
+    STAGING_ALLOWED_ORIGIN: origin,
+    STAGING_REGISTRATION_ENABLED: "true",
+    STAGING_LOGIN_ENABLED: "true",
+    RUNTIME_OPERATIONS_ENABLED: "false",
+  } as Env;
+  const a = browser(env);
+  assert.equal((await a.auth("/api/auth/register", {
+    name: "Parallel", email: "parallel@example.test", password: "Str0ng!PasswordP",
+  })).status, 200);
+  const key = crypto.randomUUID();
+  const [first, second] = await Promise.all([
+    a.create({ name: "Concurrent project" }, key),
+    a.create({ name: "Concurrent project" }, key),
+  ]);
+  assert.ok([200, 201, 202].includes(first.status));
+  assert.ok([200, 201, 202].includes(second.status));
+  const left = await first.json() as any, right = await second.json() as any;
+  assert.equal(left.id, right.id);
+  const resolved = await (await a.send(`/api/projects/${left.id}`)).json() as any;
+  assert.equal(resolved.runtimeStatus, "ready");
+  assert.equal(stock.agents.size, 1);
+  assert.equal(sqlite.prepare("SELECT agent_id FROM runtime_project_links WHERE project_id=?").get(left.id)?.agent_id, resolved.agentId);
   sqlite.close();
 });

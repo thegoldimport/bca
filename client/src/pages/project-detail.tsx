@@ -12,7 +12,7 @@ import {
   ChevronDown, Upload,
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
-import { authHeaders } from "@/lib/auth";
+import { authHeaders, csrfToken } from "@/lib/auth";
 import { getDomain } from "tldts";
 import { actionableDomainDnsRecords, dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
@@ -115,9 +115,9 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
   const publishingSettings = publishingQuery.data;
 
   useEffect(() => {
-    if (!runtimeStatus || published || previewMutation.isPending || previewUrl) return;
+    if (project?.runtimeStatus || !runtimeStatus || published || previewMutation.isPending || previewUrl) return;
     previewMutation.mutate();
-  }, [runtimeStatus, published, projectId]);
+  }, [project?.runtimeStatus, runtimeStatus, published, projectId]);
 
   return (
     <div className="space-y-6">
@@ -149,10 +149,12 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
                 </div>
               ) : (
                 <div className={`w-full h-full flex flex-col items-center justify-center gap-3 ${theme === "dark" ? "bg-[#0d0d1a] text-white/50" : "bg-gray-100 text-gray-500"}`}>
-                  <p className="text-sm">{previewError || "No runtime preview is active."}</p>
-                  <button onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending} className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold disabled:opacity-50">
-                    {previewMutation.isPending ? "Starting preview…" : "Start runtime preview"}
-                  </button>
+                  <p className="text-sm">{project.runtimeStatus ? "Preview will be available in a later release." : previewError || "No runtime preview is active."}</p>
+                  {!project.runtimeStatus && (
+                    <button onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending} className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold disabled:opacity-50">
+                      {previewMutation.isPending ? "Starting preview…" : "Start runtime preview"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -2493,9 +2495,29 @@ export function DomainTab({ projectId, runtimeStatus }: { projectId: number; run
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function ProjectDetail() {
   const { theme } = useTheme();
+  const qc = useQueryClient();
   const [, params] = useRoute("/app/project/:id");
   const projectId = parseInt(params?.id ?? "0");
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [setupError, setSetupError] = useState("");
+
+  const initializeProject = useMutation({
+    mutationFn: async () => {
+      const token = await csrfToken();
+      const response = await fetch(`/api/projects/${projectId}/runtime/initialize`, {
+        method: "POST", headers: { "X-CSRF-Token": token, "Content-Type": "application/json" }, body: "{}",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "Could not prepare this project.");
+      return body;
+    },
+    onSuccess: () => {
+      setSetupError("");
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (error: Error) => setSetupError(error.message),
+  });
 
   const { data: project, isLoading, isError } = useQuery({
     queryKey: ["project", projectId],
@@ -2505,6 +2527,7 @@ export default function ProjectDetail() {
       return res.json();
     },
     enabled: !!projectId,
+    refetchInterval: (query) => ["initializing", "reconcile"].includes(query.state.data?.runtimeStatus) ? 3000 : false,
   });
 
   const { data: blogPosts = [] } = useQuery({
@@ -2518,7 +2541,7 @@ export default function ProjectDetail() {
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "VibeSDK runtime is unavailable.");
+      if (!res.ok) throw new Error(body.message || "Project status is unavailable.");
       return body;
     },
     enabled: !!projectId,
@@ -2618,9 +2641,27 @@ export default function ProjectDetail() {
       </div>
 
       <div className="p-8">
+        {project.runtimeStatus && (
+          <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${project.runtimeStatus === "ready" ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-amber-400/30 bg-amber-500/10 text-amber-200"}`}>
+            {project.runtimeStatus === "ready"
+              ? "Project ready. Building tools will be available in a later release."
+              : project.runtimeStatus === "missing"
+                ? "This project has not been prepared yet."
+                : ["error", "reconcile"].includes(project.runtimeStatus)
+                  ? "Project setup needs attention. It will not create another project automatically."
+                  : "Preparing your project. You can leave and return later."}
+            {project.runtimeStatus === "missing" && (
+              <button onClick={() => initializeProject.mutate()} disabled={initializeProject.isPending}
+                className="ml-3 font-semibold underline disabled:opacity-50" data-testid="button-initialize-project">
+                {initializeProject.isPending ? "Preparing..." : "Prepare project"}
+              </button>
+            )}
+            {setupError && <p className="mt-2">{setupError}</p>}
+          </div>
+        )}
         {(runtimeStatusError || runtimeStatus?.configured === false) && (
           <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-            VibeSDK runtime unavailable: {(runtimeStatusError as Error)?.message || "runtime is not configured."}
+            Project status is unavailable: {(runtimeStatusError as Error)?.message || "please try again later."}
           </div>
         )}
         <AnimatePresence mode="wait">

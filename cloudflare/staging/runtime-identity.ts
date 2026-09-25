@@ -52,6 +52,7 @@ async function runtimeRequest(env: RuntimeAuthEnv, request: Request, path: strin
   body?: Record<string, unknown>;
   cookie?: string;
   sessionId?: string;
+  timeoutMs?: number;
 } = {}): Promise<Response> {
   const headers = new Headers({ Accept: "application/json" });
   const cookie = options.cookie ?? cookies(request);
@@ -64,10 +65,29 @@ async function runtimeRequest(env: RuntimeAuthEnv, request: Request, path: strin
       method: options.method || "GET",
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
     }));
   } catch {
     throw new RuntimeIdentityError("BuildCustom sign-in is temporarily unavailable.");
   }
+}
+
+// These are the only stock agent interfaces the staging product bridge uses.
+// The browser's Authorization header and any browser-provided owner ID are never forwarded.
+export function stockAgentRequest(
+  env: RuntimeAuthEnv, request: Request, path: string,
+  options: { method?: "GET" | "POST"; body?: Record<string, unknown> } = {},
+): Promise<Response> {
+  const method = options.method || "GET";
+  if (!((path === "/api/agent" && method === "POST")
+    || (path === "/api/apps" && method === "GET")
+    || (/^\/api\/agent\/[a-zA-Z0-9_-]+\/connect$/.test(path) && method === "GET"))) {
+    throw new RuntimeIdentityError("Unsupported project setup request.", 400);
+  }
+  if (method === "POST" && !request.headers.get("X-CSRF-Token")) {
+    throw new RuntimeIdentityError("A secure project request is required.", 403);
+  }
+  return runtimeRequest(env, request, path, { ...options, timeoutMs: 45_000 });
 }
 
 async function verifiedIdentity(env: RuntimeAuthEnv, request: Request, cookie?: string): Promise<RuntimeIdentity | null> {

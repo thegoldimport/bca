@@ -31,3 +31,4 @@
 - [Compat fetch boundary](compat-fetch-boundary.md) — local request preparation can pass while the Worker fetch throws before any counted subrequest or gateway log.
 - [VibeSDK setup migration ordering](vibesdk-setup-migration-order.md) — official setup can finish despite a failed remote D1 migration when its config still holds a pre-creation placeholder ID.
 - [D1 parent schema migrations](d1-parent-schema-migrations.md) — deferred foreign keys do not prevent cascaded child-row loss during a parent-table rebuild.
+- [Stock agent creation recovery](stock-agent-creation-recovery.md) — unknown Think creation outcomes must reconcile by owner-visible marker or fail closed; never blindly create again.

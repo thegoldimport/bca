@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAppUser, setAppUser, authHeaders, isAdminUser, signOut, type AppUser } from "@/lib/auth";
+import { csrfToken, getAppUser, setAppUser, authHeaders, isAdminUser, signOut, type AppUser } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutGrid,
@@ -441,17 +441,27 @@ function ProjectsPage() {
 
   const createProject = useMutation({
     mutationFn: async ({ prompt, plan }: { prompt: string; plan: boolean }) => {
+      const pendingKeyName = "buildcustom:pending-project";
+      const pending = JSON.parse(sessionStorage.getItem(pendingKeyName) || "null");
+      const key = pending?.prompt === prompt && typeof pending?.key === "string" ? pending.key : crypto.randomUUID();
+      sessionStorage.setItem(pendingKeyName, JSON.stringify({ key, prompt }));
+      const token = await csrfToken();
       const res = await fetch("/api/projects", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ type: "website", description: "" }),
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, "Idempotency-Key": key, ...authHeaders() },
+        body: JSON.stringify({ name: prompt.slice(0, 90), type: "website", description: prompt }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to create project");
+      sessionStorage.removeItem(pendingKeyName);
       return { project: data, prompt, plan };
     },
     onSuccess: ({ project, prompt, plan }) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
+      if (project.runtimeStatus) {
+        navigate(`/app/project/${project.id}`);
+        return;
+      }
       sessionStorage.setItem(`buildcustom:first-prompt:${project.id}`, JSON.stringify({ prompt, plan }));
       navigate(`/app/editor/${project.id}`);
     },
@@ -1007,6 +1017,8 @@ function EditorPage() {
         const status = await statusResponse.json().catch(() => ({}));
         if (cancelled || !statusResponse.ok) return;
         if (status.deploymentUrl) setProductionUrl(status.deploymentUrl);
+        // A staging identity-only project has no files or preview yet.
+        if (status.runtimeStatus) return;
         const previewResponse = await fetch(`/api/projects/${projectId}/runtime/previews`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },

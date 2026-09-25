@@ -10,6 +10,7 @@ import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePubl
 import { capturePreviewImage, imageDataUri, previewImageKey, verifyPublicHostnameRoute, type BrowserRunBinding } from "./staging/preview-image";
 import { StagingPublishNotReadyError, waitForStagingAppReady } from "./staging/published-readiness";
 import { handleStagingCustomerAuth, resolveRuntimeProductUser, RuntimeIdentityError } from "./staging/runtime-identity";
+import { createProductProject, initializeProjectAgent, refreshProjectAgent } from "./staging/project-initialization";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -71,6 +72,9 @@ export const serializeProject = (row: any) => ({
   createdAt: row.created_at ?? row.createdAt,
   updatedAt: row.updated_at ?? row.updatedAt,
   agentId: row.agent_id ?? row.agentId ?? null,
+  ...(Object.prototype.hasOwnProperty.call(row, "initialization_status")
+    ? { runtimeStatus: row.initialization_status ?? (row.agent_id ? "ready" : "missing"), runtimeError: row.initialization_error ?? null }
+    : {}),
   previewUrl: row.preview_url ?? row.previewUrl ?? null,
   deploymentUrl: row.deployment_url ?? row.deploymentUrl ?? null,
   previewImageUrl: row.has_preview_image && (row.deployment_url ?? row.deploymentUrl)
@@ -261,18 +265,36 @@ export default {
 
       const projectMatch = url.pathname.match(/^\/api\/projects\/(\d+)$/);
       const projectId = projectIdFromPath(url.pathname);
-      const project = projectId === null ? null : await env.DB.prepare("SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name,CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.id=? AND p.user_id=?").bind(projectId, user.id).first<any>();
-      const projectList = async () => (await env.DB.prepare("SELECT p.*,l.agent_id,l.preview_url,l.deployment_url,CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC").bind(user.id).all()).results.map(serializeProject);
+      const stagingLinkFields = stagingCustomer ? ",l.initialization_status,l.initialization_error,l.runtime_provider" : "";
+      const projectSql = `SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.id=? AND p.user_id=?`;
+      const project = projectId === null ? null : await env.DB.prepare(projectSql).bind(projectId, user.id).first<any>();
+      const projectList = async () => (await env.DB.prepare(`SELECT p.*,l.agent_id,l.preview_url,l.deployment_url${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC`).bind(user.id).all()).results.map(serializeProject);
       if (url.pathname === "/api/projects" && request.method === "GET") return json(await projectList());
       if (url.pathname === "/api/projects" && request.method === "POST") {
+        if (stagingCustomer && !request.headers.get("X-CSRF-Token")) {
+          return json({ message: "A secure project request is required." }, { status: 403 });
+        }
         const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM projects WHERE user_id=?").bind(user.id).first<any>();
         const details = projectInput(input, `Project${Number(count?.count || 0) + 1}`);
+        if (stagingCustomer) {
+          const result = await createProductProject(env, request, user.id, details);
+          const created = await env.DB.prepare(projectSql).bind(result.project.id, user.id).first<any>();
+          return json(serializeProject(created), {
+            status: result.created ? (result.link?.initialization_status === "ready" ? 201 : 202) : 200,
+          });
+        }
         const result = await env.DB.prepare("INSERT INTO projects(user_id,name,type,description,framework) VALUES(?,?,?,?,?)").bind(user.id, details.name, details.type, details.description, details.framework).run();
         const created = await env.DB.prepare("SELECT * FROM projects WHERE id=?").bind(result.meta.last_row_id).first();
         return json(serializeProject(created), { status: 201 });
       }
       if (projectId !== null && !project) return json({ message: "Project not found" }, { status: 404 });
-      if (project && request.method === "GET" && projectMatch) return json(serializeProject(project));
+      if (project && request.method === "GET" && projectMatch) {
+        if (stagingCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
+          await refreshProjectAgent(env, request, project);
+          return json(serializeProject(await env.DB.prepare(projectSql).bind(project.id, user.id).first()));
+        }
+        return json(serializeProject(project));
+      }
       if (project && request.method === "PUT" && projectMatch) {
         const details = projectInput(input, project.name);
         await env.DB.prepare("UPDATE projects SET name=?,type=?,description=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(details.name, details.type, details.description, project.id, user.id).run();
@@ -289,6 +311,37 @@ export default {
         const runtimeProject = project?.id === id ? { id: project.id, name: project.name, type: project.type, description: project.description, agentId: project.agent_id } : null;
         if (!runtimeProject) return json({ message: "Project not found" }, { status: 404 });
         const operation = runtimeMatch[2];
+        if (stagingCustomer && operation === "initialize" && request.method === "POST") {
+          await initializeProjectAgent(env, request, project);
+          return json(serializeProject(await env.DB.prepare(projectSql).bind(id, user.id).first()));
+        }
+        // A project may be visible between its D1 insert and link claim.
+        // Its creation key still identifies the stock-only staging path.
+        if (stagingCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
+          if ((operation === "agent" || operation.startsWith("agent/")) && request.method === "GET") {
+            if (operation.startsWith("agent/") && operation.slice(6) !== project.agent_id) {
+              return json({ message: "Project not found" }, { status: 404 });
+            }
+            const link = await refreshProjectAgent(env, request, project);
+            return json({ ready: link?.initialization_status === "ready", status: link?.initialization_status || "missing" });
+          }
+          if (operation === "status" && request.method === "GET") {
+            const link = await refreshProjectAgent(env, request, project);
+            const ready = link?.initialization_status === "ready";
+            return json({ connected: ready, files: 0, runtimeStatus: link?.initialization_status || "missing", state: { generation: { status: "idle" } }, previewUrl: null, deploymentUrl: null });
+          }
+          if (operation === "files" && request.method === "GET") return json([]);
+          if (operation === "files/content" && request.method === "GET") return json({ message: "No files have been created yet." }, { status: 404 });
+          if (operation === "console" && request.method === "GET") return json({ lines: [] });
+          if (operation === "turns" && request.method === "GET") return json({ turns: [] });
+          if (operation === "releases" && request.method === "GET") return json({ releases: [] });
+          if (operation === "publishing-settings" && request.method === "GET") {
+            return json({ subdomainSlug: project.subdomain_slug || cleanSlug(project.name), hostingProvider: project.hosting_provider === "custom" ? "custom" : "buildcustom", customDomain: project.custom_domain || "", customOrigin: project.custom_origin || "" });
+          }
+          // Task 2 projects never fall through to the historical shared-key
+          // adapter, including previews, messages, and publishing mutations.
+          return json({ message: "This project feature will be available in a later release." }, { status: 501 });
+        }
         const readOnly = isReadOnlyRuntimeOperation(request.method, operation);
         if (env.RUNTIME_OPERATIONS_ENABLED !== "true" && !readOnly) return json({ message: "Isolated VibeSDK compatibility gate has not passed." }, { status: 503 });
         const adapter = createVibeSdkAdapter({

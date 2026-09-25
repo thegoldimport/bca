@@ -1,0 +1,502 @@
+Migration Task 1 is accepted as PASS.
+
+Do NOT spend time linking legacy staging/test accounts.
+
+Those staging accounts are not production customer data and are not a
+launch blocker.
+
+Do not delete them, but do not design migration logic around them.
+
+Proceed with ONLY Migration Task 2:
+
+AUTHENTICATED BUILDCUSTOM PROJECT
+→ STOCK VIBESDK THINKAGENT CREATION
+→ RETRY-SAFE PROJECT LINK
+→ REOPEN
+
+STAGING ONLY.
+
+Do NOT begin the live conversation/editor migration yet.
+
+==================================================
+OBJECTIVE
+==================================================
+
+When an authenticated BuildCustom user creates a project, BuildCustom
+should create the product-level D1 project and provision ONE stock VibeSDK
+ThinkAgent owned by that SAME verified runtime user.
+
+BuildCustom should then persist the relationship:
+
+BuildCustom project
+→ verified owner
+→ VibeSDK agent/space ID
+
+The user must be able to leave the dashboard, return later, reopen the
+project, and resolve the SAME runtime agent.
+
+Do NOT start generation in this task.
+
+Do NOT send generate_all.
+
+We are establishing project identity and ownership first.
+
+==================================================
+CRITICAL OWNERSHIP RULE
+==================================================
+
+The ThinkAgent must be owned by the SAME verified runtime user established
+in Migration Task 1.
+
+Do NOT use:
+
+- the historical shared VIBESDK_API_KEY owner
+- a shared service account
+- an admin-owned agent
+- a browser-supplied owner ID
+- x-user-id
+- a second BuildCustom identity
+
+USER A's BuildCustom project must link to a VibeSDK agent owned by USER A.
+
+USER B's project must link to a VibeSDK agent owned by USER B.
+
+==================================================
+USE STOCK VIBESDK
+==================================================
+
+Use the proven stock interface:
+
+POST /api/agent
+
+with:
+
+behaviorType: "think"
+
+through the authenticated runtime identity.
+
+Do not create a BuildCustom agent wrapper.
+
+Do not create another agent service.
+
+Do not modify ThinkAgent.
+
+Do not modify VibeSDK.
+
+Do not generate any application yet.
+
+==================================================
+PROJECT CREATION FLOW
+==================================================
+
+Implement the smallest safe flow conceptually equivalent to:
+
+1. verify authenticated runtime identity
+
+2. create or initialize the BuildCustom D1 project
+
+3. create exactly ONE stock ThinkAgent owned by that runtime user
+
+4. receive the VibeSDK agent ID
+
+5. persist the relationship in runtime_project_links
+
+6. return the BuildCustom project with runtime readiness/status
+
+Use the existing D1 project/link structures where practical.
+
+Do not create duplicate state stores.
+
+==================================================
+RETRY SAFETY IS IMPORTANT
+==================================================
+
+Project creation must not accidentally create multiple ThinkAgents because:
+
+- the browser retries
+- the user double-clicks
+- a request times out
+- the D1 write succeeds but the response is lost
+- runtime creation succeeds but the final response fails
+
+Inspect the stock VibeSDK API and existing BuildCustom schema before choosing
+the smallest retry-safe strategy.
+
+We do NOT need an elaborate distributed transaction system.
+
+We DO need a practical invariant:
+
+ONE BuildCustom project
+→ ONE active VibeSDK agent
+
+If an agent has already been linked, retrying project initialization must
+return/reuse that link rather than creating another agent.
+
+If there is an unavoidable failure window between upstream creation and D1
+link persistence, document it and implement the smallest practical
+reconciliation supported by the existing APIs.
+
+Do not invent queues or orchestration infrastructure.
+
+==================================================
+PROJECT DATA
+==================================================
+
+For this task, BuildCustom should own only product metadata.
+
+At minimum:
+
+- BuildCustom project ID
+- verified runtime owner ID
+- project name
+- status
+- created timestamp
+- updated timestamp
+
+And runtime_project_links should associate:
+
+- BuildCustom project ID
+- VibeSDK agent/space ID
+- runtime/provider type if the existing schema requires it
+- timestamps/status if already useful
+
+Do NOT copy into BuildCustom D1:
+
+- generated files
+- conversation history
+- Git history
+- preview state
+- ThinkAgent internal state
+
+VibeSDK remains authoritative for those.
+
+==================================================
+CREATE PROJECT UI
+==================================================
+
+Connect the existing BuildCustom "New Project" / project creation UI to this
+new staging flow.
+
+The customer should experience:
+
+New Project
+→ choose/name project
+→ project created
+→ runtime initialized
+→ project available in dashboard
+
+Do not expose:
+
+- VibeSDK
+- agent IDs as customer-facing terminology
+- SpaceDO
+- runtime internals
+
+Internally we obviously retain the agent ID.
+
+==================================================
+REOPEN FLOW
+==================================================
+
+Implement enough of reopen/resolution to prove:
+
+USER A:
+
+1. creates Project A
+2. Project A receives Agent A
+3. leaves/reloads the dashboard
+4. lists projects
+5. opens Project A
+6. BuildCustom resolves the SAME Agent A
+
+No new agent should be created during reopen.
+
+Repeat for USER B.
+
+Do NOT implement the live ThinkAgent conversation UI yet.
+
+Opening the project can reach the existing editor shell and resolve runtime
+metadata, but should not generate or mutate runtime state.
+
+==================================================
+RUNTIME OWNERSHIP VERIFICATION
+==================================================
+
+Do not merely trust the D1 link.
+
+Using the stock owner-authorized runtime interface, verify that:
+
+Agent A is accessible by USER A.
+
+Agent B is accessible by USER B.
+
+Then prove:
+
+USER A cannot access Agent B.
+
+USER B cannot access Agent A.
+
+Use the normal stock VibeSDK ownership boundary.
+
+We want BOTH layers enforcing isolation:
+
+BuildCustom D1 ownership
+
+AND
+
+VibeSDK runtime ownership.
+
+==================================================
+DIRECT-ID ATTACK TESTS
+==================================================
+
+Test attempts where USER A manually supplies:
+
+- Project B ID
+- Agent B ID
+
+And vice versa.
+
+Neither user should gain access to the other user's product metadata or
+runtime agent.
+
+Do not depend only on hiding IDs in the UI.
+
+==================================================
+FAILURE BEHAVIOR
+==================================================
+
+Test the practical failure states supported without destructive changes.
+
+At minimum verify behavior for:
+
+- unauthenticated create
+- runtime agent creation failure
+- duplicate/retried initialization
+- project exists but runtime link is missing
+- runtime link exists and project is reopened
+
+Do not intentionally damage the proven shared runtime to manufacture
+failures.
+
+Mock appropriate upstream failures in automated tests where necessary.
+
+==================================================
+STATUS MODEL
+==================================================
+
+Use the smallest useful project/runtime status model.
+
+For example, if compatible with existing schema:
+
+initializing
+ready
+error
+
+Do not create a complex state machine.
+
+The UI should not pretend a project is runtime-ready until its agent link
+exists.
+
+==================================================
+NO GENERATION
+==================================================
+
+This is critical.
+
+Do NOT send:
+
+generate_all
+
+Do NOT ask ThinkAgent to create files.
+
+Do NOT spend inference.
+
+Do NOT build.
+
+Do NOT preview.
+
+Do NOT publish.
+
+Task 3 will connect the live native ThinkAgent conversation and begin the
+actual coding experience.
+
+==================================================
+ZERO INFERENCE CHECK
+==================================================
+
+Record the lab AI Gateway request count before and after.
+
+PASS requires:
+
+ZERO new inference requests.
+
+Creating an agent should not itself invoke model inference.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do NOT change:
+
+- Unified Billing
+- AI Gateway
+- model configuration
+- ThinkAgent implementation
+- SpaceDO implementation
+- generated-app gateway
+- wildcard generated-app DNS
+- publishing
+- production
+- customer domains
+- Stripe
+- plans
+- credits
+- billing
+
+==================================================
+AUTOMATED TESTS
+==================================================
+
+Add/update tests for:
+
+- authenticated project + runtime creation
+- runtime link persistence
+- verified owner mapping
+- retry/idempotency behavior
+- reopen returns same agent
+- User A cannot resolve User B project
+- User A cannot resolve User B agent
+- User B cannot resolve User A project
+- User B cannot resolve User A agent
+- unauthenticated denial
+- runtime creation failure
+- missing-link state
+
+Run the full relevant Cloudflare suite.
+
+Do not weaken existing tests.
+
+==================================================
+LIVE STAGING ACCEPTANCE
+==================================================
+
+Use two disposable staging users.
+
+USER A:
+
+- authenticate
+- create Project A
+- receive one runtime agent
+- reload
+- reopen Project A
+- confirm same agent
+- verify runtime ownership
+
+USER B:
+
+- authenticate
+- create Project B
+- receive one runtime agent
+- reload
+- reopen Project B
+- confirm same agent
+- verify runtime ownership
+
+Then perform cross-user direct-ID tests.
+
+Do not expose credentials or session tokens in the report.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+PASS requires:
+
+1. authenticated BuildCustom project creation works
+
+2. exactly one stock ThinkAgent is provisioned for that project
+
+3. ThinkAgent is owned by the authenticated runtime user
+
+4. runtime_project_links persists the relationship
+
+5. retry/reopen does not create another agent
+
+6. dashboard reload resolves the same project/agent relationship
+
+7. User A cannot access User B's project
+
+8. User A cannot access User B's runtime agent
+
+9. User B cannot access User A's project
+
+10. User B cannot access User A's runtime agent
+
+11. unauthenticated access is denied
+
+12. runtime creation failure is represented safely
+
+13. zero inference requests occur
+
+14. existing Task 1 auth/session behavior still passes
+
+15. production remains untouched
+
+16. no new Replit runtime dependency is introduced
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. project creation architecture implemented
+
+2. exact stock VibeSDK agent-creation interface used
+
+3. how the authenticated runtime owner is preserved upstream
+
+4. D1 project fields used
+
+5. runtime_project_links fields used
+
+6. retry/idempotency strategy
+
+7. failure/reconciliation behavior
+
+8. User A project/agent result
+
+9. User B project/agent result
+
+10. reload/reopen result
+
+11. cross-user project isolation result
+
+12. cross-user runtime-agent isolation result
+
+13. unauthenticated result
+
+14. runtime creation failure test
+
+15. missing-link behavior
+
+16. automated test count/results
+
+17. AI Gateway count before/after
+
+18. confirmation zero inference
+
+19. files changed
+
+20. migrations added, if any
+
+21. confirmation production untouched
+
+22. remaining limitations
+
+23. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
+
+Do not begin Migration Task 3.
