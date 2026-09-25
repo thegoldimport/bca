@@ -1,0 +1,397 @@
+Continue.
+
+This is now a normal stock VibeSDK configuration issue.
+
+The Worker is deployed successfully but returns:
+
+Server configuration error: Application domain is not set.
+
+We intentionally removed upstream domain defaults so the lab could not
+accidentally touch BuildCustom production domains.
+
+Now determine and configure the MINIMUM stock-compatible disposable domain
+configuration required by VibeSDK.
+
+You are authorized to investigate, configure the disposable lab domain,
+verify the runtime, and if successful proceed directly to the FIRST
+STOCK THINKAGENT GENERATION TEST.
+
+Do not stop merely because VibeSDK requires a test hostname.
+
+==================================================
+PART 1 — UNDERSTAND THE STOCK DOMAIN REQUIREMENT
+==================================================
+
+Inspect the pinned upstream source and configuration to determine exactly:
+
+1. which environment/config value triggers:
+
+   "Application domain is not set."
+
+2. what VibeSDK means by:
+
+   - application domain
+   - preview domain
+   - generated-app domain
+
+3. which of those are required merely to:
+
+   - load the VibeSDK application
+   - create a project
+   - use ThinkAgent
+   - build a preview
+
+4. whether the application domain can be the Worker workers.dev hostname
+
+5. whether the preview domain requires a wildcard hostname
+
+6. whether any domain requirement is only needed later for published
+   Workers-for-Platforms apps
+
+Use the stock source as the authority.
+
+Do not modify the domain validation code to bypass it.
+
+==================================================
+PREFERRED LAB CONFIGURATION
+==================================================
+
+Prefer the smallest configuration that allows stock VibeSDK to work.
+
+FIRST preference:
+
+Use the existing disposable Worker hostname if stock VibeSDK supports it:
+
+bc-vibesdk-lab-20260925.thegoldimport.workers.dev
+
+If stock VibeSDK requires a separate preview/application hostname that
+cannot function correctly on workers.dev, use a disposable hostname under
+buildcustom.ai ONLY if it can be isolated without affecting existing
+BuildCustom routing.
+
+Preferred disposable namespace:
+
+lab-vibesdk.buildcustom.ai
+
+and, only if stock preview architecture requires a wildcard:
+
+*.lab-vibesdk.buildcustom.ai
+
+These are LAB hostnames only.
+
+DO NOT use or modify:
+
+buildcustom.ai apex
+
+www.buildcustom.ai
+
+app.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+staging.buildcustom.ai
+
+*.staging.buildcustom.ai
+
+existing customer domains
+
+existing BuildCustom routes
+
+==================================================
+DOMAIN SAFETY
+==================================================
+
+Before creating/changing DNS or a Worker route:
+
+inspect existing DNS records and Worker routes for the exact proposed lab
+hostname/wildcard.
+
+Confirm there is no collision.
+
+If:
+
+lab-vibesdk.buildcustom.ai
+
+or:
+
+*.lab-vibesdk.buildcustom.ai
+
+already exists or would overlap an existing wildcard/route in a way that
+could affect current BuildCustom traffic:
+
+STOP and report the collision.
+
+Otherwise you are authorized to create ONLY the minimum disposable lab DNS
+records/routes required by stock VibeSDK.
+
+Do not change any existing DNS record.
+
+Do not change any existing Worker route.
+
+Do not repoint any existing hostname.
+
+==================================================
+CONFIGURATION
+==================================================
+
+Configure the stock VibeSDK environment exactly as its source expects.
+
+Do not create our own domain abstraction.
+
+Do not modify source code to bypass the domain requirement.
+
+Do not modify ThinkAgent.
+
+Do not modify inference.
+
+Do not modify AI Gateway.
+
+Do not modify Unified Billing.
+
+Do not add provider credentials.
+
+If both an application domain and preview domain are required, configure
+both using the isolated lab namespace.
+
+If only one is required, configure only one.
+
+==================================================
+VERIFY THE STOCK RUNTIME
+==================================================
+
+After applying the minimum domain configuration:
+
+request the stock VibeSDK application normally.
+
+PASS requires:
+
+- no "Application domain is not set" error
+- application returns a normal successful response
+- required static assets load
+- stock runtime is usable enough to create/use a project
+
+If the runtime still fails:
+
+STOP at the new actual failure.
+
+Do not start inference.
+
+Report the exact safe error.
+
+==================================================
+IF THE STOCK RUNTIME LOADS SUCCESSFULLY
+==================================================
+
+Proceed DIRECTLY to the first real ThinkAgent generation test.
+
+Do not stop for another approval checkpoint.
+
+Create a fresh disposable project/agent through the NORMAL stock VibeSDK
+flow.
+
+Use the actual runtime.
+
+Prompt:
+
+Create a minimal buildable website with a visible heading displaying exactly:
+
+BUILDCUSTOM_STOCK_VIBESDK_OK
+
+Include a stylesheet.
+
+Keep the application as small as possible.
+
+==================================================
+INFERENCE RULES
+==================================================
+
+Use stock VibeSDK exactly.
+
+Expected path:
+
+ThinkAgent
+→ stock model resolver
+→ fresh AI Gateway
+→ /compat/chat/completions
+→ Cloudflare Unified Billing
+→ Gemini
+
+Use upstream's existing model identifier FIRST:
+
+google-ai-studio/gemini-3.6-flash
+
+Do NOT:
+
+- manually call /compat
+- bypass ThinkAgent
+- create diagnostic endpoints
+- add Google API keys
+- add provider BYOK
+- change model identifier preemptively
+- add custom pacing
+- add custom retries
+- modify ThinkAgent
+- modify inference transport
+
+Allow the normal upstream ThinkAgent loop to operate.
+
+==================================================
+MODEL IDENTIFIER FAILURE
+==================================================
+
+If the generation fails specifically because:
+
+google-ai-studio/gemini-3.6-flash
+
+is not accepted by Cloudflare's Unified Billing /compat path:
+
+STOP.
+
+Do not retry automatically with:
+
+google/gemini-3.6-flash
+
+Report the exact error.
+
+That will establish whether the smallest necessary correction is only the
+model identifier.
+
+==================================================
+OTHER INFERENCE FAILURE
+==================================================
+
+If authentication, Unified Billing, provider resolution, rate limiting,
+ThinkAgent, or another inference component fails:
+
+STOP after the first generation attempt.
+
+Do not create diagnostic infrastructure.
+
+Do not switch to BYOK.
+
+Do not add a Google key.
+
+Preserve the evidence.
+
+==================================================
+GENERATION SUCCESS CRITERIA
+==================================================
+
+PASS requires:
+
+1. ThinkAgent completes normally
+
+2. project files exist
+
+3. generated application contains exactly:
+
+   BUILDCUSTOM_STOCK_VIBESDK_OK
+
+4. application builds successfully
+
+5. preview serves successfully
+
+6. stylesheet/assets load
+
+7. corresponding requests appear in:
+
+   bc-vibesdk-lab-20260925-ai
+
+8. no Google/provider API key was supplied
+
+9. stored provider configurations remain zero
+
+10. byok_only remains false
+
+11. billing evidence is consistent with Cloudflare Unified Billing
+
+==================================================
+WHAT TO RECORD
+==================================================
+
+For the generation record:
+
+- number of AI Gateway requests
+- HTTP statuses
+- requested model
+- observed provider
+- observed model
+- input tokens
+- output tokens
+- total inference cost
+- visible credit movement
+- 429s
+- auth errors
+- provider errors
+- model errors
+- generation duration
+
+Also record:
+
+- project/agent ID
+- generated files
+- marker verification
+- build result
+- preview result
+
+==================================================
+NO GENERATED-APP PUBLISHING YET
+==================================================
+
+Even if generation succeeds:
+
+DO NOT publish through Workers for Platforms yet.
+
+DO NOT configure:
+
+*.apps.buildcustom.ai
+
+DO NOT configure customer domains.
+
+DO NOT connect:
+
+app.buildcustom.ai
+
+This test still ends at:
+
+generation
+→ files
+→ build
+→ preview
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact stock source of the application-domain requirement
+2. stock domain values required
+3. disposable lab hostname(s) configured
+4. DNS/route changes made
+5. confirmation no existing route/DNS record was modified
+6. runtime HTTP result
+7. runtime/static asset result
+8. generation started/completed
+9. stock Think model identifier
+10. inference endpoint
+11. AI Gateway request count/statuses
+12. provider/model observed
+13. input/output tokens
+14. inference cost
+15. credit movement
+16. provider/BYOK status
+17. any inference errors
+18. generated project/agent ID
+19. generated files
+20. BUILDCUSTOM_STOCK_VIBESDK_OK verification
+21. build result
+22. preview result
+23. whether Unified Billing without BYOK is conclusively proven
+24. whether stock VibeSDK required any inference-code modification
+25. whether any existing BuildCustom resource was modified
+26. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
+
+Leave the successful lab environment intact.

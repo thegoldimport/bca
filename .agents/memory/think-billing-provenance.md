@@ -56,3 +56,9 @@ For a future isolated staging diagnostic, the owner chose a separate, high-entro
 **Why:** The Think credential is intentionally confined to the Worker, while normal VibeSDK bearer/API-key accounts are not an administrative authorization boundary for a cost-incurring diagnostic route.
 
 **How to apply:** Keep both diagnostic and Think secrets out of Replit. Prepare and review any staging-only route offline; wait for separate owner approval before deploying or invoking it, and remove it immediately after the single authorized test.
+
+An authenticated, provider-key-free stock Think run can be billed through Unified Billing even when the gateway reports a provider-prefixed requested model under a different normalized observed model. A mismatch between those two labels alone is not a model-resolution error.
+
+**Why:** The isolated lab's normal Think flow produced successful wholesale Google gateway events without BYOK, and its visible prepaid-credit decrease matched the logged inference cost at 100 credit units per dollar. Its subsequent preview build failure was separate from inference.
+
+**How to apply:** Compare the deployed source model ID with the gateway's observed provider/model, HTTP statuses, wholesale/BYOK fields, token usage, cost, and credit delta before proposing any model-identifier change or treating a build failure as an inference failure.
