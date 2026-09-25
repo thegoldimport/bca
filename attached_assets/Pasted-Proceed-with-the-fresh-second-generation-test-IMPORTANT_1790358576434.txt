@@ -1,0 +1,300 @@
+Proceed with the fresh second-generation test.
+
+IMPORTANT STRATEGY DECISION:
+
+Do NOT attempt further recovery of the first disposable project's private
+SpaceDO state.
+
+The original authenticated owner session is gone, and that project was only
+a disposable test.
+
+We have now ruled out domain/lab configuration as the cause of its
+deployment_failed: Build failed event to the extent supported by the pinned
+source and current configuration.
+
+We are not going to spend more time performing archaeology on that project.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Run ONE fresh second end-to-end stock VibeSDK generation test.
+
+This time preserve the authenticated owner session and complete diagnostic
+state so that if deploy_space/build fails, we can retrieve the authoritative
+SpaceDO tree and the ORIGINAL detailed build error.
+
+We are testing:
+
+generation
+→ authoritative persisted files
+→ deploy_space
+→ createApp/build
+→ preview
+
+We are NOT retesting inference architecture.
+
+==================================================
+FREEZE THE PROVEN ARCHITECTURE
+==================================================
+
+Do not change:
+
+- ThinkAgent
+- model resolver
+- model identifier
+- AI Gateway
+- Unified Billing
+- gateway authentication
+- provider configuration
+- /compat transport
+- retries
+- pacing
+- VibeSDK source
+- lab infrastructure
+- CUSTOM_DOMAIN
+- domain configuration
+- preview routing
+
+Do not add:
+
+- Google API key
+- BYOK
+- custom inference
+- diagnostic Worker
+- custom build logic
+
+Use the exact currently deployed lab runtime.
+
+==================================================
+CREATE A FRESH PROJECT
+==================================================
+
+Through the normal stock VibeSDK product flow:
+
+1. create/authenticate a NEW disposable test owner
+2. RETAIN authenticated owner access for diagnostics
+3. create a NEW project/agent
+4. retain project ID and agent ID
+5. use the normal ThinkAgent WebSocket flow
+
+Do not reuse the first project.
+
+Do not lose the authenticated owner session after generation.
+
+==================================================
+GENERATION PROMPT
+==================================================
+
+Give ThinkAgent exactly:
+
+Create a minimal buildable website with a visible heading displaying exactly:
+
+BUILDCUSTOM_SECOND_TEST_OK
+
+Include a stylesheet.
+
+Keep the application as small as possible.
+
+==================================================
+LET STOCK VIBESDK DECIDE THE PROJECT STRUCTURE
+==================================================
+
+Do not tell ThinkAgent:
+
+- which files to create
+- what Wrangler config to use
+- whether to create a server entry
+- what framework to use
+- how to deploy
+
+We specifically want to know whether stock VibeSDK can correctly create a
+tiny buildable application by itself.
+
+==================================================
+CAPTURE THE DEPLOY_SPACE RESULT
+==================================================
+
+This is especially important.
+
+When ThinkAgent invokes deploy_space, retain the COMPLETE tool result,
+including:
+
+- success
+- error
+- details
+- commit/revision
+- deployment ID
+- preview information
+- any bundler diagnostic
+
+Do not reduce:
+
+Build failed: <detail>
+
+to merely:
+
+Build failed
+
+in our diagnostic capture.
+
+Do not modify VibeSDK behavior to accomplish this.
+
+Use the existing authenticated conversation/tool state and normal available
+runtime records.
+
+==================================================
+AFTER GENERATION
+==================================================
+
+Using retained authenticated owner access, retrieve the authoritative
+SpaceDO project state.
+
+Enumerate the COMPLETE persisted file tree.
+
+Do not rely on the WebSocket UI mirror.
+
+Verify:
+
+- complete file list
+- wrangler configuration
+- package configuration if present
+- server entry if present
+- public assets
+- referenced files
+- BUILDCUSTOM_SECOND_TEST_OK
+
+==================================================
+SUCCESS
+==================================================
+
+PASS requires:
+
+1. ThinkAgent generation completes
+2. authoritative files exist
+3. marker exists
+4. deploy_space succeeds
+5. createApp/build succeeds
+6. a successful deployment is created
+7. preview returns HTTP 200
+8. stylesheet/assets return HTTP 200
+9. rendered preview contains BUILDCUSTOM_SECOND_TEST_OK
+
+==================================================
+IF IT FAILS
+==================================================
+
+STOP after this ONE generation.
+
+Do not generate again.
+
+Do not ask ThinkAgent to repair it.
+
+Do not edit the project.
+
+Do not change VibeSDK.
+
+Because owner access is retained, immediately retrieve:
+
+- authoritative complete SpaceDO tree
+- failed commit
+- deploy_space tool result
+- error
+- details
+- exact bundler diagnostic
+- last successful deployment if any
+
+Then classify the failure from actual evidence.
+
+==================================================
+INFERENCE METRICS
+==================================================
+
+Record for this run:
+
+- gateway request count
+- HTTP statuses
+- input tokens
+- output tokens
+- cost
+- credit movement
+- 429/auth/provider/model errors
+
+This is measurement only.
+
+Unified Billing is already proven.
+
+Do not redesign it.
+
+==================================================
+IF SECOND TEST PASSES
+==================================================
+
+Do not investigate Test 1 further.
+
+Test 1 becomes:
+
+unreproduced disposable build failure with insufficient retained diagnostic
+state.
+
+The next step will be publishing THIS successful Test 2 project through the
+stock Workers for Platforms / dispatch flow.
+
+Do NOT publish it yet.
+
+==================================================
+IF SECOND TEST FAILS
+==================================================
+
+Classify using authoritative evidence:
+
+A. generated-app defect
+
+B. stock VibeSDK build/preview defect
+
+C. lab configuration defect
+
+D. transient Cloudflare/platform defect
+
+E. other/unknown
+
+Recommend the smallest correction.
+
+Do not implement it yet.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. new project ID
+2. new agent ID
+3. confirmation authenticated owner access retained
+4. generation completed yes/no
+5. complete authoritative SpaceDO file list
+6. marker verification
+7. Wrangler configuration
+8. package configuration
+9. server entry present yes/no/not required
+10. complete deploy_space result
+11. exact build result
+12. exact build details if failed
+13. successful deployment revision if applicable
+14. preview HTTP result
+15. asset HTTP results
+16. rendered marker verification
+17. gateway request count/statuses
+18. input tokens
+19. output tokens
+20. inference cost
+21. credit movement
+22. any inference errors
+23. comparison with Test 1
+24. if failed, evidence-based classification
+25. smallest correction if needed
+26. whether any VibeSDK/runtime/configuration change was required
+27. confirmation production untouched
+28. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
