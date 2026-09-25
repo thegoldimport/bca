@@ -1,0 +1,405 @@
+Proceed with the next step.
+
+The stock Workers for Platforms publish itself is now proven.
+
+The existing project successfully published into the fresh lab dispatch
+namespace:
+
+Project / agent:
+89457e04-a6c7-4e02-9299-afe8d622a404
+
+Published script:
+minimal-test-site
+
+Dispatch namespace:
+bc-vibesdk-lab-20260925-dispatch
+
+Published commit:
+66087c8f80736109e73ee44517dfa4206d8a41aa
+
+The stock returned nested workers.dev hostname fails TLS.
+
+Do NOT treat that as a VibeSDK publish failure.
+
+We intentionally have not configured generated-app public routing yet.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Create the MINIMUM LAB-ONLY generated-app routing needed to publicly access
+the already-published Workers for Platforms script.
+
+Then verify:
+
+published script
+→ lab generated-app hostname
+→ dispatch lookup
+→ HTTP 200
+→ HTML marker
+→ stylesheet
+→ rendered application
+
+Do NOT regenerate.
+
+Do NOT republish unless the routing architecture itself requires no other
+way to access the already-published script.
+
+Do NOT modify the generated application.
+
+Do NOT modify ThinkAgent or inference.
+
+==================================================
+IMPORTANT ARCHITECTURE
+==================================================
+
+This should be a disposable lab equivalent of our eventual production
+architecture:
+
+<slug>.apps.buildcustom.ai
+
+For this lab use an isolated namespace such as:
+
+<slug>.lab-apps.buildcustom.ai
+
+Preferred test hostname:
+
+minimal-test-site.lab-apps.buildcustom.ai
+
+Preferred wildcard:
+
+*.lab-apps.buildcustom.ai
+
+ONLY if a wildcard is actually appropriate for the stock Workers for
+Platforms dispatch architecture.
+
+Do NOT configure:
+
+*.apps.buildcustom.ai
+
+Do NOT configure:
+
+*.staging.buildcustom.ai
+
+Do NOT modify:
+
+buildcustom.ai
+
+www.buildcustom.ai
+
+app.buildcustom.ai
+
+existing customer domains
+
+existing BuildCustom generated-app routes
+
+==================================================
+FIRST — INSPECT EXISTING ROUTING
+==================================================
+
+Before changing anything, inspect:
+
+- DNS records relevant to lab-apps.buildcustom.ai
+- Worker routes that could overlap it
+- existing wildcard DNS/routes
+- existing BuildCustom generated-app gateway architecture
+- the pinned VibeSDK Workers for Platforms dispatch behavior
+
+Determine the smallest correct routing architecture.
+
+We want ONE shared generated-app gateway/routing mechanism, NOT one Worker
+route per generated app.
+
+The intended pattern should be conceptually:
+
+generated hostname
+→ shared gateway/router
+→ extract slug/hostname
+→ dispatch namespace
+→ script identity
+→ dispatched Worker
+
+But use the simplest Cloudflare-native mechanism appropriate to the actual
+stock VibeSDK deployment.
+
+Do not invent unnecessary infrastructure.
+
+==================================================
+SAFETY
+==================================================
+
+Before creating anything, confirm:
+
+lab-apps.buildcustom.ai
+
+and:
+
+*.lab-apps.buildcustom.ai
+
+do not conflict with an existing DNS record, Worker route, customer domain,
+or production BuildCustom resource.
+
+If there is a collision that could affect existing traffic:
+
+STOP.
+
+Otherwise you are authorized to create ONLY the minimum lab-specific:
+
+- DNS
+- Worker route
+- gateway Worker/configuration
+
+required to serve this fresh LAB dispatch namespace.
+
+All new resource names must clearly belong to:
+
+bc-vibesdk-lab-20260925
+
+or the lab-apps.buildcustom.ai namespace.
+
+Do not modify existing production resources.
+
+==================================================
+ROUTING IMPLEMENTATION
+==================================================
+
+Use the existing published script:
+
+minimal-test-site
+
+inside:
+
+bc-vibesdk-lab-20260925-dispatch
+
+The public hostname should resolve that slug to that dispatched script.
+
+Do NOT manually upload or duplicate the generated Worker.
+
+Do NOT move it out of the dispatch namespace.
+
+Do NOT create one standalone Worker per generated application.
+
+If a shared gateway Worker is required, it must be LAB ONLY and bind only
+to the fresh lab dispatch namespace.
+
+For this test, hostname:
+
+minimal-test-site.lab-apps.buildcustom.ai
+
+should resolve to dispatch script:
+
+minimal-test-site
+
+==================================================
+TLS / DNS
+==================================================
+
+Configure the minimum Cloudflare DNS/TLS arrangement necessary for the
+lab-only wildcard hostname.
+
+Use proxied Cloudflare DNS.
+
+Do not weaken TLS.
+
+Do not disable certificate validation.
+
+Do not use insecure HTTP as the solution.
+
+Wait for the required Cloudflare certificate/routing state if necessary.
+
+==================================================
+VERIFY THE PUBLISHED APP
+==================================================
+
+Once routing is active, request:
+
+https://minimal-test-site.lab-apps.buildcustom.ai/
+
+PASS requires:
+
+- TLS succeeds
+- HTTP 200
+- response is the generated application
+- HTML contains:
+
+  BUILDCUSTOM_SECOND_TEST_OK
+
+Then request:
+
+https://minimal-test-site.lab-apps.buildcustom.ai/style.css
+
+PASS requires:
+
+- HTTP 200
+- appropriate CSS content type
+- expected stylesheet content
+
+Then render the page using the available browser mechanism.
+
+PASS requires:
+
+- visible heading contains exactly:
+
+  BUILDCUSTOM_SECOND_TEST_OK
+
+- stylesheet is applied
+- zero failed required asset requests
+- no material browser/page errors
+
+==================================================
+ASSETS DISCREPANCY
+==================================================
+
+Previously:
+
+- the dispatched script showed an ASSETS binding
+- script-list metadata reported has_assets: false
+
+Do NOT investigate this preemptively.
+
+First test the actual public routed application.
+
+If:
+
+/style.css
+
+returns successfully and the rendered page is styled:
+
+consider asset delivery proven and simply record the metadata discrepancy.
+
+Do not change anything.
+
+If the stylesheet/assets FAIL:
+
+then inspect the existing dispatched script's asset metadata and the stock
+VibeSDK asset-upload path.
+
+Do not republish or modify anything until the exact cause is known.
+
+==================================================
+PRIVACY / OWNER AUTH
+==================================================
+
+The source BuildCustom/VibeSDK project may remain private.
+
+Do NOT change project visibility merely to make the published generated
+application public unless stock VibeSDK explicitly requires that distinction.
+
+Determine whether project privacy applies to:
+
+- editor/SpaceDO preview access
+
+versus:
+
+- published Workers for Platforms application access
+
+The desired BuildCustom behavior is that a private editing project can
+still have a publicly deployed generated application.
+
+Do not weaken editor/project authorization.
+
+==================================================
+ZERO INFERENCE
+==================================================
+
+Record AI Gateway request count before and after.
+
+This routing test should produce:
+
+ZERO new inference requests.
+
+==================================================
+NO CUSTOM DOMAINS YET
+==================================================
+
+This is NOT the customer custom-domain test.
+
+Do NOT attach:
+
+buyermagnets.com
+
+or any other customer/external domain.
+
+Do NOT configure Cloudflare for SaaS yet.
+
+We are only proving BuildCustom-owned generated-app subdomains.
+
+==================================================
+SUCCESS MEANS
+==================================================
+
+If this passes, we have proven:
+
+ThinkAgent
+→ Unified Billing
+→ generated project
+→ SpaceDO
+→ build
+→ preview
+→ Workers for Platforms publish
+→ dispatch namespace
+→ BuildCustom-owned generated-app hostname
+→ TLS
+→ public generated application
+→ assets/rendering
+
+At that point DO NOT continue testing VibeSDK internals.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. routing architecture selected
+
+2. why it is the minimum appropriate architecture
+
+3. DNS records created
+
+4. Worker routes created
+
+5. gateway Worker created, if any
+
+6. gateway binding and exact lab dispatch namespace
+
+7. confirmation no existing production DNS/route/resource changed
+
+8. public generated-app hostname
+
+9. TLS result
+
+10. root HTTP status
+
+11. marker verification
+
+12. stylesheet HTTP status
+
+13. stylesheet content type
+
+14. rendered marker verification
+
+15. rendered styling verification
+
+16. failed asset requests, if any
+
+17. browser/page errors, if any
+
+18. resolution of ASSETS vs has_assets metadata discrepancy
+
+19. whether private editor/project state remained protected
+
+20. AI Gateway count before/after
+
+21. confirmation zero inference
+
+22. whether BuildCustom-owned generated-app subdomain routing is conclusively
+    proven
+
+23. any remaining blocker
+
+24. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
+
+Leave all successful lab resources intact.

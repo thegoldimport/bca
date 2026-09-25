@@ -32,3 +32,9 @@ Service-binding gateway checks cannot prove public DNS and Worker-route preceden
 **Why:** The service binding bypasses public routing. An immediate generated-app acceptance failed content/MIME checks, while a later read-only probe through the same staged gateway and script returned correct CSS and distinct browser-rendered home/About content; the timing discrepancy was not resolved.
 
 **How to apply:** Keep the public identity check fail-closed before committing hostname publish. In future acceptance work, verify rendered content and asset MIME with a bounded readiness window before declaring success; never substitute the internal service-binding response for the public-host result.
+
+Do not treat the dispatch script-list `has_assets` flag as authoritative for static asset availability.
+
+**Why:** A stock platform publish reported `has_assets: false` in script-list metadata while its dispatch script had an `ASSETS` binding, and the public lab hostname served the stylesheet with HTTP 200 and rendered the expected CSS.
+
+**How to apply:** Resolve this discrepancy by checking the actual public asset response and computed browser styles through a TLS-valid hostname; report the metadata inconsistency without republishing or modifying a working app.
