@@ -1,0 +1,358 @@
+Approved.
+
+We now have ROOT CAUSE PROVEN for the failed /compat diagnostic.
+
+The diagnostic used:
+
+redirect: 'error'
+
+Cloudflare workerd accepts only:
+
+redirect: 'follow'
+redirect: 'manual'
+
+for this fetch path.
+
+That caused fetch() to throw TypeError during Request construction,
+before any subrequest was created.
+
+This explains:
+
+- TypeError at fetch boundary
+- zero Cloudflare subrequests
+- no upstream response
+- no AI Gateway log
+- no inference
+
+This was NOT an AI Gateway failure.
+This was NOT a Unified Billing failure.
+This was NOT a Gemini failure.
+This was NOT a model-routing failure.
+
+==================================================
+AUTHORIZED NEXT STEP
+==================================================
+
+Fix ONLY this proven diagnostic bug and perform exactly ONE staging
+/compat Unified Billing inference request.
+
+Do not make any other architectural changes.
+
+==================================================
+CHANGE
+==================================================
+
+Replace:
+
+redirect: 'error'
+
+with:
+
+redirect: 'manual'
+
+Then explicitly reject redirects in application code.
+
+If the response status is:
+
+300 through 399
+
+DO NOT follow it.
+
+Return a sanitized diagnostic failure such as:
+
+{
+  "ok": false,
+  "failedStage": "UNEXPECTED_REDIRECT",
+  "upstreamStatus": <status>
+}
+
+Do not issue another request.
+
+The intent remains:
+
+ONE outbound request maximum.
+
+==================================================
+STRICT TEST ARCHITECTURE
+==================================================
+
+Test exactly:
+
+staging Worker
+→ native Cloudflare Worker fetch()
+→ Cloudflare AI Gateway /compat
+→ cf-aig-authorization
+→ NO provider credential
+→ Cloudflare Unified Billing
+→ google/gemini-3.6-flash
+
+Endpoint:
+
+https://gateway.ai.cloudflare.com/v1/{account}/buildcustom-think-unified-staging/compat/chat/completions
+
+Model:
+
+google/gemini-3.6-flash
+
+==================================================
+PRE-INFERENCE ASSERTIONS
+==================================================
+
+Before fetch, require:
+
+- account configuration present
+- gateway is buildcustom-think-unified-staging
+- Think/gateway token binding readable
+- URL constructs successfully
+- Content-Type header present
+- cf-aig-authorization present
+- provider Authorization ABSENT
+- Google API key ABSENT
+- Vertex credential ABSENT
+- other provider credential ABSENT
+- body serializes successfully
+- redirect mode is manual
+
+If ANY assertion fails:
+
+STOP WITHOUT INFERENCE.
+
+==================================================
+REQUEST
+==================================================
+
+Send exactly ONE small request.
+
+Ask the model to return exactly:
+
+COMPAT_UNIFIED_OK
+
+Use:
+
+stream: false
+
+Use a very small max_tokens sufficient for that response.
+
+No tools.
+No system prompt unless required.
+No agent loop.
+No SDK retry.
+No client retry.
+No automatic redirect.
+
+==================================================
+FETCH ERROR HANDLING
+==================================================
+
+Retain sanitized stage tracking:
+
+BEFORE_FETCH
+FETCH_RETURNED
+RESPONSE_BODY_READ
+RESPONSE_PARSED
+
+This time do not unnecessarily suppress ordinary safe runtime error
+messages.
+
+Instead SANITIZE them.
+
+Never return:
+
+- token values
+- secret values
+- Authorization values
+- account credentials
+- hashes
+
+But preserve enough of an error message to diagnose a failure.
+
+==================================================
+AI GATEWAY CORRELATION
+==================================================
+
+After the ONE request, inspect the staging AI Gateway log.
+
+If present, record:
+
+- gateway request/log ID
+- HTTP status
+- requested model
+- actual provider
+- actual model if available
+- input tokens
+- output tokens
+- cost
+- wholesale
+- byok
+- duration
+- cache status
+- safe error message if failed
+
+Do not expose prompt contents or credentials.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+The architecture is proven only if we establish:
+
+1. Worker fetch created an actual subrequest
+
+2. /compat returned HTTP 200
+
+3. Gemini returned a valid response
+
+4. AI Gateway recorded the request
+
+5. model was google/gemini-3.6-flash
+
+6. nonzero token usage
+
+7. nonzero model cost
+
+8. wholesale:true
+
+9. byok:null
+
+10. no BuildCustom Google/provider credential was supplied
+
+If these are true:
+
+CONCLUDE:
+
+Cloudflare AI Gateway /compat + Cloudflare Unified Billing + Gemini
+works without BuildCustom supplying a Google API key.
+
+==================================================
+FAILURE RULES
+==================================================
+
+If 3xx:
+STOP.
+Do not follow redirect.
+
+If 401/403:
+STOP.
+Do not modify token permissions.
+
+If model error:
+STOP.
+Do not try another model.
+
+If provider credential required:
+STOP.
+
+If wholesale 429:
+STOP.
+Record exact evidence.
+Do not retry.
+
+If fetch throws:
+STOP.
+Record sanitized error.
+Do not retry.
+
+If any other upstream error:
+STOP.
+Record it.
+Do not retry.
+
+==================================================
+ABSOLUTE REQUEST LIMIT
+==================================================
+
+ONE /compat request.
+
+ZERO retries.
+
+Even if the failure appears trivial:
+
+DO NOT send another request.
+
+==================================================
+CREDIT CHECK
+==================================================
+
+If successful, inspect gateway/billing evidence.
+
+If the tiny request visibly changes Cloudflare credit balance, record
+it.
+
+If balance precision is insufficient, do NOT send another request.
+
+wholesale:true + byok:null + nonzero cost is sufficient evidence for
+Unified Billing.
+
+==================================================
+CLEANUP
+==================================================
+
+After collecting evidence:
+
+remove temporary diagnostic code.
+
+Restore clean staging version:
+
+713a1a73-cdad-4f00-bf4e-a656f4a2959d
+
+at 100%, assuming it remains the correct clean baseline.
+
+Do not risk serving staging merely to delete inactive historical
+diagnostic versions.
+
+==================================================
+DO NOT CONTINUE AFTER SUCCESS
+==================================================
+
+Even if this works perfectly:
+
+DO NOT run native generation.
+
+DO NOT run ThinkAgent.
+
+DO NOT test call #12.
+
+DO NOT add pacing.
+
+DO NOT alter the production architecture.
+
+We will authorize the native generation separately.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. diagnostic Worker version
+2. confirmation redirect changed only from error → manual
+3. exact outbound request count
+4. Cloudflare subrequest count
+5. sanitized endpoint
+6. model
+7. safe header names
+8. confirmation provider Authorization absent
+9. BEFORE_FETCH result
+10. FETCH_RETURNED result
+11. HTTP status
+12. model response result
+13. gateway log/request ID
+14. actual provider
+15. actual model
+16. input tokens
+17. output tokens
+18. cost
+19. wholesale value
+20. byok value
+21. cache status
+22. visible credit movement if available
+23. whether /compat Unified Billing is CONCLUSIVELY PROVEN
+24. cleanup result
+25. final serving Worker version
+26. confirmation exactly ONE inference request
+27. confirmation ZERO retries
+28. confirmation no native generation
+29. confirmation no BYOK/provider key
+30. confirmation production untouched
+
+Then STOP.
