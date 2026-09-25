@@ -1,0 +1,397 @@
+Approved for ONE staging-only /compat Unified Billing inference proof.
+
+The local preflight has now conclusively passed through:
+
+READY_BEFORE_FETCH
+
+We have proven:
+
+- account/gateway configuration available
+- diagnostic protection works
+- Think token binding readable
+- /compat URL constructs and parses
+- cf-aig-authorization constructs
+- provider Authorization is absent
+- Google/provider credentials are absent
+- request body serializes
+- google/gemini-3.6-flash is specified
+- Worker completes successfully immediately before fetch()
+- zero subrequests occurred during that proof
+
+We are now authorizing exactly ONE additional boundary:
+
+fetch() to Cloudflare AI Gateway /compat.
+
+==================================================
+GOAL
+==================================================
+
+Prove or disprove this exact path:
+
+staging Worker
+→ Cloudflare AI Gateway /compat
+→ authenticated using cf-aig-authorization
+→ NO provider credential
+→ Cloudflare Unified Billing
+→ google/gemini-3.6-flash
+→ valid Gemini response
+
+This is NOT a native ThinkAgent generation.
+
+This is ONE tiny inference request.
+
+==================================================
+STRICT LIMITS
+==================================================
+
+Authorize:
+
+- ONE minimal staging diagnostic implementation
+- ONE staging deployment if required
+- EXACTLY ONE HTTP request to /compat
+- EXACTLY ZERO client retries
+- gateway-log correlation
+- cleanup afterward
+
+Do NOT:
+
+- run another inference if the first fails
+- retry a 429
+- retry a 500
+- retry a timeout
+- run native generation
+- run ThinkAgent
+- use tools
+- use streaming
+- add pacing
+- change model
+- use BYOK
+- add Google API key
+- change gateway configuration
+- change billing
+- add credits
+- change ThinkAgent
+- touch production
+
+ONE outbound /compat request means ONE.
+
+==================================================
+PRE-INFERENCE SAFETY CHECK
+==================================================
+
+Before sending the request, repeat the proven local assertions.
+
+Require:
+
+1. account configuration present
+
+2. gateway:
+
+buildcustom-think-unified-staging
+
+3. Think/gateway token binding readable
+
+4. intended endpoint:
+
+https://gateway.ai.cloudflare.com/v1/{account}/buildcustom-think-unified-staging/compat/chat/completions
+
+5. model:
+
+google/gemini-3.6-flash
+
+6. header present:
+
+cf-aig-authorization
+
+7. header present:
+
+Content-Type: application/json
+
+8. header ABSENT:
+
+Authorization
+
+9. Google API key ABSENT
+
+10. Vertex credential ABSENT
+
+11. other provider credential ABSENT
+
+12. request body serializes successfully
+
+If ANY assertion fails:
+
+STOP WITHOUT INFERENCE.
+
+==================================================
+REQUEST
+==================================================
+
+Send ONE minimal non-sensitive Chat Completions request.
+
+Model:
+
+google/gemini-3.6-flash
+
+One tiny user message asking the model to respond exactly:
+
+COMPAT_UNIFIED_OK
+
+Use:
+
+stream: false
+
+Use a very small max_tokens value sufficient for that response.
+
+No tools.
+
+No system prompt unless required by the API.
+
+No agent loop.
+
+No SDK/client retry behavior.
+
+Prefer a direct single fetch from the already validated diagnostic
+handler so we know there is exactly one outbound request.
+
+==================================================
+IMPORTANT FETCH ERROR HANDLING
+==================================================
+
+The previous unexplained 500 must not happen silently again.
+
+Wrap the fetch boundary itself in sanitized error handling.
+
+Track safe stages:
+
+BEFORE_FETCH
+FETCH_RETURNED
+RESPONSE_BODY_READ
+RESPONSE_PARSED
+
+If fetch() itself throws, return sanitized:
+
+- failedStage
+- errorName
+- safe error message
+- safe stack location if available
+
+Do not expose credentials.
+
+If an upstream response is received, return sanitized:
+
+- upstream HTTP status
+- safe Cloudflare request/ray identifier if available
+- whether response body was readable
+- safe API error code/message if failed
+
+Do NOT automatically retry under ANY circumstance.
+
+==================================================
+GATEWAY CORRELATION
+==================================================
+
+After the ONE request, inspect AI Gateway logs.
+
+Correlate using:
+
+- timestamp
+- request ID
+- model
+- status
+
+If a gateway record exists, report:
+
+- gateway request/log ID
+- HTTP status
+- requested model
+- actual model if separately shown
+- actual provider
+- input tokens
+- output tokens
+- cost
+- wholesale
+- byok
+- duration
+- cache status
+- safe error code/message if failed
+
+Do not expose prompts or credentials.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+PASS requires:
+
+1. /compat returned HTTP 200
+
+2. valid model response received
+
+3. AI Gateway has corresponding request record
+
+4. requested model is google/gemini-3.6-flash
+
+5. actual provider/model identified
+
+6. nonzero token usage
+
+7. nonzero model cost
+
+8. wholesale:true
+
+9. byok:null
+
+10. no provider credential was supplied by BuildCustom
+
+If all are true:
+
+Cloudflare Unified Billing through normal /compat is PROVEN for this
+model.
+
+==================================================
+FAILURE INTERPRETATION
+==================================================
+
+401/403:
+
+Gateway authentication problem.
+
+STOP.
+
+Do not change token permissions.
+
+
+MODEL ERROR:
+
+Model identifier/provider-routing problem.
+
+STOP.
+
+Do not try another identifier.
+
+
+PROVIDER CREDENTIAL REQUIRED:
+
+/compat did not fall through to Unified Billing as intended.
+
+STOP.
+
+
+WHOLESALE 429:
+
+VERY IMPORTANT.
+
+Record exact gateway evidence.
+
+STOP.
+
+Do not retry.
+
+
+FETCH THROWS BEFORE UPSTREAM RESPONSE:
+
+Record exact sanitized Worker exception and stage.
+
+STOP.
+
+
+OTHER UPSTREAM ERROR:
+
+Record exact safe status/error and gateway evidence.
+
+STOP.
+
+==================================================
+CREDIT CHECK
+==================================================
+
+If successful, inspect available Cloudflare billing/gateway evidence for
+the cost.
+
+If the tiny charge visibly changes the credit balance, record it.
+
+If balance precision is insufficient:
+
+DO NOT send another request.
+
+Gateway evidence showing:
+
+wholesale:true
+byok:null
+nonzero cost
+
+is sufficient to establish Unified Billing.
+
+==================================================
+CLEANUP
+==================================================
+
+After evidence is collected:
+
+remove the temporary diagnostic route/code.
+
+Restore staging to the clean serving implementation:
+
+713a1a73-cdad-4f00-bf4e-a656f4a2959d
+
+if that remains the correct clean version.
+
+Verify it is serving at 100%.
+
+Do not risk serving staging to clean inactive historical versions.
+
+Leave inactive diagnostic versions alone unless deletion is
+unambiguously safe.
+
+==================================================
+STOP AFTER THIS REQUEST
+==================================================
+
+EVEN IF IT PASSES:
+
+DO NOT run native generation.
+
+DO NOT test call #12.
+
+DO NOT send a second request.
+
+The next experiment will be separately authorized.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. preflight result
+2. diagnostic Worker version
+3. exact outbound request count
+4. sanitized endpoint
+5. model
+6. safe header names
+7. confirmation provider Authorization absent
+8. BEFORE_FETCH reached
+9. whether fetch returned or threw
+10. HTTP status
+11. response result
+12. gateway log/request ID
+13. actual provider
+14. actual model
+15. input tokens
+16. output tokens
+17. cost
+18. wholesale value
+19. byok value
+20. cache status
+21. visible credit movement if available
+22. whether /compat + Unified Billing is conclusively proven
+23. cleanup result
+24. final serving Worker version
+25. confirmation exactly ONE outbound inference request
+26. confirmation ZERO retries
+27. confirmation no native generation
+28. confirmation no BYOK/provider key
+29. confirmation production untouched
+
+Then STOP.
