@@ -1,0 +1,488 @@
+We have completed the clean VibeSDK infrastructure proof.
+
+STOP treating this as a lab-debugging exercise.
+
+The clean architecture is now proven end-to-end:
+
+ThinkAgent
+→ Cloudflare AI Gateway
+→ Unified Billing
+→ Gemini
+→ SpaceDO
+→ generated files
+→ autonomous build correction
+→ successful build
+→ preview
+→ Workers for Platforms
+→ dispatch namespace
+→ shared generated-app gateway
+→ BuildCustom-owned wildcard hostname
+→ valid TLS
+→ public generated application
+→ static assets
+
+The private editor/project also remained protected while the published
+application was publicly accessible.
+
+This infrastructure is now the foundation for BuildCustom.
+
+==================================================
+NEW OBJECTIVE
+==================================================
+
+PLAN ONLY.
+
+Do NOT deploy anything.
+
+Do NOT modify anything.
+
+Do NOT migrate anything yet.
+
+Inspect the CURRENT BuildCustom product in this Replit project and the
+newly proven clean VibeSDK lab implementation.
+
+Design the SMALLEST practical migration from the current BuildCustom
+product to the clean Cloudflare/VibeSDK foundation.
+
+The goal is to get BuildCustom usable by real customers as quickly as
+possible without rebuilding systems that VibeSDK already provides.
+
+==================================================
+FINAL PRODUCT ARCHITECTURE
+==================================================
+
+The intended product is:
+
+buildcustom.ai
+
+Marketing / sales website.
+
+Leave it alone for now.
+
+
+app.buildcustom.ai
+
+The authenticated BuildCustom product:
+
+- signup/login
+- dashboard
+- projects
+- create project
+- coding interface
+- ThinkAgent conversation
+- generated files
+- preview
+- revisions/history where stock VibeSDK provides them
+- publish
+- project settings
+- later billing/usage/domains
+
+
+<slug>.apps.buildcustom.ai
+
+Public applications generated and published by BuildCustom.
+
+
+Customer custom domains
+
+Later map to published BuildCustom apps through Cloudflare for SaaS.
+
+Do NOT work on customer custom domains during this planning task.
+
+==================================================
+IMPORTANT PRODUCT PRINCIPLE
+==================================================
+
+BuildCustom is NOT:
+
+a dashboard that calls a separate VibeSDK product.
+
+VibeSDK is the internal runtime underneath BuildCustom.
+
+The native BuildCustom coding agent IS VibeSDK's ThinkAgent/runtime,
+branded and surfaced as BuildCustom.
+
+Users should never need to know VibeSDK exists.
+
+Do not create:
+
+BuildCustom agent
+→ VibeSDK agent
+
+or any other nested-agent architecture.
+
+==================================================
+OWNERSHIP BOUNDARY
+==================================================
+
+Prefer this division unless the current code or stock VibeSDK requires a
+small adjustment.
+
+BUILDCUSTOM OWNS:
+
+- users
+- authentication/product identity
+- project ownership
+- dashboard
+- BuildCustom UI/branding
+- plans
+- future Stripe billing
+- future customer credit/usage accounting
+- publish/release metadata needed by the product
+- generated-app hostname metadata
+- future custom-domain metadata
+- product/admin functionality
+
+
+VIBESDK / CLOUDFLARE RUNTIME OWNS:
+
+- ThinkAgent
+- conversations/agent runtime
+- SpaceDO
+- generated project files
+- tools
+- builds
+- preview
+- Git/revisions/history
+- generated application bundle
+- Workers for Platforms deployment
+- dispatch runtime
+
+Do not duplicate VibeSDK state into BuildCustom unless the product
+actually needs metadata/indexing for the dashboard.
+
+==================================================
+CURRENT PRODUCT INSPECTION
+==================================================
+
+Inspect the existing BuildCustom application in this Replit workspace.
+
+Determine what currently exists for:
+
+- frontend framework
+- dashboard
+- login/signup
+- sessions/auth
+- users
+- projects
+- project ownership
+- project creation
+- coding/builder interface
+- VibeSDK integration
+- agent mapping
+- preview UI
+- publish UI
+- project settings
+- templates
+- pages
+- blog
+- autoblogger
+- SEO settings
+- admin
+- waitlist
+- database schema
+- APIs
+- Cloudflare control-plane work already implemented
+
+Identify what is actually useful for the new product versus what is
+obsolete or leftover from previous BuildCustom directions.
+
+Do not preserve code merely because it exists.
+
+==================================================
+CLEAN RUNTIME INSPECTION
+==================================================
+
+Inspect the clean proven VibeSDK lab implementation and identify the exact
+interfaces the BuildCustom product needs for:
+
+- creating a project/agent
+- opening ThinkAgent conversation
+- WebSocket communication
+- reading files
+- previewing
+- revisions/history
+- publishing
+- deployment status
+- published application identity
+
+Use the stock interfaces we just proved.
+
+Do NOT design another runtime abstraction unless a thin adapter is genuinely
+necessary for authentication/product metadata.
+
+==================================================
+AUTHENTICATION
+==================================================
+
+Pay special attention to authentication.
+
+We need ONE coherent BuildCustom user experience at:
+
+app.buildcustom.ai
+
+Determine the simplest way to connect BuildCustom users/projects to the
+VibeSDK runtime without exposing VibeSDK's internal authentication model to
+customers.
+
+We should not make users maintain two accounts or visibly log into two
+systems.
+
+Determine whether:
+
+A. BuildCustom auth should remain authoritative and securely exchange into
+   the VibeSDK runtime
+
+or
+
+B. the clean VibeSDK authentication should become the underlying
+   BuildCustom auth and the BuildCustom dashboard should use it
+
+Recommend based on the actual current code and the stock VibeSDK interfaces.
+
+Do not implement it yet.
+
+==================================================
+PROJECT MODEL
+==================================================
+
+Determine the minimum BuildCustom project record needed.
+
+Ideally BuildCustom stores only product-level metadata such as:
+
+- BuildCustom project ID
+- owner/user ID
+- project name
+- slug
+- corresponding VibeSDK agent/space ID
+- published deployment ID
+- published hostname
+- status
+- timestamps
+
+while SpaceDO/VibeSDK remains authoritative for generated files and runtime
+state.
+
+Confirm or correct this based on the actual implementation.
+
+==================================================
+PRODUCTION GENERATED APP ROUTING
+==================================================
+
+We have now proven:
+
+*.lab-apps.buildcustom.ai
+
+→ shared gateway
+→ dispatch namespace
+→ generated script
+
+The intended production equivalent is:
+
+*.apps.buildcustom.ai
+
+Do NOT configure it yet.
+
+Plan the minimum production resources required to reproduce the proven lab
+architecture safely.
+
+We want ONE shared production gateway, not one Worker route per application.
+
+==================================================
+UNIFIED BILLING
+==================================================
+
+The inference architecture is frozen:
+
+ThinkAgent
+→ AI Gateway
+→ Unified Billing
+→ model provider
+
+No provider BYOK is required.
+
+Do NOT revisit this architecture.
+
+For planning purposes only, identify where BuildCustom can later record
+per-project/per-user inference usage and cost.
+
+Do NOT implement:
+
+- Stripe
+- customer credits
+- plans
+- usage markup
+- billing enforcement
+
+during the initial migration unless some minimal placeholder is already
+required by existing product code.
+
+Getting users building applications comes first.
+
+==================================================
+REPLIT REMOVAL REQUIREMENT
+==================================================
+
+This is critical.
+
+The final BuildCustom product must NOT depend on Replit.
+
+Replit is currently only our development environment.
+
+Identify every remaining runtime dependency on:
+
+- Replit server
+- Replit database
+- Replit environment variables
+- Replit URLs
+- Replit filesystem
+- Replit deployment
+- Replit-specific services
+
+The target state is:
+
+If this Replit project is deleted after deployment, BuildCustom continues
+working normally.
+
+==================================================
+DO NOT OVERENGINEER
+==================================================
+
+We want to launch.
+
+Do not propose:
+
+- custom orchestration systems
+- new queues
+- new Durable Objects
+- duplicate file storage
+- duplicate Git systems
+- duplicate preview engines
+- custom agent harness
+- custom inference router
+- elaborate event sourcing
+- new publish broker
+- unnecessary service layers
+
+Use what Cloudflare and VibeSDK already provide.
+
+==================================================
+MIGRATION PRIORITIES
+==================================================
+
+The migration should prioritize:
+
+1. app.buildcustom.ai loads BuildCustom
+
+2. users can signup/login
+
+3. users can create projects
+
+4. users can talk to the native BuildCustom/ThinkAgent
+
+5. generated files work
+
+6. preview works
+
+7. users can reopen projects
+
+8. users can publish
+
+9. published app receives:
+
+   <slug>.apps.buildcustom.ai
+
+10. BuildCustom no longer depends on Replit
+
+Everything else can come afterward unless already trivial.
+
+==================================================
+WHAT I WANT BACK
+==================================================
+
+Do NOT give me a giant speculative architecture document.
+
+Give me a concrete migration assessment based on the actual code.
+
+Return:
+
+1. CURRENT BUILDCUSTOM STACK
+
+Brief description of what exists today.
+
+2. KEEP
+
+Existing BuildCustom components/code we should retain.
+
+3. REMOVE / IGNORE
+
+Old systems that should not be carried into the new architecture.
+
+4. CLEAN VIBESDK INTERFACES
+
+Exact stock interfaces we should use for:
+- project creation
+- agent conversation
+- files
+- preview
+- revisions
+- publish
+
+5. AUTH DECISION
+
+Recommend A or B and explain why based on the actual code.
+
+6. MINIMUM PROJECT DATA MODEL
+
+Exact fields BuildCustom should own.
+
+7. APP.BUILDCUSTOM.AI PLAN
+
+What needs to move/change for the real product to run there.
+
+8. APPS.BUILDCUSTOM.AI PLAN
+
+Minimum production equivalent of the proven lab generated-app routing.
+
+9. REPLIT DEPENDENCIES
+
+Every remaining thing that would break if Replit disappeared.
+
+10. MIGRATION STEPS
+
+Give me the smallest ordered sequence of implementation tasks.
+
+Prefer roughly 5–10 meaningful tasks rather than dozens of microtasks.
+
+11. FIRST IMPLEMENTATION TASK
+
+Give me the exact scope of the FIRST task we should have Replit implement
+after I approve the plan.
+
+12. RISKS / BLOCKERS
+
+Only actual blockers supported by the current code.
+
+Do not manufacture hypothetical enterprise concerns.
+
+==================================================
+IMPORTANT
+==================================================
+
+NO IMPLEMENTATION.
+
+NO DEPLOYMENT.
+
+NO DNS CHANGES.
+
+NO DATABASE CHANGES.
+
+NO INFERENCE.
+
+NO NEW CLOUDFLARE RESOURCES.
+
+This task is inspection and planning only.
+
+We are done proving the underlying engine.
+
+Now plan how to turn the proven engine into the actual BuildCustom product.
