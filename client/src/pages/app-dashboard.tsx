@@ -458,7 +458,7 @@ function ProjectsPage() {
     },
     onSuccess: ({ project, prompt, plan }) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
-      if (project.runtimeStatus) {
+      if (project.runtimeStatus && project.runtimeStatus !== "ready") {
         navigate(`/app/project/${project.id}`);
         return;
       }
@@ -674,10 +674,14 @@ function BuildActivity({
   projectId,
   theme,
   isBuilding,
+  progressEvents = [],
+  connectionState,
 }: {
   projectId: number;
   theme: string;
   isBuilding: boolean;
+  progressEvents?: string[];
+  connectionState?: string;
 }) {
   const [open, setOpen] = useState(true);
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -755,13 +759,13 @@ function BuildActivity({
         <div className={`px-3 pb-3 border-t ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
           <div className={`grid grid-cols-2 gap-2 py-3 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
             <span>Generation <b className={theme === "dark" ? "text-white/80" : "text-gray-800"}>{generationStatus}</b></span>
-            <span>Connection <b className={theme === "dark" ? "text-white/80" : "text-gray-800"}>{statusQuery.data?.connected ? "connected" : "not connected"}</b></span>
+            <span>Connection <b className={theme === "dark" ? "text-white/80" : "text-gray-800"}>{connectionState || (statusQuery.data?.connected ? "connected" : "not connected")}</b></span>
           </div>
-          {steps.length > 0 && (
+          {(steps.length > 0 || progressEvents.length > 0) && (
             <div className={`mb-3 space-y-1 border-l-2 pl-3 ${theme === "dark" ? "border-cyan-400/30" : "border-cyan-300"}`}>
-              {steps.map((step, index) => (
+              {[...steps, ...progressEvents].slice(-10).map((step, index, visibleSteps) => (
                 <div key={`${index}-${step}`} className={`text-[11px] leading-relaxed ${
-                  index === steps.length - 1
+                  index === visibleSteps.length - 1
                     ? theme === "dark" ? "text-cyan-200" : "text-cyan-700"
                     : theme === "dark" ? "text-white/40" : "text-gray-500"
                 }`}>
@@ -786,9 +790,15 @@ function BuildActivity({
 
 function EditorPage() {
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
   const planEntitlement = getPlanEntitlement(getAppUser()?.plan);
   const [, routeParams] = useRoute("/app/editor/:id");
   const projectId = Number(routeParams?.id || 0);
+  const [runtimeCapability, setRuntimeCapability] = useState<{ projectId: number; nativeThink: boolean; status: any } | null>(null);
+  const [runtimeCapabilityError, setRuntimeCapabilityError] = useState("");
+  const currentRuntimeCapability = runtimeCapability?.projectId === projectId ? runtimeCapability : null;
+  const nativeThink = currentRuntimeCapability?.nativeThink === true;
+  const canManageProduction = Boolean(currentRuntimeCapability && !nativeThink);
   const [chatInput, setChatInput] = useState("");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
@@ -822,6 +832,8 @@ function EditorPage() {
   const [restoringRelease, setRestoringRelease] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
   const [sending, setSending] = useState(false);
+  const [nativeProgress, setNativeProgress] = useState<string[]>([]);
+  const [nativeConnected, setNativeConnected] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [chatWidth, setChatWidth] = useState(420);
   const [resizingChat, setResizingChat] = useState(false);
@@ -836,6 +848,10 @@ function EditorPage() {
   const [selectorEnabled, setSelectorEnabled] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const nativeSocketRef = useRef<WebSocket | null>(null);
+  const turnLoadSequenceRef = useRef(0);
+  const activeProjectIdRef = useRef(projectId);
+  activeProjectIdRef.current = projectId;
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1011,17 +1027,30 @@ function EditorPage() {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
+    setRuntimeCapabilityError("");
     const loadRuntime = async () => {
       try {
         const statusResponse = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
         const status = await statusResponse.json().catch(() => ({}));
-        if (cancelled || !statusResponse.ok) return;
+        if (cancelled) return;
+        if (!statusResponse.ok) throw new Error(status.message || "Project status is unavailable.");
+        const isNativeThink = status.nativeThink === true;
+        setRuntimeCapability({ projectId, nativeThink: isNativeThink, status });
+        setNativeProgress([]);
+        if (isNativeThink) {
+          setProductionUrl("");
+          setPreviewEnvironment("development");
+          const nativePreviewUrl = status.previewUrl || status.previewURL || status.state?.previewUrl || status.state?.previewURL;
+          setPreviewUrl(typeof nativePreviewUrl === "string" ? nativePreviewUrl : "");
+          return;
+        }
         if (status.deploymentUrl) setProductionUrl(status.deploymentUrl);
-        // A staging identity-only project has no files or preview yet.
         if (status.runtimeStatus) return;
+        const token = await csrfToken();
         const previewResponse = await fetch(`/api/projects/${projectId}/runtime/previews`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
           body: JSON.stringify({}),
         });
         const preview = await previewResponse.json().catch(() => ({}));
@@ -1030,11 +1059,16 @@ function EditorPage() {
           setPreviewRevision((revision) => revision + 1);
         }
       } catch {
-        // The user can retry with the preview refresh control.
+        if (!cancelled) setRuntimeCapabilityError("Project status is unavailable. Refresh and try again.");
       }
     };
     loadRuntime();
     return () => { cancelled = true; };
+  }, [projectId]);
+
+  useEffect(() => () => {
+    nativeSocketRef.current?.close(1000, "Project view closed");
+    nativeSocketRef.current = null;
   }, [projectId]);
 
   useEffect(() => {
@@ -1066,18 +1100,532 @@ function EditorPage() {
 
   const loadTurns = async () => {
     if (!projectId) return;
+    const sequence = ++turnLoadSequenceRef.current;
     const response = await fetch(`/api/projects/${projectId}/runtime/turns`, { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
-    if (response.ok) setTurns(data.turns || []);
+    if (!response.ok) throw new Error(data.message || "Conversation history is unavailable.");
+    if (sequence === turnLoadSequenceRef.current) setTurns(Array.isArray(data) ? data : data.turns || []);
   };
 
   useEffect(() => {
+    requestController.current?.abort();
+    requestController.current = null;
+    setSending(false);
+    setTurns([]);
     setMessages([]);
+    setChatInput("");
+    setRuntimeError("");
+    setNativeProgress([]);
+    setNativeConnected(false);
+    setPlanMode(false);
+    setPendingPlan("");
+    setAttachments([]);
+    setTextContext([]);
+    setSelectedElement(null);
     loadTurns().catch(() => undefined);
   }, [projectId]);
 
   useEffect(() => {
-    if (!publishing || !projectId) return;
+    if (!nativeThink) return;
+    loadTurns().catch((error: any) => setRuntimeError(error.message || "Conversation history is unavailable."));
+  }, [projectId, nativeThink]);
+
+  const recordNativeProgress = (label: string) => {
+    const cleanLabel = label.trim();
+    if (!cleanLabel) return;
+    setNativeProgress((current) => current[current.length - 1] === cleanLabel
+      ? current
+      : [...current.slice(-8), cleanLabel]);
+  };
+
+  const streamNativeTurn = async (agentPrompt: string, images: ComposerImage[]) => {
+    const baselineResponse = await fetch(`/api/projects/${projectId}/runtime/revision`, {
+      credentials: "same-origin",
+      headers: authHeaders(),
+    });
+    const baselineData = await baselineResponse.json().catch(() => ({}));
+    if (!baselineResponse.ok) {
+      throw new Error(baselineData.message || "Unable to read the current runtime revision. Your prompt was not sent.");
+    }
+    const baselineCommitHash = typeof baselineData.commitHash === "string"
+      ? baselineData.commitHash
+      : typeof baselineData.revision?.commitHash === "string" ? baselineData.revision.commitHash : null;
+    if (activeProjectIdRef.current !== projectId) return;
+
+    const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const socketUrl = `${websocketProtocol}//${window.location.host}/api/projects/${projectId}/runtime/ws`;
+
+    await new Promise<void>((resolve, reject) => {
+      const socket = new WebSocket(socketUrl);
+      nativeSocketRef.current = socket;
+      const startedAt = Date.now();
+      let lastFrameAt = startedAt;
+      let frameSequence = 0;
+      let generationComplete = false;
+      let assistantStreaming = false;
+      let suggestionSent = false;
+      let recoveryStarted = false;
+      let finished = false;
+      let settleTimer: number | null = null;
+      let settling = false;
+      let settleAgain = false;
+      let revisionCandidate: { commitHash: string; checkedAt: number; frameSequence: number } | null = null;
+      const activeWork = new Set<string>();
+      let settlementWaitReason = "The Agent did not reach a verifiable idle state.";
+
+      const replaceAssistantMessage = (content: string) => {
+        setMessages((current) => {
+          const index = current.findLastIndex((message) => message.role === "assistant");
+          if (index < 0) return [...current, { role: "assistant", content }];
+          return current.map((message, messageIndex) => messageIndex === index ? { ...message, content } : message);
+        });
+      };
+
+      const closeAndFinish = (error?: Error) => {
+        if (finished) return;
+        finished = true;
+        if (settleTimer !== null) window.clearTimeout(settleTimer);
+        const ownsSocket = nativeSocketRef.current === socket;
+        if (ownsSocket) nativeSocketRef.current = null;
+        if (ownsSocket && activeProjectIdRef.current === projectId) setNativeConnected(false);
+        socket.close(1000, error ? "Build stream ended with an error" : "Build stream settled");
+        if (error) reject(error);
+        else resolve();
+      };
+
+      const failTurn = (message: string) => {
+        const error = new Error(message);
+        if (activeProjectIdRef.current === projectId) {
+          setRuntimeError(message);
+          replaceAssistantMessage(message);
+        }
+        closeAndFinish(error);
+      };
+
+      const fetchJson = async (path: string, init?: RequestInit) => {
+        const response = await fetch(`/api/projects/${projectId}/runtime/${path}`, {
+          credentials: "same-origin",
+          ...init,
+          headers: { ...authHeaders(), ...(init?.headers || {}) },
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || `Unable to load ${path.replaceAll("/", " ")}.`);
+        return body;
+      };
+
+      const isRuntimeIdle = (runtimeStatus: any) => {
+        const state = runtimeStatus.state || {};
+        const generationStatus = String(
+          state.generation?.status
+            || state.generationStatus
+            || state.generation_status
+            || state.status
+            || runtimeStatus.generation?.status
+            || runtimeStatus.generationStatus
+            || runtimeStatus.generation_status
+            || runtimeStatus.status
+            || runtimeStatus.runtimeStatus
+            || "",
+        ).toLowerCase();
+        const runningStatuses = ["pending", "queued", "starting", "running", "building", "generating"];
+        const terminalErrors = ["failed", "error", "stopped", "cancelled", "canceled"];
+        const settledStatuses = ["idle", "complete", "completed", "success", "succeeded"];
+        const generationSignal = typeof state.shouldBeGenerating === "boolean"
+          ? state.shouldBeGenerating
+          : typeof runtimeStatus.shouldBeGenerating === "boolean" ? runtimeStatus.shouldBeGenerating : undefined;
+        if (generationSignal === true || runningStatuses.includes(generationStatus) || terminalErrors.includes(generationStatus)) return false;
+        return generationSignal === false && settledStatuses.includes(generationStatus);
+      };
+
+      const settle = async () => {
+        if (finished) return;
+        if (settling) {
+          settleAgain = true;
+          return;
+        }
+        if (activeProjectIdRef.current !== projectId) {
+          closeAndFinish();
+          return;
+        }
+        if (Date.now() - startedAt > 10 * 60 * 1000) {
+          failTurn(`${settlementWaitReason} No build was marked complete.`);
+          return;
+        }
+        const quietFallbackReady = suggestionSent
+          && !generationComplete
+          && !recoveryStarted
+          && Date.now() - lastFrameAt >= 30_000;
+        if (!generationComplete && !recoveryStarted && !quietFallbackReady) {
+          if (suggestionSent) scheduleSettle();
+          return;
+        }
+        if (!quietFallbackReady && (assistantStreaming || activeWork.size > 0)) {
+          scheduleSettle();
+          return;
+        }
+        const requiredQuietMs = quietFallbackReady ? 30_000 : 5000;
+        if (Date.now() - lastFrameAt < requiredQuietMs) {
+          scheduleSettle();
+          return;
+        }
+
+        settling = true;
+        const checkFrameSequence = frameSequence;
+        try {
+          const status = await fetchJson("status");
+          if (activeProjectIdRef.current !== projectId) {
+            closeAndFinish();
+            return;
+          }
+          if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
+            revisionCandidate = null;
+            scheduleSettle();
+            return;
+          }
+          if (!isRuntimeIdle(status)) {
+            revisionCandidate = null;
+            settlementWaitReason = "Runtime generation has not reported an idle or complete state.";
+            scheduleSettle();
+            return;
+          }
+
+          const revisionData = await fetchJson("revision");
+          if (activeProjectIdRef.current !== projectId) {
+            closeAndFinish();
+            return;
+          }
+          if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
+            revisionCandidate = null;
+            scheduleSettle();
+            return;
+          }
+          const currentCommitHash = typeof revisionData.commitHash === "string"
+            ? revisionData.commitHash
+            : typeof revisionData.revision?.commitHash === "string" ? revisionData.revision.commitHash : null;
+          if (!currentCommitHash || currentCommitHash === baselineCommitHash) {
+            revisionCandidate = null;
+            settlementWaitReason = "The Agent did not produce a new authoritative project revision.";
+            scheduleSettle();
+            return;
+          }
+          if (!revisionCandidate
+            || revisionCandidate.frameSequence !== checkFrameSequence
+            || revisionCandidate.commitHash !== currentCommitHash) {
+            revisionCandidate = { commitHash: currentCommitHash, checkedAt: Date.now(), frameSequence: checkFrameSequence };
+            settlementWaitReason = "Waiting to confirm the authoritative revision is stable.";
+            scheduleSettle();
+            return;
+          }
+          if (Date.now() - revisionCandidate.checkedAt < 5000) {
+            scheduleSettle();
+            return;
+          }
+
+          const [fileData, latestStatus] = await Promise.all([
+            fetchJson("files"),
+            fetchJson("status"),
+          ]);
+          if (activeProjectIdRef.current !== projectId) {
+            closeAndFinish();
+            return;
+          }
+          if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
+            revisionCandidate = null;
+            scheduleSettle();
+            return;
+          }
+          if (!isRuntimeIdle(latestStatus)) {
+            revisionCandidate = null;
+            settlementWaitReason = "Runtime generation did not remain idle while verifying the new revision.";
+            scheduleSettle();
+            return;
+          }
+          const files = Array.isArray(fileData) ? fileData : Array.isArray(fileData.files) ? fileData.files : [];
+          if (files.length === 0) {
+            settlementWaitReason = "The new authoritative revision contains no verifiable project files.";
+            scheduleSettle();
+            return;
+          }
+
+          const finalRevisionData = await fetchJson("revision");
+          if (activeProjectIdRef.current !== projectId) {
+            closeAndFinish();
+            return;
+          }
+          const finalCommitHash = typeof finalRevisionData.commitHash === "string"
+            ? finalRevisionData.commitHash
+            : typeof finalRevisionData.revision?.commitHash === "string" ? finalRevisionData.revision.commitHash : null;
+          if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
+            revisionCandidate = null;
+            scheduleSettle();
+            return;
+          }
+          if (finalCommitHash !== currentCommitHash) {
+            revisionCandidate = null;
+            settlementWaitReason = "The authoritative project revision changed during verification.";
+            scheduleSettle();
+            return;
+          }
+
+          const previewState = latestStatus.state || {};
+          const lastDeployedCommit = previewState.lastDeployedCommit || latestStatus.lastDeployedCommit;
+          const signedPreviewUrl = latestStatus.previewUrl
+            || latestStatus.previewURL
+            || previewState.previewUrl
+            || previewState.previewURL
+            || "";
+          let previewUrl = lastDeployedCommit === currentCommitHash && typeof signedPreviewUrl === "string"
+            ? signedPreviewUrl
+            : "";
+          if (!previewUrl) {
+            const token = await csrfToken();
+            const preview = await fetchJson("previews", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+              body: JSON.stringify({}),
+            });
+            previewUrl = typeof preview.url === "string" ? preview.url : typeof preview.previewUrl === "string" ? preview.previewUrl : "";
+          }
+          if (!previewUrl) throw new Error("Build files were verified, but the runtime did not return a preview URL.");
+
+          const turnsSequence = ++turnLoadSequenceRef.current;
+          const turnsData = await fetchJson("turns");
+          if (activeProjectIdRef.current !== projectId) {
+            closeAndFinish();
+            return;
+          }
+          if (turnsSequence === turnLoadSequenceRef.current) setTurns(Array.isArray(turnsData) ? turnsData : turnsData.turns || []);
+          setRuntimeError("");
+          setMessages([]);
+          setPreviewUrl(previewUrl);
+          setPreviewEnvironment("development");
+          setPreviewRevision((revision) => revision + 1);
+          queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
+          const runtimeFilesQueryKey = ["runtime-files", projectId] as const;
+          queryClient.invalidateQueries({ queryKey: runtimeFilesQueryKey });
+          queryClient.invalidateQueries({ queryKey: ["runtime-file-content", projectId] });
+          recordNativeProgress(`${files.length} project file${files.length === 1 ? "" : "s"} verified · preview ready`);
+          closeAndFinish();
+        } catch (error: any) {
+          failTurn(error.message || "The completed build could not be verified from the runtime.");
+        } finally {
+          settling = false;
+          if (settleAgain && !finished) {
+            settleAgain = false;
+            scheduleSettle();
+          }
+        }
+      };
+
+      const scheduleSettle = () => {
+        if (finished) return;
+        if (settling) {
+          settleAgain = true;
+          return;
+        }
+        if (settleTimer !== null) return;
+        settleTimer = window.setTimeout(() => {
+          settleTimer = null;
+          void settle();
+        }, 1200);
+      };
+
+      const beginRecovery = () => {
+        if (finished || !suggestionSent) return false;
+        if (recoveryStarted) return true;
+        recoveryStarted = true;
+        lastFrameAt = Date.now();
+        frameSequence += 1;
+        revisionCandidate = null;
+        assistantStreaming = false;
+        activeWork.clear();
+        settlementWaitReason = "The runtime did not produce a verifiable committed revision after the connection was interrupted.";
+        if (activeProjectIdRef.current === projectId) {
+          setNativeConnected(false);
+          replaceAssistantMessage("Connection interrupted. Verifying the committed revision before marking this build complete…");
+          recordNativeProgress("Connection interrupted · verifying runtime status and revision");
+        }
+        scheduleSettle();
+        try {
+          socket.close(1000, "Connection interrupted; verifying committed revision");
+        } catch {
+          // A browser may already have closed the socket after an error event.
+        }
+        return true;
+      };
+
+      socket.onopen = () => {
+        try {
+          if (activeProjectIdRef.current !== projectId) {
+            closeAndFinish();
+            return;
+          }
+          setNativeConnected(true);
+          socket.send(JSON.stringify({ type: "get_conversation_state" }));
+          socket.send(JSON.stringify({
+            type: "user_suggestion",
+            message: agentPrompt,
+            ...(images.length ? { images } : {}),
+          }));
+          suggestionSent = true;
+          lastFrameAt = Date.now();
+          scheduleSettle();
+        } catch {
+          failTurn("The native Agent connection could not send your request.");
+        }
+      };
+
+      socket.onmessage = (event) => {
+        let frame: any;
+        try {
+          frame = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
+        if (!frame || typeof frame.type !== "string") return;
+        if (activeProjectIdRef.current !== projectId) {
+          closeAndFinish();
+          return;
+        }
+        lastFrameAt = Date.now();
+        frameSequence += 1;
+        revisionCandidate = null;
+
+        const tool = frame.tool || {};
+        const toolName = typeof tool.name === "string" ? tool.name : "";
+        const toolPath = typeof tool.args?.path === "string" ? tool.args.path : "";
+        const eventPath = typeof frame.path === "string" ? frame.path
+          : typeof frame.file?.filePath === "string" ? frame.file.filePath
+            : typeof frame.file?.path === "string" ? frame.file.path
+            : typeof frame.filePath === "string" ? frame.filePath : "";
+        const toolKey = String(tool.id || `${toolName}:${toolPath}`);
+
+        switch (frame.type) {
+          case "conversation_response": {
+            if (typeof frame.message === "string" && frame.message) {
+              setMessages((current) => {
+                const index = current.findLastIndex((message) => message.role === "assistant");
+                if (index < 0) return [...current, { role: "assistant", content: frame.message }];
+                return current.map((message, messageIndex) => messageIndex === index
+                  ? { ...message, content: frame.isDelta ? `${message.content}${frame.message}` : frame.message }
+                  : message);
+              });
+            }
+            assistantStreaming = frame.isStreaming === true;
+            if (toolName) {
+              if (["start", "running", "pending", "started"].includes(String(tool.status || "").toLowerCase())) {
+                activeWork.add(toolKey);
+              } else if (tool.status) {
+                activeWork.delete(toolKey);
+              }
+              const label = toolPath
+                ? `${tool.status === "success" ? "Updated" : "Working on"} ${toolPath}`
+                : toolName.replaceAll("_", " ");
+              recordNativeProgress(label);
+            }
+            break;
+          }
+          case "generation_started":
+            activeWork.add("generation");
+            recordNativeProgress("Agent started the build");
+            break;
+          case "generation_complete":
+            generationComplete = true;
+            activeWork.delete("generation");
+            recordNativeProgress("Agent reported generation complete · verifying files and preview");
+            break;
+          case "phase_generating":
+          case "phase_implementing":
+          case "phase_validating": {
+            const phase = frame.type.slice("phase_".length);
+            activeWork.add(`phase:${phase}`);
+            recordNativeProgress(phase === "generating" ? "Generating project files"
+              : phase === "implementing" ? "Applying project changes" : "Validating the project");
+            break;
+          }
+          case "phase_generated":
+            activeWork.delete("phase:generating");
+            recordNativeProgress("Project file generation phase completed");
+            break;
+          case "phase_implemented":
+            activeWork.delete("phase:implementing");
+            recordNativeProgress("Project implementation phase completed");
+            break;
+          case "phase_validated":
+            activeWork.delete("phase:validating");
+            recordNativeProgress("Project validation phase completed");
+            break;
+          case "file_generating":
+            if (eventPath) {
+              activeWork.add(`file:${eventPath}`);
+              recordNativeProgress(`Writing ${eventPath}`);
+            }
+            break;
+          case "file_generated":
+          case "file_regenerated":
+          case "file_chunk_generated":
+            if (eventPath) {
+              activeWork.delete(`file:${eventPath}`);
+              recordNativeProgress(`Updated ${eventPath}`);
+            }
+            break;
+          case "file_deleted":
+            if (eventPath) {
+              activeWork.delete(`file:${eventPath}`);
+              recordNativeProgress(`Removed ${eventPath}`);
+            }
+            break;
+          case "deployment_started":
+            activeWork.add("deployment");
+            recordNativeProgress("Runtime is preparing the preview");
+            break;
+          case "deployment_completed":
+            activeWork.delete("deployment");
+            recordNativeProgress("Runtime preview deployment completed");
+            break;
+          case "deployment_failed":
+            activeWork.delete("deployment");
+            recordNativeProgress(typeof frame.error === "string" ? `Preview deployment failed: ${frame.error}` : "Preview deployment failed");
+            break;
+          case "error":
+            failTurn(typeof frame.message === "string" ? frame.message
+              : typeof frame.error === "string" ? frame.error
+                : "The native Agent reported an error.");
+            return;
+          case "generation_stopped":
+          case "generation_cancelled":
+            activeWork.clear();
+            failTurn("Build stopped. The current authoritative files were not marked as a completed build.");
+            return;
+          default:
+            break;
+        }
+        scheduleSettle();
+      };
+
+      socket.onerror = () => {
+        if (!beginRecovery()) {
+          failTurn("The native Agent connection failed before the prompt was sent. Your request was not automatically retried.");
+        }
+      };
+
+      socket.onclose = () => {
+        if (nativeSocketRef.current === socket) {
+          nativeSocketRef.current = null;
+          setNativeConnected(false);
+        }
+        if (!finished) {
+          if (!beginRecovery()) {
+            failTurn("The native Agent connection closed before the prompt was sent. Your request was not automatically retried.");
+          }
+        }
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!publishing || !projectId || nativeThink) return;
     const poll = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders() });
@@ -1096,16 +1644,22 @@ function EditorPage() {
       }
     }, 1000);
     return () => window.clearInterval(poll);
-  }, [publishing, projectId]);
+  }, [publishing, projectId, nativeThink]);
 
   const handleSend = async (promptOverride?: string, planOverride?: boolean) => {
     const prompt = (promptOverride ?? chatInput).trim();
-    const activePlanMode = planOverride ?? planMode;
+    const activePlanMode = nativeThink ? false : planOverride ?? planMode;
+    if (nativeThink && sending) return;
     if (!prompt) return;
     if (!projectId) {
       setRuntimeError("Open Builder from a runtime-backed project to start an Agent session.");
       return;
     }
+    if (!currentRuntimeCapability) {
+      setRuntimeError(runtimeCapabilityError || "Checking project runtime before starting an Agent session.");
+      return;
+    }
+    const sendingProjectId = projectId;
     setMessages((prev) => [
       ...prev,
       { role: "user" as const, content: prompt },
@@ -1117,7 +1671,7 @@ function EditorPage() {
     requestController.current = controller;
     setMessages((prev) => [
       ...prev,
-      { role: "assistant" as const, content: activePlanMode ? "Agent is preparing a plan…" : "Agent is working on your request…" },
+      { role: "assistant" as const, content: nativeThink ? "" : activePlanMode ? "Agent is preparing a plan…" : "Agent is working on your request…" },
     ]);
     const imageContext = attachments.length
       ? `\n\nAttached images: ${attachments.map((image) => `${image.filename} (${image.mimeType}, ${image.size} bytes)`).join(", ")}`
@@ -1132,6 +1686,27 @@ function EditorPage() {
       ? `\n\nApproved implementation plan from Plan mode:\n${pendingPlan}\n\nFollow this approved plan while applying the user's request.`
       : "";
     const agentPrompt = `${prompt}${imageContext}${selectedContext}${textFileContext}${approvedPlanContext}`;
+    if (nativeThink) {
+      requestController.current = null;
+      try {
+        await streamNativeTurn(agentPrompt, attachments);
+        if (activeProjectIdRef.current !== sendingProjectId) return;
+        setPendingPlan("");
+        setAttachments([]);
+        setTextContext([]);
+        setSelectedElement(null);
+      } catch (error: any) {
+        if (activeProjectIdRef.current !== sendingProjectId) return;
+        const message = error?.message || "The native Agent could not complete the request.";
+        setRuntimeError(message);
+        setMessages((previous) => previous.map((item, index) => index === previous.length - 1 && item.role === "assistant"
+          ? { ...item, content: message }
+          : item));
+      } finally {
+        if (activeProjectIdRef.current === sendingProjectId) setSending(false);
+      }
+      return;
+    }
     try {
       const response = await fetch(`/api/projects/${projectId}/runtime/messages`, {
         method: "POST",
@@ -1155,12 +1730,17 @@ function EditorPage() {
       setTextContext([]);
       setSelectedElement(null);
       if (activePlanMode) return;
+      const token = await csrfToken();
       const preview = await fetch(`/api/projects/${projectId}/runtime/previews`, {
-        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({}),
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
+        body: JSON.stringify({}),
       });
       const previewData = await preview.json().catch(() => ({}));
       if (preview.ok && previewData.url) setPreviewUrl(previewData.url);
     } catch (error: any) {
+      if (activeProjectIdRef.current !== sendingProjectId) return;
       if (error?.name === "AbortError") {
         setMessages((prev) => [
           ...prev.slice(0, -1),
@@ -1175,13 +1755,13 @@ function EditorPage() {
         { role: "assistant", content: message },
       ]);
     } finally {
-      requestController.current = null;
-      setSending(false);
+      if (requestController.current === controller) requestController.current = null;
+      if (activeProjectIdRef.current === sendingProjectId) setSending(false);
     }
   };
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId || !currentRuntimeCapability || sending) return;
     const key = `buildcustom:first-prompt:${projectId}`;
     const stored = sessionStorage.getItem(key);
     if (!stored) return;
@@ -1194,10 +1774,10 @@ function EditorPage() {
     } catch {
       // Leave the Builder ready for manual input if the handoff is malformed.
     }
-  }, [projectId]);
+  }, [projectId, currentRuntimeCapability?.projectId, sending, handleSend]);
 
   const restoreBuilderTurn = async (turn: RuntimeBuilderTurn) => {
-    if (!projectId || !turn.commitHash || restoringTurnId !== null) return;
+    if (!canManageProduction || !projectId || !turn.commitHash || restoringTurnId !== null) return;
     if (!window.confirm("Restore this checkpoint to Development? Your live Production app will not change.")) return;
     const commitHash = turn.commitHash;
     setRestoringTurnId(turn.id);
@@ -1244,6 +1824,16 @@ function EditorPage() {
   };
 
   const stopBuild = async () => {
+    if (nativeThink) {
+      const socket = nativeSocketRef.current;
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "stop_generation" }));
+        recordNativeProgress("Stop requested");
+      } else {
+        socket?.close(1000, "Build stopped before generation started");
+      }
+      return;
+    }
     if (projectId) {
       await fetch(`/api/projects/${projectId}/runtime/stop`, {
         method: "POST",
@@ -1256,7 +1846,7 @@ function EditorPage() {
   };
 
   const requestPublishApproval = () => {
-    if (!projectId || publishing || !previewUrl) return;
+    if (!canManageProduction || !projectId || publishing || !previewUrl) return;
     setPublishDrawerOpen(true);
     if (hostingProvider === "custom") {
       setPublishFlow({
@@ -1300,7 +1890,7 @@ function EditorPage() {
   };
 
   const publishProject = async () => {
-    if (!projectId || publishing) return;
+    if (!canManageProduction || !projectId || publishing) return;
     setPublishing(true);
     setRuntimeError("");
     setPublishFlow({
@@ -1333,7 +1923,7 @@ function EditorPage() {
   };
 
   const restoreReleaseToDevelopment = async () => {
-    if (!projectId || !restoreCandidate || restoringRelease) return;
+    if (!canManageProduction || !projectId || !restoreCandidate || restoringRelease) return;
     setRestoringRelease(true);
     setRuntimeError("");
     try {
@@ -1363,7 +1953,7 @@ function EditorPage() {
   };
 
   const refreshActivePreview = async () => {
-    if (!projectId || refreshingPreview) return;
+    if (!projectId || refreshingPreview || (nativeThink && previewEnvironment === "production")) return;
     setRefreshingPreview(true);
     try {
       if (previewEnvironment === "production") {
@@ -1372,9 +1962,11 @@ function EditorPage() {
         if (!response.ok) throw new Error(data.message || "The production URL could not be refreshed.");
         setProductionUrl(data.deploymentUrl || "");
       } else {
+        const token = await csrfToken();
         const response = await fetch(`/api/projects/${projectId}/runtime/previews`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
           body: JSON.stringify({}),
         });
         const data = await response.json().catch(() => ({}));
@@ -1504,6 +2096,8 @@ function EditorPage() {
 
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="builder-chat-scroll">
           {runtimeError && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{runtimeError}</div>}
+          {runtimeCapabilityError && <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">{runtimeCapabilityError}</div>}
+          {!currentRuntimeCapability && !runtimeCapabilityError && <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Checking project runtime…</p>}
           {!turns.length && !messages.length && !runtimeError && (
             <div className={`rounded-2xl border px-4 py-4 ${theme === "dark" ? "bg-white/5 border-white/10" : "bg-gray-100 border-gray-200"}`}>
               <p className={`text-sm font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>What do you want to build?</p>
@@ -1606,7 +2200,7 @@ function EditorPage() {
                     ) : (
                       <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>No file content changed in this turn.</p>
                     )}
-                    {turn.commitHash && (
+                    {turn.commitHash && canManageProduction && (
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <span className={`font-mono text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{turn.commitHash.slice(0, 8)}</span>
                         <button
@@ -1646,7 +2240,13 @@ function EditorPage() {
             </div>
           ))}
           {projectId > 0 && sending && (
-            <BuildActivity projectId={projectId} theme={theme} isBuilding={sending} />
+            <BuildActivity
+              projectId={projectId}
+              theme={theme}
+              isBuilding={sending}
+              progressEvents={nativeProgress}
+              connectionState={nativeThink ? (nativeConnected ? "connected" : "not connected") : undefined}
+            />
           )}
         </div>
 
@@ -1796,7 +2396,8 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              placeholder="Describe what you want to build..."
+              disabled={!currentRuntimeCapability || (nativeThink && sending)}
+              placeholder={currentRuntimeCapability ? "Describe what you want to build..." : "Checking project runtime…"}
               rows={1}
               className={`block w-full min-h-10 max-h-[220px] bg-transparent border-none outline-none resize-none text-sm leading-6 ${
                 theme === "dark"
@@ -1807,13 +2408,14 @@ function EditorPage() {
             />
             <div className="mt-2 flex items-center justify-between gap-3">
               <div className="flex items-center gap-1 shrink-0">
-                <button
+                {!nativeThink && <button
                   onClick={() => setPlanMode((value) => !value)}
                   className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold border transition-colors ${planMode ? "border-purple-400/50 bg-purple-400/15 text-purple-200" : theme === "dark" ? "border-white/10 text-white/45 hover:text-white/75" : "border-gray-200 text-gray-500 hover:text-gray-800"}`}
                   title="Plan only. No workspace files will be changed."
                   aria-pressed={planMode}
                   data-testid="button-plan-toggle"
                 >Plan</button>
+                }
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className={`p-1.5 rounded-md transition-colors ${theme === "dark" ? "text-white/45 hover:bg-white/10 hover:text-white" : "text-gray-500 hover:bg-white hover:text-gray-800"}`}
@@ -1845,6 +2447,7 @@ function EditorPage() {
               ) : (
               <button
                 onClick={() => handleSend()}
+                disabled={!currentRuntimeCapability}
                 className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
                 data-testid="button-send-chat"
               >
@@ -1889,7 +2492,7 @@ function EditorPage() {
           <div className={`flex items-center gap-1 p-1 rounded-lg shrink-0 ${
             theme === "dark" ? "bg-white/5" : "bg-gray-200"
           }`}>
-            {(["development", "production"] as const).map((environment) => (
+            {(canManageProduction ? ["development", "production"] as const : ["development"] as const).map((environment) => (
               <button
                 key={environment}
                 onClick={() => setPreviewEnvironment(environment)}
@@ -1965,7 +2568,7 @@ function EditorPage() {
               </div>
             )}
           </form>
-          <button
+          {canManageProduction && <button
             onClick={() => {
               setPublishDrawerOpen(true);
               if (publishFlow.status === "idle" && !productionUrl) {
@@ -1982,7 +2585,7 @@ function EditorPage() {
           >
             {publishing ? <RefreshCw size={13} className="animate-spin" /> : <Rocket size={13} />}
             {publishing ? "Publishing" : "Publish"}
-          </button>
+          </button>}
           {previewEnvironment === "production" && !productionUrl ? null : (
             <div className="flex items-center gap-1 shrink-0">
               <button
@@ -2168,7 +2771,7 @@ function EditorPage() {
         )}
 
         <AnimatePresence>
-          {publishDrawerOpen && (
+          {publishDrawerOpen && canManageProduction && (
             <>
               <motion.button
                 type="button"

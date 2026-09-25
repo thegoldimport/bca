@@ -84,12 +84,15 @@ function fmtDate(dateStr: string) {
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
 function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project: any; blogCount: number; projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
   const isWebsite = project.type === "website";
+  const nativeThink = runtimeStatus?.nativeThink === true;
   const preview = PREVIEW_IMAGES[project.type] || PREVIEW_IMAGES.website;
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewError, setPreviewError] = useState("");
   const publishingQuery = useQuery({
     queryKey: ["publishing-settings", projectId],
+    enabled: Boolean(runtimeStatus && !nativeThink),
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() });
       const body = await res.json().catch(() => ({}));
@@ -99,25 +102,39 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
   });
   const previewMutation = useMutation({
     mutationFn: async () => {
+      const token = await csrfToken();
       const res = await fetch(`/api/projects/${projectId}/runtime/previews`, {
-        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({}),
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
+        body: JSON.stringify({}),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Unable to create runtime preview.");
       return body;
     },
-    onSuccess: (body) => { setPreviewUrl(body.url || body.previewUrl || ""); setPreviewError(body.url || body.previewUrl ? "" : "Runtime did not return a preview URL."); },
+    onSuccess: (body) => {
+      const freshPreviewUrl = body.url || body.previewUrl || "";
+      setPreviewUrl(freshPreviewUrl);
+      setPreviewError(freshPreviewUrl ? "" : "Runtime did not return a preview URL.");
+      queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
+    },
     onError: (error: any) => setPreviewError(error.message),
   });
   const deploymentUrl = runtimeStatus?.deploymentUrl || "";
-  const displayedPreviewUrl = deploymentUrl || previewUrl;
+  const nativePreviewUrl = nativeThink
+    ? runtimeStatus?.previewUrl || runtimeStatus?.previewURL || runtimeStatus?.state?.previewUrl || runtimeStatus?.state?.previewURL || ""
+    : "";
+  const displayedPreviewUrl = nativeThink
+    ? previewUrl || nativePreviewUrl
+    : deploymentUrl || nativePreviewUrl || previewUrl;
   const published = Boolean(deploymentUrl);
   const publishingSettings = publishingQuery.data;
 
   useEffect(() => {
-    if (project?.runtimeStatus || !runtimeStatus || published || previewMutation.isPending || previewUrl) return;
+    if (runtimeStatus?.nativeThink !== false || project?.runtimeStatus || published || previewMutation.isPending || previewUrl) return;
     previewMutation.mutate();
-  }, [project?.runtimeStatus, runtimeStatus, published, projectId]);
+  }, [nativeThink, project?.runtimeStatus, runtimeStatus, published, projectId]);
 
   return (
     <div className="space-y-6">
@@ -133,7 +150,23 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <GlassCard>
-            <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Preview</h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Preview</h3>
+              {nativeThink && displayedPreviewUrl && (
+                <button
+                  type="button"
+                  onClick={() => { setPreviewError(""); previewMutation.mutate(); }}
+                  disabled={previewMutation.isPending}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                    theme === "dark" ? "border-white/10 text-cyan-300 hover:bg-white/5" : "border-gray-200 text-cyan-700 hover:bg-gray-50"
+                  }`}
+                  data-testid="button-refresh-native-preview"
+                >
+                  <RefreshCw size={13} className={previewMutation.isPending ? "animate-spin" : ""} />
+                  {previewMutation.isPending ? "Refreshing…" : "Refresh preview"}
+                </button>
+              )}
+            </div>
             <div className="rounded-xl overflow-hidden aspect-video">
               {displayedPreviewUrl ? (
                 <div className="relative h-full w-full overflow-hidden">
@@ -149,11 +182,19 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
                 </div>
               ) : (
                 <div className={`w-full h-full flex flex-col items-center justify-center gap-3 ${theme === "dark" ? "bg-[#0d0d1a] text-white/50" : "bg-gray-100 text-gray-500"}`}>
-                  <p className="text-sm">{project.runtimeStatus ? "Preview will be available in a later release." : previewError || "No runtime preview is active."}</p>
+                  <p className="text-sm">{nativeThink
+                    ? "Use Builder to create a preview from the runtime Agent."
+                    : project.runtimeStatus ? "Preview will be available in a later release." : previewError || "No runtime preview is active."}</p>
                   {!project.runtimeStatus && (
-                    <button onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending} className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold disabled:opacity-50">
-                      {previewMutation.isPending ? "Starting preview…" : "Start runtime preview"}
-                    </button>
+                    nativeThink ? (
+                      <Link href={`/app/editor/${projectId}`}>
+                        <button className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold">Open Builder</button>
+                      </Link>
+                    ) : runtimeStatus?.nativeThink === false ? (
+                      <button onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending} className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-xs font-semibold disabled:opacity-50">
+                        {previewMutation.isPending ? "Starting preview…" : "Start runtime preview"}
+                      </button>
+                    ) : null
                   )}
                 </div>
               )}
@@ -197,7 +238,7 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
             </div>
           </GlassCard>
 
-          <GlassCard>
+          {!nativeThink && <GlassCard>
             <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Publishing</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
@@ -217,7 +258,7 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
                 </span>
               </div>
             </div>
-          </GlassCard>
+          </GlassCard>}
 
           <GlassCard>
             <h3 className={`font-semibold mb-3 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Quick Actions</h3>
@@ -261,15 +302,36 @@ const DEMO_FILES = [
   { name: "index.html", type: "file", size: "0.6 KB", lang: "html" },
 ];
 
-function FileRow({ file, depth = 0 }: { file: any; depth?: number }) {
+function FileRow({ file, depth = 0, selectedPath, onOpenFile }: {
+  file: any;
+  depth?: number;
+  selectedPath: string;
+  onOpenFile: (path: string) => void;
+}) {
   const { theme } = useTheme();
   const [open, setOpen] = useState(depth === 0);
-  const isFolder = file.type === "folder";
+  const isFolder = ["folder", "directory", "tree"].includes(file.type);
+  const path = file.path || file.name || "";
   const langColors: Record<string, string> = { tsx: "text-cyan-400", ts: "text-blue-400", js: "text-amber-400", css: "text-pink-400", json: "text-green-400", html: "text-orange-400" };
   return (
     <div>
-      <div onClick={() => isFolder && setOpen(!open)}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${theme === "dark" ? "hover:bg-white/5 text-white/70" : "hover:bg-gray-50 text-gray-700"}`}
+      <div
+        onClick={() => isFolder ? setOpen(!open) : path && onOpenFile(path)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          if (isFolder) setOpen(!open);
+          else if (path) onOpenFile(path);
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isFolder ? open : undefined}
+        aria-current={!isFolder && selectedPath === path ? "true" : undefined}
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${
+          selectedPath === path && !isFolder
+            ? theme === "dark" ? "bg-cyan-400/10 text-cyan-100" : "bg-cyan-50 text-cyan-800"
+            : theme === "dark" ? "hover:bg-white/5 text-white/70" : "hover:bg-gray-50 text-gray-700"
+        }`}
         style={{ paddingLeft: `${12 + depth * 20}px` }} data-testid={`file-row-${file.name}`}>
         {isFolder ? (
           <>{open ? <ChevronDown size={14} className={theme === "dark" ? "text-white/30" : "text-gray-400"} /> : <ChevronRight size={14} className={theme === "dark" ? "text-white/30" : "text-gray-400"} />}<FolderTree size={14} className="text-amber-400" /></>
@@ -279,7 +341,15 @@ function FileRow({ file, depth = 0 }: { file: any; depth?: number }) {
         <span className="flex-1">{file.name}</span>
         {!isFolder && <span className={`text-xs ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{file.size}</span>}
       </div>
-      {isFolder && open && file.children?.map((child: any, i: number) => <FileRow key={i} file={child} depth={depth + 1} />)}
+      {isFolder && open && file.children?.map((child: any, i: number) => (
+        <FileRow
+          key={child.path || child.name || i}
+          file={child}
+          depth={depth + 1}
+          selectedPath={selectedPath}
+          onOpenFile={onOpenFile}
+        />
+      ))}
     </div>
   );
 }
@@ -288,6 +358,7 @@ function FilesTab() {
   const { theme } = useTheme();
   const [, params] = useRoute("/app/project/:id");
   const projectId = params?.id || "";
+  const [selectedFile, setSelectedFile] = useState("");
   const { data, isLoading, error } = useQuery({
     queryKey: ["runtime-files", projectId],
     queryFn: async () => {
@@ -297,6 +368,17 @@ function FilesTab() {
       return body;
     },
     enabled: Boolean(projectId),
+  });
+  const fileContentQuery = useQuery({
+    queryKey: ["runtime-file-content", projectId, selectedFile],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(selectedFile)}`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load this runtime file.");
+      if (typeof body.content !== "string") throw new Error("The runtime did not return authoritative file content.");
+      return body.content;
+    },
+    enabled: Boolean(projectId && selectedFile),
   });
   const files = Array.isArray(data) ? data : data?.files || [];
   return (
@@ -309,10 +391,28 @@ function FilesTab() {
       <div className={`rounded-xl overflow-hidden border ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
         {!isLoading && !error && files.length === 0 && <p className="p-4 text-sm text-white/40">The runtime workspace has no files yet.</p>}
         {files.map((file: any, i: number) => <FileRow key={file.path || file.name || i} file={{
-          ...file, name: file.name || file.path?.split("/").pop(), type: file.type || "file",
-          size: file.size ? `${Math.round(file.size / 1024 * 10) / 10} KB` : undefined,
-        }} />)}
+          ...file,
+          name: file.name || file.path?.split("/").pop(),
+          type: file.type || "file",
+          size: typeof file.size === "number" ? `${Math.round(file.size / 1024 * 10) / 10} KB` : file.size,
+        }} selectedPath={selectedFile} onOpenFile={setSelectedFile} />)}
       </div>
+      {selectedFile && (
+        <section className={`mt-4 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-black/20" : "border-gray-200 bg-white"}`}>
+          <div className={`border-b px-4 py-2.5 font-mono text-xs ${theme === "dark" ? "border-white/10 text-cyan-200/80" : "border-gray-200 text-cyan-800"}`}>
+            {selectedFile}
+          </div>
+          {fileContentQuery.isLoading ? (
+            <p className="p-4 text-xs text-white/50">Loading authoritative file content…</p>
+          ) : fileContentQuery.error ? (
+            <p className="p-4 text-xs text-red-400">{(fileContentQuery.error as Error).message}</p>
+          ) : (
+            <pre className={`max-h-[560px] overflow-auto p-4 text-xs leading-relaxed ${theme === "dark" ? "text-white/75" : "text-gray-700"}`}>
+              {fileContentQuery.data}
+            </pre>
+          )}
+        </section>
+      )}
     </GlassCard>
   );
 }
@@ -368,21 +468,14 @@ function ConsoleTab() {
   );
 }
 
-// ── VERSION HISTORY (realistic demo) ─────────────────────────────────────────
-const VERSIONS = [
-  { version: "v1.4", label: "Added contact form validation", author: "You", time: "2 hours ago", current: true },
-  { version: "v1.3", label: "Responsive mobile nav", author: "You", time: "1 day ago", current: false },
-  { version: "v1.2", label: "SEO meta tags added", author: "You", time: "2 days ago", current: false },
-  { version: "v1.1", label: "Hero section redesign", author: "You", time: "4 days ago", current: false },
-  { version: "v1.0", label: "Initial build", author: "AI Builder", time: "Project created", current: false },
-];
-function HistoryTab() {
+// ── VERSION HISTORY ──────────────────────────────────────────────────────────
+function HistoryTab({ projectId, runtimeStatus }: { projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
-  const [, params] = useRoute("/app/project/:id");
+  const nativeThink = runtimeStatus?.nativeThink === true;
   const [deployMessage, setDeployMessage] = useState("");
   const deployMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/projects/${params?.id}/runtime/deployments`, {
+      const res = await fetch(`/api/projects/${projectId}/runtime/deployments`, {
         method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({}),
       });
@@ -396,17 +489,31 @@ function HistoryTab() {
   return (
     <GlassCard>
       <h3 className={`font-semibold mb-5 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Version History</h3>
-      {deployMessage && <p className={`mb-4 text-sm ${deployMessage.startsWith("Unable") || deployMessage.includes("not configured") ? "text-red-400" : "text-emerald-400"}`}>{deployMessage}</p>}
-      <div className="space-y-3">
-        <div className={`flex items-center gap-4 p-4 rounded-xl border ${theme === "dark" ? "border-cyan-400/30 bg-cyan-500/5" : "border-cyan-400 bg-cyan-50"}`}>
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${theme === "dark" ? "bg-white/10 text-white" : "bg-gray-100 text-gray-700"}`}>Git</div>
-          <div className="flex-1">
-            <p className={`text-sm font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Current Agent workspace</p>
-            <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Conversational revisions are committed inside the isolated runtime workspace.</p>
-          </div>
-          <button onClick={() => deployMutation.mutate()} disabled={deployMutation.isPending} className="px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-300 text-xs font-semibold disabled:opacity-50">{deployMutation.isPending ? "Deploying…" : "Deploy current"}</button>
+      {nativeThink ? (
+        <div className={`rounded-xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.03]" : "border-gray-200 bg-gray-50"}`}>
+          <p className={`text-sm font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Current stock Agent workspace</p>
+          <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Workspace revisions are managed by the runtime Agent. Publishing is not available from this project view.</p>
+          <Link href={`/app/editor/${projectId}`}>
+            <button className="mt-3 rounded-lg bg-cyan-400 px-3 py-2 text-xs font-semibold text-black">Open Builder history</button>
+          </Link>
         </div>
-      </div>
+      ) : runtimeStatus?.nativeThink !== false ? (
+        <p className={`text-sm ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Checking runtime capabilities. Publish controls remain hidden until the project runtime is confirmed.</p>
+      ) : (
+        <>
+          {deployMessage && <p className={`mb-4 text-sm ${deployMessage.startsWith("Unable") || deployMessage.includes("not configured") ? "text-red-400" : "text-emerald-400"}`}>{deployMessage}</p>}
+          <div className="space-y-3">
+            <div className={`flex items-center gap-4 rounded-xl border p-4 ${theme === "dark" ? "border-cyan-400/30 bg-cyan-500/5" : "border-cyan-400 bg-cyan-50"}`}>
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${theme === "dark" ? "bg-white/10 text-white" : "bg-gray-100 text-gray-700"}`}>Git</div>
+              <div className="flex-1">
+                <p className={`text-sm font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Current Agent workspace</p>
+                <p className={`mt-0.5 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Conversational revisions are committed inside the isolated runtime workspace.</p>
+              </div>
+              <button onClick={() => deployMutation.mutate()} disabled={deployMutation.isPending} className="rounded-lg bg-purple-500/15 px-2.5 py-1.5 text-xs font-semibold text-purple-300 disabled:opacity-50">{deployMutation.isPending ? "Deploying…" : "Deploy current"}</button>
+            </div>
+          </div>
+        </>
+      )}
     </GlassCard>
   );
 }
@@ -592,7 +699,9 @@ function ProjectSettingsTab({ project, projectId, runtimeStatus }: { project: an
         </div>
       </GlassCard>
 
-      <PublishingSettingsCard projectId={projectId} deploymentUrl={runtimeStatus?.deploymentUrl} />
+      {runtimeStatus && runtimeStatus.nativeThink !== true && (
+        <PublishingSettingsCard projectId={projectId} deploymentUrl={runtimeStatus?.deploymentUrl} />
+      )}
 
       <SEOTab projectId={projectId} project={project} deploymentUrl={runtimeStatus?.deploymentUrl} />
 
@@ -2569,6 +2678,7 @@ export default function ProjectDetail() {
   }
 
   const isWebsite = project.type === "website";
+  const nativeThink = runtimeStatus?.nativeThink === true;
   const isPublished = Boolean(runtimeStatus?.deploymentUrl);
   const allTabs = isWebsite ? [...UNIVERSAL_TABS, ...WEBSITE_TABS] : UNIVERSAL_TABS;
   const headerPreview = PREVIEW_IMAGES[project.type] || PREVIEW_IMAGES.website;
@@ -2587,11 +2697,11 @@ export default function ProjectDetail() {
             <div className={`relative h-[104px] w-[144px] shrink-0 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-100"}`}>
               {runtimeStatus?.previewImageUrl ? (
                 <img src={runtimeStatus.previewImageUrl} alt={`${project.name} live page thumbnail`} className="h-full w-full object-cover" />
-              ) : runtimeStatus?.deploymentUrl ? (
+              ) : runtimeStatus?.deploymentUrl || (nativeThink && (runtimeStatus?.previewUrl || runtimeStatus?.previewURL || runtimeStatus?.state?.previewUrl || runtimeStatus?.state?.previewURL)) ? (
                 <>
                   <iframe
-                    src={runtimeStatus.deploymentUrl}
-                    title={`${project.name} live page thumbnail`}
+                    src={runtimeStatus.deploymentUrl || runtimeStatus.previewUrl || runtimeStatus.previewURL || runtimeStatus.state?.previewUrl || runtimeStatus.state?.previewURL}
+                    title={`${project.name} runtime preview`}
                     tabIndex={-1}
                     aria-hidden="true"
                     sandbox="allow-scripts allow-same-origin"
@@ -2600,8 +2710,12 @@ export default function ProjectDetail() {
                   />
                   <div className="absolute inset-0" aria-hidden="true" />
                 </>
-              ) : (
+              ) : runtimeStatus?.nativeThink === false ? (
                 <img src={headerPreview} alt={`${project.name} preview`} className="h-full w-full object-cover" />
+              ) : (
+                <div className={`flex h-full w-full items-center justify-center text-xs ${theme === "dark" ? "bg-white/5 text-white/35" : "bg-gray-100 text-gray-500"}`}>
+                  {nativeThink ? "Runtime preview not available" : "Checking runtime preview…"}
+                </div>
               )}
             </div>
             <div>
@@ -2643,14 +2757,18 @@ export default function ProjectDetail() {
       <div className="p-8">
         {project.runtimeStatus && (
           <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${project.runtimeStatus === "ready" ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-amber-400/30 bg-amber-500/10 text-amber-200"}`}>
-            {project.runtimeStatus === "ready"
+            {runtimeStatus?.nativeThink === undefined
+              ? "Checking project runtime status."
+              : nativeThink
+              ? "This project is connected to a runtime Agent. Open Builder to create or update files."
+              : project.runtimeStatus === "ready"
               ? "Project ready. Building tools will be available in a later release."
               : project.runtimeStatus === "missing"
                 ? "This project has not been prepared yet."
                 : ["error", "reconcile"].includes(project.runtimeStatus)
                   ? "Project setup needs attention. It will not create another project automatically."
                   : "Preparing your project. You can leave and return later."}
-            {project.runtimeStatus === "missing" && (
+            {project.runtimeStatus === "missing" && runtimeStatus?.nativeThink === false && (
               <button onClick={() => initializeProject.mutate()} disabled={initializeProject.isPending}
                 className="ml-3 font-semibold underline disabled:opacity-50" data-testid="button-initialize-project">
                 {initializeProject.isPending ? "Preparing..." : "Prepare project"}
@@ -2669,7 +2787,7 @@ export default function ProjectDetail() {
             {activeTab === "overview" && <OverviewTab project={project} blogCount={blogPosts.length} projectId={projectId} runtimeStatus={runtimeStatus} />}
             {activeTab === "files" && <FilesTab />}
             {activeTab === "console" && <ConsoleTab />}
-            {activeTab === "history" && <HistoryTab />}
+            {activeTab === "history" && <HistoryTab projectId={projectId} runtimeStatus={runtimeStatus} />}
             {activeTab === "settings" && <ProjectSettingsTab project={project} projectId={projectId} runtimeStatus={runtimeStatus} />}
             {activeTab === "pages" && <PagesTab projectId={projectId} />}
             {activeTab === "blog" && <BlogTab projectId={projectId} />}

@@ -1,0 +1,650 @@
+Migration Task 2 is accepted as PASS.
+
+Do not change the Task 2 project/agent ownership architecture.
+
+The 50-app reconciliation limitation is acceptable for launch.
+
+If an ambiguous old creation cannot be safely reconciled, keeping the
+project blocked for manual review is preferable to creating a duplicate
+agent.
+
+Proceed with ONLY Migration Task 3:
+
+NATIVE BUILDCUSTOM CODING EXPERIENCE
+
+Authenticated BuildCustom project
+→ existing owner-linked stock ThinkAgent
+→ native WebSocket conversation
+→ streaming generation
+→ authoritative files
+→ stock preview
+→ reload/reopen same project
+
+STAGING ONLY.
+
+Do NOT implement publishing yet.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Turn the existing BuildCustom project/editor UI into a working native
+coding interface using the SAME stock ThinkAgent created in Task 2.
+
+A BuildCustom user should be able to:
+
+1. create/open a project
+2. enter a natural-language request
+3. watch the BuildCustom AI respond progressively
+4. have ThinkAgent generate the application
+5. see files produced by the runtime
+6. see the working preview
+7. send a follow-up edit
+8. see the application update
+9. leave the project
+10. return later
+11. continue working with the SAME agent/project
+
+This should feel like BuildCustom.
+
+VibeSDK remains invisible implementation detail.
+
+==================================================
+CRITICAL ARCHITECTURE
+==================================================
+
+DO NOT create:
+
+BuildCustom agent
+→ VibeSDK agent
+
+The stock VibeSDK ThinkAgent IS the native BuildCustom coding agent.
+
+The BuildCustom frontend is the branded product interface around that
+runtime.
+
+Use the existing Task 2 relationship:
+
+BuildCustom project
+→ runtime_project_links
+→ owner-specific stock ThinkAgent
+
+Do not create another agent when opening the editor.
+
+Do not create another agent when generating.
+
+Do not create another agent for follow-up edits.
+
+==================================================
+REMOVE THE OLD COMMAND/FINAL-JSON EXPERIENCE
+==================================================
+
+The migration assessment found that the existing Cloudflare adapter sends
+commands upstream and waits for final JSON.
+
+That is NOT the desired coding experience.
+
+For Task 3, use the stock owner-authorized ThinkAgent WebSocket protocol.
+
+Use the stock flow based on:
+
+POST /api/ws-ticket
+
+GET /api/agent/:id/ws
+
+and the native ThinkAgent WebSocket frames.
+
+Use the verified authenticated runtime user established in Task 1.
+
+Do not expose runtime credentials to the browser.
+
+Do not use the historical shared VIBESDK_API_KEY for customer projects.
+
+==================================================
+THIN BUILDCUSTOM WEBSOCKET BRIDGE
+==================================================
+
+Determine the minimum secure way for the BuildCustom browser at the staging
+product origin to use the owner-authorized ThinkAgent WebSocket.
+
+Prefer the simplest architecture supported by the existing Cloudflare
+Worker/service binding.
+
+The BuildCustom Worker may:
+
+- verify the BuildCustom/runtime session
+- verify BuildCustom project ownership
+- resolve the linked agent ID
+- obtain/use the owner-authorized runtime WebSocket ticket
+- upgrade/proxy the WebSocket
+- pass native ThinkAgent frames between browser and runtime
+
+It should NOT:
+
+- implement another agent loop
+- rewrite ThinkAgent reasoning
+- store a second conversation
+- become a second runtime
+- maintain a duplicate file mirror
+- invent a new messaging protocol unless minimal framing is required for
+  BuildCustom UI compatibility
+
+Preserve native streaming behavior.
+
+==================================================
+CUSTOMER-FACING TERMINOLOGY
+==================================================
+
+The UI should say things like:
+
+BuildCustom
+AI
+Project
+Preview
+Files
+History
+
+Do not expose customer-facing terminology such as:
+
+VibeSDK
+ThinkAgent
+SpaceDO
+Durable Object
+Workers for Platforms
+runtime_project_links
+agent ID
+
+Internal logs/debugging may obviously use those terms.
+
+==================================================
+FIRST GENERATION
+==================================================
+
+Use the existing native ThinkAgent generation behavior.
+
+For a new project with no generated application yet, the user's first
+natural-language build request should start the normal stock generation
+flow.
+
+Do not hard-code a special test application into the product.
+
+For LIVE ACCEPTANCE ONLY, use a simple deterministic prompt such as:
+
+Create a minimal website for a fictional coffee shop called Northstar
+Coffee. The homepage must display the exact heading
+BUILDCUSTOM_TASK3_INITIAL_OK. Include a stylesheet and keep the application
+small.
+
+Use ONE generation.
+
+Allow stock ThinkAgent to:
+
+- reason
+- create files
+- test/build
+- observe errors
+- correct its own files
+- deploy the preview
+
+Do not intervene if it performs its normal autonomous correction loop.
+
+==================================================
+STREAMING EXPERIENCE
+==================================================
+
+Verify the BuildCustom UI receives useful progressive state during the run.
+
+The user should not stare at a frozen page until final JSON arrives.
+
+Map native frames into the existing BuildCustom UI with the smallest
+reasonable presentation.
+
+At minimum surface useful states such as:
+
+- AI response/progress
+- tool activity when appropriate
+- file changes
+- build/preview progress
+- completion
+- errors
+
+Do not expose raw internal protocol dumps to normal customers.
+
+Do not fabricate progress messages.
+
+Customer-visible progress must correspond to actual runtime events.
+
+==================================================
+AUTHORITATIVE FILES
+==================================================
+
+The migration assessment explicitly identified the old WebSocket file mirror
+as something we should NOT use as source of truth.
+
+Fix that in this task.
+
+The authoritative generated project state must come from stock
+VibeSDK/SpaceDO/Git interfaces.
+
+Use the owner-authorized stock interfaces already identified during the
+migration assessment.
+
+The BuildCustom Files UI should reflect authoritative runtime state.
+
+Do NOT persist generated file contents into BuildCustom D1.
+
+Do NOT maintain a second file store.
+
+==================================================
+FILES UI
+==================================================
+
+Connect the existing BuildCustom files panel to authoritative project state.
+
+After generation, verify it shows the files actually committed by the
+runtime.
+
+Opening a file should retrieve/display the authoritative current contents.
+
+If the existing UI expects a file structure different from the stock
+runtime response, add the smallest presentation adapter.
+
+Do not copy the project into BuildCustom storage.
+
+==================================================
+PREVIEW
+==================================================
+
+Use the STOCK VibeSDK preview flow.
+
+Do not build a BuildCustom preview engine.
+
+Do not use the historical shared-key preview path.
+
+Preview access must be scoped to the authenticated project owner.
+
+The BuildCustom preview panel should display the project's working preview.
+
+Remember from the migration assessment:
+
+GET /api/agent/:id/preview
+
+may itself deploy a sandbox and is not merely a passive read.
+
+Use the correct stock behavior intentionally.
+
+Do not automatically create unnecessary previews merely by listing/opening
+projects.
+
+The preview should start when appropriate for the coding experience.
+
+==================================================
+INITIAL GENERATION ACCEPTANCE
+==================================================
+
+For the live staging test:
+
+USER A opens their Task 2 project.
+
+Send the initial Northstar Coffee prompt.
+
+PASS requires:
+
+- existing linked agent is reused
+- native ThinkAgent streaming is visible
+- generation completes
+- authoritative files exist
+- exact marker exists in authoritative files
+- build succeeds
+- stock preview succeeds
+- preview HTTP response succeeds
+- rendered preview contains:
+
+BUILDCUSTOM_TASK3_INITIAL_OK
+
+- stylesheet is applied
+- no material page errors
+
+Record the AI Gateway request count/cost for this generation.
+
+Inference is EXPECTED in Task 3.
+
+==================================================
+FOLLOW-UP EDIT
+==================================================
+
+After initial generation succeeds, use the SAME BuildCustom project and SAME
+ThinkAgent.
+
+Send ONE natural-language follow-up edit:
+
+Change the main heading to exactly
+BUILDCUSTOM_TASK3_EDIT_OK
+and add a short line beneath it that says
+Fresh coffee. Simple mornings.
+
+Do not start a second generation/project.
+
+Use the normal stock follow-up conversation/edit behavior.
+
+PASS requires:
+
+- same BuildCustom project
+- same runtime agent
+- native streaming works
+- authoritative files change
+- new marker exists
+- old heading is no longer the main heading
+- preview updates
+- rendered preview displays:
+
+BUILDCUSTOM_TASK3_EDIT_OK
+
+and:
+
+Fresh coffee. Simple mornings.
+
+Record inference usage/cost for this edit separately if available.
+
+==================================================
+REOPEN / PERSISTENCE TEST
+==================================================
+
+After the successful edit:
+
+1. leave the project
+2. reload with a fresh authenticated browser/client session
+3. reopen the same BuildCustom project
+
+PASS requires:
+
+- same BuildCustom project ID
+- same runtime agent ID
+- no new agent created
+- authoritative files still contain the edited state
+- preview represents the edited application
+- the user can continue the existing conversation/project
+
+Do not create another generation merely because the project was reopened.
+
+==================================================
+CONVERSATION HISTORY
+==================================================
+
+Use stock VibeSDK/runtime conversation state as authoritative.
+
+Do not copy the transcript into BuildCustom D1.
+
+If the stock interface provides persisted conversation/history suitable for
+reopen, surface it in the BuildCustom UI.
+
+If the current stock API only exposes part of the history needed by the UI,
+document that exact limitation.
+
+Do not invent a duplicate transcript database in this task.
+
+==================================================
+TWO-USER SECURITY
+==================================================
+
+Keep Task 1 and Task 2 ownership boundaries intact.
+
+USER B must NOT be able to:
+
+- open User A's WebSocket
+- obtain a usable ticket for User A's agent
+- read User A's files
+- access User A's preview through BuildCustom owner APIs
+- send messages to User A's agent
+
+Test direct project and agent ID substitution.
+
+Likewise User A must not access User B.
+
+==================================================
+WEBSOCKET SECURITY
+==================================================
+
+Verify:
+
+- unauthenticated WebSocket access fails
+- wrong-owner WebSocket access fails
+- tickets are appropriately scoped
+- expired/reused tickets behave according to stock runtime rules
+- runtime cookies/tokens are not exposed unnecessarily to browser JS
+- browser cannot select an arbitrary linked agent belonging to another user
+
+Do not weaken stock runtime ownership to make proxying easier.
+
+==================================================
+ERROR HANDLING
+==================================================
+
+Preserve actual runtime failures.
+
+If generation/build/preview fails:
+
+show a useful BuildCustom error state derived from the real runtime result.
+
+Do not convert failures into fake success.
+
+Do not automatically create another agent.
+
+Do not silently regenerate an entire project.
+
+Stock ThinkAgent may perform its own normal autonomous correction loop.
+
+That is allowed.
+
+==================================================
+DO NOT PUBLISH
+==================================================
+
+Task 3 ends at a working owner preview.
+
+Do NOT send the stock:
+
+deploy target: "platform"
+
+action.
+
+Do NOT create a Workers for Platforms published script.
+
+Do NOT configure:
+
+*.apps.buildcustom.ai
+
+Do NOT change generated-app production routing.
+
+Publishing is Task 4.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do NOT change:
+
+- Unified Billing architecture
+- AI Gateway architecture
+- model provider architecture
+- ThinkAgent internals
+- SpaceDO internals
+- stock build behavior
+- production DNS
+- production Workers
+- customer custom domains
+- Stripe
+- plans
+- credits
+- customer billing
+
+Do not add a custom agent harness.
+
+==================================================
+AUTOMATED TESTS
+==================================================
+
+Add/update tests for:
+
+- authenticated WebSocket bridge
+- project → linked-agent resolution
+- no arbitrary agent selection
+- native streaming frame forwarding
+- unauthenticated WebSocket denial
+- cross-user WebSocket denial
+- ticket scoping
+- authoritative file reads
+- cross-user file denial
+- preview ownership
+- cross-user preview denial
+- reopen uses same agent
+- no agent creation during reopen
+- no publish action during Task 3
+
+Mock inference/runtime where necessary for automated tests.
+
+Do not run unnecessary live inference for unit tests.
+
+Run the complete relevant Cloudflare suite.
+
+==================================================
+LIVE STAGING TEST LIMIT
+==================================================
+
+Use ONLY:
+
+- one initial generation
+- one follow-up edit
+
+Do not run repeated AI generations while debugging UI issues.
+
+If infrastructure/UI wiring fails before inference begins, fix the wiring
+without sending additional model requests.
+
+If the first live generation reaches the runtime and fails because of a
+genuine generated-app issue, capture the complete failure before deciding
+whether any second inference attempt is justified.
+
+Do not burn inference repeatedly.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+PASS requires:
+
+1. existing Task 2 project and agent are reused
+
+2. BuildCustom editor connects to native owner-authorized ThinkAgent
+
+3. responses/progress stream live
+
+4. initial generation succeeds
+
+5. authoritative files are visible
+
+6. authoritative file contents are correct
+
+7. stock owner preview works
+
+8. initial rendered marker is correct
+
+9. follow-up edit uses same agent
+
+10. follow-up edit updates authoritative files
+
+11. updated preview renders correctly
+
+12. reload/reopen returns to same project and agent
+
+13. edited state persists
+
+14. conversation/project can continue after reopen
+
+15. User A cannot access User B runtime state
+
+16. User B cannot access User A runtime state
+
+17. unauthenticated runtime access is denied
+
+18. no duplicate file/conversation/runtime store is introduced
+
+19. no publish action occurs
+
+20. Task 1 auth behavior still passes
+
+21. Task 2 ownership/link behavior still passes
+
+22. production remains untouched
+
+23. no new Replit runtime dependency is introduced
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. WebSocket architecture implemented
+
+2. exact stock VibeSDK interfaces used
+
+3. how BuildCustom resolves project → agent
+
+4. how owner identity is preserved
+
+5. native frame types surfaced in the UI
+
+6. authoritative file interface used
+
+7. preview interface used
+
+8. initial generation result
+
+9. initial agent/project IDs
+
+10. initial authoritative file verification
+
+11. initial preview/render result
+
+12. follow-up edit result
+
+13. confirmation same agent was used
+
+14. edited authoritative file verification
+
+15. edited preview/render result
+
+16. reopen result
+
+17. conversation/history persistence result
+
+18. cross-user WebSocket result
+
+19. cross-user files result
+
+20. cross-user preview result
+
+21. unauthenticated runtime access result
+
+22. automated test count/results
+
+23. initial generation AI Gateway usage/cost
+
+24. follow-up edit AI Gateway usage/cost
+
+25. files changed
+
+26. migrations added, if any
+
+27. confirmation NO publish occurred
+
+28. confirmation production untouched
+
+29. remaining limitations
+
+30. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
+
+Do not begin Migration Task 4.

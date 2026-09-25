@@ -11,6 +11,7 @@ import { capturePreviewImage, imageDataUri, previewImageKey, verifyPublicHostnam
 import { StagingPublishNotReadyError, waitForStagingAppReady } from "./staging/published-readiness";
 import { handleStagingCustomerAuth, resolveRuntimeProductUser, RuntimeIdentityError } from "./staging/runtime-identity";
 import { createProductProject, initializeProjectAgent, refreshProjectAgent } from "./staging/project-initialization";
+import { handleThinkRuntime } from "./staging/think-runtime";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -318,6 +319,11 @@ export default {
         // A project may be visible between its D1 insert and link claim.
         // Its creation key still identifies the stock-only staging path.
         if (stagingCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
+          if (operation === "ws" && request.method === "GET" && !rateLimit(`think-ws:${user.id}:${id}`, 60)) {
+            return json({ message: "Too many project connections." }, { status: 429 });
+          }
+          const nativeThinkResponse = await handleThinkRuntime(env, request, project, operation);
+          if (nativeThinkResponse) return nativeThinkResponse;
           if ((operation === "agent" || operation.startsWith("agent/")) && request.method === "GET") {
             if (operation.startsWith("agent/") && operation.slice(6) !== project.agent_id) {
               return json({ message: "Project not found" }, { status: 404 });
@@ -325,16 +331,9 @@ export default {
             const link = await refreshProjectAgent(env, request, project);
             return json({ ready: link?.initialization_status === "ready", status: link?.initialization_status || "missing" });
           }
-          if (operation === "status" && request.method === "GET") {
-            const link = await refreshProjectAgent(env, request, project);
-            const ready = link?.initialization_status === "ready";
-            return json({ connected: ready, files: 0, runtimeStatus: link?.initialization_status || "missing", state: { generation: { status: "idle" } }, previewUrl: null, deploymentUrl: null });
+          if ((operation === "console" || operation === "releases") && request.method === "GET") {
+            return json({ message: "This stock Think feature is not available." }, { status: 501 });
           }
-          if (operation === "files" && request.method === "GET") return json([]);
-          if (operation === "files/content" && request.method === "GET") return json({ message: "No files have been created yet." }, { status: 404 });
-          if (operation === "console" && request.method === "GET") return json({ lines: [] });
-          if (operation === "turns" && request.method === "GET") return json({ turns: [] });
-          if (operation === "releases" && request.method === "GET") return json({ releases: [] });
           if (operation === "publishing-settings" && request.method === "GET") {
             return json({ subdomainSlug: project.subdomain_slug || cleanSlug(project.name), hostingProvider: project.hosting_provider === "custom" ? "custom" : "buildcustom", customDomain: project.custom_domain || "", customOrigin: project.custom_origin || "" });
           }

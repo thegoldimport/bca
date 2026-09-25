@@ -32,3 +32,6 @@
 - [VibeSDK setup migration ordering](vibesdk-setup-migration-order.md) — official setup can finish despite a failed remote D1 migration when its config still holds a pre-creation placeholder ID.
 - [D1 parent schema migrations](d1-parent-schema-migrations.md) — deferred foreign keys do not prevent cascaded child-row loss during a parent-table rebuild.
 - [Stock agent creation recovery](stock-agent-creation-recovery.md) — unknown Think creation outcomes must reconcile by owner-visible marker or fail closed; never blindly create again.
+- [Stock Artifacts feature gate](stock-artifacts-feature-gate.md) — owner-authorized Artifacts REST can be account-gated; the private stock Git export remains an authoritative read path.
+- [Stock framework WebSocket envelopes](stock-framework-websocket-envelopes.md) — framework state can arrive JSON-encoded inside a frame type and must not be relayed to browser clients.
+- [Stock service-binding redirects](stock-service-binding-redirects.md) — use manual redirects with explicit rejection for owner-bound Worker-to-Worker requests.

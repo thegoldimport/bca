@@ -22,3 +22,9 @@ For this project's stock generation acceptance, an intermediate `deploy_space` b
 **Why:** The user explicitly accepted that behavior as a passing stock-agent result and asked to freeze the proven architecture rather than alter build or inference behavior.
 
 **How to apply:** Report both the original error and final successful revision; do not request an extra generation or change the runtime to eliminate an intermediate failure that the stock agent resolves.
+
+Stock follow-up edits may stream generation, conversation, file, and deployment progress and become idle with a new committed revision **without ever emitting `generation_complete`**. A socket may also end uncleanly after the files and preview have been saved. Do not resend the user's prompt because a completion frame is missing or a socket disconnects.
+
+**Why:** A controlled staging initial build and follow-up edit both produced correct rendered previews and persisted conversation on the same agent, while their WebSocket lifecycle failed to provide an uninterrupted completion signal.
+
+**How to apply:** After native-frame quiet, independently verify explicit idle state, a changed and stable authoritative revision, real files, and a working preview before marking success. Preserve visible transport warnings and fail closed if the new committed result cannot be verified.
