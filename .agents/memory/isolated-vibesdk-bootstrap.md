@@ -9,6 +9,12 @@ An isolated VibeSDK Worker clone needs the canonical public D1 migrations and te
 
 **How to apply:** Bootstrap disposable VibeSDK environments from the matching public VibeSDK and template repositories before testing the SDK. Keep identities and API keys staging-only.
 
+Do not assume an embedded templates directory remains a usable Git checkout after a workspace checkpoint. If its nested Git metadata disappears while files remain, the stock deployment script attempts to clone into a nonempty directory, reports template deployment failure, but can still declare the overall Worker deployment successful.
+
+**Why:** A clean lab's first stock deploy uploaded a Worker despite this non-blocking template failure; the checkout directory existed but no longer contained its nested Git metadata.
+
+**How to apply:** Check template checkout integrity and the template-upload step independently before claiming a full VibeSDK deployment succeeded. Do not infer success solely from the final Worker deployment message.
+
 VibeSDK platform publishing currently requires an account ID and Cloudflare API token even when the Worker has an isolated dispatch namespace binding.
 
 **Why:** Build, realtime state, preview, and cancellation worked without the token, but platform publish explicitly rejected the missing account credentials. Its dispatch upload calls require account-scoped Workers Scripts Write; Cloudflare exposes no dispatch-namespace or script-name token resource scope. The available token could mutate protected account resources and therefore could not satisfy a hard staging boundary.

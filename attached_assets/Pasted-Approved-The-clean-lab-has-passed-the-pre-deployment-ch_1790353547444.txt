@@ -1,0 +1,385 @@
+Approved.
+
+The clean lab has passed the pre-deployment checkpoint.
+
+Proceed with the FIRST STOCK VIBESDK DEPLOYMENT AND GENERATION TEST.
+
+Do not introduce any custom inference code or diagnostic infrastructure.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Prove this exact path:
+
+Stock VibeSDK
+→ Stock ThinkAgent
+→ Fresh AI Gateway
+→ /compat/chat/completions
+→ Cloudflare Unified Billing
+→ Gemini
+→ SpaceDO/files
+→ build
+→ preview
+
+WITHOUT:
+
+- Google API key
+- Vertex credentials
+- stored provider BYOK
+- custom inference transport
+- custom diagnostic routes
+- custom retries
+- custom pacing
+- old BuildCustom runtime
+
+==================================================
+CURRENT APPROVED BASELINE
+==================================================
+
+Upstream source:
+
+cloudflare/vibesdk
+commit:
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Fresh Worker target:
+
+bc-vibesdk-lab-20260925
+
+Fresh D1:
+
+bc-vibesdk-lab-20260925-db
+
+Fresh KV:
+
+bc-vibesdk-lab-20260925-kv
+
+Fresh R2:
+
+bc-vibesdk-lab-20260925-templates
+
+Fresh dispatch namespace:
+
+bc-vibesdk-lab-20260925-dispatch
+
+Fresh AI Gateway:
+
+bc-vibesdk-lab-20260925-ai
+
+D1:
+
+all nine official migrations successfully applied
+
+Gateway:
+
+authentication enabled
+stored provider configurations = 0
+byok_only = false
+
+Provider credentials:
+
+NONE
+
+Stock Think model:
+
+google-ai-studio/gemini-3.6-flash
+
+Stock Think endpoint:
+
+https://gateway.ai.cloudflare.com/v1/{account}/bc-vibesdk-lab-20260925-ai/compat/chat/completions
+
+Cloudflare prepaid credits:
+
+available
+
+==================================================
+STEP 1 — FINAL TARGET CHECK
+==================================================
+
+Immediately before deployment, confirm the deployment command targets:
+
+bc-vibesdk-lab-20260925
+
+and the audited fresh lab resources.
+
+Confirm:
+
+- no custom routes
+- workers.dev only
+- no buildcustom.ai routes
+- no app.buildcustom.ai routes
+- no *.apps.buildcustom.ai routes
+- no existing BuildCustom resource IDs
+- no old runtime service bindings
+
+If this differs from the approved baseline:
+
+STOP.
+
+==================================================
+STEP 2 — DEPLOY STOCK VIBESDK
+==================================================
+
+Deploy using the official upstream deployment flow.
+
+Do not modify ThinkAgent.
+
+Do not modify model resolution.
+
+Do not modify inference transport.
+
+Do not modify gateway authentication.
+
+Do not add provider credentials.
+
+Capture:
+
+- deployment result
+- Worker version
+- workers.dev URL
+- created Durable Object namespaces/bindings
+- any deployment warnings/errors
+
+If deployment fails:
+
+STOP.
+
+Report the exact safe failure.
+
+Do not start modifying upstream code.
+
+==================================================
+STEP 3 — VERIFY RUNTIME
+==================================================
+
+If deployment succeeds:
+
+verify the stock VibeSDK runtime loads successfully at its workers.dev
+location.
+
+Confirm the application/runtime is operational enough to perform the normal
+VibeSDK generation flow.
+
+Do not send a model request merely for diagnostics.
+
+==================================================
+STEP 4 — RUN ONE NORMAL GENERATION
+==================================================
+
+Use the actual stock VibeSDK application/runtime.
+
+Create a fresh disposable project/agent through the normal VibeSDK flow.
+
+Prompt:
+
+Create a minimal buildable website with a visible heading displaying exactly:
+
+BUILDCUSTOM_STOCK_VIBESDK_OK
+
+Include a stylesheet.
+
+Keep it as small as possible.
+
+IMPORTANT:
+
+This is a NORMAL ThinkAgent generation.
+
+Allow ThinkAgent to make however many model calls its normal upstream agent
+loop requires.
+
+Do not artificially limit it to one model call.
+
+Do not manually call /compat.
+
+Do not bypass ThinkAgent.
+
+Do not add pacing.
+
+Do not add custom retries.
+
+Do not change the upstream agent loop.
+
+==================================================
+MODEL IDENTIFIER RULE
+==================================================
+
+For the FIRST attempt use stock upstream exactly:
+
+google-ai-studio/gemini-3.6-flash
+
+Do not preemptively change it.
+
+If Cloudflare rejects this exact identifier:
+
+STOP.
+
+Do not automatically retry with:
+
+google/gemini-3.6-flash
+
+Record the exact safe error.
+
+That would establish the smallest next correction.
+
+==================================================
+WHAT TO OBSERVE
+==================================================
+
+Correlate the generation with the fresh AI Gateway.
+
+Record:
+
+- number of model requests
+- requested model
+- actual provider
+- actual model if exposed
+- input tokens
+- output tokens
+- cost
+- credit movement if visible
+- response statuses
+- any 429s
+- any provider-auth errors
+- any model-resolution errors
+
+Also confirm throughout the test:
+
+- no GOOGLE_AI_STUDIO_API_KEY
+- no provider Authorization credential supplied by BuildCustom
+- no stored gateway BYOK
+- byok_only remains false
+
+==================================================
+GENERATION SUCCESS
+==================================================
+
+Generation succeeds only if:
+
+1. ThinkAgent completes normally
+
+2. files are created in the fresh project workspace
+
+3. the generated application visibly contains:
+
+BUILDCUSTOM_STOCK_VIBESDK_OK
+
+4. the application is buildable
+
+5. preview successfully serves the application
+
+6. stylesheet/assets load correctly
+
+7. fresh AI Gateway contains the corresponding inference traffic
+
+8. no Google/provider BYOK credential was used
+
+9. billing evidence is consistent with Cloudflare Unified Billing
+
+==================================================
+IMPORTANT FAILURE RULE
+==================================================
+
+If anything fails:
+
+STOP AT THE FIRST REAL FAILURE.
+
+Do NOT:
+
+- create a diagnostic Worker
+- create a diagnostic route
+- rewrite ThinkAgent
+- create another inference transport
+- switch to direct Google
+- add a Google API key
+- add BYOK
+- add pacing
+- add custom retries
+- modify the model identifier automatically
+- run another generation
+
+We want the actual stock-runtime failure preserved.
+
+==================================================
+NO PUBLISHING YET
+==================================================
+
+Even if generation works perfectly:
+
+DO NOT publish the generated app through Workers for Platforms yet.
+
+DO NOT configure:
+
+*.apps.buildcustom.ai
+
+DO NOT configure custom domains.
+
+DO NOT connect app.buildcustom.ai.
+
+This test ends at:
+
+generation
+→ files
+→ build
+→ preview
+
+==================================================
+DO NOT CLEAN UP ON SUCCESS
+==================================================
+
+If successful, leave:
+
+- Worker
+- D1
+- KV
+- R2
+- DO namespaces
+- dispatch namespace
+- gateway
+- generated test project
+
+intact.
+
+This environment will become the basis for the next test.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. deployment result
+2. Worker version
+3. workers.dev URL
+4. fresh runtime bindings/resources
+5. confirmation stock upstream code was used
+6. confirmation no inference code changes
+7. confirmation Google/provider keys absent
+8. gateway stored-BYOK status
+9. byok_only status
+10. exact Think model identifier
+11. exact inference path
+12. generation started yes/no
+13. generation completed yes/no
+14. number of AI Gateway model requests
+15. HTTP/status pattern
+16. actual provider
+17. actual model
+18. total input tokens
+19. total output tokens
+20. total inference cost
+21. visible Cloudflare credit movement
+22. any 429/auth/model errors
+23. generated project/agent identifier
+24. generated files
+25. marker verification
+26. build result
+27. preview result
+28. whether Unified Billing without BYOK is conclusively proven
+29. whether stock VibeSDK worked without inference modifications
+30. whether any existing BuildCustom resource was modified
+31. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
+
+Production and the historical BuildCustom environment must remain untouched.
