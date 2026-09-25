@@ -1,0 +1,236 @@
+Good. The fresh stock Worker successfully deployed.
+
+Do NOT run generation yet.
+
+Do NOT send inference.
+
+Do NOT modify ThinkAgent, inference, AI Gateway, Unified Billing, model
+configuration, or provider credentials.
+
+We have two narrow deployment-readiness issues to resolve:
+
+1. deployment-time template repository clone failure
+2. deployed Worker missing JWT_SECRET
+
+Investigate and correct ONLY these stock VibeSDK deployment prerequisites.
+
+==================================================
+ISSUE 1 — TEMPLATE CLONE
+==================================================
+
+Important context:
+
+During the earlier setup phase, templates were already uploaded into the
+fresh lab R2 bucket:
+
+bc-vibesdk-lab-20260925-templates
+
+During the later stock deployment script, its template repository clone
+failed and the script continued.
+
+Before attempting another clone or upload, determine whether this failure
+actually left the deployed runtime without required templates.
+
+READ ONLY FIRST.
+
+Inspect:
+
+- official pinned VibeSDK deployment script
+- official template deployment script
+- template repository/source it expects
+- current lab R2 template bucket contents
+- expected template catalog/files from pinned upstream
+- whether setup already populated the exact template assets required by
+  this Worker
+- whether deployment-time template upload is idempotent/redundant after
+  successful setup
+- whether the existing local templates directory caused clone to fail
+- whether that directory is supposed to be a Git checkout or merely
+  generated/downloaded content
+
+Do NOT guess the original Git error because stderr was suppressed.
+
+If the existing R2 bucket already contains a complete valid template
+catalog matching what the deployed stock runtime needs, classify:
+
+TEMPLATE RUNTIME STATE = READY
+
+and do NOT repair something merely because the deployment script emitted
+a warning.
+
+If required template content is missing or incomplete, identify the exact
+official upstream command/process needed to populate ONLY the fresh lab R2
+bucket.
+
+Do not execute that correction until you have proven it is necessary.
+
+==================================================
+ISSUE 2 — JWT_SECRET
+==================================================
+
+Determine exactly how the pinned official VibeSDK expects JWT_SECRET to be
+configured in production.
+
+Inspect:
+
+- setup script
+- deployment script
+- .prod.vars generation
+- Wrangler configuration
+- Worker source references to JWT_SECRET
+- authentication/session code
+- official setup documentation
+
+Answer:
+
+1. Is JWT_SECRET required for the stock runtime flow we are about to test?
+
+2. Was setup supposed to generate it?
+
+3. Was deploy supposed to upload it?
+
+4. Why does the current deployed Worker lack it?
+
+5. Did regenerating .prod.vars accidentally omit an existing generated
+   value?
+
+6. What is the official expected production secret-binding mechanism?
+
+Do NOT expose any existing or generated secret value.
+
+==================================================
+IF JWT_SECRET IS REQUIRED
+==================================================
+
+If the pinned upstream source establishes JWT_SECRET is required:
+
+correct it using the smallest stock-compatible approach.
+
+Generate a fresh cryptographically secure JWT secret for this disposable
+lab if required.
+
+Store/upload it using the official Cloudflare Worker secret mechanism
+expected by VibeSDK.
+
+Do NOT print it.
+
+Do NOT return it.
+
+Do NOT store it in chat.
+
+Do NOT reuse an existing BuildCustom JWT secret.
+
+Do NOT modify authentication code to avoid requiring it.
+
+Afterward verify only:
+
+JWT_SECRET binding = PRESENT
+
+Never expose its value.
+
+==================================================
+TEMPLATE CORRECTION AUTHORIZATION
+==================================================
+
+If read-only inspection PROVES the fresh R2 template state is incomplete:
+
+you are authorized to populate ONLY:
+
+bc-vibesdk-lab-20260925-templates
+
+using the official pinned VibeSDK template deployment process.
+
+Do not modify any existing BuildCustom R2 bucket.
+
+If the official process attempts to target anything except the fresh lab
+bucket:
+
+STOP.
+
+==================================================
+DEPLOYMENT RULE
+==================================================
+
+Do NOT perform a full redeployment merely because JWT_SECRET is added if
+Cloudflare's normal secret-binding operation can safely update the existing
+lab Worker.
+
+If a redeployment is actually required by upstream/runtime behavior:
+
+verify all targets remain fresh lab resources first.
+
+Do not change source code.
+
+==================================================
+AFTER CORRECTIONS
+==================================================
+
+Perform a deployment-readiness check only.
+
+Verify:
+
+- stock Worker exists
+- stock Worker responds at workers.dev
+- JWT_SECRET binding present if required
+- required templates exist in fresh R2
+- D1 migrations complete
+- KV binding correct
+- R2 binding correct
+- dispatch binding correct
+- fresh DO bindings correct
+- fresh AI Gateway configuration unchanged
+- gateway authentication enabled
+- stored provider configs = 0
+- byok_only = false
+- no GOOGLE_AI_STUDIO_API_KEY
+- no provider key
+- stock Think model remains google-ai-studio/gemini-3.6-flash
+- stock Think endpoint remains fresh /compat path
+- no production routes
+- no existing BuildCustom resources referenced
+
+==================================================
+IMPORTANT
+
+Do NOT create a project.
+
+Do NOT invoke ThinkAgent.
+
+Do NOT send inference.
+
+Do NOT test Unified Billing yet.
+
+Do NOT modify model identifier.
+
+Do NOT create diagnostics.
+
+Do NOT add BYOK.
+
+Do NOT add Google credentials.
+
+Do NOT modify production.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. root cause/status of template clone failure
+2. whether existing R2 templates were already complete
+3. whether any template correction was necessary
+4. template correction performed, if any
+5. official role of JWT_SECRET
+6. why it was missing
+7. whether JWT_SECRET correction was necessary
+8. confirmation JWT_SECRET binding now present if required
+9. current Worker version
+10. workers.dev runtime response/result
+11. complete deployment-readiness result
+12. confirmation fresh AI Gateway remains unchanged
+13. confirmation zero provider credentials
+14. confirmation ZERO inference requests
+15. whether the lab is READY FOR FIRST STOCK THINKAGENT GENERATION
+16. confirmation production untouched
+
+Then STOP.
