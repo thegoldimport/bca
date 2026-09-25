@@ -1,0 +1,339 @@
+STOP.
+
+Do NOT make another inference request.
+
+We are now spending too much time debugging a temporary diagnostic
+harness instead of testing Cloudflare /compat.
+
+The latest invocation:
+
+- returned HTTP 500 without diagnostic JSON
+- was scriptThrewException
+- produced zero subrequests
+- produced no AI Gateway log
+- produced no credit movement
+
+Therefore it again failed inside the temporary Worker diagnostic before
+we observed an outbound request.
+
+We have a VERY useful control available:
+
+KNOWN-GOOD DRY-RUN DIAGNOSTIC VERSION
+
+16e2b128-ecbf-4173-8475-e64336e24fce
+
+This version:
+
+- returned HTTP 200
+- passed every preparation stage
+- reached READY_BEFORE_FETCH
+- had zero Worker errors
+- intentionally made zero subrequests
+
+LATEST BROKEN DIAGNOSTIC VERSION
+
+5a14605d-cd6c-4353-95f5-e28a7efd3197
+
+This version:
+
+- returned HTTP 500 without diagnostic JSON
+- scriptThrewException
+- zero subrequests
+- no gateway log
+
+==================================================
+GOAL
+==================================================
+
+Perform a READ-ONLY forensic diff between these two uploaded Worker
+versions.
+
+Determine exactly what changed between:
+
+16e2b128-ecbf-4173-8475-e64336e24fce
+
+and
+
+5a14605d-cd6c-4353-95f5-e28a7efd3197
+
+We already know two intentional conceptual changes occurred later:
+
+1. redirect mode:
+   error → manual
+
+2. diagnostic-only guard rotation / safe-error handling changes
+
+But do NOT assume those were the only compiled differences.
+
+We need the ACTUAL deployed-version diff.
+
+==================================================
+ABSOLUTE RESTRICTIONS
+==================================================
+
+READ ONLY.
+
+ZERO inference.
+ZERO route invocation.
+ZERO deployment.
+ZERO code changes.
+ZERO secret changes.
+ZERO gateway changes.
+ZERO billing changes.
+ZERO production changes.
+
+Do not contact support.
+
+==================================================
+PHASE 1 — RETRIEVE BOTH EXACT DEPLOYED BUNDLES
+==================================================
+
+Retrieve/read the actual uploaded modules for BOTH Worker versions:
+
+GOOD:
+16e2b128-ecbf-4173-8475-e64336e24fce
+
+BROKEN:
+5a14605d-cd6c-4353-95f5-e28a7efd3197
+
+Compare the deployed artifacts, not merely current local source.
+
+Verify:
+
+- module names
+- module hashes if available
+- compatibility date
+- compatibility flags
+- bindings
+- migration metadata
+- diagnostic route code
+- entrypoint code
+
+==================================================
+PHASE 2 — DIFF THE DIAGNOSTIC ROUTE
+==================================================
+
+Produce a semantic diff of the diagnostic route.
+
+Ignore irrelevant minification/bundle offsets.
+
+Identify EVERY behavioral change involving:
+
+- route matching
+- request handling
+- diagnostic authentication
+- nonce/hash handling
+- crypto calls
+- secret reads
+- safe-error filtering
+- stage helper
+- try/catch boundaries
+- outermost catch
+- URL construction
+- header construction
+- body construction
+- fetch
+- redirect handling
+- response parsing
+- JSON response generation
+
+Do not expose secrets or hashes.
+
+==================================================
+PHASE 3 — FIND WHY THE OUTERMOST CATCH FAILED
+==================================================
+
+This is particularly important.
+
+The latest diagnostic was supposed to return structured JSON even when
+something failed.
+
+Instead Cloudflare classified the invocation:
+
+scriptThrewException
+
+and the client received an unstructured HTTP 500.
+
+Determine how execution could escape ALL diagnostic error handling.
+
+Inspect whether:
+
+- an exception occurs before entering the protected route handler
+- authentication occurs outside try/catch
+- nonce hashing occurs outside try/catch
+- route initialization throws
+- module initialization throws
+- a Promise rejection escapes
+- response construction throws
+- safe-error sanitization itself throws
+- the outer catch calls code that can throw
+- a variable referenced by the catch is unavailable
+- Web Crypto is called incorrectly
+- a Headers/Response construction can throw
+- any helper used by the catch can itself throw
+
+==================================================
+PHASE 4 — USE THE GOOD VERSION AS THE BASELINE
+==================================================
+
+Do NOT design another diagnostic from scratch.
+
+The known-good version already proved:
+
+route
+→ auth
+→ secret read
+→ Think token read
+→ URL
+→ headers
+→ body
+→ READY_BEFORE_FETCH
+
+all work.
+
+Determine the MINIMUM semantic difference required to turn THAT exact
+known-good handler into the eventual real test.
+
+Ideally it should be conceptually only:
+
+KNOWN-GOOD HANDLER
+
++
+native fetch(preparedUrl, {
+  method: 'POST',
+  headers: preparedHeaders,
+  body: preparedBody,
+  redirect: 'manual'
+})
+
++
+explicit 3xx rejection
+
+Nothing else.
+
+If guard rotation is necessary because the old caller bearer is gone,
+identify the smallest possible guard change that does not disturb the
+known-good handler's execution/error structure.
+
+==================================================
+PHASE 5 — INSPECT THE PREVIOUS CAUGHT-FETCH VERSION TOO
+==================================================
+
+Also compare against diagnostic Worker version:
+
+fde46ec2-c2bd-459f-bb26-b8a79035f52f
+
+That version is valuable because it:
+
+- successfully reached BEFORE_FETCH
+- actually called fetch()
+- caught the fetch TypeError
+- returned STRUCTURED diagnostic JSON
+
+Its only PROVEN fetch bug was:
+
+redirect: 'error'
+
+Therefore we now have three useful states:
+
+A. 16e2b128...
+known-good through READY_BEFORE_FETCH
+
+B. fde46ec2...
+known-good through BEFORE_FETCH and caught fetch failure correctly
+
+C. 5a14605d...
+uncaught scriptThrewException before diagnostic JSON
+
+Triangulate the differences among A, B, and C.
+
+This should make the regression much easier to identify.
+
+==================================================
+PHASE 6 — DETERMINE WHETHER WE CAN REUSE VERSION B
+==================================================
+
+Determine whether the safest eventual test is simply:
+
+take the exact source corresponding to:
+
+fde46ec2-c2bd-459f-bb26-b8a79035f52f
+
+and change ONLY:
+
+redirect: 'error'
+
+to:
+
+redirect: 'manual'
+
+plus explicit 3xx rejection if required.
+
+Do not modify its error-handling architecture.
+
+Do not modify its stage handling.
+
+Do not modify its request construction.
+
+Do not modify its model.
+
+Do not modify its gateway path.
+
+Do not modify its provider-auth behavior.
+
+If its original one-time guard cannot be invoked anymore, isolate the
+guard replacement as the ONLY additional change.
+
+==================================================
+PHASE 7 — ROOT CAUSE
+==================================================
+
+Return one of:
+
+ROOT CAUSE PROVEN
+
+or
+
+ROOT CAUSE NOT PROVEN
+
+for why version C escaped diagnostic handling.
+
+If proven:
+
+show the exact semantic regression and smallest correction.
+
+If not proven:
+
+show the narrowest remaining possibilities.
+
+Do NOT propose another inference attempt yet.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. whether exact deployed artifacts for A/B/C were retrieved
+2. compatibility/binding differences
+3. semantic diagnostic-route differences
+4. every change from B → C
+5. exact placement of outer error handling in B vs C
+6. whether C can throw before entering it
+7. whether C's error sanitizer/catch can itself throw
+8. whether guard rotation introduced the regression
+9. whether redirect manual itself introduced any regression
+10. ROOT CAUSE PROVEN / NOT PROVEN
+11. exact cause if proven
+12. smallest correction
+13. whether version B + ONLY redirect manual is the safest basis
+14. exact unavoidable guard change, if any
+15. proposed eventual diff in plain English
+16. confirmation ZERO inference
+17. confirmation ZERO deployments
+18. confirmation ZERO changes
+19. confirmation production untouched
+
+STOP.
+
+Do not build or invoke the next diagnostic.
