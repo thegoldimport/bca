@@ -1,0 +1,474 @@
+Excellent. Approved to move from research into the FIRST clean implementation test.
+
+We are resetting around the official current Cloudflare VibeSDK architecture.
+
+The old BuildCustom test project and historical VibeSDK runtime do NOT
+need to be preserved for the future product.
+
+However:
+
+DO NOT delete or modify them yet.
+
+They remain untouched until the replacement architecture is proven.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Create a completely fresh, disposable VibeSDK installation based on the
+CURRENT official cloudflare/vibesdk source we just researched.
+
+The purpose of this test is to answer one question:
+
+CAN STOCK VIBESDK SUCCESSFULLY GENERATE A SMALL APPLICATION USING
+CLOUDFLARE AI GATEWAY + UNIFIED BILLING WITHOUT A GOOGLE API KEY?
+
+We are NOT testing our custom BuildCustom inference transport.
+
+We are NOT testing the old runtime.
+
+We are NOT preserving old agent/project state.
+
+We are establishing a clean upstream baseline.
+
+==================================================
+ARCHITECTURAL RULE
+==================================================
+
+Stay as close to upstream VibeSDK as possible.
+
+Do NOT create:
+
+- custom inference transport
+- custom /compat diagnostic route
+- custom account-scoped AI REST transport
+- BUILDCUSTOM_UNIFIED_BILLING branch
+- custom ThinkAgent
+- custom model router
+- pacing layer
+- retry layer
+- billing proxy
+
+Use VibeSDK's existing ThinkAgent inference architecture.
+
+The desired path is:
+
+VibeSDK ThinkAgent
+→ stock VibeSDK model resolver
+→ Cloudflare AI Gateway /compat
+→ Cloudflare Unified Billing
+→ Gemini
+
+==================================================
+ISOLATION FIRST
+==================================================
+
+Before running setup or deployment:
+
+audit the upstream configuration for:
+
+- Worker names
+- D1 IDs/names
+- KV IDs/names
+- R2 names
+- Durable Object bindings
+- dispatch namespace
+- routes
+- hostnames
+- AI Gateway
+- account IDs
+- hard-coded demo/production resources
+
+Nothing in this test may route through or modify:
+
+buildcustom.ai
+
+app.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+existing customer/custom domains
+
+existing BuildCustom production resources
+
+existing BuildCustom staging resources
+
+existing ThinkAgent/SpaceDO instances
+
+existing generated applications
+
+Use fresh disposable resource names.
+
+Suggested prefix:
+
+bc-vibesdk-lab-20260925
+
+If the current Cloudflare account cannot safely isolate the test,
+STOP before deployment and explain exactly why.
+
+Do not improvise around a safety conflict.
+
+==================================================
+SOURCE
+==================================================
+
+Use the current official:
+
+cloudflare/vibesdk
+
+Pin the exact upstream revision used for this test.
+
+Do not use our modified BuildCustom VibeSDK branch as the source.
+
+==================================================
+SETUP
+==================================================
+
+Follow the official VibeSDK setup/deployment flow as closely as practical.
+
+Use:
+
+Node 22+
+
+bun install
+
+bun run setup
+
+and the appropriate upstream deployment commands.
+
+Before executing setup, inspect any generated configuration to ensure
+it targets ONLY disposable resources.
+
+==================================================
+UNIFIED BILLING CONFIGURATION
+==================================================
+
+We specifically want Cloudflare Unified Billing.
+
+Configure a fresh authenticated AI Gateway for this disposable runtime.
+
+Use available Cloudflare prepaid credits.
+
+IMPORTANT:
+
+DO NOT configure:
+
+GOOGLE_AI_STUDIO_API_KEY
+
+DO NOT supply:
+
+- Google provider API key
+- request-level provider key
+- user-level provider key
+- Vertex credential
+- stored Google BYOK key in the gateway
+
+Ensure:
+
+Require provider credentials = OFF
+
+Use a Cloudflare AI Gateway authentication token appropriate for the
+stock VibeSDK path.
+
+The intent is for credential resolution to reach:
+
+Cloudflare Unified Billing
+
+not BYOK.
+
+==================================================
+MODEL
+==================================================
+
+FIRST attempt:
+
+DO NOT modify upstream's model identifier.
+
+Use the exact model identifier stock VibeSDK currently selects.
+
+According to our research this is:
+
+google-ai-studio/gemini-3.6-flash
+
+We know Cloudflare's managed catalog represents the model as:
+
+google/gemini-3.6-flash
+
+But DO NOT change it preemptively.
+
+We want to establish whether the stock VibeSDK identifier works through
+the supported /compat Unified Billing path.
+
+==================================================
+PRE-INFERENCE GATE
+==================================================
+
+Before generating anything, verify:
+
+1. fresh disposable VibeSDK Worker deployed successfully
+
+2. fresh D1/resources created successfully
+
+3. fresh AI Gateway exists
+
+4. gateway authentication is configured
+
+5. Cloudflare credits are available
+
+6. no Google provider key exists in the runtime
+
+7. no stored Google BYOK key applies to the gateway
+
+8. Require provider credentials is OFF
+
+9. ThinkAgent is using stock upstream code
+
+10. ThinkAgent resolves to the stock /compat gateway path
+
+11. no old BuildCustom runtime resources are involved
+
+12. no production routes were changed
+
+If any of these fail:
+
+STOP before inference.
+
+==================================================
+GENERATION TEST
+==================================================
+
+If the pre-inference gate passes:
+
+perform ONE normal VibeSDK generation through the actual ThinkAgent.
+
+Do NOT call /compat manually.
+
+Do NOT create a diagnostic endpoint.
+
+Do NOT bypass ThinkAgent.
+
+Use the actual product runtime.
+
+Prompt:
+
+Create a minimal buildable website with a visible heading displaying
+exactly:
+
+BUILDCUSTOM_STOCK_VIBESDK_OK
+
+Include a stylesheet.
+
+Keep the application as small as possible.
+
+==================================================
+WHAT WE ARE TESTING
+==================================================
+
+This is intentionally a REAL VibeSDK generation.
+
+We want to observe:
+
+ThinkAgent
+→ model calls
+→ tool loop
+→ SpaceDO/files
+→ build
+→ preview
+
+Do not artificially limit ThinkAgent to one model call.
+
+Allow the normal upstream generation loop to operate.
+
+Do not add custom retries or pacing.
+
+Use upstream behavior.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+PASS requires:
+
+1. ThinkAgent generation completes
+
+2. expected files exist
+
+3. generated app contains:
+
+BUILDCUSTOM_STOCK_VIBESDK_OK
+
+4. generated application builds
+
+5. preview serves successfully
+
+6. AI Gateway contains the corresponding model requests
+
+7. no Google/provider API key was supplied by BuildCustom
+
+8. Cloudflare billing/credit evidence is consistent with Unified Billing
+
+9. no BYOK credential was used
+
+10. old BuildCustom runtime was not involved
+
+Record:
+
+- number of AI Gateway requests
+- requested model
+- actual provider/model if available
+- input tokens
+- output tokens
+- cost evidence
+- credit movement if visible
+- errors or rate limits
+- generation duration
+
+Do not expose credentials or prompt internals unnecessarily.
+
+==================================================
+IMPORTANT MODEL IDENTIFIER FAILURE RULE
+==================================================
+
+If the FIRST request fails specifically because:
+
+google-ai-studio/gemini-3.6-flash
+
+is not accepted by the Unified Billing /compat path:
+
+STOP.
+
+Do NOT automatically retry with:
+
+google/gemini-3.6-flash
+
+Instead report the exact safe error.
+
+That will give us evidence for the smallest model configuration correction.
+
+==================================================
+OTHER FAILURE RULES
+==================================================
+
+If authentication fails:
+
+STOP.
+
+If Unified Billing/provider credential resolution fails:
+
+STOP.
+
+If wholesale/rate limiting occurs:
+
+STOP and record the exact evidence.
+
+If ThinkAgent itself fails:
+
+STOP and identify the failing layer.
+
+Do not create diagnostic Workers.
+
+Do not start rewriting VibeSDK.
+
+Do not fall back to BYOK.
+
+Do not add Google API keys.
+
+==================================================
+NO GENERATED-APP PUBLISH TEST YET
+==================================================
+
+For this step we only need:
+
+generation
++
+files
++
+build
++
+preview
++
+Unified Billing evidence
+
+Do NOT yet test production-style Workers for Platforms publishing.
+
+We will do that after generation is proven.
+
+==================================================
+AFTER TEST
+==================================================
+
+Do NOT delete the disposable environment yet.
+
+If the test succeeds, leave it available for the next approved test.
+
+If it fails, leave it intact for inspection.
+
+Do not touch the historical BuildCustom environment.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. upstream VibeSDK commit used
+
+2. disposable Cloudflare resources created
+
+3. Worker version deployed
+
+4. AI Gateway used
+
+5. confirmation Google API key absent
+
+6. confirmation stored Google BYOK absent
+
+7. confirmation Require provider credentials OFF
+
+8. exact Think model identifier
+
+9. exact Think inference endpoint/path
+
+10. whether generation started
+
+11. whether generation completed
+
+12. number of AI Gateway model requests
+
+13. actual provider/model observed
+
+14. input tokens
+
+15. output tokens
+
+16. cost evidence
+
+17. Cloudflare credit movement if visible
+
+18. any 429/auth/model errors
+
+19. generated files
+
+20. confirmation marker exists
+
+21. build result
+
+22. preview result
+
+23. whether Unified Billing without provider BYOK is conclusively proven
+
+24. whether stock VibeSDK required ANY inference code modification
+
+25. whether old BuildCustom resources were involved
+
+26. confirmation production untouched
+
+27. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
+
+Do not integrate the BuildCustom dashboard yet.
+
+Do not implement customer billing yet.
+
+Do not publish generated apps yet.
