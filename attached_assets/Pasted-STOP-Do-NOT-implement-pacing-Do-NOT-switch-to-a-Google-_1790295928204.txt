@@ -1,0 +1,371 @@
+STOP.
+
+Do NOT implement pacing.
+
+Do NOT switch to a Google API key.
+
+Do NOT abandon Cloudflare Unified Billing.
+
+We have identified a more important architectural question that must be
+tested first.
+
+==================================================
+WHY WE ARE DOING THIS
+==================================================
+
+Our desired BuildCustom inference architecture is:
+
+BuildCustom
+→ VibeSDK ThinkAgent
+→ Cloudflare AI Gateway
+→ Cloudflare Unified Billing
+→ supported model provider
+
+We specifically want Cloudflare Unified Billing so BuildCustom does NOT
+need separate Google/Anthropic/OpenAI provider credentials for every
+supported model.
+
+The owner has already funded the isolated Cloudflare account with $10
+of Unified Billing credits.
+
+We have already conclusively proven that Cloudflare-managed Gemini
+inference works:
+
+- Gemini returned successful responses
+- gateway logs recorded real token usage
+- wholesale:true
+- byok:null
+- Cloudflare credits were charged
+
+However, two full native Think runs reproduced:
+
+11 successful wholesale Gemini calls
+→ call #12 wholesale 429
+→ two unchanged SDK retries also 429
+
+Error:
+
+"Wholesale rate limit exceeded for this gateway. Please reduce request
+rate or use BYOK."
+
+This behavior does not make sense as an acceptable production ceiling
+for a coding agent that may eventually serve thousands of BuildCustom
+users.
+
+Before engineering around it, we need to eliminate a major variable:
+
+OUR CURRENT UNIFIED BILLING PATH IS CUSTOM.
+
+==================================================
+IMPORTANT DISCOVERY
+==================================================
+
+Current official VibeSDK Think routing uses the normal Cloudflare AI
+Gateway compatibility endpoint:
+
+https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat
+
+Our isolated staging Unified Billing experiment instead introduced a
+custom Think-only branch using:
+
+/client/v4/accounts/{account}/ai/v1/chat/completions
+
+with:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+That branch successfully reaches Cloudflare Unified Billing, but it is
+not VibeSDK's normal gateway transport.
+
+Therefore we need to answer:
+
+CAN NORMAL VIBESDK /compat ROUTING USE CLOUDFLARE UNIFIED BILLING
+WITHOUT A GOOGLE PROVIDER KEY?
+
+And if yes:
+
+DOES THE REPRODUCIBLE 11-CALL WHOLESALE FAILURE STILL OCCUR THROUGH
+THAT NORMAL ROUTE?
+
+==================================================
+PHASE 1 — READ-ONLY DOCUMENTATION + SOURCE PROOF
+==================================================
+
+DO NOT change anything yet.
+
+Using current official Cloudflare documentation and current official
+VibeSDK source, establish exactly how:
+
+/v1/{account}/{gateway}/compat
+
+handles provider authentication.
+
+Specifically determine what happens when:
+
+- VibeSDK calls /compat
+- model is google-ai-studio/gemini-3.6-flash or the equivalent
+  supported Cloudflare model identifier
+- NO Google provider credential is supplied on the request
+- NO Google provider credential is stored in AI Gateway
+- gateway authentication is enabled
+- Cloudflare Unified Billing has positive credits
+
+Determine whether Cloudflare officially supports falling through to
+Unified Billing in this configuration.
+
+Do NOT infer merely from credential precedence documentation.
+
+Trace enough official documentation/source to establish whether
+/compat + no provider key + Unified Billing is a supported route.
+
+==================================================
+PHASE 2 — MODEL IDENTIFIER COMPATIBILITY
+==================================================
+
+Determine the correct model identifier for this route.
+
+Official VibeSDK currently refers to:
+
+google-ai-studio/gemini-3.6-flash
+
+Our custom Unified Billing branch used:
+
+google/gemini-3.6-flash
+
+Determine what /compat expects when Cloudflare Unified Billing is
+supposed to supply the provider credential.
+
+Do NOT guess.
+
+Establish from official Cloudflare documentation/current VibeSDK code:
+
+- accepted identifier
+- provider selected
+- whether Google AI Studio vs Google Vertex matters
+- whether Unified Billing supports that exact provider/model
+- whether model-name translation occurs inside /compat
+
+This is particularly important because our custom route's gateway logs
+showed:
+
+provider: google-vertex-ai
+
+even though VibeSDK's normal configuration refers to:
+
+google-ai-studio
+
+Explain this difference if evidence permits.
+
+==================================================
+PHASE 3 — AUTHENTICATION LAYERS
+==================================================
+
+Clearly separate:
+
+A. authentication TO Cloudflare AI Gateway
+
+from
+
+B. authentication FROM AI Gateway TO Google.
+
+We already know our gateway must have authentication enabled for
+Cloudflare-managed Google Unified Billing to work.
+
+Determine what credential/header normal VibeSDK /compat needs to
+authenticate TO the gateway.
+
+Then determine how the absence of a Google provider key causes
+Cloudflare to select Unified Billing.
+
+We want:
+
+BuildCustom/Worker authenticates to AI Gateway
+BUT
+no BuildCustom Google credential exists
+AND
+Cloudflare supplies the provider credential through Unified Billing.
+
+==================================================
+PHASE 4 — COMPARE THE TWO TRANSPORTS
+==================================================
+
+Compare:
+
+CURRENT CUSTOM PATH
+
+ThinkAgent
+→ account-scoped Cloudflare AI REST
+→ cf-aig-gateway-id
+→ Unified Billing
+→ Gemini
+
+versus:
+
+PROPOSED NORMAL VIBESDK PATH
+
+ThinkAgent
+→ gateway.ai.cloudflare.com/.../compat
+→ authenticated AI Gateway
+→ Unified Billing fallback
+→ Gemini
+
+For each identify:
+
+- endpoint
+- authentication mechanism
+- model identifier
+- provider selected
+- credential selection
+- wholesale behavior
+- rate-limit documentation
+- streaming/tool-call compatibility
+- VibeSDK compatibility
+- whether it is an officially supported Cloudflare route
+
+Most importantly:
+
+Determine whether the SAME wholesale limiter should theoretically apply
+to both routes.
+
+If Cloudflare documentation establishes that both transports converge
+onto the exact same wholesale quota, say so.
+
+If that cannot be established, say it is unknown.
+
+==================================================
+PHASE 5 — INSPECT CURRENT STAGING IMPLEMENTATION
+==================================================
+
+READ ONLY.
+
+Determine the smallest possible staging-only change required to test:
+
+ThinkAgent
+→ NORMAL VibeSDK /compat
+→ authenticated gateway
+→ NO provider key
+→ Unified Billing
+→ Gemini
+
+Prefer existing upstream VibeSDK code.
+
+DO NOT build another custom inference client.
+
+DO NOT change ThinkAgent's loop.
+
+DO NOT change:
+
+- pacing
+- retries
+- context
+- skills
+- max steps
+- prompts
+- tool behavior
+
+We are testing TRANSPORT ONLY.
+
+==================================================
+PHASE 6 — DESIGN A MINIMAL ROUTE PROOF
+==================================================
+
+Before running a full agent generation, design the smallest possible
+staging diagnostic proving:
+
+/compat
+→ authenticated gateway
+→ no Google BYOK
+→ Cloudflare Unified Billing
+→ Gemini
+
+It must prove from gateway evidence:
+
+- HTTP 200
+- correct provider/model
+- real input/output tokens
+- real cost
+- wholesale:true
+- byok:null
+- Cloudflare credit deduction
+- no Google provider credential used
+
+The diagnostic must not expose prompts or secrets.
+
+==================================================
+STOP FOR READ-ONLY REPORT FIRST
+==================================================
+
+IMPORTANT:
+
+DO NOT IMPLEMENT THE TEST YET.
+
+For this task I want the investigation and test design FIRST.
+
+ZERO inference.
+
+ZERO deployment.
+
+ZERO code changes.
+
+ZERO gateway changes.
+
+ZERO credential changes.
+
+ZERO billing changes.
+
+ZERO model changes.
+
+ZERO pacing changes.
+
+Do not contact support.
+
+Do not touch production.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. whether /compat officially supports Unified Billing without provider
+   BYOK
+
+2. exact authentication required TO AI Gateway
+
+3. exact provider authentication behavior after the gateway
+
+4. correct Gemini model identifier for /compat + Unified Billing
+
+5. explanation of google-ai-studio vs google-vertex-ai if determinable
+
+6. current custom transport versus normal VibeSDK transport
+
+7. whether both transports are known to share the same wholesale limiter
+
+8. whether the custom account-scoped transport may be contributing to
+   our reproducible 11-call behavior
+
+9. exact smallest staging-only code/config change needed to use normal
+   VibeSDK /compat
+
+10. exact minimal diagnostic design
+
+11. what evidence would conclusively prove /compat Unified Billing works
+
+12. what evidence would show it still encounters the same wholesale
+    restriction
+
+13. whether a full native generation should be attempted after the
+    minimal route proof
+
+14. ONE recommended next experiment
+
+15. confirmation ZERO inference occurred
+
+16. confirmation ZERO changes/deployments occurred
+
+17. confirmation production untouched
+
+Do not perform the recommended experiment.
+
+STOP.
