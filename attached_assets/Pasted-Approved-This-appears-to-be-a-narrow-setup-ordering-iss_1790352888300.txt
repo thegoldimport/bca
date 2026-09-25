@@ -1,0 +1,215 @@
+Approved.
+
+This appears to be a narrow setup-ordering issue, not a reason to restart
+the clean VibeSDK installation.
+
+Do NOT rerun the entire setup.
+
+Do NOT recreate the lab resources.
+
+Do NOT modify inference code.
+
+Do NOT start inference yet.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Complete the official VibeSDK D1 remote migration against the VERIFIED
+fresh lab database that setup already created:
+
+bc-vibesdk-lab-20260925-db
+
+Then verify the complete pre-deployment/pre-inference state.
+
+==================================================
+STEP 1 — VERIFY THE TARGET
+
+Before any mutation, establish from Cloudflare inventory:
+
+- exact D1 database name
+- exact D1 database ID
+- account
+- creation/existence
+- that it is the fresh lab database
+
+Then inspect the FINAL generated Wrangler configuration.
+
+Confirm its D1 binding points to that exact database ID.
+
+Also confirm the migration command you are about to execute resolves to
+that same lab database.
+
+If there is any mismatch:
+
+STOP.
+
+Do not run the migration.
+
+==================================================
+STEP 2 — INSPECT THE OFFICIAL MIGRATION
+
+Determine the exact migration command the pinned VibeSDK setup intended
+to run.
+
+Use the official migration files from:
+
+cloudflare/vibesdk
+commit:
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Do not create custom schema.
+
+Do not modify migrations simply to make them pass.
+
+Before execution, confirm the command targets ONLY:
+
+bc-vibesdk-lab-20260925-db
+
+==================================================
+STEP 3 — RUN THE MIGRATION ONCE
+
+If the target is verified, execute the official remote D1 migration
+against the fresh lab D1.
+
+Do not rerun the whole setup.
+
+Capture the complete safe output.
+
+If it fails:
+
+STOP.
+
+Return the actual Cloudflare/Wrangler error.
+
+Do not attempt speculative fixes.
+
+If it succeeds:
+
+continue.
+
+==================================================
+STEP 4 — VERIFY DATABASE STATE
+
+After migration, inspect the fresh D1.
+
+Confirm:
+
+- expected VibeSDK tables exist
+- expected migration state exists
+- no obvious partial/failed migration state remains
+- the runtime binding still targets this exact database
+
+Use the upstream schema/migrations as the expected source of truth.
+
+Do not write test data merely to verify it.
+
+==================================================
+STEP 5 — RECHECK LAB CONFIGURATION
+
+Re-run the resource-target audit.
+
+Confirm the fresh runtime config points only to the intended lab resources:
+
+Worker:
+bc-vibesdk-lab-20260925
+
+D1:
+bc-vibesdk-lab-20260925-db
+
+KV:
+bc-vibesdk-lab-20260925-kv
+
+R2:
+bc-vibesdk-lab-20260925-templates
+
+Dispatch:
+bc-vibesdk-lab-20260925-dispatch
+
+AI Gateway:
+bc-vibesdk-lab-20260925-ai
+
+and fresh lab-specific DO/other bindings as applicable.
+
+Confirm:
+
+- no custom production routes
+- no buildcustom.ai route
+- no app.buildcustom.ai route
+- no *.apps.buildcustom.ai route
+- no existing BuildCustom resource IDs
+- no existing BuildCustom service binding
+- no old ThinkAgent/SpaceDO state
+
+==================================================
+STEP 6 — AI CONFIGURATION CHECK
+
+Before deployment/inference, confirm again:
+
+- no GOOGLE_AI_STUDIO_API_KEY
+- no Google provider key
+- no Vertex credential
+- no request/user provider override
+- fresh gateway has zero stored provider configurations
+- gateway authentication is enabled
+- stock ThinkAgent code remains unchanged
+- stock model remains:
+  google-ai-studio/gemini-3.6-flash
+- stock endpoint resolves through the fresh gateway /compat path
+- Cloudflare credits remain available
+
+For "Require provider credentials":
+
+If the API still does not expose the setting, do NOT block solely because
+the field cannot be read.
+
+Instead determine from current Cloudflare configuration/documentation
+whether there is affirmative evidence that provider credentials are
+required.
+
+If there is no such evidence, report the field as "not exposed/unverified"
+rather than inventing a value.
+
+Do not change gateway settings just to make the field visible.
+
+==================================================
+IF EVERYTHING PASSES
+
+STOP BEFORE DEPLOYMENT.
+
+Do NOT deploy the Worker yet.
+
+Do NOT run ThinkAgent yet.
+
+Do NOT send inference.
+
+I want one clean checkpoint confirming that setup is now complete and the
+lab is safe before we perform the actual stock VibeSDK deployment and
+Unified Billing generation test.
+
+==================================================
+FINAL REPORT
+
+Return:
+
+1. verified lab D1 name
+2. verified lab D1 ID (safe identifier only)
+3. final Wrangler D1 binding target
+4. exact official migration command used
+5. migration result
+6. expected tables/schema verification
+7. migration-state verification
+8. final resource-target audit
+9. confirmation no existing BuildCustom IDs/routes are referenced
+10. Google/provider credential status
+11. gateway stored-provider status
+12. gateway authentication status
+13. Require provider credentials status, including "not exposed" if applicable
+14. stock Think model
+15. stock Think gateway endpoint
+16. Cloudflare credit availability
+17. whether the lab is READY FOR STOCK VIBESDK DEPLOYMENT
+18. confirmation ZERO inference requests
+19. confirmation ZERO production changes
+
+Then STOP.
