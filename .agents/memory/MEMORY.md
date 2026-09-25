@@ -29,3 +29,4 @@
 - [Cloudflare container sizing](cloudflare-container-sizing.md) — container validation requires enough memory per vCPU and caps disk relative to memory.
 - [Staging readiness evidence](staging-readiness-evidence.md) — do not infer propagation from raw HTML markers in a JS SPA; timestamp asset, route, and rendered checks separately.
 - [Compat fetch boundary](compat-fetch-boundary.md) — local request preparation can pass while the Worker fetch throws before any counted subrequest or gateway log.
+- [VibeSDK setup migration ordering](vibesdk-setup-migration-order.md) — official setup can finish despite a failed remote D1 migration when its config still holds a pre-creation placeholder ID.

@@ -1,0 +1,441 @@
+Approved strategy adjustment.
+
+A separate Cloudflare ACCOUNT is NOT required.
+
+Use the existing BuildCustom Cloudflare account.
+
+The previous instruction requiring a separate account was intentionally
+over-conservative because we were still treating the historical BuildCustom
+test runtime as production state that had to be preserved.
+
+That is no longer the case.
+
+There are no real BuildCustom customer projects in that historical runtime
+that we need to migrate.
+
+The old project/runtime was testing.
+
+==================================================
+WHAT MUST STILL BE PROTECTED
+==================================================
+
+Do NOT modify or overwrite existing resources.
+
+In particular do not modify:
+
+- buildcustom.ai routes/DNS
+- app.buildcustom.ai
+- *.apps.buildcustom.ai
+- existing custom-domain configuration
+- existing serving Workers
+- existing D1 databases
+- existing KV namespaces
+- existing R2 buckets
+- existing Durable Object namespaces
+- existing dispatch namespaces
+- existing AI Gateways
+
+Do not delete anything.
+
+The isolation boundary is now:
+
+FRESH RESOURCE IDENTITY
+
+rather than:
+
+SEPARATE CLOUDFLARE ACCOUNT.
+
+==================================================
+IMPORTANT
+
+Account-scoped API permissions are acceptable for this setup.
+
+The fact that a token technically has permission to access another resource
+does NOT by itself block this test.
+
+What matters is that every configuration reference used by the fresh
+VibeSDK installation points only to the newly created lab resources.
+
+Do not stop merely because AI Gateway Run or Workers permissions are
+account-scoped.
+
+Instead verify resource targeting before every destructive or mutating
+setup/deployment operation.
+
+==================================================
+FRESH SOURCE
+==================================================
+
+Use the official upstream:
+
+cloudflare/vibesdk
+
+commit:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Create/use a fresh isolated working copy.
+
+Do NOT use our modified BuildCustom VibeSDK branch as the source.
+
+==================================================
+FIRST TASK: SANITIZE UPSTREAM CONFIGURATION
+==================================================
+
+Before running:
+
+bun run setup
+
+or ANY deployment command:
+
+audit the entire fresh working copy for existing Cloudflare resource
+references.
+
+Search for:
+
+- account IDs
+- zone IDs
+- Worker names
+- routes
+- custom domains
+- D1 database IDs
+- D1 database names
+- KV namespace IDs
+- R2 bucket names
+- Durable Object configuration
+- dispatch namespace names
+- AI Gateway names
+- Artifacts namespaces
+- Browser bindings
+- Container bindings
+- Worker Loader bindings
+- service bindings
+- environment-specific resource IDs
+- hard-coded staging values
+- hard-coded production values
+
+Also inspect:
+
+- wrangler.jsonc
+- setup scripts
+- deployment scripts
+- environment files
+- generated configuration
+- package scripts
+
+==================================================
+FRESH RESOURCE PREFIX
+==================================================
+
+Use:
+
+bc-vibesdk-lab-20260925
+
+for disposable resource naming where possible.
+
+Create fresh resources rather than reusing existing BuildCustom resources.
+
+Examples:
+
+Worker:
+bc-vibesdk-lab-20260925
+
+D1:
+bc-vibesdk-lab-20260925-db
+
+KV:
+bc-vibesdk-lab-20260925-kv
+
+R2:
+bc-vibesdk-lab-20260925-templates
+
+Dispatch namespace:
+bc-vibesdk-lab-20260925-dispatch
+
+AI Gateway:
+bc-vibesdk-lab-20260925-ai
+
+Artifacts if required:
+bc-vibesdk-lab-20260925-artifacts
+
+Use fresh Durable Object namespaces/classes/migrations associated only
+with the fresh Worker deployment.
+
+==================================================
+ROUTES / HOSTNAMES
+==================================================
+
+For the FIRST generation test, do not attach:
+
+buildcustom.ai
+
+app.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+or customer domains.
+
+If stock VibeSDK can initially operate through a workers.dev hostname,
+use that.
+
+If VibeSDK absolutely requires a hostname/route for this stage, identify
+the smallest safe test hostname before changing DNS.
+
+Do not modify DNS without reporting the requirement first.
+
+==================================================
+AI GATEWAY
+==================================================
+
+Create a fresh AI Gateway:
+
+bc-vibesdk-lab-20260925-ai
+
+It must not contain stored provider BYOK credentials.
+
+Configure gateway authentication according to the stock VibeSDK path.
+
+Require provider credentials:
+
+OFF
+
+Use Cloudflare Unified Billing.
+
+Do NOT configure:
+
+GOOGLE_AI_STUDIO_API_KEY
+
+Do NOT supply:
+
+- Google API key
+- Vertex credential
+- request-level provider key
+- user-level provider key
+- stored Google BYOK key
+
+==================================================
+IMPORTANT: STOCK VIBESDK
+
+Do not create another custom inference implementation.
+
+Do not create:
+
+- diagnostic Worker
+- diagnostic route
+- custom /compat transport
+- custom REST transport
+- BUILDCUSTOM_UNIFIED_BILLING branch
+- model proxy
+- retry proxy
+- pacing layer
+
+Use stock VibeSDK.
+
+==================================================
+SETUP
+
+Once the configuration audit proves that every mutable Cloudflare reference
+is either:
+
+A. newly created bc-vibesdk-lab-20260925 resource
+
+or
+
+B. a required generic account-level capability that does not identify an
+existing BuildCustom resource
+
+then proceed with the official setup/deployment flow.
+
+Node 22+
+
+bun install
+
+bun run setup
+
+Use the official deployment process where required.
+
+==================================================
+PRE-INFERENCE CHECKPOINT
+
+Before allowing ThinkAgent to generate anything, STOP and verify:
+
+1. fresh Worker exists
+
+2. fresh D1 exists
+
+3. fresh KV exists
+
+4. fresh R2 exists
+
+5. fresh dispatch namespace exists if setup requires it
+
+6. fresh AI Gateway exists
+
+7. fresh Durable Object namespaces/configuration are attached to the fresh
+   Worker only
+
+8. no existing BuildCustom resource IDs appear in the fresh runtime config
+
+9. no BuildCustom production/staging routes were changed
+
+10. no Google provider key is configured
+
+11. no stored Google BYOK exists in the fresh gateway
+
+12. Require provider credentials is OFF
+
+13. stock ThinkAgent is being used
+
+14. stock model resolver is being used
+
+15. Think resolves through the fresh AI Gateway /compat path
+
+16. Cloudflare credits are available
+
+==================================================
+IF THE CHECKPOINT PASSES
+
+Proceed with ONE normal STOCK VibeSDK generation.
+
+Do not call /compat manually.
+
+Do not bypass ThinkAgent.
+
+Prompt:
+
+Create a minimal buildable website with a visible heading displaying
+exactly:
+
+BUILDCUSTOM_STOCK_VIBESDK_OK
+
+Include a stylesheet.
+
+Keep the application as small as possible.
+
+Allow the normal ThinkAgent loop to operate.
+
+==================================================
+MODEL
+
+Use the upstream default model identifier FIRST:
+
+google-ai-studio/gemini-3.6-flash
+
+Do not change it preemptively.
+
+If Cloudflare specifically rejects that model identifier:
+
+STOP.
+
+Do not retry automatically.
+
+Return the exact safe error so we can determine whether the only necessary
+change is:
+
+google-ai-studio/gemini-3.6-flash
+
+→
+
+google/gemini-3.6-flash
+
+==================================================
+SUCCESS CRITERIA
+
+PASS requires:
+
+- normal ThinkAgent generation completes
+- files are created
+- BUILDCUSTOM_STOCK_VIBESDK_OK exists
+- app builds
+- preview works
+- requests appear in the fresh AI Gateway
+- no Google/provider API key was supplied
+- gateway billing evidence is consistent with Unified Billing
+- no stored BYOK was used
+- existing BuildCustom runtime was not involved
+
+Record:
+
+- upstream commit
+- fresh resources created
+- Worker version
+- gateway
+- Think model identifier
+- endpoint
+- number of model requests
+- provider/model observed
+- input tokens
+- output tokens
+- cost
+- visible credit movement
+- any rate limits/errors
+- generated files
+- build result
+- preview result
+
+==================================================
+FAILURE RULE
+
+If stock VibeSDK fails:
+
+STOP at the actual failure.
+
+Do not build diagnostic infrastructure.
+
+Do not rewrite ThinkAgent.
+
+Do not switch to BYOK.
+
+Do not add a Google key.
+
+Do not add pacing.
+
+Do not retry with architectural changes.
+
+Report the failure and evidence.
+
+==================================================
+AFTER TEST
+
+Leave the fresh lab environment intact.
+
+Do not delete it.
+
+Do not delete the old BuildCustom environment.
+
+Do not connect BuildCustom domains yet.
+
+Do not integrate the dashboard yet.
+
+Do not implement customer billing yet.
+
+==================================================
+FINAL REPORT
+
+Return:
+
+1. configuration audit result
+2. confirmation no existing resource IDs were targeted
+3. fresh resources created
+4. upstream commit
+5. Worker version
+6. gateway configuration
+7. confirmation Google key absent
+8. confirmation stored BYOK absent
+9. stock Think model
+10. stock Think endpoint
+11. generation result
+12. number of model requests
+13. provider/model
+14. tokens
+15. cost
+16. credit movement if visible
+17. generated files
+18. build result
+19. preview result
+20. whether Unified Billing is proven
+21. whether ANY VibeSDK inference-code change was required
+22. whether any existing BuildCustom resource was modified
+23. recommendation for the next single step
+
+Then STOP.
