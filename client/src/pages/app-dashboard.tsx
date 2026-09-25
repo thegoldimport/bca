@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAppUser, setAppUser, clearAppUser, authHeaders, isAdminUser, type AppUser } from "@/lib/auth";
+import { getAppUser, setAppUser, authHeaders, isAdminUser, signOut, type AppUser } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutGrid,
@@ -199,7 +199,7 @@ function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onTo
               </span>
             </button>
             <button
-              onClick={() => { clearAppUser(); window.location.href = "/app/login"; }}
+              onClick={() => { void signOut().catch((error) => window.alert(error.message)); }}
               className={`relative group flex items-center justify-center w-full px-2 py-2.5 rounded-xl transition-colors ${
                 theme === "dark" ? "text-white/55 hover:text-red-400 hover:bg-red-500/10" : "text-gray-500 hover:text-red-600 hover:bg-red-50"
               }`}
@@ -288,12 +288,13 @@ function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onTo
           </span>
         </button>
         <button
-          onClick={() => { clearAppUser(); window.location.href = "/app/login"; }}
+          onClick={() => { void signOut().catch((error) => window.alert(error.message)); }}
           className={`flex items-center gap-2 w-full px-2 py-2.5 rounded-xl transition-colors ${
             theme === "dark"
               ? "text-white/60 hover:text-red-400 hover:bg-red-500/10"
               : "text-gray-600 hover:text-red-600 hover:bg-red-50"
           }`}
+          aria-label="Log Out"
           data-testid="button-logout"
         >
           <LogOut size={20} />
@@ -3564,26 +3565,28 @@ function AppDashboardContent({ user }: { user: AppUser }) {
 
 export default function AppDashboard() {
   const [appUser, setCurrentUser] = useState<AppUser | null>(() => getAppUser());
+  const [checkingSession, setCheckingSession] = useState(true);
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    if (!appUser) return;
-    fetch("/api/auth/me", { headers: authHeaders() })
+    let active = true;
+    fetch("/api/auth/me", { credentials: "same-origin", cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error("Unable to refresh account");
         return res.json();
       })
-      .then((user: AppUser) => {
+      .then((user: AppUser | null) => {
+        if (!active) return;
+        if (!user) { setCurrentUser(null); navigate("/app/login"); return; }
         setAppUser(user);
         setCurrentUser(user);
       })
-      .catch(() => {});
-  }, [appUser?.id]);
+      .catch(() => { if (active) { setCurrentUser(null); navigate("/app/login"); } })
+      .finally(() => { if (active) setCheckingSession(false); });
+    return () => { active = false; };
+  }, [navigate]);
 
-  if (!appUser) {
-    navigate("/app/login");
-    return null;
-  }
+  if (checkingSession || !appUser) return null;
 
   return (
     <ThemeProvider>

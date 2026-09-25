@@ -9,6 +9,7 @@ import { handleDomainRoute } from "./domain-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
 import { capturePreviewImage, imageDataUri, previewImageKey, verifyPublicHostnameRoute, type BrowserRunBinding } from "./staging/preview-image";
 import { StagingPublishNotReadyError, waitForStagingAppReady } from "./staging/published-readiness";
+import { handleStagingCustomerAuth, resolveRuntimeProductUser, RuntimeIdentityError } from "./staging/runtime-identity";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -23,6 +24,8 @@ export type Env = {
   VIBESDK_RUNTIME_URL?: string;
   VIBESDK_API_KEY?: string;
   VIBESDK_RUNTIME: Fetcher;
+  AUTH_RUNTIME?: Fetcher;
+  AUTH_RUNTIME_URL?: string;
   STAGING_ROUTE_KV_ID: string;
   STAGING_DISPATCH_NAMESPACE: string;
   STAGING_ALLOWED_ORIGIN: string;
@@ -45,7 +48,7 @@ const reservedSlugs = new Set(["www", "api", "app", "apps", "admin", "billing", 
 const STAGING_GATEWAY_HOST = "buildcustom-apps-gateway-staging.thegoldimport.workers.dev";
 const json = (data: unknown, init: ResponseInit = {}) => Response.json(data, { headers: { "Cache-Control": "no-store", ...init.headers }, ...init });
 const readBody = async (request: Request) => await request.json().catch(() => ({})) as Record<string, unknown>;
-export const serializeUser = (row: any) => ({ id: row.id, username: row.username, email: row.email, plan: row.plan || "free", role: row.role, createdAt: row.created_at || row.createdAt });
+export const serializeUser = (row: any) => ({ id: row.id, username: row.display_name || row.username, email: row.email, plan: row.plan || "free", role: row.role, createdAt: row.created_at || row.createdAt });
 const jsonArray = (value: unknown): unknown[] => {
   if (Array.isArray(value)) return value;
   if (typeof value !== "string") return [];
@@ -149,6 +152,7 @@ export function projectIdFromPath(pathname: string): number | null {
 }
 function runtimeError(error: unknown): Response {
   if (error instanceof VibeSdkAdapterError) return json({ message: error.message, code: error.code }, { status: error.status });
+  if (error instanceof RuntimeIdentityError) return json({ message: error.message }, { status: error.status });
   return json({ message: error instanceof Error ? error.message : "Request failed" }, { status: 400 });
 }
 
@@ -194,6 +198,14 @@ export default {
       if (adminResponse) return adminResponse;
       const contentResponse = await handleContentRoute({ request, env, url, input });
       if (contentResponse) return contentResponse;
+      const stagingCustomer = env.ENVIRONMENT === "staging";
+      if (stagingCustomer) {
+        if (url.pathname === "/api/auth/register" && env.STAGING_REGISTRATION_ENABLED !== "true") {
+          return json({ message: "Staging registration is closed." }, { status: 403 });
+        }
+        const response = await handleStagingCustomerAuth(env, request, url.pathname, input);
+        if (response) return response;
+      }
 
       if (url.pathname === "/api/auth/register" && request.method === "POST") {
         if (env.STAGING_LOGIN_ENABLED !== "true") return json({ message: "Staging login is disabled until acceptance testing is authorized." }, { status: 503 });
@@ -225,7 +237,7 @@ export default {
         await revokeSession(env.DB, request);
         return new Response(null, { status: 204, headers: { "Set-Cookie": expiredSessionCookie() } });
       }
-      const user = await resolveSession(env.DB, request);
+      const user = stagingCustomer ? await resolveRuntimeProductUser(env, request) : await resolveSession(env.DB, request);
       if (!user) {
         if (url.pathname.startsWith("/api/")) return json({ message: "Unauthorized" }, { status: 401 });
         const asset = await env.ASSETS.fetch(request);

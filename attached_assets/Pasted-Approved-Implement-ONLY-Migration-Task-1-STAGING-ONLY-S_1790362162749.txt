@@ -1,0 +1,393 @@
+Approved. Implement ONLY Migration Task 1:
+
+STAGING-ONLY SINGLE LOGIN + USER OWNERSHIP FOUNDATION.
+
+We are accepting Auth Decision B for launch:
+
+Stock VibeSDK authentication will be the underlying runtime identity system.
+
+The customer-facing experience must remain entirely BuildCustom branded.
+
+Users should experience:
+
+app.buildcustom.ai
+→ BuildCustom signup/login
+→ BuildCustom dashboard
+
+They should never see or need to understand VibeSDK.
+
+==================================================
+IMPORTANT ARCHITECTURE
+==================================================
+
+There must be ONE customer identity.
+
+The authenticated runtime user is the identity that owns:
+
+- ThinkAgent
+- SpaceDO
+- runtime projects
+
+BuildCustom D1 should reference that verified runtime user ID for product
+ownership.
+
+Do NOT maintain:
+
+BuildCustom user
+→ shared VibeSDK service account
+
+for customer projects.
+
+Do NOT create:
+
+BuildCustom user
+→ second VibeSDK user account
+
+as two visible/separate login systems.
+
+The VibeSDK runtime identity IS the underlying BuildCustom identity.
+
+==================================================
+SCOPE
+==================================================
+
+Implement this ONLY in the staging/Cloudflare product path.
+
+Do NOT modify production.
+
+Do NOT change:
+
+buildcustom.ai
+
+app.buildcustom.ai production DNS
+
+*.apps.buildcustom.ai
+
+existing customer domains
+
+existing production generated apps
+
+the clean lab VibeSDK inference architecture
+
+ThinkAgent
+
+Unified Billing
+
+AI Gateway
+
+generated-app routing
+
+publishing
+
+==================================================
+BUILD THE BRANDED AUTH FLOW
+==================================================
+
+Use the stock VibeSDK authentication implementation underneath the
+BuildCustom experience.
+
+The frontend should present BuildCustom-branded:
+
+- Sign up
+- Log in
+- Log out
+- Session restoration
+
+Do not expose:
+
+- VibeSDK branding
+- VibeSDK URLs
+- VibeSDK API keys
+- runtime credentials
+- internal runtime terminology
+
+==================================================
+ONE BROWSER SESSION
+==================================================
+
+A user should authenticate once.
+
+After authentication, the BuildCustom Cloudflare application must be able
+to determine the VERIFIED runtime user ID server-side.
+
+Do not trust:
+
+- user ID supplied by the browser
+- localStorage identity
+- x-user-id
+- arbitrary project owner IDs from frontend requests
+
+Ownership must derive from the authenticated runtime session.
+
+==================================================
+D1 PRODUCT USER
+==================================================
+
+Adapt the Cloudflare D1 user model so the minimum BuildCustom product user
+can be keyed to the verified VibeSDK/runtime user ID.
+
+Inspect the current schema first.
+
+The existing:
+
+users.password NOT NULL
+
+assumption must not force BuildCustom to maintain a second password system.
+
+Make the SMALLEST intentional staging D1 migration necessary.
+
+Do not destroy existing staging data.
+
+Do not perform a production migration.
+
+Do not create a second auth database.
+
+==================================================
+PROJECT OWNERSHIP
+==================================================
+
+For this task, apply the verified user identity to BuildCustom project:
+
+- create
+- list
+- read
+
+A project must belong to the authenticated runtime user.
+
+Do not trust owner information from the request body.
+
+Do not implement generation yet.
+
+Do not create ThinkAgents yet unless absolutely required by the stock auth
+mechanism itself.
+
+This task is identity + BuildCustom project ownership only.
+
+==================================================
+TWO-USER ISOLATION TEST
+==================================================
+
+Create two disposable staging users:
+
+USER A
+USER B
+
+Do not expose their credentials in the final report.
+
+Verify:
+
+USER A:
+
+- signs up/logs in through BuildCustom-branded flow
+- receives one authenticated browser session
+- creates Project A
+- sees Project A
+
+USER B:
+
+- signs up/logs in independently
+- creates Project B
+- sees Project B
+
+Then prove:
+
+USER A cannot:
+
+- list Project B
+- read Project B
+
+USER B cannot:
+
+- list Project A
+- read Project A
+
+Attempt direct API access using the other project's ID.
+
+Expected result:
+
+403 or 404 according to the application's ownership convention.
+
+==================================================
+UNAUTHENTICATED TESTS
+==================================================
+
+Verify an unauthenticated browser/client cannot:
+
+- list projects
+- read a project
+- create a project
+- access protected editor/project APIs
+
+==================================================
+SESSION TESTS
+==================================================
+
+Verify:
+
+- signup establishes valid identity
+- login establishes valid identity
+- refresh/session restoration works
+- logout invalidates the customer session
+- logged-out requests cannot access protected resources
+
+==================================================
+SECURITY REQUIREMENTS
+==================================================
+
+Do NOT return runtime API keys to the browser.
+
+Do NOT store runtime API keys in localStorage.
+
+Do NOT store passwords in BuildCustom D1 merely to preserve the old schema.
+
+Do NOT trust frontend user IDs.
+
+Do NOT use the existing shared VIBESDK_API_KEY as the ownership identity
+for customer projects.
+
+Server-side identity must be derived from authenticated runtime state.
+
+==================================================
+DO NOT EXPAND SCOPE
+==================================================
+
+Do NOT implement:
+
+- ThinkAgent project creation
+- generation
+- live AI conversation
+- file synchronization
+- preview
+- publishing
+- production generated-app routing
+- customer domains
+- Stripe
+- plans
+- credits
+- usage billing
+- templates migration
+- blog migration
+- SEO migration
+- autoblogger migration
+
+Those are later tasks.
+
+==================================================
+REPLIT / EXPRESS
+==================================================
+
+Do not spend time fixing the old Replit/Express authentication path.
+
+This task belongs to the Cloudflare product path that will replace it.
+
+The Replit server can remain temporarily for development/reference.
+
+Do not create any NEW production dependency on:
+
+- Express
+- Replit Postgres
+- Replit filesystem
+- Replit runtime
+
+==================================================
+TESTS
+==================================================
+
+Add/update automated tests for:
+
+- authentication
+- session verification
+- project create ownership
+- project list isolation
+- project read isolation
+- unauthenticated denial
+- forged user ID rejection
+- logout/session invalidation
+
+Run the relevant existing Cloudflare test suite as well.
+
+Do not weaken existing tests to make the new implementation pass.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+PASS requires:
+
+1. BuildCustom-branded signup works in staging
+
+2. BuildCustom-branded login works
+
+3. one authenticated browser session represents one verified runtime user
+
+4. BuildCustom D1 product user maps to that verified runtime identity
+
+5. no second BuildCustom password system is required
+
+6. project ownership derives server-side from verified identity
+
+7. User A and User B are fully isolated
+
+8. forged user IDs cannot bypass ownership
+
+9. unauthenticated project/editor access is denied
+
+10. logout invalidates access
+
+11. existing relevant Cloudflare tests pass
+
+12. no generation or inference occurs
+
+13. production remains untouched
+
+14. no new Replit runtime dependency is introduced
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. auth architecture implemented
+
+2. exact stock VibeSDK auth interfaces used
+
+3. BuildCustom session mechanism
+
+4. how verified runtime user ID is obtained
+
+5. D1 schema change
+
+6. product user fields
+
+7. project ownership enforcement
+
+8. User A isolation result
+
+9. User B isolation result
+
+10. forged identity test result
+
+11. unauthenticated test result
+
+12. refresh/session restoration result
+
+13. logout result
+
+14. automated test count/results
+
+15. confirmation zero inference requests
+
+16. confirmation production untouched
+
+17. files changed
+
+18. migrations added
+
+19. remaining auth limitations, if any
+
+20. recommendation for the NEXT SINGLE STEP
+
+Then STOP.
+
+Do not begin Migration Task 2.

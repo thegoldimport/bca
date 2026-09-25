@@ -10,6 +10,7 @@
   "kv_namespaces": [{ "binding": "STAGING_ROUTES", "id": "e5e119fa2abc4c26a8c027e0d8a8d82c" }],
   "services": [
     { "binding": "VIBESDK_RUNTIME", "service": "buildcustom-vibesdk-migration-staging" },
+    { "binding": "AUTH_RUNTIME", "service": "bc-vibesdk-lab-20260925" },
     { "binding": "STAGING_GATEWAY", "service": "buildcustom-apps-gateway-staging" }
   ],
   "browser": { "binding": "BROWSER" },
@@ -25,8 +26,9 @@
     "STAGING_MANAGED_GATEWAY_URL": "https://buildcustom-apps-gateway-staging.thegoldimport.workers.dev/p",
     "STAGING_MANAGED_HOSTNAME_SUFFIX": "staging.buildcustom.ai",
     "STAGING_ALLOWED_ORIGIN": "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
+    "AUTH_RUNTIME_URL": "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev",
     "STAGING_LOGIN_ENABLED": "true",
-    "STAGING_REGISTRATION_ENABLED": "false",
+    "STAGING_REGISTRATION_ENABLED": "true",
     "RUNTIME_OPERATIONS_ENABLED": "true"
   }
 }

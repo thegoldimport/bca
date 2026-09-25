@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { createSession, resolveSession, sessionCookie, type SessionUser } from "./staging/auth";
 
-type AdminEnv = { DB: D1Database; STAGING_LOGIN_ENABLED?: string };
+type AdminEnv = { DB: D1Database; STAGING_LOGIN_ENABLED?: string; ENVIRONMENT?: string };
 type AdminRouteArgs = { request: Request; env: AdminEnv; url: URL; input: Record<string, unknown> };
 
 const LOGIN_WINDOW_MS = 60_000;
@@ -87,7 +87,8 @@ export async function handleAdminRoute({ request, env, url, input }: AdminRouteA
     if (!username || !password) return json({ message: "Username and password are required." }, { status: 400 });
     const limiterKeys = [`ip:${requestIp(request)}`, `identity:${username}`];
     if (rateLimited(limiterKeys)) return json({ message: "Too many login attempts. Please try again later." }, { status: 429 });
-    const user = await env.DB.prepare("SELECT id,username,email,password,plan,role,created_at FROM users WHERE lower(username)=? OR lower(email)=?")
+    const hashColumn = env.ENVIRONMENT === "staging" ? "legacy_password_hash" : "password";
+    const user = await env.DB.prepare(`SELECT id,username,email,${hashColumn} AS password,plan,role,created_at FROM users WHERE lower(username)=? OR lower(email)=?`)
       .bind(username, username).first<any>();
     const passwordMatches = await bcrypt.compare(password, user?.password || DUMMY_PASSWORD_HASH);
     if (!user || user.role !== "super_admin" || !passwordMatches) {

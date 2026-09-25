@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 import logo from "@/assets/logo.png";
-import { setAppUser } from "@/lib/auth";
+import { csrfToken, setAppUser } from "@/lib/auth";
 
 export default function AppAuth() {
   const [location, navigate] = useLocation();
@@ -24,18 +24,19 @@ export default function AppAuth() {
       const body = mode === "login"
         ? { email: form.email, password: form.password }
         : { name: form.name, email: form.email, password: form.password };
+      const token = await csrfToken();
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
         body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.message || "Something went wrong"); return; }
       setAppUser(data);
-      if (mode === "signup") localStorage.setItem("bc_new_user", "1");
       navigate("/app");
     } catch {
-      setError("Network error — please try again");
+      setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -102,7 +103,7 @@ export default function AppAuth() {
                   type={showPass ? "text" : "password"}
                   value={form.password}
                   onChange={e => set("password", e.target.value)}
-                  placeholder={mode === "signup" ? "Min 6 characters" : "Your password"}
+                  placeholder={mode === "signup" ? "Choose a strong password" : "Your password"}
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   required
                   className="w-full px-4 py-3 pr-11 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/20 text-sm outline-none focus:border-cyan-400/50 transition-colors"
