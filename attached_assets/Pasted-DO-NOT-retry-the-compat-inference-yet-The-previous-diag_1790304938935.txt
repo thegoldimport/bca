@@ -1,0 +1,321 @@
+DO NOT retry the /compat inference yet.
+
+The previous diagnostic is INCONCLUSIVE because:
+
+- exactly one invocation occurred
+- it returned HTTP 500
+- NO corresponding AI Gateway record exists
+- therefore we have no evidence the request ever reached AI Gateway
+- therefore this was NOT a Unified Billing failure
+- therefore we must diagnose the Worker-side 500 before another inference
+
+==================================================
+GOAL
+==================================================
+
+Determine exactly why the temporary /compat diagnostic returned HTTP
+500 BEFORE reaching AI Gateway.
+
+This task is READ ONLY.
+
+ZERO inference.
+
+ZERO deployments.
+
+ZERO code changes.
+
+ZERO secret changes.
+
+ZERO gateway changes.
+
+ZERO billing changes.
+
+ZERO model changes.
+
+Production untouched.
+
+==================================================
+PHASE 1 — FIND THE EXACT WORKER FAILURE
+==================================================
+
+Inspect Cloudflare Worker observability/logs for the ONE diagnostic
+invocation.
+
+Use the exact timestamp/request context from the previous test.
+
+Find:
+
+- Worker exception
+- stack trace
+- error message
+- request ID / ray ID if available
+- route that handled the diagnostic
+- exact code location that threw
+- whether fetch() to gateway.ai.cloudflare.com was ever attempted
+- whether the failure occurred before constructing fetch
+- whether the failure occurred while constructing headers
+- whether the failure occurred reading a secret/binding
+- whether the failure occurred parsing the request/response
+- whether Cloudflare blocked the outbound request before AI Gateway
+- any other concrete cause
+
+Do NOT infer the cause if Worker logs provide it.
+
+==================================================
+PHASE 2 — INSPECT THE INACTIVE DIAGNOSTIC VERSION
+==================================================
+
+The diagnostic version is no longer serving, but Cloudflare still has
+the uploaded inactive version containing the diagnostic secret.
+
+READ ONLY inspect its:
+
+- version ID
+- modules
+- bindings
+- environment variables
+- compatibility date
+- compatibility flags
+
+Compare it against serving version:
+
+713a1a73-cdad-4f00-bf4e-a656f4a2959d
+
+Determine whether anything required by the diagnostic was missing or
+different.
+
+Do NOT activate the inactive version.
+
+Do NOT delete anything.
+
+==================================================
+PHASE 3 — TRACE THE DIAGNOSTIC CODE
+==================================================
+
+Inspect the exact diagnostic implementation that was deployed.
+
+Trace it line-by-line from:
+
+incoming protected diagnostic request
+
+through:
+
+credential/binding lookup
+→ endpoint construction
+→ request body construction
+→ header construction
+→ fetch()
+
+Determine the FIRST operation capable of producing the observed 500.
+
+Particularly verify:
+
+1. Was BUILDCUSTOM_THINK_API_TOKEN actually readable in that version?
+
+2. Was the diagnostic protection secret readable?
+
+3. Was the account ID available?
+
+4. Was the gateway ID available?
+
+5. Was the URL syntactically correct?
+
+6. Was the request body valid JSON?
+
+7. Was the model:
+
+google/gemini-3.6-flash
+
+8. Was:
+
+cf-aig-authorization
+
+constructed correctly?
+
+9. Was provider Authorization absent?
+
+10. Was fetch() actually called?
+
+==================================================
+PHASE 4 — DISTINGUISH LOCAL 500 FROM UPSTREAM 500
+==================================================
+
+This distinction is critical.
+
+Determine whether:
+
+A.
+
+our Worker threw an exception and generated HTTP 500
+
+OR
+
+B.
+
+gateway.ai.cloudflare.com returned HTTP 500 and our Worker forwarded it
+
+OR
+
+C.
+
+another Cloudflare layer returned 500 before AI Gateway logging
+
+We currently know there was no attributable AI Gateway log.
+
+Do not call this an AI Gateway or Unified Billing failure unless the
+evidence proves that.
+
+==================================================
+PHASE 5 — CHECK REQUEST FORMAT AGAINST OFFICIAL /compat
+==================================================
+
+Without sending anything, compare the exact diagnostic request against
+current official Cloudflare /compat documentation.
+
+Verify:
+
+- URL
+- HTTP method
+- headers
+- gateway authentication header
+- Content-Type
+- body structure
+- model identifier
+- messages structure
+
+Identify any mismatch.
+
+Do not fix it yet.
+
+==================================================
+PHASE 6 — CHECK TOKEN USAGE WITHOUT VERIFYING VIA INFERENCE
+==================================================
+
+We used:
+
+BUILDCUSTOM_THINK_API_TOKEN
+
+because it was previously owner-verified as the token:
+
+newtestworkersai
+
+with AI Gateway Run permission.
+
+Determine whether using this token through:
+
+cf-aig-authorization
+
+is valid according to Cloudflare's current gateway authentication
+documentation.
+
+This is different from the account-scoped REST route where it was
+previously used as:
+
+Authorization: Bearer ...
+
+We need to know whether the SAME Account API Token can legitimately be
+used as:
+
+cf-aig-authorization: Bearer ...
+
+for /compat.
+
+Do not expose the token.
+
+Do not change permissions.
+
+Do not verify it by inference.
+
+==================================================
+PHASE 7 — DIAGNOSTIC SECRET CLEANUP
+==================================================
+
+There is currently an unused diagnostic secret attached only to an
+inactive uploaded Worker version.
+
+DO NOT perform a deployment solely to remove it during this task.
+
+Determine the safest eventual cleanup method.
+
+If Cloudflare requires another version/deployment before the old latest
+uploaded version can be deleted/retired, explain that.
+
+But make ZERO changes now.
+
+This secret is not a reason to alter the serving Worker during this
+investigation.
+
+==================================================
+PHASE 8 — DETERMINE THE SMALLEST FIX
+==================================================
+
+Once the exact 500 cause is known, describe the smallest staging-only
+fix required for the diagnostic.
+
+Do NOT implement it.
+
+The desired eventual diagnostic remains:
+
+VibeSDK-compatible request
+→ /compat
+→ authenticated AI Gateway
+→ NO provider key
+→ Unified Billing
+→ google/gemini-3.6-flash
+
+We still want exactly ONE inference when we eventually retry.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT reopen:
+
+- wholesale pacing
+- Google BYOK
+- direct Google billing
+- alternate models
+- native generation
+- the call-12 issue
+
+Those are downstream questions.
+
+Right now we have a simple engineering problem:
+
+WHY DID OUR DIAGNOSTIC RETURN 500 BEFORE PRODUCING AN AI GATEWAY LOG?
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact diagnostic invocation timestamp
+2. diagnostic Worker version ID
+3. serving Worker version ID
+4. exact Worker-side error
+5. stack trace / relevant code location
+6. whether fetch() to /compat was actually attempted
+7. whether the 500 originated locally or upstream
+8. whether BUILDCUSTOM_THINK_API_TOKEN was readable
+9. whether that token type is valid for cf-aig-authorization
+10. whether diagnostic secret was readable
+11. whether account/gateway identifiers were available
+12. exact URL that WOULD have been requested, with account ID redacted
+    if appropriate
+13. exact safe header names that WOULD have been sent
+14. confirmation provider Authorization was absent
+15. request-body validation result
+16. comparison against official /compat request format
+17. exact root cause of the 500
+18. smallest fix
+19. safest eventual inactive diagnostic-secret cleanup
+20. whether another ONE-request /compat test is justified after the fix
+21. confirmation ZERO inference
+22. confirmation ZERO changes
+23. confirmation production untouched
+
+STOP.
+
+Do not implement the fix.
+Do not retry inference.
