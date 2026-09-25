@@ -912,6 +912,7 @@ function EditorPage() {
   const [runtimeCapabilityError, setRuntimeCapabilityError] = useState("");
   const currentRuntimeCapability = runtimeCapability?.projectId === projectId ? runtimeCapability : null;
   const nativeThink = currentRuntimeCapability?.nativeThink === true;
+  const canPublishNative = Boolean(currentRuntimeCapability && nativeThink);
   const runtimeGenerationStatus = String(currentRuntimeCapability?.status?.state?.generation?.status || "").toLowerCase();
   const nativeRuntimeAlreadyWorking = nativeThink && (
     currentRuntimeCapability?.status?.state?.shouldBeGenerating === true
@@ -930,6 +931,7 @@ function EditorPage() {
   const [productionUrl, setProductionUrl] = useState("");
   const [previewEnvironment, setPreviewEnvironment] = useState<"development" | "production">("development");
   const [publishing, setPublishing] = useState(false);
+  const nativePublishingRef = useRef(false);
   const [publishDrawerOpen, setPublishDrawerOpen] = useState(false);
   const [subdomainSlug, setSubdomainSlug] = useState("");
   const [customDomainOpen, setCustomDomainOpen] = useState(false);
@@ -1164,7 +1166,7 @@ function EditorPage() {
         setRuntimeCapability({ projectId, nativeThink: isNativeThink, status });
         setNativeProgress([]);
         if (isNativeThink) {
-          setProductionUrl("");
+          setProductionUrl(status.deploymentUrl || "");
           setPreviewEnvironment("development");
           const nativePreviewUrl = status.previewUrl || status.previewURL || status.state?.previewUrl || status.state?.previewURL;
           setPreviewUrl(typeof nativePreviewUrl === "string" ? nativePreviewUrl : "");
@@ -1228,7 +1230,11 @@ function EditorPage() {
     if (!projectId) return;
     const response = await fetch(`/api/projects/${projectId}/runtime/releases`, { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
-    if (response.ok) setReleases(data.releases || []);
+    if (response.ok) {
+      const nextReleases = data.releases || [];
+      setReleases(nextReleases);
+      if (nextReleases[0]?.deploymentUrl) setProductionUrl(nextReleases[0].deploymentUrl);
+    }
   };
 
   useEffect(() => {
@@ -2556,6 +2562,55 @@ function EditorPage() {
     }
   };
 
+  const publishNativeProject = async () => {
+    if (!canPublishNative || !projectId || publishing || nativePublishingRef.current) return;
+    const safeSlug = subdomainSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "").slice(0, 63);
+    if (safeSlug && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(safeSlug)) {
+      setPublishFlow({ status: "failed", message: "Use 1–63 lowercase letters, numbers, or hyphens for the project address." });
+      return;
+    }
+    nativePublishingRef.current = true;
+    setPublishing(true);
+    setPublishFlow({ status: "preparing", message: "Publishing your project…" });
+    try {
+      const token = await csrfToken();
+      const headers = { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() };
+      if (safeSlug) {
+        const settingsResponse = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            subdomainSlug: safeSlug,
+            hostingProvider: "buildcustom",
+            customDomain: "",
+            customOrigin: "",
+          }),
+        });
+        const settings = await settingsResponse.json().catch(() => ({}));
+        if (!settingsResponse.ok) throw new Error(settings.message || "The project address could not be saved.");
+        setSubdomainSlug(settings.subdomainSlug || safeSlug);
+      }
+
+      const response = await fetch(`/api/projects/${projectId}/runtime/deployments`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "The project could not be published.");
+      const publicUrl = typeof data.deploymentUrl === "string" ? data.deploymentUrl : "";
+      if (!publicUrl) throw new Error("The project was published, but no public address was returned.");
+      setProductionUrl(publicUrl);
+      setPublishFlow({ status: "complete", message: "Published" });
+      await loadReleases().catch(() => undefined);
+    } catch (error: any) {
+      setPublishFlow({ status: "failed", message: error.message || "The project could not be published." });
+    } finally {
+      nativePublishingRef.current = false;
+      setPublishing(false);
+    }
+  };
+
   const restoreReleaseToDevelopment = async () => {
     if (!canManageProduction || !projectId || !restoreCandidate || restoringRelease) return;
     setRestoringRelease(true);
@@ -3224,6 +3279,20 @@ function EditorPage() {
               </div>
             )}
           </form>
+          {canPublishNative && <button
+            onClick={() => {
+              setPublishDrawerOpen(true);
+              setPublishFlow(productionUrl
+                ? { status: "complete", message: "Published" }
+                : { status: "idle", message: "" });
+            }}
+            disabled={publishing}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-400 text-black hover:bg-cyan-300 disabled:opacity-40 text-xs font-semibold transition-colors"
+            data-testid="button-open-native-publish"
+          >
+            {publishing ? <RefreshCw size={13} className="animate-spin" /> : <Rocket size={13} />}
+            {publishing ? "Publishing" : "Publish"}
+          </button>}
           {canManageProduction && <button
             onClick={() => {
               setPublishDrawerOpen(true);
@@ -3427,7 +3496,7 @@ function EditorPage() {
         )}
 
         <AnimatePresence>
-          {publishDrawerOpen && canManageProduction && (
+          {publishDrawerOpen && (canManageProduction || canPublishNative) && (
             <>
               <motion.button
                 type="button"
@@ -3452,7 +3521,7 @@ function EditorPage() {
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-400"><Rocket size={18} /></div>
                   <div className="min-w-0 flex-1">
                     <h2 className="text-sm font-semibold">Publish project</h2>
-                    <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Subdomain, custom domain, progress, and releases</p>
+                    <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{nativeThink ? "Publish your project and view its public address" : "Subdomain, custom domain, progress, and releases"}</p>
                   </div>
                   <button
                     onClick={() => setPublishDrawerOpen(false)}
@@ -3464,6 +3533,51 @@ function EditorPage() {
                 </div>
 
                 <div className="flex-1 space-y-5 overflow-y-auto p-5">
+                  {nativeThink ? (
+                    <section className={`space-y-5 rounded-2xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.03]" : "border-gray-200 bg-gray-50"}`} data-testid="native-publish-panel">
+                      <div>
+                        <label htmlFor="native-publish-slug" className="mb-2 block text-xs font-semibold">Project address (optional)</label>
+                        <div className={`flex overflow-hidden rounded-xl border focus-within:border-cyan-400/60 ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-white"}`}>
+                          <input
+                            id="native-publish-slug"
+                            value={subdomainSlug.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "").slice(0, 63)}
+                            onChange={(event) => setSubdomainSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "").slice(0, 63))}
+                            disabled={Boolean(productionUrl) || publishing}
+                            maxLength={63}
+                            aria-label="Project address"
+                            className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-right text-sm outline-none disabled:cursor-not-allowed disabled:opacity-55"
+                            data-testid="input-native-publish-slug"
+                          />
+                          <span className={`flex items-center border-l px-3 text-sm ${theme === "dark" ? "border-white/10 text-white/45" : "border-gray-200 text-gray-500"}`}>.apps.buildcustom.ai</span>
+                        </div>
+                      </div>
+                      <div role="status" aria-live="polite" data-testid="native-publish-status">
+                        <div className="flex items-center gap-2">
+                          {publishing ? <RefreshCw size={15} className="animate-spin text-cyan-400" /> :
+                            publishFlow.status === "failed" ? <X size={15} className="text-red-400" /> :
+                            publishFlow.status === "complete" || productionUrl ? <Check size={15} className="text-emerald-400" /> :
+                            <Cloud size={15} className="text-cyan-400" />}
+                          <span className="text-sm font-semibold">{publishing ? "Publishing" : publishFlow.status === "failed" ? "Publish failed" : (publishFlow.status === "complete" || productionUrl) ? "Published" : "Ready to publish"}</span>
+                        </div>
+                        {publishFlow.status === "failed" && <p role="alert" className={`mt-2 text-xs ${theme === "dark" ? "text-red-300" : "text-red-600"}`}>{publishFlow.message}</p>}
+                        {productionUrl && (
+                          <a href={productionUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex max-w-full items-center gap-1.5 break-all text-xs font-semibold text-cyan-400 underline" data-testid="link-native-public-url">
+                            <ExternalLink size={13} className="shrink-0" />{productionUrl}
+                          </a>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={publishNativeProject}
+                        disabled={publishing}
+                        className="w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        data-testid="button-publish-native"
+                      >
+                        {publishing ? "Publishing…" : productionUrl ? "Publish updates" : "Publish"}
+                      </button>
+                    </section>
+                  ) : (
+                  <>
                   <section>
                     <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide opacity-60">BuildCustom.Ai subdomain</h3>
                     <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium">
@@ -3709,6 +3823,8 @@ function EditorPage() {
                         </button>
                       </div>
                     </section>
+                  )}
+                  </>
                   )}
                 </div>
               </motion.aside>

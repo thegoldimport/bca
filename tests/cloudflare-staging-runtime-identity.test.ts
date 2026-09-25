@@ -16,6 +16,9 @@ function database() {
   sqlite.exec("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES('legacy-session','legacy','2030-01-01')");
   sqlite.exec(readFileSync("migrations/d1/0002_staging_runtime_identity.sql", "utf8"));
   sqlite.exec(readFileSync("migrations/d1/0003_staging_think_project_links.sql", "utf8"));
+  // Apply the native publish migration after legacy data and project rows have
+  // been inserted above; this exercises upgrade compatibility on a populated D1.
+  sqlite.exec(readFileSync("migrations/d1/0004_native_publish.sql", "utf8"));
   const db = {
     prepare(sql: string) {
       let args: unknown[] = [];
@@ -435,6 +438,9 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.deepEqual((await (await a.send("/api/projects")).json() as any[]).map((p) => p.id), [projectA.id]);
   assert.deepEqual((await (await b.send("/api/projects")).json() as any[]).map((p) => p.id), [projectB.id]);
   assert.equal((await a.send(`/api/projects/${projectB.id}`)).status, 404);
+  assert.equal((await a.send(`/api/projects/${projectB.id}/runtime/reconcile-deployment`, "POST", {}, {
+    "X-CSRF-Token": "csrf-value",
+  })).status, 404);
   assert.equal((await b.send(`/api/projects/${projectA.id}`)).status, 404);
   assert.equal((await a.send(`/api/projects/${projectB.id}/runtime/agent/${projectB.agentId}`)).status, 404);
   assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/agent/${projectA.agentId}`)).status, 404);
@@ -572,7 +578,9 @@ test("two runtime users have one verified session each and isolated BuildCustom 
     assert.equal(expiredReplay.status, 403);
   });
   assert.deepEqual(await (await a.send(`/api/projects/${projectA.id}/runtime/turns`, "GET", undefined, { "X-CSRF-Token": "csrf-value" })).json(), { turns: [] });
-  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/releases`)).status, 501);
+  const nativeReleases = await a.send(`/api/projects/${projectA.id}/runtime/releases`);
+  assert.equal(nativeReleases.status, 200);
+  assert.deepEqual(await nativeReleases.json(), { releases: [] });
   assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/publishing-settings`)).status, 200);
   const previewResponse = await a.send(`/api/projects/${projectA.id}/runtime/previews`, "POST", {}, { "X-CSRF-Token": "csrf-value" });
   assert.equal(previewResponse.status, 201);
@@ -580,7 +588,7 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal(stock.calls.filter((path) => /\/api\/agent\/[^/]+\/preview$/.test(path)).length, 1);
   assert.equal(stock.calls.some((path) => /deploy|publish/i.test(path)), false);
   assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/messages`, "POST", { prompt: "Do not send" })).status, 501);
-  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/deployments`, "POST", {})).status, 501);
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/deployments`, "POST", {})).status, 403);
   assert.equal(stock.agents.size, 2);
 
   assert.equal((await a.send("/api/projects", "POST", { name: "Forged" }, { "x-user-id": bMe.id })).status, 400);

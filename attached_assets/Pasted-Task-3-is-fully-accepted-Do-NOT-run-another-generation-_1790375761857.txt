@@ -1,0 +1,687 @@
+Task 3 is fully accepted.
+
+Do NOT run another generation.
+
+Do NOT modify the Task 3 application.
+
+Proceed with ONLY Migration Task 4:
+
+BUILDCUSTOM PUBLISH FLOW
+
+Existing authenticated BuildCustom project
+→ existing owner-linked ThinkAgent
+→ stock VibeSDK platform deploy
+→ staging/lab Workers for Platforms dispatch namespace
+→ BuildCustom release metadata
+→ BuildCustom-owned generated-app hostname
+→ public application
+
+STAGING ONLY.
+
+DO NOT TOUCH PRODUCTION.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Connect the actual BuildCustom Publish experience to the stock VibeSDK
+publishing mechanism already proven independently.
+
+Use the existing successful Task 3 project:
+
+BuildCustom project:
+10
+
+Stock agent:
+758c1390-8c92-457d-bd85-560b2fab3c4b
+
+Current authoritative revision:
+b53e777aa0481108f8d8bcce09de73b23afe0da6
+
+Current application contains:
+
+BUILDCUSTOM_TASK3_EDIT_OK
+
+Fresh coffee. Simple mornings.
+
+Do NOT regenerate or edit it.
+
+==================================================
+IMPORTANT
+==================================================
+
+This is NOT another infrastructure research task.
+
+We have already proven independently:
+
+- stock VibeSDK platform publish
+- Workers for Platforms upload
+- dispatch namespace
+- shared generated-app gateway
+- wildcard generated-app DNS
+- wildcard TLS
+- public HTML
+- static assets
+
+Task 4 connects those proven pieces to the real authenticated BuildCustom
+project/product flow.
+
+Do not redesign publishing.
+
+==================================================
+PUBLISH ARCHITECTURE
+==================================================
+
+The intended product flow is:
+
+authenticated BuildCustom user
+→ BuildCustom project ownership check
+→ resolve linked owner-specific stock agent
+→ stock WebSocket deploy action
+→ target: "platform"
+→ generated script in staging/lab dispatch namespace
+→ persist BuildCustom release metadata
+→ assign BuildCustom public slug
+→ shared generated-app gateway
+→ public hostname
+
+Use the stock VibeSDK deploy mechanism.
+
+Do NOT:
+
+- manually upload a Worker
+- create a second bundler
+- create a BuildCustom deployment engine
+- duplicate the generated app
+- create one gateway Worker per app
+
+==================================================
+STAGING PUBLIC HOSTNAME
+==================================================
+
+Use the already-proven LAB/STAGING generated-app routing.
+
+Do NOT configure:
+
+*.apps.buildcustom.ai
+
+during this task.
+
+Use the existing safe lab generated-app namespace:
+
+*.lab-apps.buildcustom.ai
+
+and its existing shared gateway:
+
+bc-vibesdk-lab-20260925-apps-gateway
+
+bound to:
+
+bc-vibesdk-lab-20260925-dispatch
+
+Do not create another wildcard or gateway if the existing proven one can be
+used safely.
+
+==================================================
+SCRIPT / SLUG DISTINCTION
+==================================================
+
+Do NOT assume the customer-facing BuildCustom slug must equal the stock
+VibeSDK deployment/script ID.
+
+These are separate concepts.
+
+For example:
+
+BuildCustom slug:
+northstar-coffee
+
+Stock deployment/script ID:
+whatever stock VibeSDK returns
+
+The BuildCustom routing layer must be able to resolve:
+
+northstar-coffee.lab-apps.buildcustom.ai
+
+→ correct stock dispatched script
+
+Use the existing product route-map/D1/KV architecture if appropriate.
+
+Do not rename or duplicate the dispatched Worker merely to force the names
+to match.
+
+==================================================
+PUBLISH BUTTON
+==================================================
+
+Connect the existing BuildCustom Publish button/UI.
+
+The customer experience should be conceptually:
+
+Publish
+→ Publishing...
+→ Published
+→ public URL available
+
+The customer should NOT see:
+
+VibeSDK
+Workers for Platforms
+dispatch namespace
+script ID
+Cloudflare internals
+
+Useful customer-facing information:
+
+- publishing state
+- published URL
+- success
+- real error if publish fails
+
+==================================================
+OWNERSHIP
+==================================================
+
+Publishing must require the authenticated project owner.
+
+USER A cannot publish USER B's project.
+
+USER B cannot publish USER A's project.
+
+The browser must not be able to submit an arbitrary agent ID and publish
+another user's agent.
+
+Resolve:
+
+authenticated user
+→ owned BuildCustom project
+→ linked stock agent
+
+server-side.
+
+==================================================
+REVISION BEING PUBLISHED
+==================================================
+
+Before publishing, capture the authoritative current branch revision.
+
+For Project 10 it should currently be:
+
+b53e777aa0481108f8d8bcce09de73b23afe0da6
+
+Persist the revision associated with the successful release.
+
+Do not mark a release successful unless the stock platform deployment
+succeeds.
+
+==================================================
+STOCK DEPLOY ACTION
+==================================================
+
+Use the owner-authorized stock WebSocket deploy action:
+
+deploy
+target: "platform"
+
+Use the SAME agent.
+
+Do not create another agent.
+
+Do not send an AI prompt.
+
+Do not invoke generation.
+
+Capture the complete stock deployment result.
+
+Persist the returned stock deployment/script identity.
+
+==================================================
+RELEASE METADATA
+==================================================
+
+Use the existing BuildCustom D1 release structures where practical.
+
+For a successful publish, retain enough product metadata to know:
+
+- BuildCustom project ID
+- owner
+- authoritative published revision
+- stock deployment/script ID
+- BuildCustom public slug
+- public hostname/URL
+- publish status
+- published timestamp
+
+If the existing schema already contains additional harmless fields, use it.
+
+Do NOT store generated application files in release metadata.
+
+Do NOT duplicate the runtime bundle.
+
+==================================================
+ROUTE MAPPING
+==================================================
+
+The shared generated-app gateway must resolve the BuildCustom hostname/slug
+to the correct dispatched script.
+
+Use a product mapping such as:
+
+slug
+→ deployment/script ID
+
+Do not rely solely on:
+
+slug == script ID
+
+The gateway must continue to use ONE shared route.
+
+Do not create a Worker route per project.
+
+==================================================
+SLUG RULES
+==================================================
+
+Use the existing project slug system if already suitable.
+
+At minimum:
+
+- lowercase
+- hostname-safe
+- unique within the BuildCustom generated-app namespace
+- cannot collide with reserved system names
+
+If Project 10 does not already have an appropriate slug, assign a safe
+staging slug through the normal BuildCustom product mechanism.
+
+Do not create an elaborate slug subsystem.
+
+==================================================
+PUBLIC VERIFICATION
+==================================================
+
+After successful stock deployment and route mapping, verify the BuildCustom
+public hostname.
+
+Expected pattern:
+
+https://<slug>.lab-apps.buildcustom.ai/
+
+PASS requires:
+
+- valid TLS
+- HTTP 200
+- generated application served
+- HTML contains:
+
+BUILDCUSTOM_TASK3_EDIT_OK
+
+- HTML contains:
+
+Fresh coffee. Simple mornings.
+
+Then verify:
+
+/style.css
+
+PASS requires:
+
+- HTTP 200
+- text/css
+- expected stylesheet
+
+Then render the public page.
+
+PASS requires:
+
+- edited heading visible
+- requested line visible
+- CSS applied
+- no material page errors
+- no failed required assets
+
+An optional favicon 404 is not a blocker.
+
+==================================================
+PRIVATE EDITOR / PUBLIC APP SEPARATION
+==================================================
+
+Project 10 must remain private in the BuildCustom editor.
+
+Publishing must NOT weaken:
+
+- project ownership
+- conversation access
+- file access
+- preview access
+- editor access
+
+Unauthenticated visitor:
+
+PUBLIC GENERATED APP
+→ HTTP 200
+
+Unauthenticated visitor:
+
+BUILDCUSTOM PROJECT/EDITOR
+→ denied
+
+This separation was already proven in the lab architecture and must remain
+true through the actual product publish flow.
+
+==================================================
+REPUBLISH BEHAVIOR
+==================================================
+
+Add deterministic automated coverage for republishing the SAME project
+after a future revision.
+
+Do not perform another AI edit for this test.
+
+Mock or fixture the revision change.
+
+The intended invariant:
+
+same BuildCustom project
+→ same public slug/hostname
+→ new successful deployment/release
+→ route mapping updated to newest successful deployment
+
+A failed republish must NOT break the currently working public deployment.
+
+The previous successful route should remain active until replacement
+deployment is proven successful.
+
+Do not implement elaborate rollback infrastructure.
+
+Just preserve the last known-good public mapping until a new publish
+succeeds.
+
+==================================================
+FAILURE BEHAVIOR
+==================================================
+
+Test:
+
+- stock deploy failure
+- timeout
+- malformed deployment response
+- route-map update failure
+- public verification failure
+
+A failure must not create a false successful release.
+
+Where practical, preserve the previous working public deployment.
+
+Do not automatically regenerate the project.
+
+Do not automatically ask ThinkAgent to fix anything.
+
+Publishing failures are deployment failures, not coding prompts.
+
+==================================================
+PUBLISH IDEMPOTENCY
+==================================================
+
+Prevent accidental duplicate concurrent publishes caused by:
+
+- double-click
+- browser retry
+- duplicate request
+
+Use the smallest practical project-level publish guard supported by the
+existing control plane.
+
+Do not create queues or workflow infrastructure.
+
+==================================================
+NO INFERENCE
+==================================================
+
+Record AI Gateway request count before and after the live publish.
+
+Publishing should produce:
+
+ZERO new inference requests.
+
+Do not send a prompt.
+
+==================================================
+TWO-USER SECURITY
+==================================================
+
+Use deterministic tests and, where safe, existing disposable staging users
+to verify:
+
+USER A cannot:
+
+- publish User B's project
+- change User B's public slug
+- alter User B's route mapping
+- read User B's private release controls
+
+And vice versa.
+
+Do not needlessly perform multiple live WfP publishes for security tests.
+
+Mock the deployment call where appropriate.
+
+==================================================
+DO NOT TOUCH PRODUCTION
+==================================================
+
+Do NOT modify:
+
+buildcustom.ai
+
+app.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+production wildcard DNS
+
+production gateway
+
+production dispatch namespace
+
+production D1
+
+production Worker
+
+production VibeSDK runtime
+
+customer custom domains
+
+All live deployment/routing acceptance must remain within the isolated
+lab/staging resources.
+
+==================================================
+DO NOT TOUCH INFERENCE
+==================================================
+
+Do NOT change:
+
+ThinkAgent
+AI Gateway
+Unified Billing
+model configuration
+SpaceDO
+generation behavior
+completion recovery
+
+Task 3 is frozen.
+
+==================================================
+AUTOMATED TESTS
+==================================================
+
+Add/update tests for:
+
+- owner-authorized publish
+- project → agent resolution
+- arbitrary agent ID rejection
+- cross-user publish denial
+- stock deploy result parsing
+- revision capture
+- successful release metadata
+- slug → deployment mapping
+- public URL construction
+- duplicate publish guard
+- deploy failure
+- route-map failure
+- public verification failure
+- last-known-good mapping preservation
+- republish updates mapping only after success
+- private editor remains private
+- no inference
+- no generation
+
+Run the complete relevant Cloudflare/client suite.
+
+==================================================
+LIVE ACCEPTANCE LIMIT
+==================================================
+
+Perform ONE live publish of the existing Project 10.
+
+Do not republish it repeatedly while debugging UI issues.
+
+If UI/control-plane wiring fails before stock deployment begins, fix that
+without deploying again.
+
+If stock deployment itself fails, capture the complete result before any
+decision to retry.
+
+Do not create another application.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+PASS requires:
+
+1. existing Project 10 is used
+
+2. existing agent is used
+
+3. no generation occurs
+
+4. authoritative revision is captured
+
+5. stock target:"platform" deployment succeeds
+
+6. generated script exists in isolated lab dispatch namespace
+
+7. stock deployment ID is persisted
+
+8. BuildCustom release metadata is persisted
+
+9. customer-facing slug is mapped separately from deployment ID
+
+10. public lab hostname resolves through shared gateway
+
+11. TLS succeeds
+
+12. root returns HTTP 200
+
+13. edited marker is present
+
+14. requested secondary line is present
+
+15. stylesheet returns HTTP 200 text/css
+
+16. rendered public page is correct
+
+17. private editor remains protected
+
+18. cross-user publishing is denied
+
+19. duplicate publish is guarded
+
+20. failed future publish preserves last-known-good mapping
+
+21. zero inference occurs
+
+22. no new agent is created
+
+23. production remains untouched
+
+24. no new Replit runtime dependency is introduced
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. BuildCustom publish architecture
+
+2. stock VibeSDK publish interface used
+
+3. project ID
+
+4. agent ID
+
+5. authoritative revision published
+
+6. stock deployment/script ID
+
+7. dispatch namespace
+
+8. BuildCustom public slug
+
+9. public hostname
+
+10. release metadata written
+
+11. route mapping written
+
+12. root HTTP result
+
+13. marker verification
+
+14. secondary text verification
+
+15. stylesheet result
+
+16. rendered-browser result
+
+17. private editor/public app separation result
+
+18. cross-user publish result
+
+19. duplicate publish result
+
+20. republish/last-known-good deterministic test result
+
+21. deployment failure behavior
+
+22. route failure behavior
+
+23. public verification failure behavior
+
+24. automated test count/results
+
+25. AI Gateway count before/after
+
+26. confirmation zero inference
+
+27. confirmation same agent
+
+28. confirmation no generation
+
+29. files changed
+
+30. migrations added, if any
+
+31. confirmation production untouched
+
+32. remaining limitations
+
+33. whether Task 4 can be accepted
+
+34. recommendation for NEXT SINGLE STEP
+
+Then STOP.
+
+Do not begin production cutover.

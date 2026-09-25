@@ -11,7 +11,8 @@
   "services": [
     { "binding": "VIBESDK_RUNTIME", "service": "buildcustom-vibesdk-migration-staging" },
     { "binding": "AUTH_RUNTIME", "service": "bc-vibesdk-lab-20260925" },
-    { "binding": "STAGING_GATEWAY", "service": "buildcustom-apps-gateway-staging" }
+    { "binding": "STAGING_GATEWAY", "service": "buildcustom-apps-gateway-staging" },
+    { "binding": "LAB_APPS_GATEWAY", "service": "bc-vibesdk-lab-20260925-apps-gateway" }
   ],
   "browser": { "binding": "BROWSER" },
   "observability": { "enabled": true },

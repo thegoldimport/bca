@@ -2,7 +2,23 @@
 // Workers for Platforms dispatch namespace. Editor access stays on the lab
 // VibeSDK Worker and is not exposed by this gateway.
 const HOST_SUFFIX = ".lab-apps.buildcustom.ai";
-const VALID_SCRIPT_NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const VALID_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const VALID_SCRIPT_NAME = /^[a-z0-9_][a-z0-9_-]{0,62}$/;
+const RESERVED_SLUGS = new Set(["admin", "api", "app", "apps", "editor", "gateway", "www"]);
+
+function routeScriptName(raw) {
+  let mapping;
+  try {
+    mapping = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) return null;
+  if (typeof mapping.scriptName !== "string" || !VALID_SCRIPT_NAME.test(mapping.scriptName)) return null;
+  if (!mapping.metadata || typeof mapping.metadata !== "object" || Array.isArray(mapping.metadata)) return null;
+  return { scriptName: mapping.scriptName, metadata: mapping.metadata };
+}
 
 export default {
   async fetch(request, env) {
@@ -11,11 +27,29 @@ export default {
       return new Response("Not found", { status: 404 });
     }
 
-    const scriptName = hostname.slice(0, -HOST_SUFFIX.length);
-    if (!VALID_SCRIPT_NAME.test(scriptName)) {
+    const slug = hostname.slice(0, -HOST_SUFFIX.length);
+    if (!VALID_SLUG.test(slug) || RESERVED_SLUGS.has(slug)) {
       return new Response("Not found", { status: 404 });
     }
 
-    return env.DISPATCHER.get(scriptName).fetch(request);
+    const rawMapping = await env.ROUTES.get(slug);
+    const route = rawMapping === null ? null : routeScriptName(rawMapping);
+    const scriptName = route?.scriptName ?? (rawMapping === null ? slug : null);
+    if (!scriptName) {
+      return new Response("Project not found", { status: 404 });
+    }
+
+    const script = env.DISPATCHER.get(scriptName);
+    const styleFallbackEnabled = route?.metadata.styleCssFallback === true;
+    const shouldCheckStyleFallback = styleFallbackEnabled && new URL(request.url).pathname === "/style.css";
+    const retryRequest = shouldCheckStyleFallback ? request.clone() : null;
+    const response = await script.fetch(request);
+    if (!shouldCheckStyleFallback || response.status !== 404) {
+      return response;
+    }
+
+    const fallbackUrl = new URL(retryRequest.url);
+    fallbackUrl.pathname = "/styles.css";
+    return script.fetch(new Request(fallbackUrl, retryRequest));
   },
 };

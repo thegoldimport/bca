@@ -12,6 +12,7 @@ import { StagingPublishNotReadyError, waitForStagingAppReady } from "./staging/p
 import { handleStagingCustomerAuth, resolveRuntimeProductUser, RuntimeIdentityError } from "./staging/runtime-identity";
 import { createProductProject, initializeProjectAgent, refreshProjectAgent } from "./staging/project-initialization";
 import { handleThinkRuntime } from "./staging/think-runtime";
+import { handleNativeThinkPublish } from "./staging/native-publish";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -43,6 +44,7 @@ export type Env = {
   STAGING_MANAGED_GATEWAY_URL?: string;
   STAGING_MANAGED_HOSTNAME_SUFFIX?: string;
   STAGING_GATEWAY?: Fetcher;
+  LAB_APPS_GATEWAY?: Fetcher;
 };
 
 const attempts = new Map<string, { count: number; reset: number }>();
@@ -322,6 +324,8 @@ export default {
           if (operation === "ws" && request.method === "GET" && !rateLimit(`think-ws:${user.id}:${id}`, 60)) {
             return json({ message: "Too many project connections." }, { status: 429 });
           }
+          const nativePublishResponse = await handleNativeThinkPublish(env, request, project, operation, { id: user.id }, input);
+          if (nativePublishResponse) return nativePublishResponse;
           const nativeThinkResponse = await handleThinkRuntime(env, request, project, operation);
           if (nativeThinkResponse) return nativeThinkResponse;
           if ((operation === "agent" || operation.startsWith("agent/")) && request.method === "GET") {

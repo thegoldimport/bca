@@ -213,9 +213,20 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
                     data-testid="button-view-live"><ExternalLink size={15} /> View Live</button>
                 </a>
               )}
+              {nativeThink && (
+                <Link href={`/app/editor/${projectId}`}>
+                  <button className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${theme === "dark" ? "bg-white/10 text-white hover:bg-white/15" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                    data-testid="button-native-publish-link"><ExternalLink size={15} /> {deploymentUrl ? "Publish updates" : "Publish"}</button>
+                </Link>
+              )}
               <button className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${theme === "dark" ? "bg-white/10 text-white hover:bg-white/15" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                 data-testid="button-share"><Share2 size={15} /> Share</button>
             </div>
+            {nativeThink && deploymentUrl && (
+              <div className={`mt-4 rounded-xl border px-3 py-2.5 text-xs ${theme === "dark" ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`} data-testid="native-public-address">
+                Public address: <a href={deploymentUrl} target="_blank" rel="noopener noreferrer" className="ml-1 break-all font-semibold underline">{deploymentUrl}</a>
+              </div>
+            )}
           </GlassCard>
         </div>
 
@@ -2794,7 +2805,19 @@ export default function ProjectDetail() {
             {activeTab === "autoblogger" && <AutoBloggerTab projectId={projectId} />}
             {activeTab === "seo" && <SEOTab projectId={projectId} project={project} deploymentUrl={runtimeStatus?.deploymentUrl} />}
             {activeTab === "analytics" && <AnalyticsTab />}
-            {activeTab === "domain" && <DomainTab projectId={projectId} runtimeStatus={runtimeStatus} />}
+            {activeTab === "domain" && (nativeThink ? (
+              <GlassCard>
+                <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Project address</h3>
+                {runtimeStatus?.deploymentUrl ? (
+                  <a href={runtimeStatus.deploymentUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex break-all text-sm font-semibold text-cyan-400 underline" data-testid="native-domain-public-url">{runtimeStatus.deploymentUrl}</a>
+                ) : (
+                  <div className="mt-3 flex items-center justify-between gap-4">
+                    <p className={`text-sm ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Publish this project to make it available at a public address.</p>
+                    <Link href={`/app/editor/${projectId}`}><button className="shrink-0 rounded-lg bg-cyan-400 px-3 py-2 text-xs font-semibold text-black">Publish</button></Link>
+                  </div>
+                )}
+              </GlassCard>
+            ) : <DomainTab projectId={projectId} runtimeStatus={runtimeStatus} />)}
           </motion.div>
         </AnimatePresence>
       </div>

@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bc-vibesdk-lab-20260925-apps-gateway",
+  "main": "lab/bc-vibesdk-lab-20260925/app-gateway/worker.mjs",
+  "compatibility_date": "2026-09-25",
+  "workers_dev": false,
+  "preview_urls": false,
+  "kv_namespaces": [
+    {
+      "binding": "ROUTES",
+      "id": "e5e119fa2abc4c26a8c027e0d8a8d82c",
+      "remote": true
+    }
+  ],
+  "dispatch_namespaces": [
+    {
+      "binding": "DISPATCHER",
+      "namespace": "bc-vibesdk-lab-20260925-dispatch",
+      "remote": true
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
