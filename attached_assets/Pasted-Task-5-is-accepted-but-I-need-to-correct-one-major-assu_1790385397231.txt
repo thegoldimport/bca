@@ -1,0 +1,862 @@
+Task 5 is accepted, but I need to correct one major assumption before we
+continue.
+
+I am the owner of BuildCustom and I can confirm:
+
+BUILDCUSTOM NEVER REALLY LAUNCHED.
+
+There are NO real legacy BuildCustom customers, customer projects, customer
+generated apps, or customer data that need to be migrated.
+
+Everything currently in the old BuildCustom product environment was created
+by me while testing the software before launch.
+
+This includes:
+
+- old BuildCustom users
+- old BuildCustom projects
+- old agents
+- old runtime links
+- old releases
+- old generated apps
+- old sessions
+- the two waitlist entries
+- BuyerMagnets
+- buyermagnets.com
+- www.buyermagnets.com
+- app.buyermagnets.com
+- their custom-hostname records
+- their generated app/runtime state
+- their releases
+- their route mappings
+
+BuyerMagnets was also only my test project.
+
+I have separately downloaded the BuildCustom project source code containing
+the homepage, dashboard, attached pages, and the design/code I care about.
+
+I like the current homepage enough to keep/build from for now, although it
+may be redesigned later.
+
+Therefore we need to materially simplify the production plan.
+
+==================================================
+NEW PRIMARY GOAL
+==================================================
+
+Treat this as:
+
+CLEAN FIRST PRODUCTION LAUNCH OF BUILDCUSTOM
+
+NOT:
+
+MIGRATION OF AN EXISTING CUSTOMER PRODUCT
+
+The product we proved in Tasks 1-4 is what we want to launch.
+
+We do NOT need archaeological preservation of the old BuildCustom test
+environment.
+
+==================================================
+IMPORTANT DISTINCTION
+==================================================
+
+Do not immediately delete old resources.
+
+During cutover, old resources may remain temporarily for:
+
+- safe rollback
+- comparison
+- avoiding accidental Cloudflare conflicts
+
+But that does NOT mean their application data needs to be migrated.
+
+Distinguish:
+
+TEMPORARILY LEFT IN PLACE
+
+from:
+
+MUST PRESERVE CUSTOMER STATE
+
+There is currently NO known legacy BuildCustom customer state that must be
+preserved.
+
+==================================================
+PREFERRED CLEAN PRODUCTION ARCHITECTURE
+==================================================
+
+Unless you discover a concrete technical blocker, the preferred architecture
+is now:
+
+NEW clean BuildCustom production product D1
+
+NEW clean production VibeSDK runtime
+
+NEW clean VibeSDK runtime D1
+
+NEW clean runtime KV
+
+NEW clean runtime R2
+
+NEW clean Workers for Platforms dispatch namespace
+
+NEW clean Durable Object namespaces
+
+NEW clean Sandbox/Container resources
+
+NEW clean production AI Gateway
+
+NEW clean production runtime configuration/secrets
+
+NEW clean production BuildCustom control-plane configuration
+
+Then connect the proven product to:
+
+app.buildcustom.ai
+
+and:
+
+*.apps.buildcustom.ai
+
+Reuse existing Cloudflare domain/DNS/certificate infrastructure only where
+that is simpler and safe.
+
+Do NOT reuse old application state merely because the infrastructure already
+exists.
+
+==================================================
+OLD PRODUCTION D1
+==================================================
+
+Re-evaluate the Task 5 recommendation to migrate the populated old production
+D1.
+
+Its:
+
+- 2 users
+- 4 projects
+- 3 runtime links
+- 7 releases
+- 2 waitlist entries
+- 3 custom-domain claims
+
+are test data.
+
+We do NOT need them in the new product.
+
+Therefore I strongly prefer:
+
+NEW CLEAN PRODUCTION PRODUCT D1
+
+created directly with the accepted final schema
+
+instead of:
+
+migrating the old populated D1 through 0002-0005.
+
+Determine whether there is ANY real technical reason we cannot do this.
+
+If there is no blocker, remove the old production-D1 migration from the
+launch plan entirely.
+
+Leave the old D1 untouched temporarily.
+
+It can be retired later.
+
+==================================================
+BUYERMAGNETS
+==================================================
+
+BuyerMagnets is test infrastructure.
+
+These are NOT customer assets that require continuity:
+
+buyermagnets.com
+www.buyermagnets.com
+app.buyermagnets.com
+
+Their:
+
+- Custom Hostnames
+- certificates
+- mappings
+- releases
+- generated scripts
+- runtime state
+
+do not need migration for customer continuity.
+
+Do NOT delete them during this task.
+
+But reclassify them as:
+
+DISPOSABLE / RETIRE LATER
+
+rather than protected customer infrastructure.
+
+==================================================
+CUSTOM DOMAIN FEATURE
+==================================================
+
+We still want BuildCustom to support customer custom domains.
+
+The proven Cloudflare for SaaS architecture remains useful.
+
+But distinguish:
+
+CUSTOM DOMAIN CAPABILITY
+
+from:
+
+LEGACY CUSTOMER DOMAIN MIGRATION
+
+There are no real legacy customer domains we need to migrate.
+
+We can later test the feature again with a disposable domain if needed.
+
+==================================================
+GENERATED APP GATEWAY
+==================================================
+
+Re-evaluate the gateway plan.
+
+Task 5 assumed the production gateway needed backward compatibility with old
+generated apps and BuyerMagnets.
+
+That is no longer a requirement.
+
+The desired final architecture remains:
+
+*.apps.buildcustom.ai
+→ ONE shared BuildCustom gateway
+→ slug mapping
+→ immutable release script
+→ clean production dispatch namespace
+
+Determine whether it is now simpler and safer to:
+
+A. adapt the existing gateway
+
+or
+
+B. deploy the clean accepted Tasks 1-4 gateway implementation and switch the
+   wildcard to it during cutover.
+
+Prefer simplicity.
+
+Do NOT build dual-dispatch compatibility solely for disposable test apps.
+
+==================================================
+APP.BUILDCUSTOM.AI
+==================================================
+
+Task 5 discovered:
+
+app.buildcustom.ai
+
+is currently attached to the legacy:
+
+vibesdk
+
+Worker and returns HTTP 500.
+
+That old application does NOT need preservation.
+
+We still need a safe Cloudflare reassignment because the hostname is
+technically attached.
+
+But the goal is simply:
+
+old test Worker association
+→ new BuildCustom production application
+
+We do NOT need application-state compatibility with the old Worker.
+
+==================================================
+MARKETING SITE
+==================================================
+
+Keep:
+
+buildcustom.ai
+
+and the current homepage/design for launch unless a change is required.
+
+I have the source downloaded separately.
+
+Do not redesign the marketing site during productionization.
+
+==================================================
+REPLIT WAITLIST
+==================================================
+
+The existing two waitlist records are test data and can be discarded.
+
+However, Task 5 discovered the CURRENT live marketing JavaScript still sends
+new waitlist requests to:
+
+ai-build-studio.replit.app
+
+That runtime dependency still matters.
+
+Before Replit can be shut down, move the live waitlist POST to an appropriate
+Cloudflare endpoint.
+
+We care about removing the dependency.
+
+We do NOT need to migrate the two existing test waitlist records.
+
+==================================================
+REPLIT
+==================================================
+
+Final invariant remains:
+
+REPLIT COMPLETELY UNAVAILABLE
+→ BUILDCUSTOM STILL WORKS
+
+That includes:
+
+- marketing site
+- waitlist submission
+- signup/login
+- dashboard
+- project creation
+- coding agent
+- generation
+- files
+- preview
+- editing
+- reopen
+- publishing
+- generated apps
+
+Do not shut Replit down yet.
+
+==================================================
+TASKS 1-4 ARE FROZEN
+==================================================
+
+Preserve the accepted architecture:
+
+1. BuildCustom-branded stock runtime authentication
+
+2. verified runtime user identity
+
+3. owner-specific ThinkAgents
+
+4. BuildCustom product metadata in D1
+
+5. native ThinkAgent WebSocket streaming
+
+6. stock conversation authority
+
+7. stock Git/file authority
+
+8. stock preview
+
+9. completion/recovery state machine
+
+10. immutable candidate-first publishing
+
+11. stable BuildCustom public slug
+
+12. one shared generated-app gateway
+
+13. last-known-good release until candidate verification
+
+14. recovery/reconciliation cannot deploy
+
+Do not reopen these architecture decisions.
+
+==================================================
+NEXT TASK
+==================================================
+
+Proceed with ONLY:
+
+PRODUCTION SOURCE BASELINE + CLEAN-LAUNCH MANIFEST
+
+This is still a NON-PRODUCTION-MUTATING task.
+
+Do NOT create production resources yet.
+
+Do NOT deploy production.
+
+Do NOT change DNS.
+
+Do NOT change Worker routes.
+
+Do NOT change app.buildcustom.ai.
+
+Do NOT change *.apps.buildcustom.ai.
+
+Do NOT change the old production D1.
+
+Do NOT delete old resources.
+
+==================================================
+PART 1 — FREEZE CONTROL-PLANE SOURCE
+==================================================
+
+Identify the exact accepted BuildCustom control-plane/frontend source that
+contains Tasks 1-4.
+
+Record:
+
+- repository/path
+- Git commit
+- clean/dirty status
+- package manager
+- lockfile
+- Node/toolchain versions
+- build command
+- test commands
+- Worker entrypoint
+- frontend build output
+
+Determine whether ANY accepted functionality exists only in:
+
+- uncommitted files
+- ignored files
+- temporary Replit state
+- generated local files
+
+There must be no hidden source dependency before production.
+
+==================================================
+PART 2 — FREEZE CLEAN STOCK VIBESDK BASELINE
+==================================================
+
+Identify the clean stock VibeSDK source that should become the new production
+runtime.
+
+Record:
+
+- repository
+- exact upstream commit if determinable
+- lockfile
+- package manager
+- toolchain
+- Worker entrypoint
+- build/deploy commands
+- required D1/KV/R2
+- required DO classes
+- Sandbox/Container requirements
+- Browser/AI requirements
+- required migrations
+
+Do NOT use an unidentified temporary checkout.
+
+==================================================
+PART 3 — ISOLATE ONLY THE ACCEPTED BUILDCUSTOM PATCH
+==================================================
+
+Extract the exact Task 4B immutable-release modification separately from
+stock VibeSDK.
+
+The production runtime should conceptually be:
+
+CLEAN STOCK VIBESDK
++
+SMALL BUILDCUSTOM IMMUTABLE-RELEASE PATCH
+
+The patch may include only accepted requirements such as:
+
+- immutable release identity
+- project/agent + revision collision safety
+- script existence preflight
+- safe no-retry upload behavior
+- publish locking
+- capability/version handling
+- recovery-never-deploy enforcement where runtime-side enforcement belongs
+- associated tests
+
+Do not include unrelated lab experiments.
+
+==================================================
+PART 4 — DO NOT INCLUDE OLD RESTORE PATCH
+==================================================
+
+The historical:
+
+docs/vibesdk-frozen-consistency.patch
+
+is unrelated restore-consistency work.
+
+Do NOT include it in the production baseline for this task.
+
+Document that exclusion.
+
+==================================================
+PART 5 — CLASSIFY LAB DIFFERENCES
+==================================================
+
+Compare:
+
+accepted lab runtime
+
+against:
+
+clean stock VibeSDK
++
+Task 4B patch
+
+Classify every remaining difference:
+
+REQUIRED PRODUCTION CONFIG
+LAB ONLY
+UNRELATED
+UNKNOWN
+
+Pay particular attention to:
+
+- Artifacts binding
+- lab Gateway
+- lab D1/KV/R2
+- lab dispatch namespace
+- lab hostnames
+- acceptance routes
+- diagnostic code
+- temporary credentials/config
+- test-only behavior
+
+Do not copy unsupported bindings simply because they existed in a lab config.
+
+==================================================
+PART 6 — IMMUTABLE ID TEST VECTOR
+==================================================
+
+Create a deterministic immutable-release test vector.
+
+Fixed:
+
+agent UUID
++
+Git revision
+
+must always produce the same expected script identity.
+
+Record the input and expected output.
+
+We will use this later to prove production has the same accepted patch.
+
+==================================================
+PART 7 — RUNTIME CONTRACT
+==================================================
+
+Document the exact existing interface the BuildCustom control plane expects
+from the runtime.
+
+AUTH:
+- CSRF
+- register
+- login
+- check
+- logout
+
+PROJECT:
+- POST /api/agent
+- owner verification
+
+EDITOR:
+- WS ticket
+- ThinkAgent WebSocket
+- branches
+- conversation state
+- Git/files
+- preview
+
+PUBLISH:
+- immutable capability/version check
+- owner-authorized target:"platform"
+- immutable deployment result
+- recovery cannot deploy
+
+Do not create a new API.
+
+==================================================
+PART 8 — GATEWAY BASELINE
+==================================================
+
+Freeze the accepted gateway source.
+
+Record:
+
+- repository/path
+- commit
+- Worker entrypoint
+- build
+- tests
+- bindings
+- route-record contract
+- slug → script behavior
+
+Because there are NO real legacy generated apps to preserve, explicitly
+determine whether the final production gateway can use ONLY the new clean
+production dispatch namespace after cutover.
+
+Do not retain dual-dispatch complexity unless something outside disposable
+test infrastructure genuinely requires it.
+
+==================================================
+PART 9 — CLEAN PRODUCT D1
+==================================================
+
+Define the clean production BuildCustom product D1 schema.
+
+It should start directly at the accepted final Tasks 1-4 schema.
+
+Do NOT design a migration from the old test database unless technically
+required.
+
+Specify:
+
+- schema creation path
+- migrations/schema files required
+- initial admin/bootstrap requirements if any
+- empty-state behavior
+- registration behavior
+
+No old test rows should be copied automatically.
+
+==================================================
+PART 10 — CLEAN PRODUCTION RESOURCE MANIFEST
+==================================================
+
+Create the exact resource manifest for the NEXT task.
+
+Expected direction:
+
+NEW product D1
+NEW VibeSDK Worker
+NEW runtime D1
+NEW runtime KV
+NEW runtime R2
+NEW dispatch namespace
+NEW runtime DO namespaces
+NEW Sandbox/Container
+NEW AI Gateway
+
+plus whatever required bindings the proven runtime actually needs.
+
+For every resource specify:
+
+- proposed production name
+- type
+- purpose
+- component
+- stateful/stateless
+- public/private
+- binding name
+- whether safe to provision before cutover
+
+Do not create them yet.
+
+==================================================
+PART 11 — SOURCE REPRODUCIBILITY
+==================================================
+
+For:
+
+CONTROL PLANE
+VIBESDK RUNTIME
+GATEWAY
+
+perform clean builds from frozen source.
+
+Record:
+
+- source commit
+- lockfile hash
+- toolchain
+- build command
+- tests
+- build verification fingerprint/hash where practical
+
+No deployment.
+
+No inference.
+
+No publish.
+
+==================================================
+PART 12 — UPDATED CUTOVER PLAN
+==================================================
+
+Rewrite the production cutover plan for a CLEAN FIRST LAUNCH.
+
+It should now look roughly like:
+
+1. freeze accepted source
+
+2. provision completely clean private production resources
+
+3. deploy clean VibeSDK production runtime privately
+
+4. verify production AI Gateway + Unified Billing privately
+
+5. test runtime auth/generation/files/preview/immutable deployment privately
+
+6. create clean BuildCustom production product D1
+
+7. deploy production control plane privately against clean D1/runtime
+
+8. run complete private product acceptance
+
+9. deploy/prepare clean generated-app gateway
+
+10. verify new production dispatch/gateway privately
+
+11. safely switch *.apps.buildcustom.ai to clean gateway
+
+12. verify public generated app
+
+13. safely reassign app.buildcustom.ai from old test Worker to new control
+    plane
+
+14. verify signup/login/project/editor/publish publicly
+
+15. move marketing waitlist POST off Replit
+
+16. verify marketing site and waitlist
+
+17. make Replit unavailable
+
+18. rerun complete acceptance
+
+19. observe
+
+20. retire old test infrastructure later
+
+Refine this based on actual Cloudflare constraints.
+
+==================================================
+PART 13 — UPDATED RISK LIST
+==================================================
+
+Recalculate the HIGH / MEDIUM / LOW risks now that:
+
+- no customer data migration exists
+- old product D1 is disposable
+- BuyerMagnets is disposable test infrastructure
+- legacy generated apps are disposable
+- legacy custom hostnames are disposable
+- old waitlist data is disposable
+
+Explicitly identify which Task 5 HIGH-risk items are now eliminated.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+PASS requires:
+
+1. clean-launch assumption is adopted
+
+2. old BuildCustom product data is removed from migration requirements
+
+3. BuyerMagnets is removed from customer-continuity requirements
+
+4. clean NEW product D1 is confirmed viable or a concrete blocker is given
+
+5. old populated D1 migration is eliminated if technically unnecessary
+
+6. clean stock VibeSDK baseline is identified
+
+7. Task 4B patch is isolated
+
+8. restore patch is excluded
+
+9. control-plane source is frozen/reproducible
+
+10. gateway source is frozen/reproducible
+
+11. lab-only differences are classified
+
+12. clean production resource manifest exists
+
+13. updated clean-launch cutover plan exists
+
+14. updated risk list exists
+
+15. complete relevant tests pass
+
+16. zero production Cloudflare mutations occurred
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. confirmation of clean-launch assumption
+
+2. whether NEW clean product D1 is viable
+
+3. whether old D1 migration is eliminated
+
+4. BuyerMagnets classification
+
+5. legacy custom-domain classification
+
+6. legacy generated-app classification
+
+7. control-plane source commit/status
+
+8. control-plane build/test result
+
+9. clean stock VibeSDK source/commit
+
+10. Task 4B patch files/functions
+
+11. restore patch exclusion confirmation
+
+12. lab-only differences
+
+13. immutable identity test vector
+
+14. runtime API contract
+
+15. gateway source commit/status
+
+16. gateway build/test result
+
+17. whether dual-dispatch is still needed
+
+18. clean product D1 schema/bootstrap plan
+
+19. complete new production resource manifest
+
+20. required binding names
+
+21. required secret names ONLY
+
+22. build verification method/hashes
+
+23. updated clean-launch cutover sequence
+
+24. eliminated Task 5 risks
+
+25. remaining HIGH risks
+
+26. remaining MEDIUM risks
+
+27. old resources to leave temporarily for rollback/reference
+
+28. old resources classified RETIRE LATER
+
+29. confirmation zero production mutations
+
+30. whether we are ready to begin provisioning the clean private production
+    stack
+
+31. recommendation for the NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+Do not create production resources.
+Do not deploy production.
+Do not change domains.
+Do not delete old infrastructure.
