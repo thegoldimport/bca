@@ -1,0 +1,698 @@
+Task 7 is ACCEPTED.
+
+Freeze the accepted private BuildCustom production application.
+
+Accepted control-plane Worker:
+
+buildcustom-control-plane-launch
+
+Accepted Worker version:
+
+8d8f0e80-48f6-48cd-ab7e-76a14777e0a6
+
+Accepted runtime Worker:
+
+buildcustom-vibesdk-launch
+
+Accepted runtime version:
+
+699e38f7-4622-4932-a0a2-264e1f97d5a4
+
+Accepted private gateway:
+
+buildcustom-apps-gateway-launch
+
+Accepted product D1:
+
+buildcustom-product-launch-db
+
+Accepted clean route KV:
+
+buildcustom-app-routes-launch
+
+Do not reopen Tasks 6/6A/7 architecture.
+
+Proceed with ONLY:
+
+TASK 8 — APP.BUILDCUSTOM.AI CUTOVER PREPARATION + REHEARSAL
+
+IMPORTANT:
+
+DO NOT CUT OVER app.buildcustom.ai during this task.
+
+This task prepares, rehearses, and proves the exact rollback-safe procedure
+we will use in the NEXT task.
+
+Do not modify *.apps.buildcustom.ai yet.
+
+Do not modify the marketing site or waitlist yet.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Prepare app.buildcustom.ai to become the public home of the accepted Task 7
+BuildCustom control plane.
+
+We already know Task 5 found that:
+
+app.buildcustom.ai
+
+is currently attached to the legacy:
+
+vibesdk
+
+Worker and was returning HTTP 500.
+
+There is no customer state behind that old application that needs
+preservation.
+
+Therefore this is NOT an application migration.
+
+It is a controlled Cloudflare hostname reassignment:
+
+OLD TEST WORKER
+→
+ACCEPTED NEW BUILDCUSTOM CONTROL PLANE
+
+The purpose of Task 8 is to make the eventual change boring, reversible, and
+fully specified before we touch the hostname.
+
+==================================================
+ABSOLUTE RULE
+==================================================
+
+DO NOT change the live app.buildcustom.ai association in Task 8.
+
+No production hostname cutover is authorized yet.
+
+==================================================
+STEP 1 — READ-ONLY CURRENT STATE SNAPSHOT
+==================================================
+
+Inspect and record the exact CURRENT state of:
+
+app.buildcustom.ai
+
+including:
+
+- DNS record
+- proxied status
+- certificate status
+- Worker custom-domain association
+- currently attached Worker
+- route relationships if any
+- hostname ownership
+- current HTTP behavior
+- current TLS behavior
+- any redirects
+- any Cloudflare custom-domain metadata
+- any dependencies that would be affected by reassignment
+
+Record exact resource IDs where available.
+
+Do not mutate anything.
+
+==================================================
+STEP 2 — FREEZE NEW TARGET
+==================================================
+
+Verify the intended target is still exactly:
+
+buildcustom-control-plane-launch
+
+Worker version:
+
+8d8f0e80-48f6-48cd-ab7e-76a14777e0a6
+
+Confirm:
+
+- version still serving 100%
+- health works
+- signup/login works
+- dashboard works
+- accepted Task 7 bindings unchanged
+- AUTH_RUNTIME still targets buildcustom-vibesdk-launch
+- product DB still targets buildcustom-product-launch-db
+- no old production DB/runtime binding
+- no Replit backend fallback
+- no staging/lab dependency
+
+Do not generate another app.
+
+No new inference is needed.
+
+==================================================
+STEP 3 — PUBLIC-ORIGIN COMPATIBILITY REVIEW
+==================================================
+
+The private Worker currently runs on a workers.dev/canary origin.
+
+Before app.buildcustom.ai can point to it, inspect every place where origin,
+host, cookie, CSRF, CORS, redirect, URL construction, WebSocket, preview, or
+security behavior could differ.
+
+Specifically inspect:
+
+- cookie Domain
+- cookie Path
+- Secure
+- HttpOnly
+- SameSite
+- CSRF origin checks
+- allowed origins
+- Host validation
+- Origin validation
+- Referer assumptions
+- redirect URLs
+- signup/login/logout URLs
+- WebSocket URL construction
+- ThinkAgent ticket flow
+- preview proxy URLs
+- iframe sandbox behavior
+- generated app URLs
+- published slug URLs
+- API base URLs
+- frontend absolute URLs
+- workers.dev assumptions
+- staging assumptions
+- Replit assumptions
+- CSP
+- frame-src
+- connect-src
+- CORS
+- callback URLs if any
+
+The production application must behave correctly when its canonical origin is:
+
+https://app.buildcustom.ai
+
+Do not loosen security globally just to support the hostname.
+
+==================================================
+STEP 4 — COOKIE / SESSION CUTOVER ANALYSIS
+==================================================
+
+Determine exactly what happens to existing PRIVATE acceptance sessions when
+the hostname changes.
+
+We do NOT need to preserve disposable acceptance sessions.
+
+But public production behavior must be correct.
+
+Verify that a fresh user at:
+
+https://app.buildcustom.ai
+
+will receive cookies scoped appropriately to that host and that those cookies
+will not accidentally:
+
+- leak to buildcustom.ai
+- leak to *.apps.buildcustom.ai
+- depend on workers.dev
+- collide with legacy cookies
+
+Identify any legacy cookie names that could collide.
+
+If a cookie cleanup is advisable on first public load, describe the narrow
+approach.
+
+Do not implement unnecessary cross-domain cookies.
+
+==================================================
+STEP 5 — RUNTIME ORIGIN COMPATIBILITY
+==================================================
+
+Verify the control plane can continue communicating with:
+
+buildcustom-vibesdk-launch
+
+through the service binding when the browser-facing origin becomes:
+
+app.buildcustom.ai
+
+The browser should NOT need direct knowledge of internal runtime credentials.
+
+Verify:
+
+app.buildcustom.ai
+→ BuildCustom control plane
+→ AUTH_RUNTIME service binding
+→ production VibeSDK
+
+for:
+
+- auth
+- agent creation
+- ticket issuance
+- WebSocket upgrade/proxy
+- conversation streaming
+- files
+- preview
+- publish
+
+No generation required.
+
+Use code/config inspection and existing accepted state where sufficient.
+
+==================================================
+STEP 6 — PUBLIC GENERATED-APP URL ISSUE
+==================================================
+
+IMPORTANT:
+
+Task 7 publishing currently proved the PRIVATE gateway.
+
+We have NOT switched:
+
+*.apps.buildcustom.ai
+
+to the new clean route KV/dispatch yet.
+
+Therefore inspect what the BuildCustom UI currently displays after Publish.
+
+Before app.buildcustom.ai goes public, it must NOT misleadingly show a broken
+or private workers.dev generated-app URL to a real customer.
+
+Determine the safest temporary behavior for the interval between:
+
+app.buildcustom.ai cutover
+
+and:
+
+*.apps.buildcustom.ai gateway cutover
+
+Options may include:
+
+A. do not enable public registration until generated-app gateway cutover
+
+B. keep app.buildcustom.ai private/owner-only until generated-app cutover
+
+C. perform app and generated-app cutovers in tightly sequenced separate tasks
+
+D. another minimal solution consistent with accepted architecture
+
+DO NOT implement a hack.
+
+Recommend the cleanest sequence.
+
+==================================================
+STEP 7 — REGISTRATION EXPOSURE DECISION
+==================================================
+
+Determine whether public signup should be enabled immediately when
+app.buildcustom.ai is reassigned.
+
+Remember:
+
+there are no existing customers.
+
+We can safely keep registration restricted until the entire public path is
+ready.
+
+Recommend one of:
+
+PUBLIC SIGNUP ON AT APP CUTOVER
+
+or
+
+PUBLIC SIGNUP REMAINS RESTRICTED UNTIL GENERATED-APP CUTOVER
+
+Base this on actual current behavior and dependencies.
+
+Do not enable public registration in this task.
+
+==================================================
+STEP 8 — CUTOVER MECHANISM
+==================================================
+
+Determine the exact Cloudflare operation required to move:
+
+app.buildcustom.ai
+
+from:
+
+legacy vibesdk Worker
+
+to:
+
+buildcustom-control-plane-launch
+
+Identify:
+
+- exact current association
+- exact API/dashboard operation
+- whether old association must be removed first
+- whether new association can replace atomically
+- whether DNS changes are required
+- whether certificate reissuance is required
+- expected propagation behavior
+- whether there is a temporary conflict window
+- how to verify association after change
+
+Prefer the smallest Cloudflare change.
+
+Do not execute it.
+
+==================================================
+STEP 9 — ROLLBACK PROCEDURE
+==================================================
+
+Write the exact rollback procedure.
+
+If the new app fails after cutover, we must be able to restore the prior
+association quickly.
+
+Even though the old application is disposable, rollback is useful while we
+diagnose Cloudflare/domain issues.
+
+Record:
+
+- old Worker
+- old association
+- old DNS state
+- old certificate state
+- exact reverse operation
+- verification command/check
+
+Do not rely on memory during the eventual cutover.
+
+==================================================
+STEP 10 — CUTOVER ACCEPTANCE SCRIPT
+==================================================
+
+Prepare the exact acceptance sequence to run immediately AFTER the future
+cutover.
+
+It must include:
+
+1. TLS valid
+
+2. app.buildcustom.ai returns expected BuildCustom frontend
+
+3. no legacy Worker response
+
+4. static JS/CSS load
+
+5. CSRF works
+
+6. signup behavior matches chosen exposure policy
+
+7. login works
+
+8. auth/check works
+
+9. dashboard works
+
+10. project reopen works
+
+11. files work
+
+12. preview works
+
+13. ThinkAgent WebSocket connects
+
+14. conversation loads
+
+15. logout works
+
+16. exact old session rejected
+
+17. fresh login works
+
+18. no Replit network dependency
+
+19. no staging/lab network dependency
+
+20. no legacy VIBESDK_API_KEY path
+
+Do NOT run a new AI generation during the initial hostname smoke test.
+
+Generation can be tested after the public generated-app gateway is ready.
+
+==================================================
+STEP 11 — BROWSER NETWORK AUDIT PLAN
+==================================================
+
+Prepare a browser-level network audit for the eventual public hostname.
+
+Flag ANY request from app.buildcustom.ai to:
+
+- replit.com
+- replit.dev
+- replit.app
+- old vibesdk Worker URLs
+- staging Workers
+- lab Workers
+- old BuildCustom control plane
+- old API origins
+
+Expected application requests should remain on the intended BuildCustom
+origin or approved Cloudflare infrastructure.
+
+==================================================
+STEP 12 — PUBLIC GATEWAY CUTOVER PREPARATION
+==================================================
+
+Do NOT switch *.apps.buildcustom.ai.
+
+But because this comes immediately after app cutover, prepare the next
+gateway step.
+
+Read-only inspect:
+
+- current buildcustom-apps-gateway
+- current ROUTES binding
+- current DISPATCHER binding
+- current *.apps.buildcustom.ai Worker route
+- zone-wide route used for custom-domain pass-through
+- clean Task 7 gateway source/version
+- clean route KV
+- clean production dispatch namespace
+
+Determine the exact minimal binding/version change that will eventually make:
+
+*.apps.buildcustom.ai
+
+serve the clean Task 7 route records and immutable scripts.
+
+Remember:
+
+legacy generated apps are disposable.
+
+No dual dispatch is required.
+
+Do not execute the change.
+
+==================================================
+STEP 13 — MARKETING PASS-THROUGH SAFETY
+==================================================
+
+Task 5/7 identified that the existing shared gateway also participates in a
+zone-wide route used for pass-through behavior.
+
+Before any future gateway rebind, prove from source/config that changing its:
+
+ROUTES
+DISPATCHER
+
+bindings to clean resources will NOT cause:
+
+buildcustom.ai
+
+or unrelated marketing requests to disappear into generated-app routing.
+
+Document the pass-through behavior and acceptance check.
+
+Do not change the gateway.
+
+==================================================
+STEP 14 — WAITLIST DEPENDENCY
+==================================================
+
+Read-only confirm the current marketing waitlist still points to Replit.
+
+Document:
+
+- current endpoint
+- frontend source location
+- expected request/response contract
+- minimum Cloudflare replacement needed later
+
+Do NOT move it in Task 8.
+
+This will happen after the product application/gateway cutovers are accepted.
+
+==================================================
+STEP 15 — NO NEW ARCHITECTURE
+==================================================
+
+Task 8 should NOT produce:
+
+- another Worker architecture
+- another auth system
+- another gateway
+- another database
+- another runtime
+- another agent
+- another deployment broker
+
+This is cutover preparation.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+Do NOT modify:
+
+app.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+buildcustom.ai
+
+DNS
+
+Worker routes
+
+Worker custom domains
+
+existing public gateway bindings
+
+marketing Pages
+
+marketing waitlist
+
+Replit public deployment
+
+old production D1
+
+BuyerMagnets
+
+legacy generated apps
+
+Task 6 runtime
+
+Task 7 control-plane architecture
+
+Do not create new production resources unless a purely disposable local test
+artifact is necessary.
+
+No inference.
+
+No generation.
+
+No publish.
+
+==================================================
+TASK 8 ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. current app.buildcustom.ai state precisely documented
+
+2. new target Worker/version frozen
+
+3. public-origin compatibility reviewed
+
+4. cookie/session behavior reviewed
+
+5. runtime service-binding path confirmed
+
+6. generated-app sequencing issue resolved conceptually
+
+7. public-registration exposure decision made
+
+8. exact app hostname cutover operation documented
+
+9. exact rollback operation documented
+
+10. post-cutover acceptance script prepared
+
+11. browser network audit prepared
+
+12. *.apps gateway cutover operation prepared
+
+13. marketing pass-through safety verified
+
+14. waitlist dependency documented
+
+15. zero public mutations
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current app.buildcustom.ai DNS state
+
+2. current Worker association
+
+3. current certificate/TLS state
+
+4. current HTTP behavior
+
+5. exact target Worker/version
+
+6. target binding verification
+
+7. origin/cookie issues found
+
+8. CSRF/CORS/CSP issues found
+
+9. WebSocket/origin issues found
+
+10. preview-origin issues found
+
+11. changes required before hostname cutover
+
+12. whether those changes require a new control-plane Worker version
+
+13. recommended public-registration state at app cutover
+
+14. recommended sequencing between app and *.apps cutovers
+
+15. exact Cloudflare app-host cutover operation
+
+16. expected propagation/conflict behavior
+
+17. exact rollback procedure
+
+18. post-cutover acceptance checklist
+
+19. browser network-audit checklist
+
+20. current public gateway Worker/version
+
+21. current ROUTES binding
+
+22. current DISPATCHER binding
+
+23. clean replacement ROUTES target
+
+24. clean replacement DISPATCHER target
+
+25. exact future gateway change
+
+26. proof marketing pass-through remains safe
+
+27. current marketing waitlist endpoint
+
+28. minimum future waitlist replacement
+
+29. remaining HIGH risks
+
+30. remaining MEDIUM risks
+
+31. confirmation zero public mutations
+
+32. whether TASK 8 is ACCEPTED or NOT ACCEPTED
+
+33. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CUT OVER app.buildcustom.ai.
+DO NOT SWITCH *.apps.buildcustom.ai.
