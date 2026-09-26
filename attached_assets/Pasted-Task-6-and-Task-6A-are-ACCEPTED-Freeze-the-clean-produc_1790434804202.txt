@@ -1,0 +1,801 @@
+Task 6 and Task 6A are ACCEPTED.
+
+Freeze the clean production runtime as currently proven.
+
+The accepted production runtime Worker version is:
+
+699e38f7-4622-4932-a0a2-264e1f97d5a4
+
+The accepted generation revision is:
+
+735705d3cbcbb0c066803a605e1582488ca8c1c2
+
+Do not reopen Task 6 architecture.
+
+Do not modify the accepted runtime unless this next task uncovers a concrete
+integration blocker that cannot be solved in the BuildCustom control plane.
+
+Proceed with ONLY:
+
+TASK 7 — PRIVATE PRODUCTION BUILDCUSTOM CONTROL PLANE
+
+==================================================
+OBJECTIVE
+==================================================
+
+Take the BuildCustom dashboard/application we already built and connect it
+privately to the clean production foundation proven in Task 6.
+
+At the end of Task 7, through the actual BuildCustom product UI/API, a
+normal disposable customer should be able to:
+
+sign up
+→ log in
+→ see dashboard
+→ create project
+→ receive their owner-specific ThinkAgent
+→ open builder
+→ send generation prompt
+→ watch native streaming
+→ see authoritative generated files
+→ preview app
+→ make an edit
+→ reopen project
+→ publish immutable release
+
+while using:
+
+NEW clean BuildCustom product D1
+NEW clean production VibeSDK runtime
+NEW clean production route KV
+NEW production dispatch namespace
+NEW production AI Gateway
+
+and NOT:
+
+old product D1
+old runtime
+staging runtime
+lab runtime
+Replit Postgres
+legacy local-password auth
+shared VIBESDK_API_KEY ownership
+super_admin-only customer publishing
+
+This entire task remains PRIVATE.
+
+Do not connect app.buildcustom.ai yet.
+
+Do not switch *.apps.buildcustom.ai yet.
+
+==================================================
+CRITICAL ARCHITECTURE
+==================================================
+
+BuildCustom owns:
+
+- product user metadata
+- project metadata
+- ownership mapping
+- project ↔ runtime-agent mapping
+- dashboard
+- plans/future billing metadata
+- release metadata
+- stable public slug
+- route mapping metadata
+- future domain metadata
+
+VibeSDK owns:
+
+- authentication authority used by the accepted identity bridge
+- ThinkAgent
+- conversation
+- streaming
+- files
+- Git
+- branches
+- generation
+- editing
+- preview
+- runtime execution
+- immutable platform deployment
+
+Do NOT duplicate VibeSDK state into BuildCustom.
+
+Do NOT create:
+
+- second transcript store
+- second file store
+- second Git/history system
+- second preview engine
+- second coding agent
+- publish broker
+- active-operation ledger
+- BuildCustom project Durable Object
+- queue/workflow orchestration
+
+Keep the Tasks 1–4 architecture.
+
+==================================================
+TASK 6A AUTH PATCH IS NOW PART OF PRODUCTION BASELINE
+==================================================
+
+The production runtime baseline is now:
+
+PINNED STOCK VIBESDK
++
+TASK 4B IMMUTABLE RELEASE PATCH
++
+TASK 6A LOGOUT REVOCATION PATCH
+
+Do not accidentally redeploy stock VibeSDK without Task 6A.
+
+Record and preserve the Task 6A patch artifact/hash from the accepted Task 6
+report.
+
+The accepted logout semantics are:
+
+logout
+→ signed token bound to stored session owner
+→ exact session revoked successfully
+→ revocation confirmed
+→ cookie cleared
+→ exact old cookie rejected
+
+while:
+
+another same-user session remains valid
+another user's session remains valid
+
+==================================================
+STEP 1 — FREEZE TASK 6
+==================================================
+
+Before changing control-plane code, record:
+
+- accepted runtime Worker/version
+- runtime resource IDs
+- runtime D1
+- runtime KV
+- runtime R2
+- dispatch namespace
+- AI Gateway
+- route KV
+- product D1
+- Task 4B patch hash
+- Task 6A patch hash
+- accepted immutable identity vector
+- accepted generation revision
+
+Do not modify these merely for convenience.
+
+==================================================
+STEP 2 — INSPECT CURRENT CONTROL-PLANE BRANCHES
+==================================================
+
+Task 5 found several production blockers:
+
+1. proven stock-auth behavior was staging-gated
+
+2. current production branch used legacy/local-password behavior
+
+3. runtime mutations were disabled in production
+
+4. customer publish was super_admin-gated
+
+5. staging-specific binding names remained in the accepted implementation
+
+Inspect the exact current code and identify every environment conditional
+responsible for these differences.
+
+Then make the SMALLEST clean productionization change.
+
+Do not rewrite the control plane.
+
+==================================================
+STEP 3 — REMOVE ENVIRONMENT-BASED ARCHITECTURE DIFFERENCES
+==================================================
+
+The accepted secure architecture should not exist only because:
+
+ENVIRONMENT=staging
+
+Production must use the same ownership/auth architecture.
+
+Refactor narrowly so the intended behavior is capability/configuration based
+rather than:
+
+staging = secure new architecture
+production = legacy architecture
+
+Production must use:
+
+stock runtime identity
+verified runtime session
+BuildCustom product-user mapping
+owner-scoped project access
+native runtime agent
+immutable publish
+
+Do NOT restore legacy local-password auth.
+
+==================================================
+STEP 4 — CLEAN PRODUCT D1
+==================================================
+
+Connect ONLY the private Task 7 control plane to the NEW:
+
+buildcustom-product-launch-db
+
+or its exact Task 6 resource name.
+
+Verify before testing:
+
+- clean final Tasks 1–4 schema
+- zero migrated legacy users
+- zero migrated legacy projects
+- zero legacy releases
+- zero legacy domain claims
+
+Do not connect to old production D1.
+
+==================================================
+STEP 5 — AUTH_RUNTIME
+==================================================
+
+Bind the private Task 7 control plane directly to the accepted Task 6
+production VibeSDK runtime using the proven service-binding architecture.
+
+Use the production equivalent of:
+
+AUTH_RUNTIME
+
+Do not use browser-supplied owner IDs.
+
+Do not use shared API-key ownership.
+
+Do not expose runtime service credentials to the browser.
+
+The browser should authenticate to BuildCustom on one BuildCustom origin,
+while the control plane performs the verified runtime identity bridge.
+
+==================================================
+STEP 6 — CUSTOMER AUTH
+==================================================
+
+Through the PRIVATE BuildCustom control plane, verify:
+
+CSRF
+signup
+login
+auth check
+refresh/reopen
+logout
+old-session rejection
+fresh login
+
+Signup must:
+
+1. create the stock runtime identity/session
+2. verify that identity server-side
+3. create/upsert the corresponding BuildCustom product user
+4. establish the BuildCustom same-origin session behavior
+
+There must not be a second password database.
+
+BuildCustom product D1 may store:
+
+runtime user ID
+internal username
+email
+display name
+role
+plan
+created/updated metadata
+
+but NOT a second authoritative password.
+
+==================================================
+STEP 7 — NORMAL CUSTOMER PUBLISH AUTHORIZATION
+==================================================
+
+Remove the current requirement that an ordinary project owner must be:
+
+super_admin
+
+to publish their own project.
+
+Publishing must instead require:
+
+authenticated user
++
+verified ownership of BuildCustom project
++
+verified ownership/access to corresponding runtime agent
++
+valid committed revision
++
+accepted immutable deployment capability
+
+Admin status should not be required for normal customer publishing.
+
+Do not weaken admin-only functionality elsewhere.
+
+==================================================
+STEP 8 — RUNTIME MUTATION GATE
+==================================================
+
+Production currently has runtime mutations disabled.
+
+Replace the staging-only assumption with an explicit safe configuration for
+this PRIVATE production control plane.
+
+The private Task 7 instance may perform:
+
+- runtime registration
+- project/agent creation
+- generation
+- editing
+- publish
+
+against ONLY the clean Task 6 runtime.
+
+Do not enable mutations against old/staging/lab runtime resources.
+
+==================================================
+STEP 9 — PRODUCTION ROUTE KV
+==================================================
+
+Bind the private control plane's publish metadata writer to ONLY the clean
+Task 6 route KV:
+
+buildcustom-app-routes-launch
+
+or its exact accepted name.
+
+Do not bind to old route KV.
+
+Do not write public mappings yet unless explicitly required for a private
+acceptance test.
+
+The stable route record contract remains:
+
+slug
+→ immutable scriptName
+→ metadata
+
+Preserve last-known-good behavior.
+
+==================================================
+STEP 10 — GENERATED-APP GATEWAY FOR PRIVATE ACCEPTANCE
+==================================================
+
+Do NOT rebind the existing public:
+
+buildcustom-apps-gateway
+
+during Task 7.
+
+For private acceptance, use either:
+
+A. a temporary/private canary deployment of the SAME accepted gateway source
+   bound to the clean route KV + clean dispatch namespace
+
+or
+
+B. an already-existing isolated/private gateway created specifically for the
+   clean launch stack, if Task 6 created one.
+
+Choose the smallest safe option.
+
+It must use:
+
+clean route KV
+clean production dispatch
+
+and must NOT alter:
+
+*.apps.buildcustom.ai
+zone-wide production routing
+existing public gateway bindings
+
+This private gateway is for acceptance only.
+
+==================================================
+STEP 11 — PRIVATE CONTROL-PLANE DEPLOYMENT
+==================================================
+
+Build the productionized BuildCustom control plane from the accepted source.
+
+Require:
+
+- typecheck
+- full relevant tests
+- clean production bindings
+- no Replit backend fallback
+- no old D1 binding
+- no staging/lab runtime binding
+- no legacy VIBESDK_API_KEY ownership path
+- no public domain route
+
+Deploy it as a PRIVATE/CANARY Worker.
+
+Use its isolated workers.dev/canary endpoint only.
+
+Do NOT attach:
+
+app.buildcustom.ai
+
+==================================================
+STEP 12 — ACTUAL BUILDCUSTOM UI ACCEPTANCE
+==================================================
+
+This test must use the actual BuildCustom product experience, not direct
+runtime API calls only.
+
+Create ONE disposable BuildCustom customer.
+
+Through BuildCustom:
+
+1. Sign up
+
+2. Log in
+
+3. Verify dashboard loads
+
+4. Create project
+
+5. Verify exactly one owner-specific ThinkAgent is created
+
+6. Open builder
+
+7. Send ONE minimal generation prompt containing marker:
+
+BUILDCUSTOM_TASK7_UI_OK
+
+8. Observe native streaming through BuildCustom
+
+9. Verify completion/recovery state machine reaches SUCCESS only after
+   authoritative verification
+
+10. Verify authoritative committed revision
+
+11. Verify files shown by BuildCustom correspond to runtime Git authority
+
+12. Verify preview works
+
+13. Send ONE small edit request:
+
+Change visible text to:
+
+BUILDCUSTOM_TASK7_EDIT_OK
+
+14. Verify new committed revision
+
+15. Verify preview contains edited marker
+
+16. Close/reopen project
+
+17. Verify same agent, conversation, files and current revision return
+
+18. Publish through the normal customer Publish control
+
+19. Verify one immutable candidate deployment
+
+20. Verify release metadata stored in clean product D1
+
+21. Verify stable slug mapping written to clean route KV
+
+22. Verify the PRIVATE generated-app gateway serves the immutable release
+
+Do not perform unnecessary generations.
+
+==================================================
+STEP 13 — PUBLISH INVARIANTS
+==================================================
+
+Require:
+
+candidate immutable script
+→ candidate verification
+→ release metadata
+→ stable slug route switch
+
+Never:
+
+stable route first
+→ hope deployment works afterward
+
+Verify:
+
+- old release remains available
+- active route changes only after candidate passes
+- same-revision retry does not redeploy
+- recovery/reconciliation cannot deploy
+- one customer Publish action does not cause duplicate upload
+
+==================================================
+STEP 14 — OWNERSHIP ISOLATION THROUGH BUILDCUSTOM
+==================================================
+
+Create a second disposable BuildCustom customer only if needed.
+
+Verify through the control plane:
+
+User B cannot:
+
+- open User A project
+- obtain User A runtime ticket
+- access User A agent
+- read User A files
+- access User A conversation
+- preview User A project through owner-only endpoints
+- publish User A project
+- change User A route mapping
+
+Supplying another owner/project/agent ID manually must not bypass checks.
+
+==================================================
+STEP 15 — REPLIT-OFF PRIVATE TEST
+==================================================
+
+After Task 7 acceptance passes:
+
+make the Replit development runtime unavailable in the safest reversible way
+available for the test.
+
+Do NOT unpublish the live Replit autoscale deployment yet because the
+marketing waitlist still depends on it.
+
+But the PRIVATE BuildCustom control plane + runtime path must not require the
+Replit development server or Replit Postgres.
+
+With the development runtime unavailable, repeat a focused check:
+
+login
+dashboard
+existing project reopen
+files
+preview
+publish idempotency
+
+No new inference is necessary for this Replit-off check.
+
+Restore development availability afterward only if needed for continued work.
+
+==================================================
+STEP 16 — DATABASE INSPECTION
+==================================================
+
+At the end inspect the clean product D1.
+
+It should contain ONLY Task 7 disposable acceptance data.
+
+Verify:
+
+- runtime identity mapping
+- product project
+- runtime link
+- release metadata
+- stable slug metadata
+
+It must NOT contain:
+
+- legacy users
+- legacy projects
+- BuyerMagnets
+- old releases
+- old domain claims
+- old waitlist rows
+
+==================================================
+STEP 17 — NO MARKETING WORK YET
+==================================================
+
+Do NOT move the marketing waitlist during Task 7.
+
+Do NOT modify buildcustom.ai.
+
+That happens after the private application itself is accepted.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+Do NOT modify:
+
+buildcustom.ai
+
+marketing Pages
+
+marketing waitlist JavaScript
+
+public Replit autoscale deployment
+
+app.buildcustom.ai
+
+*.apps.buildcustom.ai DNS
+
+*.apps.buildcustom.ai Worker route
+
+existing public buildcustom-apps-gateway bindings
+
+existing old route KV
+
+old production D1
+
+old dispatch namespace
+
+BuyerMagnets
+
+legacy vibesdk Worker
+
+buildcustom-vibesdk-staging
+
+lab resources
+
+Task 6 accepted runtime architecture
+
+Do not delete old resources.
+
+==================================================
+FAILURE RULE
+==================================================
+
+If the control plane cannot integrate with the accepted runtime because of a
+real runtime contract defect:
+
+STOP.
+
+Do not silently change VibeSDK.
+
+Explain:
+
+- exact failing contract
+- expected behavior
+- actual behavior
+- whether the smallest fix belongs in control plane or runtime
+- proposed change
+
+If it can be fixed entirely in BuildCustom control-plane code/config, do so
+within this task.
+
+==================================================
+TASK 7 ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. private production control plane deployed
+
+2. clean product D1 only
+
+3. stock runtime auth used in production configuration
+
+4. no second password authority
+
+5. normal customer can create project
+
+6. exactly one owner ThinkAgent created
+
+7. actual BuildCustom builder streams native generation
+
+8. authoritative files/revision verified
+
+9. preview works
+
+10. edit works
+
+11. reopen works
+
+12. normal owner can publish without super_admin
+
+13. immutable candidate deployment works
+
+14. clean release metadata persists
+
+15. clean route KV mapping persists
+
+16. private generated-app gateway serves release
+
+17. same-revision publish is idempotent
+
+18. recovery cannot deploy
+
+19. second-user isolation passes
+
+20. Replit development runtime is not required
+
+21. old product/runtime state was not used
+
+22. no public domain/route was changed
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact control-plane source commit
+
+2. files changed
+
+3. productionization changes made
+
+4. environment-conditionals removed/changed
+
+5. private Worker name/version
+
+6. product D1 used
+
+7. AUTH_RUNTIME binding target
+
+8. route KV target
+
+9. private gateway used
+
+10. auth acceptance result
+
+11. proof no second password authority exists
+
+12. disposable product user ID
+
+13. disposable project ID
+
+14. runtime agent ID
+
+15. initial generation result
+
+16. initial committed revision
+
+17. edit result
+
+18. edited committed revision
+
+19. reopen result
+
+20. preview result
+
+21. customer publish result
+
+22. immutable script identity
+
+23. release ID
+
+24. stable slug
+
+25. clean route KV record
+
+26. private generated-app URL/result
+
+27. same-revision idempotency result
+
+28. recovery-never-deploy result
+
+29. second-user isolation result
+
+30. clean product D1 row summary
+
+31. Replit-development-off result
+
+32. test/typecheck/build results
+
+33. inference request count/cost for Task 7
+
+34. confirmation Task 6 runtime was not architecturally changed
+
+35. confirmation public domains/routes were untouched
+
+36. confirmation marketing/Replit public deployment untouched
+
+37. deviations/blockers
+
+38. whether TASK 7 is ACCEPTED or NOT ACCEPTED
+
+39. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+Do not proceed to app.buildcustom.ai cutover.
+Do not switch *.apps.buildcustom.ai.
+Do not move the marketing waitlist yet.
