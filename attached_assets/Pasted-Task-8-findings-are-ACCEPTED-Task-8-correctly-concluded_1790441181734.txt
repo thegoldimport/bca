@@ -1,0 +1,656 @@
+Task 8 findings are ACCEPTED.
+
+Task 8 correctly concluded that we are NOT yet cutover-ready.
+
+Do NOT cut over app.buildcustom.ai.
+
+Do NOT switch *.apps.buildcustom.ai.
+
+Proceed with ONLY:
+
+TASK 8B — PUBLIC-ORIGIN READY + REGISTRATION-RESTRICTED CONTROL PLANE
+
+==================================================
+OBJECTIVE
+==================================================
+
+Create and privately verify the next version of the EXISTING:
+
+buildcustom-control-plane-launch
+
+that is ready to serve:
+
+https://app.buildcustom.ai
+
+but DO NOT attach that hostname yet.
+
+This task must resolve ONLY the blockers discovered by Task 8:
+
+1. app.buildcustom.ai exact-Origin compatibility
+
+2. preview/proxy compatibility with app.buildcustom.ai
+
+3. safe registration restriction during the cutover interval
+
+4. legacy cookie-name collision verification
+
+5. create a disposable known-credential EXISTING PROJECT OWNER for the future
+   cutover smoke test
+
+6. ensure Publish does not expose a private workers.dev generated-app URL to
+   a customer during the interval before *.apps.buildcustom.ai is switched
+
+Do not redesign anything else.
+
+==================================================
+FROZEN DEPENDENCIES
+==================================================
+
+Keep using the accepted:
+
+RUNTIME:
+buildcustom-vibesdk-launch
+version:
+699e38f7-4622-4932-a0a2-264e1f97d5a4
+
+PRODUCT D1:
+buildcustom-product-launch-db
+
+ROUTE KV:
+buildcustom-app-routes-launch
+
+PRIVATE GATEWAY:
+buildcustom-apps-gateway-launch
+
+Do not modify the VibeSDK runtime.
+
+Do not modify Task 6A auth.
+
+Do not modify the immutable deployment architecture.
+
+==================================================
+STEP 1 — ORIGIN CONFIGURATION
+==================================================
+
+The control plane must support its future canonical browser origin:
+
+https://app.buildcustom.ai
+
+Do NOT solve this with:
+
+Access-Control-Allow-Origin: *
+wildcard mutation origins
+disabled CSRF
+disabled Origin validation
+broad *.buildcustom.ai trust
+
+Implement the smallest explicit production-origin configuration.
+
+The intended architecture should allow a configured exact canonical origin,
+for example conceptually:
+
+APP_ORIGIN=https://app.buildcustom.ai
+
+or an equivalent existing configuration mechanism.
+
+All mutation/security checks must compare against the exact configured origin.
+
+The private workers.dev canary must remain testable through an explicitly
+authorized canary/test origin mechanism without weakening production.
+
+Do not hard-code behavior based purely on ENVIRONMENT=staging.
+
+==================================================
+STEP 2 — REVIEW EVERY ORIGIN CONSUMER
+==================================================
+
+Update/reconcile all relevant consumers of canonical origin consistently:
+
+- CSRF validation
+- mutation Origin validation
+- Referer validation where applicable
+- auth requests
+- WebSocket construction/proxy behavior
+- preview proxy
+- preview capability validation
+- iframe URLs
+- frontend API URL construction
+- redirects
+- cookie behavior
+- CSP/connect-src/frame-src if added
+- generated/public URL construction
+
+There must be ONE coherent source of truth for the intended public application
+origin rather than independent hard-coded strings.
+
+Do not change runtime ownership semantics.
+
+==================================================
+STEP 3 — REGISTRATION-RESTRICTED MODE
+==================================================
+
+Implement an explicit production-safe registration mode.
+
+During the interval after app.buildcustom.ai cutover but before the generated
+app gateway is public, we want:
+
+EXISTING AUTHORIZED TESTERS:
+login allowed
+
+NEW PUBLIC USERS:
+registration denied
+
+The current flag cannot simply be set false because the guard rejects that
+configuration.
+
+Fix this narrowly.
+
+Use an explicit configuration/capability such as the existing registration
+setting if it can be corrected safely.
+
+Required behavior when registration is restricted:
+
+GET login page:
+works
+
+existing-user login:
+works
+
+auth/check:
+works
+
+logout:
+works
+
+fresh login:
+works
+
+registration attempt:
+fails cleanly with an intentional response
+
+UI:
+must not misleadingly advertise working public signup
+
+Do NOT disable authentication.
+
+Do NOT create an invitation system.
+
+Do NOT create a waitlist system here.
+
+Do NOT build account approval workflows.
+
+We only need:
+
+registration OPEN
+or
+registration CLOSED
+
+with existing-user login still functional.
+
+==================================================
+STEP 4 — SIGNUP UI
+==================================================
+
+When registration is CLOSED:
+
+- remove or disable "Sign up free" in the public-facing auth UI
+- direct navigation to registration must not create an account
+- API registration must reject creation server-side
+
+Do not rely on hiding the button as security.
+
+When registration is later OPENED, the normal signup flow should be
+restorable through configuration rather than another architecture rewrite.
+
+==================================================
+STEP 5 — COOKIE COLLISION TEST
+==================================================
+
+Task 8 identified possible legacy cookie names:
+
+accessToken
+csrf-token
+
+Inspect the legacy app and new control-plane cookie behavior.
+
+Determine whether a browser arriving at app.buildcustom.ai with old legacy
+cookies could:
+
+- fail login
+- appear falsely authenticated
+- break CSRF
+- shadow new cookies
+- cause logout problems
+
+If there is a collision:
+
+implement the smallest safe targeted cleanup/migration behavior.
+
+Old legacy authentication state is disposable.
+
+It is acceptable to invalidate legacy sessions.
+
+Do NOT create compatibility with the old auth system.
+
+Test:
+
+legacy cookies present
+→ new app loads safely
+→ user is unauthenticated unless they possess a valid NEW session
+→ login works
+→ logout works
+→ exact old new-session cookie is rejected after logout
+
+==================================================
+STEP 6 — PUBLISH URL DURING CUTOVER INTERVAL
+==================================================
+
+Task 8 found that Publish currently displays the PRIVATE generated-app
+workers.dev URL.
+
+That URL must NOT be exposed as the customer's public app URL after
+app.buildcustom.ai becomes public.
+
+Remember:
+
+*.apps.buildcustom.ai
+
+will NOT be switched until a later separately approved task.
+
+Implement the smallest safe temporary behavior.
+
+Preferred behavior:
+
+Publishing may remain technically available to the authorized cutover tester
+if needed for internal verification, BUT the UI must not present the private
+workers.dev gateway URL as a real customer-facing public URL.
+
+Because public registration is CLOSED, ordinary public customers cannot reach
+this state anyway.
+
+Possible clean behavior:
+
+- label the deployment as not publicly available yet
+- suppress customer-facing Open Site/public URL action until public gateway
+  capability is enabled
+
+Prefer a capability/config flag over hostname hacks.
+
+Do NOT change immutable publishing.
+
+Do NOT change route KV semantics.
+
+Do NOT switch the public gateway.
+
+==================================================
+STEP 7 — PUBLIC GENERATED-APP CAPABILITY
+==================================================
+
+Introduce or use a narrow explicit capability/configuration representing:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+or equivalent.
+
+When false:
+
+- immutable internal publish may still work for acceptance if authorized
+- customer UI must not claim the generated app is publicly live
+- private gateway hostname must not be surfaced as the production URL
+
+When later true:
+
+the UI should construct/use the intended canonical public URL:
+
+https://<slug>.apps.buildcustom.ai
+
+based on the accepted stable slug.
+
+Do not implement the actual wildcard cutover here.
+
+==================================================
+STEP 8 — CREATE CUTOVER TESTER
+==================================================
+
+The old Task 7 owner credentials were discarded.
+
+Do NOT build account recovery for disposable acceptance data.
+
+Instead create ONE new disposable known-credential cutover tester through the
+normal accepted auth path.
+
+This user must be a normal:
+
+role=user
+
+not super_admin.
+
+Create ONE tiny project through BuildCustom.
+
+The project should have:
+
+- BuildCustom product record
+- runtime link
+- owner-specific ThinkAgent
+- at least one valid committed revision
+- working files
+- working preview
+
+Keep inference minimal.
+
+If creating the valid project requires one generation, ONE small generation
+is authorized.
+
+Use marker:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+Do not publish a new release unless strictly necessary.
+
+Store the temporary tester credentials ONLY in the approved secure secret/test
+mechanism.
+
+Do not print them in chat or final report.
+
+We need this tester so the future app.buildcustom.ai cutover can verify:
+
+login
+dashboard
+project reopen
+files
+preview
+idle WebSocket/conversation
+
+without signup or new generation.
+
+==================================================
+STEP 9 — FUTURE HOST REHEARSAL
+==================================================
+
+Without changing DNS or the custom-domain association, exercise the new
+control-plane build as closely as safely possible with:
+
+canonical origin:
+https://app.buildcustom.ai
+
+Verify configuration and request handling for that exact origin.
+
+Do not weaken checks merely because workers.dev is the actual canary host.
+
+Use a controlled test/rehearsal mechanism.
+
+Required:
+
+app Origin accepted when configured
+random Origin rejected
+buildcustom.ai rejected as mutation Origin
+*.apps.buildcustom.ai rejected as mutation Origin
+workers.dev rejected in public-origin mode unless explicitly running the
+isolated canary acceptance configuration
+
+==================================================
+STEP 10 — PRIVATE CANARY REGRESSION
+==================================================
+
+Deploy the new version ONLY to:
+
+buildcustom-control-plane-launch
+
+Do not attach app.buildcustom.ai.
+
+Then privately verify:
+
+- frontend
+- assets
+- CSRF
+- restricted signup UI
+- registration API rejection
+- known tester login
+- auth/check
+- dashboard
+- existing tester project
+- files
+- preview
+- idle ThinkAgent connection
+- conversation
+- logout
+- exact old-session rejection
+- fresh login
+
+No second AI generation is needed after tester setup.
+
+==================================================
+STEP 11 — REPLIT-INDEPENDENCE
+==================================================
+
+With the Replit development workflow temporarily unavailable, repeat:
+
+known tester login
+dashboard
+project reopen
+files
+preview
+logout/fresh login
+
+Do not unpublish the public Replit autoscale deployment yet because the
+marketing waitlist still uses it.
+
+Restore the development workflow afterward if needed.
+
+==================================================
+STEP 12 — NETWORK AUDIT
+==================================================
+
+Run the Task 8 passive browser/network audit against the new canary.
+
+Require no browser requests to:
+
+replit.com
+replit.dev
+replit.app
+legacy vibesdk Worker
+staging runtime
+lab runtime
+old BuildCustom API
+
+Internal Cloudflare service bindings are fine and should not appear as browser
+credential exposure.
+
+==================================================
+STEP 13 — FREEZE CUTOVER CANDIDATE
+==================================================
+
+If all tests pass, freeze the new control-plane version as the ONLY candidate
+for the future app.buildcustom.ai reassignment.
+
+Record:
+
+- source commit
+- Worker version
+- build fingerprint
+- bindings
+- canonical public origin config
+- registration state
+- generated-app-public capability state
+- tester user ID
+- tester project ID
+- tester runtime agent ID
+- tester committed revision
+
+Do not expose tester credentials.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+Do NOT modify:
+
+app.buildcustom.ai association
+
+app.buildcustom.ai DNS
+
+*.apps.buildcustom.ai DNS
+
+*.apps.buildcustom.ai Worker route
+
+existing public buildcustom-apps-gateway
+
+existing public gateway bindings
+
+buildcustom.ai
+
+marketing Pages
+
+marketing waitlist
+
+public Replit autoscale deployment
+
+old production D1
+
+legacy vibesdk Worker
+
+BuyerMagnets
+
+Task 6 runtime Worker/version
+
+production dispatch architecture
+
+Do not delete anything.
+
+==================================================
+TASK 8B ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. exact app.buildcustom.ai origin is supported securely
+
+2. arbitrary origins remain rejected
+
+3. registration can be CLOSED while login remains functional
+
+4. signup UI reflects closed registration
+
+5. API registration is blocked server-side
+
+6. legacy cookie collision behavior is safe
+
+7. private generated-app URL is not exposed as a public customer URL
+
+8. future public generated-app URL derives from stable slug
+
+9. known-credential normal tester exists
+
+10. tester owns one valid project
+
+11. tester project has a valid runtime agent/revision
+
+12. tester login works
+
+13. dashboard/reopen/files/preview work
+
+14. idle ThinkAgent connection works
+
+15. logout revocation works
+
+16. fresh login works
+
+17. Replit development workflow is not required
+
+18. browser network audit is clean
+
+19. no public hostname/route changed
+
+20. new cutover candidate Worker version is frozen
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. source commit
+
+2. files changed
+
+3. canonical-origin implementation
+
+4. exact allowed public origin
+
+5. arbitrary-origin rejection result
+
+6. registration restriction implementation
+
+7. signup UI behavior
+
+8. registration API result while closed
+
+9. legacy cookie collision result
+
+10. generated-app public capability implementation
+
+11. Publish UI behavior while public apps disabled
+
+12. future public URL construction behavior
+
+13. tester product user ID
+
+14. tester project ID
+
+15. tester runtime agent ID
+
+16. tester committed revision
+
+17. inference performed/cost if any
+
+18. login result
+
+19. dashboard result
+
+20. project reopen result
+
+21. files result
+
+22. preview result
+
+23. idle WebSocket/conversation result
+
+24. logout revocation result
+
+25. fresh-login result
+
+26. Replit-development-off result
+
+27. browser network-audit result
+
+28. test/typecheck/build result
+
+29. new Worker version
+
+30. build/source fingerprint
+
+31. confirmation Task 6 runtime unchanged
+
+32. confirmation app.buildcustom.ai untouched
+
+33. confirmation *.apps.buildcustom.ai untouched
+
+34. confirmation public gateway untouched
+
+35. confirmation marketing/Replit public deployment untouched
+
+36. remaining HIGH risks
+
+37. remaining MEDIUM risks
+
+38. whether TASK 8B is ACCEPTED or NOT ACCEPTED
+
+39. whether this exact Worker version is READY for app.buildcustom.ai
+    reassignment
+
+40. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CUT OVER app.buildcustom.ai.
+DO NOT SWITCH *.apps.buildcustom.ai.
