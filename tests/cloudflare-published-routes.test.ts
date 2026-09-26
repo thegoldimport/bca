@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertRouteBinding, deleteProjectWithRoutes } from "../cloudflare/published-routes";
+import { assertRouteBinding, deleteProjectWithRoutes, writePublishedRoute } from "../cloudflare/published-routes";
 
 const STAGING_KV_ID = "e5e119fa2abc4c26a8c027e0d8a8d82c";
 
@@ -93,6 +93,20 @@ test("enforces the isolated staging route KV binding before cleanup", async () =
   );
   assert.deepEqual(routes.calls, []);
   assert.equal(database.prepared.length, 0);
+});
+
+test("launch route writes require the exact private production KV", async () => {
+  const routes = kv({});
+  const launchEnv = {
+    STAGING_ROUTES: routes,
+    ENVIRONMENT: "production",
+    CONTROL_PLANE_PROFILE: "launch",
+    STAGING_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+    CONTROL_PLANE_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+  } as any;
+  await writePublishedRoute(launchEnv, "launch-project", "bc-r-launch", {});
+  assert.equal(routes.values.get("launch-project"), JSON.stringify({ scriptName: "bc-r-launch", metadata: {} }));
+  await assert.rejects(writePublishedRoute({ ...launchEnv, STAGING_ROUTE_KV_ID: "wrong" }, "other", "bc-r-other", {}), /LAUNCH_ROUTE_KV_REQUIRED/);
 });
 
 test("refuses to delete when the slug route belongs to another owner", async () => {

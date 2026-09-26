@@ -5,8 +5,31 @@ import { DatabaseSync } from "node:sqlite";
 import git from "isomorphic-git";
 import { createFsFromVolume, Volume } from "memfs";
 import worker, { type Env } from "../cloudflare/worker";
+import { handleStagingCustomerAuth } from "../cloudflare/staging/runtime-identity";
 
 const origin = "https://buildcustom-control-plane-staging.thegoldimport.workers.dev";
+
+test("launch auth bridge targets only the reviewed stock runtime", async () => {
+  const launchUrl = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
+  let forwardedUrl = "";
+  const response = await handleStagingCustomerAuth({
+    DB: {} as D1Database,
+    ENVIRONMENT: "production",
+    CONTROL_PLANE_PROFILE: "launch",
+    AUTH_RUNTIME_URL: launchUrl,
+    AUTH_RUNTIME: {
+      async fetch(request: Request) {
+        forwardedUrl = request.url;
+        return Response.json({ success: true, data: { token: "launch-csrf" } }, {
+          headers: { "Set-Cookie": "csrf-token=csrf-cookie; Path=/; Secure; HttpOnly; SameSite=Strict" },
+        });
+      },
+    } as Fetcher,
+  }, new Request("https://control.launch.test/api/auth/csrf-token"), "/api/auth/csrf-token", {});
+  assert.equal(forwardedUrl, `${launchUrl}/api/auth/csrf-token`);
+  assert.equal(response?.status, 200);
+  assert.deepEqual(await response?.json(), { token: "launch-csrf" });
+});
 
 function database() {
   const sqlite = new DatabaseSync(":memory:");

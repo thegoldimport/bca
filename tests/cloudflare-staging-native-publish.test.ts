@@ -53,9 +53,14 @@ type FixtureOptions = {
   candidateProbeStatus?: number;
   stockAlreadyExists?: boolean;
   failBatch?: boolean;
+  failBatchOnce?: boolean;
+  failRoutePutOnce?: boolean;
   collisionScript?: string;
   stockUrl?: (scriptName: string) => string;
   holdDeploy?: boolean;
+  launch?: boolean;
+  launchSourceHtml?: boolean;
+  failLaunchRouteCheck?: boolean;
 };
 
 function fixture(options: FixtureOptions = {}) {
@@ -87,8 +92,13 @@ function fixture(options: FixtureOptions = {}) {
     claimToken: null as string | null,
     claimExpired: false,
     uploadedScripts: new Set<string>(),
+    failBatchOnce: options.failBatchOnce ?? false,
+    failRoutePutOnce: options.failRoutePutOnce ?? false,
     route: defaultLegacy ? oldRoute : null as string | null,
   };
+  const authoritativeHtml = options.launchSourceHtml
+    ? indexHtml.replace('href="/styles.css"', `href="/p/${slug}/styles.css"`)
+    : indexHtml;
   if (options.preexistingExpiredClaim) {
     state.claimToken = "expired-old-claim";
     state.claimExpired = true;
@@ -105,6 +115,12 @@ function fixture(options: FixtureOptions = {}) {
     }
     if (sql.includes("SELECT project_id FROM runtime_project_links")) return null;
     if (sql.includes("SELECT user_id FROM projects")) return { user_id: "owner-a" };
+    if (sql.includes("SELECT * FROM native_publish_releases") && sql.includes("status='pending'")) {
+      return state.releases.find((row: any) =>
+        row.project_id === values[0] && row.revision === values[1]
+        && row.script_name === values[2] && row.status === "pending",
+      ) || null;
+    }
     if (sql.includes("SELECT * FROM native_publish_releases") && sql.includes("script_name=?")) {
       return state.releases.find((row: any) =>
         row.project_id === values[0] && row.revision === values[1]
@@ -142,10 +158,21 @@ function fixture(options: FixtureOptions = {}) {
         script_name: values[3],
         slug: values[4],
         public_url: values[5],
-        status: "published",
+        status: sql.includes("'pending'") ? "pending" : "published",
         created_at: "2026-09-26 00:00:00",
       };
+      events.push(`d1:release:${row.status}`);
       state.releases.push(row);
+      return row;
+    }
+    if (sql.includes("UPDATE native_publish_releases SET status='published'")) {
+      const row = state.releases.find((release: any) =>
+        release.project_id === values[0] && release.revision === values[1]
+        && release.script_name === values[2] && release.status === "pending",
+      );
+      if (!row) return null;
+      row.status = "published";
+      events.push("d1:release:published");
       return row;
     }
     if (sql.includes("DELETE FROM native_publish_claims")) {
@@ -176,7 +203,11 @@ function fixture(options: FixtureOptions = {}) {
       return statement;
     },
     async batch(statements: any[]) {
-      if (options.failBatch) throw new Error("D1 unavailable");
+      events.push("d1:batch");
+      if (options.failBatch || state.failBatchOnce) {
+        state.failBatchOnce = false;
+        throw new Error("D1 unavailable");
+      }
       return statements.map((statement) => ({ results: [query(statement.sql, statement.values)] }));
     },
   };
@@ -188,6 +219,10 @@ function fixture(options: FixtureOptions = {}) {
       routes.set(key, value);
       state.route = value;
       events.push(`kv:${JSON.parse(value).scriptName}`);
+      if (state.failRoutePutOnce) {
+        state.failRoutePutOnce = false;
+        throw new Error("KV write response was lost.");
+      }
     },
     async delete(key: string) { routes.delete(key); state.route = null; },
   };
@@ -195,14 +230,40 @@ function fixture(options: FixtureOptions = {}) {
     if (host === `${slug}.lab-apps.buildcustom.ai`) {
       try { return JSON.parse(state.route || "null")?.scriptName ?? slug; } catch { return null; }
     }
+    if (host === "buildcustom-apps-gateway-launch.thegoldimport.workers.dev") {
+      try { return JSON.parse(state.route || "null")?.scriptName ?? slug; } catch { return null; }
+    }
     return host.split(".")[0];
   }
   const gateway = {
     async fetch(request: Request) {
       const url = new URL(request.url);
-      const target = routeTarget(url.hostname);
+      if (options.launch && url.hostname !== "buildcustom-apps-gateway-launch.thegoldimport.workers.dev") {
+        events.push(`unexpected-host:${url.hostname}`);
+        return new Response("Direct runtime-host access is not permitted.", { status: 404 });
+      }
+      const candidatePath = url.pathname.match(/^\/c\/([a-z0-9_-]+)(\/.*)?$/);
+      const stableLaunchPath = url.pathname.match(/^\/p\/([a-z0-9-]+)(\/.*)?$/);
+      const target = candidatePath ? candidatePath[1] : routeTarget(url.hostname);
       events.push(`fetch:${target}:${url.pathname}`);
+      events.push(`request:${url.origin}${url.pathname}`);
       if (!target) return new Response("Not found", { status: 404 });
+      if (url.pathname.endsWith("/_buildcustom/route-check") && stableLaunchPath) {
+        const mapped = (() => { try { return JSON.parse(state.route || "null")?.scriptName ?? null; } catch { return null; } })();
+        if (!mapped) return new Response("Not found", { status: 404 });
+        return Response.json({
+          ok: true,
+          project: options.failLaunchRouteCheck && mapped === validScript(currentRevision) ? "wrong-project" : stableLaunchPath[1],
+          scriptName: mapped,
+        });
+      }
+      if (candidatePath && request.headers.get("X-BuildCustom-Verify-Source") === "1") {
+        assert.equal(url.pathname, `/c/${candidatePath[1]}/` + (url.pathname.endsWith("/styles.css") ? "styles.css" : ""));
+        if (url.pathname.endsWith("/styles.css")) {
+          return new Response(stylesCss, { headers: { "content-type": "text/css" } });
+        }
+        return new Response(authoritativeHtml, { headers: { "content-type": "text/html" } });
+      }
       if (target.startsWith("bc-r-") && options.candidateProbeStatus !== undefined
         && !state.uploadedScripts.has(target)) {
         return new Response("candidate probe status", { status: options.candidateProbeStatus });
@@ -210,14 +271,17 @@ function fixture(options: FixtureOptions = {}) {
       if (target.startsWith("bc-r-") && !state.uploadedScripts.has(target)) {
         return new Response("The shared dispatcher could not resolve this candidate.", { status: 500 });
       }
-      if (options.failCandidateAsset && target === validScript(currentRevision) && url.pathname === "/styles.css") {
+      if (options.failCandidateAsset && target === validScript(currentRevision) && url.pathname.endsWith("/styles.css")) {
         return new Response("missing", { status: 404, headers: { "content-type": "text/html" } });
       }
-      if (url.pathname === "/styles.css") {
+      if (url.pathname.endsWith("/styles.css")) {
         return new Response(stylesCss, { headers: { "content-type": "text/css" } });
       }
-      if (url.pathname === "/") {
-        return new Response(indexHtml, { headers: { "content-type": "text/html" } });
+      if (candidatePath && !request.headers.has("X-BuildCustom-Verify-Source")) {
+        return new Response(authoritativeHtml.replace('href="/styles.css"', `href="/c/${candidatePath[1]}/styles.css"`), { headers: { "content-type": "text/html" } });
+      }
+      if (url.pathname === "/" || url.pathname.startsWith("/p/") || (candidatePath && url.pathname.endsWith("/"))) {
+        return new Response(authoritativeHtml, { headers: { "content-type": "text/html" } });
       }
       return new Response("Not found", { status: 404 });
     },
@@ -225,12 +289,21 @@ function fixture(options: FixtureOptions = {}) {
   const browser = {
     async quickAction(_action: string, actionOptions: any) {
       const url = new URL(actionOptions.url);
-      const target = routeTarget(url.hostname);
+      const candidate = url.pathname.match(/^\/c\/([a-z0-9_-]+)(\/.*)?$/);
+      const target = candidate ? candidate[1] : routeTarget(url.hostname);
       browserVisits.push({ url: url.toString(), mappedScript: state.route ? JSON.parse(state.route).scriptName : null });
       if (options.failCandidateRender && target === validScript(currentRevision)) {
         return new Response("Candidate render failed", { status: 502 });
       }
       if (options.failStableAfterSwitch && url.hostname === `${slug}.lab-apps.buildcustom.ai`
+        && target === validScript(currentRevision)) {
+        if (options.loseClaimOnStableFailure) {
+          state.claimToken = "replacement-claim";
+          state.claimExpired = false;
+        }
+        return new Response("Switched candidate render failed", { status: 502 });
+      }
+      if (options.failStableAfterSwitch && url.hostname === "buildcustom-apps-gateway-launch.thegoldimport.workers.dev"
         && target === validScript(currentRevision)) {
         if (options.loseClaimOnStableFailure) {
           state.claimToken = "replacement-claim";
@@ -244,11 +317,14 @@ function fixture(options: FixtureOptions = {}) {
     },
   };
   const env: any = {
-    ENVIRONMENT: "staging",
+    ENVIRONMENT: options.launch ? "production" : "staging",
+    CONTROL_PLANE_PROFILE: options.launch ? "launch" : undefined,
     DB: db,
-    STAGING_ROUTE_KV_ID: "test-routes",
+    STAGING_ROUTE_KV_ID: options.launch ? "248ac5b6821a475794a7fe3d2b0c3718" : "test-routes",
     STAGING_ROUTES: routeStore,
     LAB_APPS_GATEWAY: gateway,
+    STAGING_MANAGED_GATEWAY_URL: options.launch ? "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p" : undefined,
+    STAGING_GATEWAY: options.launch ? gateway : undefined,
     BROWSER: browser,
   };
   let revisionReads = 0;
@@ -262,7 +338,7 @@ function fixture(options: FixtureOptions = {}) {
         return { commitHash: currentRevision };
       }
       if (operation === "files") return [{ path: "public/index.html" }, { path: "public/styles.css" }];
-      if (operation === "files/content" && path === "public/index.html") return { path, content: indexHtml };
+      if (operation === "files/content" && path === "public/index.html") return { path, content: authoritativeHtml };
       if (operation === "files/content" && path === "public/styles.css") return { path, content: stylesCss };
       return null;
     },
@@ -278,12 +354,14 @@ function fixture(options: FixtureOptions = {}) {
         throw new Error("Cloudflare dispatch script already exists; refusing immutable upload.");
       }
       state.uploadedScripts.add(scriptName);
+      const deployedUrl = options.stockUrl?.(scriptName)
+        ?? `https://${scriptName}.${options.launch ? "buildcustom-vibesdk-launch.thegoldimport.workers.dev" : "any-preview-host.test"}/`;
       if (options.holdDeploy) {
         return await new Promise<string>((resolve) => {
-          completeDeploy = () => resolve(options.stockUrl?.(scriptName) ?? `https://${scriptName}.any-preview-host.test/`);
+          completeDeploy = () => resolve(deployedUrl);
         });
       }
-      return options.stockUrl?.(scriptName) ?? `https://${scriptName}.any-preview-host.test/`;
+      return deployedUrl;
     },
     async verifyReady(_gateway: any, url: string) {
       events.push(`ready:${new URL(url).hostname}`);
@@ -348,6 +426,14 @@ test("stock URL only supplies the confirmed script identity; preview host is not
   assert.equal(parseStockDeploymentUrl(`https://another-script.preview.invalid/`, name), null);
   assert.equal(parseStockDeploymentUrl(`https://${name}.preview.invalid/path`, name), null);
   assert.equal(parseStockDeploymentUrl(`http://${name}.preview.invalid/`, name), null);
+  assert.deepEqual(parseStockDeploymentUrl(
+    `https://${name}.buildcustom-vibesdk-launch.thegoldimport.workers.dev/`, name,
+    "buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+  ), {
+    scriptName: name,
+    url: `https://${name}.buildcustom-vibesdk-launch.thegoldimport.workers.dev/`,
+    dispatchUrl: `https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/c/${name}/`,
+  });
 });
 
 test("stock WebSocket waits for immutable capability and idle state before deploying", async () => {
@@ -366,6 +452,33 @@ test("stock WebSocket waits for immutable capability and idle state before deplo
   }));
   assert.equal(await pending, `https://${validScript(revisionA)}.stock-preview.invalid/`);
   assert.equal(socket.closed, true);
+});
+
+test("launch status preserves only the path-scoped preview capability cookie", async () => {
+  const f = fixture({ launch: true });
+  const previewCookie = `__Secure-bc-preview-${"a".repeat(64)}=signed-preview-token; Path=/_private_preview/${agentId}/main/; Max-Age=1800; Secure; HttpOnly; SameSite=None; Partitioned`;
+  const statusHeaders = new Headers();
+  statusHeaders.append("Set-Cookie", previewCookie);
+  statusHeaders.append("Set-Cookie", "__Host-bc_session=must-not-forward; Path=/; Secure; HttpOnly");
+  const statusResponse = Response.json({ nativeThink: true, previewUrl: "/_private_preview/agent/main/" }, { headers: statusHeaders });
+  const response = await handleNativeThinkPublish(
+    f.env,
+    new Request("https://control.test/api/projects/10/runtime/status"),
+    project,
+    "status",
+    owner,
+    {},
+    { readThinkStatus: async () => statusResponse },
+  );
+  assert.ok(response);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Set-Cookie"), previewCookie);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(await response.json(), {
+    nativeThink: true,
+    previewUrl: "/_private_preview/agent/main/",
+    deploymentUrl: null,
+  });
 });
 
 test("stale stock worker, generating agent, timeout, and premature completion never send deploy", async () => {
@@ -607,6 +720,91 @@ test("publishing capabilities, protocol header, legacy path, recovery, and owner
   assert.equal(forged?.status, 400);
   assert.equal(f.deploys, 0);
   assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, oldScript);
+});
+
+test("launch native publish exposes owner-scoped capabilities and requires its private gateway", async () => {
+  const f = fixture();
+  f.env.ENVIRONMENT = "production";
+  f.env.CONTROL_PLANE_PROFILE = "launch";
+  f.env.STAGING_ROUTE_KV_ID = "248ac5b6821a475794a7fe3d2b0c3718";
+  f.env.STAGING_MANAGED_GATEWAY_URL = "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p";
+  f.env.STAGING_GATEWAY = undefined;
+  const capability = await handleNativeThinkPublish(
+    f.env, new Request("https://control.test/api", { method: "GET" }), project, "publishing-capabilities", owner,
+  );
+  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2" });
+  const response = await publish(f);
+  assert.equal(response?.status, 503);
+  assert.match((await response!.json()).message, /private launch apps gateway/i);
+  assert.equal(f.deploys, 0);
+});
+
+test("launch owner publish verifies the immutable dispatch candidate before the private /p route cutover", async () => {
+  const f = fixture({ launch: true });
+  const response = await publish(f);
+  assert.equal(response?.status, 201, await response?.clone().text());
+  const result = await response!.json() as any;
+  assert.equal(result.deploymentUrl, `https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p/${slug}/`);
+  assert.equal(f.state.route && JSON.parse(f.state.route).scriptName, validScript(revisionA));
+  const routeWrite = f.events.indexOf(`kv:${validScript(revisionA)}`);
+  const candidateReady = f.events.indexOf("ready:buildcustom-apps-gateway-launch.thegoldimport.workers.dev");
+  assert.ok(candidateReady >= 0);
+  assert.ok(routeWrite > candidateReady);
+  assert.ok(f.events.some((event) => event === `fetch:${validScript(revisionA)}:/c/${validScript(revisionA)}/styles.css`));
+  assert.ok(f.events.some((event) => event.includes(`/p/${slug}/_buildcustom/route-check`)));
+  assert.ok(f.events.some((event) => event === `request:https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/c/${validScript(revisionA)}/`));
+  assert.equal(f.events.some((event) => event.startsWith("unexpected-host:")), false);
+  const preparedIndex = f.events.indexOf("d1:release:pending");
+  assert.ok(preparedIndex >= 0 && preparedIndex < routeWrite, "prepared D1 release must precede the KV route switch");
+  const retriesBefore = f.events.filter((event) => event.includes(`/p/${slug}/_buildcustom/route-check`)).length;
+  const retry = await publish(f);
+  assert.equal(retry?.status, 200);
+  assert.ok(f.events.filter((event) => event.includes(`/p/${slug}/_buildcustom/route-check`)).length > retriesBefore);
+});
+
+test("launch initial publish preserves an absent route after failure between prepared D1 and KV, then retries without another upload", async () => {
+  const f = fixture({ launch: true, legacy: false, failRoutePutOnce: true });
+  const first = await publish(f);
+  assert.equal(first?.status, 502);
+  assert.equal(f.routes.get(slug) ?? null, null);
+  assert.equal(f.state.releases.at(-1).status, "pending");
+  assert.equal(f.deploys, 1);
+
+  const retry = await publish(f);
+  assert.equal(retry?.status, 201, await retry?.clone().text());
+  assert.equal(f.deploys, 1);
+  assert.equal(f.state.releases.at(-1).status, "published");
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, validScript());
+});
+
+test("launch republish restores the last-known-good route on final D1 failure and prepared retry avoids upload", async () => {
+  const f = fixture({ launch: true, failBatchOnce: true });
+  const first = await publish(f);
+  assert.equal(first?.status, 502);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, oldScript);
+  assert.equal(f.state.link.deployment_script_name, oldScript);
+  assert.equal(f.state.releases.at(-1).status, "pending");
+  assert.equal(f.deploys, 1);
+
+  const retry = await publish(f);
+  assert.equal(retry?.status, 201, await retry?.clone().text());
+  assert.equal(f.deploys, 1);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, validScript());
+  assert.equal(f.state.releases.at(-1).status, "published");
+});
+
+test("launch route-check failure rolls back and verifies the previous slug and script mapping", async () => {
+  const f = fixture({ launch: true, failLaunchRouteCheck: true });
+  const response = await publish(f);
+  assert.equal(response?.status, 502);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, oldScript);
+  assert.ok(f.events.some((event) => event.includes(`/p/${slug}/_buildcustom/route-check`)));
+});
+
+test("launch source verification accepts original CSS URLs and requires the exact-source header", async () => {
+  const f = fixture({ launch: true, launchSourceHtml: true });
+  const response = await publish(f);
+  assert.equal(response?.status, 201, await response?.clone().text());
 });
 
 test("public verification checks rendered HTML and every required stylesheet without an alias", async () => {

@@ -16,6 +16,9 @@ type NativeEnv = {
   BROWSER?: BrowserRunBinding;
   STAGING_ROUTE_KV_ID: string;
   ENVIRONMENT: string;
+  CONTROL_PLANE_PROFILE?: string;
+  STAGING_MANAGED_GATEWAY_URL?: string;
+  STAGING_GATEWAY?: Fetcher;
 } & Parameters<typeof openStockAgentWebSocket>[0];
 
 type NativeProject = {
@@ -33,6 +36,11 @@ type NativeProject = {
 };
 
 export type NativePublishDependencies = {
+  readThinkStatus?: (
+    env: NativeEnv,
+    request: Request,
+    project: NativeProject,
+  ) => Promise<Response | null>;
   readRuntime?: (
     env: NativeEnv,
     request: Request,
@@ -72,7 +80,9 @@ export async function nativeReleaseScriptName(agentId: string, revision: string)
   return name.length === 61 && /^bc-r-[a-f0-9]{56}$/.test(name) ? name : null;
 }
 
-export function parseStockDeploymentUrl(value: unknown, expectedScriptName?: string): { scriptName: string; url: string; dispatchUrl: string } | null {
+export function parseStockDeploymentUrl(
+  value: unknown, expectedScriptName?: string, dispatchSuffix = "lab-apps.buildcustom.ai",
+): { scriptName: string; url: string; dispatchUrl: string } | null {
   if (typeof value !== "string" || value.length > 2048) return null;
   try {
     const url = new URL(value);
@@ -80,18 +90,50 @@ export function parseStockDeploymentUrl(value: unknown, expectedScriptName?: str
     if (url.protocol !== "https:" || !match || (expectedScriptName && match[1] !== expectedScriptName)
       || url.pathname !== "/" || url.search || url.hash
       || url.username || url.password || url.port) return null;
+    if (dispatchSuffix === "buildcustom-vibesdk-launch.thegoldimport.workers.dev"
+      && url.hostname !== `${match[1]}.${dispatchSuffix}`) return null;
     return {
       scriptName: match[1],
       url: url.toString(),
-      dispatchUrl: `https://${match[1]}.lab-apps.buildcustom.ai/`,
+      dispatchUrl: dispatchSuffix === "buildcustom-vibesdk-launch.thegoldimport.workers.dev"
+        ? `https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/c/${match[1]}/`
+        : `https://${match[1]}.${dispatchSuffix}/`,
     };
   } catch {
     return null;
   }
 }
 
+function launchProfile(env: NativeEnv): boolean {
+  return env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch";
+}
+
+function candidateUrl(env: NativeEnv, scriptName: string): string {
+  return launchProfile(env)
+    ? `https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/c/${scriptName}/`
+    : `https://${scriptName}.lab-apps.buildcustom.ai/`;
+}
+
+function publicUrl(env: NativeEnv, slug: string): string {
+  return launchProfile(env)
+    ? `${env.STAGING_MANAGED_GATEWAY_URL!.replace(/\/+$/, "")}/${slug}/`
+    : `https://${slug}.lab-apps.buildcustom.ai/`;
+}
+
 function errorResponse(message: string, status: number): Response {
   return Response.json({ message }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+function launchPreviewCookie(response: Response, env: NativeEnv): string | null {
+  if (!launchProfile(env)) return null;
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  const raw = response.headers.get("Set-Cookie") || "";
+  const cookies = typeof headers.getSetCookie === "function"
+    ? headers.getSetCookie()
+    : raw.split(/,\s*(?=[!#$%&'*+\-.^_`|~0-9A-Za-z]+=)/);
+  return cookies.find((cookie) =>
+    /^__Secure-bc-preview-[a-f0-9]{64}=[^;,]+(?:;|$)/.test(cookie) && !cookie.includes(","),
+  ) || null;
 }
 
 function csrfPresent(request: Request): boolean {
@@ -262,13 +304,18 @@ async function verifyDispatchedSources(
   gateway: Fetcher,
   directUrl: string,
   source: { indexHtml: string; stylesCss: string },
+  launch = false,
 ): Promise<void> {
   for (const [path, expected, mediaType] of [
     ["/", source.indexHtml, "text/html"],
     ["/styles.css", source.stylesCss, "text/css"],
   ] as const) {
-    const url = new URL(path, directUrl);
-    const response = await gateway.fetch(new Request(url, { headers: { Accept: mediaType } }));
+    const url = path === "/" ? new URL(directUrl) : launch
+      ? new URL(path.slice(1), directUrl)
+      : new URL(path, directUrl);
+    const headers = new Headers({ Accept: mediaType });
+    if (launch) headers.set("X-BuildCustom-Verify-Source", "1");
+    const response = await gateway.fetch(new Request(url, { headers }));
     const type = response.headers.get("content-type")?.toLowerCase() || "";
     if (response.status !== 200 || !type.includes(mediaType)) {
       await response.body?.cancel();
@@ -280,6 +327,30 @@ async function verifyDispatchedSources(
       || actual.some((byte, index) => byte !== expectedBytes[index])) {
       throw new Error(`The deployed ${path} does not match the authoritative Think source.`);
     }
+  }
+}
+
+async function verifyStableRoute(
+  gateway: Fetcher,
+  stableUrl: string,
+  slug: string,
+  expectedScriptName: string,
+): Promise<void> {
+  const checkUrl = new URL("_buildcustom/route-check", stableUrl);
+  const response = await gateway.fetch(new Request(checkUrl, { headers: { Accept: "application/json" } }));
+  const payload = await response.json().catch(() => null) as any;
+  if (!response.ok || payload?.ok !== true || payload.project !== slug
+    || payload.scriptName !== expectedScriptName) {
+    throw new Error("The private launch route check resolved to an unexpected project or deployment.");
+  }
+}
+
+async function verifyStableRouteAbsent(gateway: Fetcher, stableUrl: string): Promise<void> {
+  const checkUrl = new URL("_buildcustom/route-check", stableUrl);
+  const response = await gateway.fetch(new Request(checkUrl, { headers: { Accept: "application/json" } }));
+  await response.body?.cancel();
+  if (response.status !== 404) {
+    throw new Error("The private launch route remained reachable after rollback.");
   }
 }
 
@@ -357,7 +428,7 @@ async function assertNoForeignScriptCollision(env: NativeEnv, projectId: number,
     "SELECT project_id FROM runtime_project_links WHERE deployment_script_name=? AND project_id<>? LIMIT 1",
   ).bind(scriptName, projectId).first<any>();
   const releaseCollision = await env.DB.prepare(
-    "SELECT project_id FROM native_publish_releases WHERE script_name=? AND project_id<>? AND status='published' LIMIT 1",
+    "SELECT project_id FROM native_publish_releases WHERE script_name=? AND project_id<>? AND status IN ('pending','published') LIMIT 1",
   ).bind(scriptName, projectId).first<any>();
   if (linkedCollision || releaseCollision) {
     throw new Error("The stock deployment script name is already used by another project.");
@@ -381,7 +452,16 @@ async function publishImmutable(
   if (request.headers.get("X-Publish-Protocol") !== PUBLISH_PROTOCOL) {
     return errorResponse("Refresh publishing capabilities before publishing.", 409);
   }
-  if (!env.LAB_APPS_GATEWAY) return errorResponse("The lab apps gateway is not configured.", 503);
+  const launch = launchProfile(env);
+  if (launch && (env.STAGING_ROUTE_KV_ID !== "248ac5b6821a475794a7fe3d2b0c3718"
+    || env.STAGING_MANAGED_GATEWAY_URL !== "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p"
+    || !env.STAGING_GATEWAY)) return errorResponse("The private launch apps gateway is not configured.", 503);
+  const gateway = launch ? env.STAGING_GATEWAY : env.LAB_APPS_GATEWAY;
+  if (!gateway) return errorResponse(launch ? "The private launch apps gateway is not configured." : "The lab apps gateway is not configured.", 503);
+  const fetchPublicTarget = (target: string) => gateway!.fetch(new Request(target, {
+    headers: { Accept: new URL(target).pathname.endsWith(".css") ? "text/css" : "text/html" },
+    signal: AbortSignal.timeout(5_000),
+  }));
 
   // Project and agent identity come only from owner-filtered server-side rows.
   const link = await env.DB.prepare(
@@ -400,32 +480,30 @@ async function publishImmutable(
   const expectedRevision = revision.commitHash.toLowerCase();
   const scriptName = await nativeReleaseScriptName(link.agent_id, expectedRevision);
   if (!scriptName) return errorResponse("A collision-safe deployment identity could not be derived.", 409);
+  const stableUrl = publicUrl(env, slug);
   const already = await env.DB.prepare(
     "SELECT * FROM native_publish_releases WHERE project_id=? AND revision=? AND script_name=? AND status='published' ORDER BY id DESC LIMIT 1",
   ).bind(project.id, expectedRevision, scriptName).first<any>();
   if (already) {
-    const publicUrl = `https://${slug}.lab-apps.buildcustom.ai/`;
     try {
       const savedRoute = await env.STAGING_ROUTES.get(slug);
       let mapped: any;
       try { mapped = savedRoute === null ? null : JSON.parse(savedRoute); } catch { mapped = null; }
-      if (link.deployment_script_name !== scriptName || link.deployment_url !== publicUrl
-        || already.public_url !== publicUrl || mapped?.scriptName !== scriptName) {
+      if (link.deployment_script_name !== scriptName || link.deployment_url !== stableUrl
+        || already.public_url !== stableUrl || mapped?.scriptName !== scriptName) {
         return errorResponse("This immutable release is not the active published route.", 409);
       }
       const authoritativeSources = await readAuthoritativeSources(env, request, project, readRuntime);
-      const directUrl = `https://${scriptName}.lab-apps.buildcustom.ai/`;
-      const fetchPublic = (target: string) => env.LAB_APPS_GATEWAY!.fetch(new Request(target, {
-        headers: { Accept: new URL(target).pathname === "/" ? "text/html" : "text/css" },
-        signal: AbortSignal.timeout(5_000),
-      }));
+      const directUrl = candidateUrl(env, scriptName);
+      const fetchPublic = fetchPublicTarget;
       const checkReady = dependencies.verifyReady || verifyReady;
       const verifyPublic = dependencies.verifyPublic || verifyNativePublicRoute;
-      await verifyDispatchedSources(env.LAB_APPS_GATEWAY, directUrl, authoritativeSources);
-      await checkReady(env.LAB_APPS_GATEWAY, directUrl);
+      await verifyDispatchedSources(gateway!, directUrl, authoritativeSources, launch);
+      await checkReady(gateway!, directUrl);
       await verifyPublic(env.BROWSER, directUrl, fetchPublic);
-      await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
-      await verifyPublic(env.BROWSER, publicUrl, fetchPublic);
+      await checkReady(gateway!, stableUrl);
+      await verifyPublic(env.BROWSER, stableUrl, fetchPublic);
+      if (launch) await verifyStableRoute(gateway!, stableUrl, slug, scriptName);
       const latestLink = await env.DB.prepare(
         "SELECT agent_id,initialization_status,deployment_script_name,deployment_url FROM runtime_project_links WHERE project_id=?",
       ).bind(project.id).first<any>();
@@ -433,7 +511,7 @@ async function publishImmutable(
       const latestStatus = await readRuntime(env, request, project, "status");
       const latestRevision = await readRuntime(env, request, project, "revision");
       if (latestLink?.agent_id !== link.agent_id || latestLink?.initialization_status !== "ready"
-        || latestLink?.deployment_script_name !== scriptName || latestLink?.deployment_url !== publicUrl
+        || latestLink?.deployment_script_name !== scriptName || latestLink?.deployment_url !== stableUrl
         || latestRoute !== savedRoute || latestStatus?.state?.generation?.status !== "idle"
         || latestRevision?.commitHash?.toLowerCase() !== expectedRevision) {
         return errorResponse("The active immutable release changed during verification.", 409);
@@ -445,6 +523,14 @@ async function publishImmutable(
       );
     }
     return Response.json({ deploymentUrl: already.public_url, release: mapRelease(already), alreadyPublished: true }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const prepared = launch
+    ? await env.DB.prepare(
+      "SELECT * FROM native_publish_releases WHERE project_id=? AND revision=? AND script_name=? AND status='pending' ORDER BY id DESC LIMIT 1",
+    ).bind(project.id, expectedRevision, scriptName).first<any>()
+    : null;
+  if (prepared && (prepared.slug !== slug || prepared.public_url !== stableUrl)) {
+    return errorResponse("The prepared immutable release does not match the current publishing address.", 409);
   }
   const priorRelease = await env.DB.prepare(
     "SELECT * FROM native_publish_releases WHERE project_id=? AND status='published' ORDER BY id DESC LIMIT 1",
@@ -488,27 +574,26 @@ async function publishImmutable(
   let writtenRoute: string | null = null;
   try {
     const authoritativeSources = await readAuthoritativeSources(env, request, project, readRuntime);
-    const publicUrl = `https://${slug}.lab-apps.buildcustom.ai/`;
-    const referencedCss = requiredAssets(authoritativeSources.indexHtml, publicUrl)
+    const referencedCss = requiredAssets(authoritativeSources.indexHtml, stableUrl)
       .filter((asset) => asset.kind === "css");
-    if (!referencedCss.some((asset) => new URL(asset.path, publicUrl).pathname === "/styles.css")) {
+    if (!referencedCss.some((asset) => {
+      const path = new URL(asset.path, stableUrl).pathname;
+      return path === "/styles.css" || (launch && path === `/p/${slug}/styles.css`);
+    })) {
       throw new Error("The authoritative project HTML must reference its existing public/styles.css asset.");
     }
-    const candidateFetch = (target: string) => env.LAB_APPS_GATEWAY!.fetch(new Request(target, {
-      headers: { Accept: new URL(target).pathname === "/" ? "text/html" : "text/css" },
-      signal: AbortSignal.timeout(5_000),
-    }));
+    const candidateFetch = fetchPublicTarget;
     const checkReady = dependencies.verifyReady || verifyReady;
     const verifyPublic = dependencies.verifyPublic || verifyNativePublicRoute;
 
     if (oldScriptName) {
-      const oldDirectUrl = `https://${oldScriptName}.lab-apps.buildcustom.ai/`;
-      await checkReady(env.LAB_APPS_GATEWAY, oldDirectUrl);
+      const oldDirectUrl = candidateUrl(env, oldScriptName);
+      await checkReady(gateway!, oldDirectUrl);
       if (priorRelease?.revision === expectedRevision) {
-        await verifyDispatchedSources(env.LAB_APPS_GATEWAY, oldDirectUrl, authoritativeSources);
+        await verifyDispatchedSources(gateway!, oldDirectUrl, authoritativeSources, launch);
       }
-      await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
-      await verifyPublic(env.BROWSER, publicUrl, candidateFetch);
+      await checkReady(gateway!, stableUrl);
+      await verifyPublic(env.BROWSER, stableUrl, candidateFetch);
     }
 
     const latestStatus = await readRuntime(env, request, project, "status");
@@ -526,18 +611,31 @@ async function publishImmutable(
       || latestLink.deployment_url !== link.deployment_url) {
       throw new Error("This project is not ready for runtime access.");
     }
-    // Stock performs the authoritative Cloudflare dispatch-script preflight and
-    // create-once guard. The shared gateway reports an absent dispatch as HTTP
-    // 500, so it cannot safely distinguish absence from an existing candidate.
-    const socket = await (dependencies.openSocket || openStockAgentWebSocket)(env, request, latestLink.agent_id);
-    const deployed = parseStockDeploymentUrl(
-      await (dependencies.waitForDeploy || awaitNativeDeployResult)(socket, expectedRevision),
-      scriptName,
-    );
-    if (!deployed) throw new Error("Think returned an invalid lab deployment URL.");
-    await verifyDispatchedSources(env.LAB_APPS_GATEWAY, deployed.dispatchUrl, authoritativeSources);
+    let deployed: ReturnType<typeof parseStockDeploymentUrl>;
+    if (prepared) {
+      // A prepared launch release has already passed source and browser
+      // verification. Explicit Publish retries reuse it; recovery endpoints
+      // remain read-only and never initiate another stock deployment.
+      deployed = parseStockDeploymentUrl(
+        `https://${scriptName}.buildcustom-vibesdk-launch.thegoldimport.workers.dev/`,
+        scriptName,
+        "buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+      );
+    } else {
+      // Stock performs the authoritative Cloudflare dispatch-script preflight
+      // and create-once guard. The shared gateway cannot safely distinguish an
+      // absent dispatch from an existing candidate.
+      const socket = await (dependencies.openSocket || openStockAgentWebSocket)(env, request, latestLink.agent_id);
+      deployed = parseStockDeploymentUrl(
+        await (dependencies.waitForDeploy || awaitNativeDeployResult)(socket, expectedRevision),
+        scriptName,
+        launch ? "buildcustom-vibesdk-launch.thegoldimport.workers.dev" : "lab-apps.buildcustom.ai",
+      );
+    }
+    if (!deployed) throw new Error("Think returned an invalid deployment URL.");
+    await verifyDispatchedSources(gateway!, deployed.dispatchUrl, authoritativeSources, launch);
 
-    await checkReady(env.LAB_APPS_GATEWAY, deployed.dispatchUrl);
+    await checkReady(gateway!, deployed.dispatchUrl);
     await verifyPublic(env.BROWSER, deployed.dispatchUrl, candidateFetch);
 
     // The active slug is deliberately not touched until the new script and all
@@ -548,13 +646,14 @@ async function publishImmutable(
       if (activeRoute !== savedRoute) throw new Error("The active public route changed during candidate deployment.");
       if (priorRelease?.revision === expectedRevision) {
         await verifyDispatchedSources(
-          env.LAB_APPS_GATEWAY,
-          `https://${oldScriptName}.lab-apps.buildcustom.ai/`,
+          gateway!,
+          candidateUrl(env, oldScriptName),
           authoritativeSources,
+          launch,
         );
       }
-      await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
-      await verifyPublic(env.BROWSER, publicUrl, candidateFetch);
+      await checkReady(gateway!, stableUrl);
+      await verifyPublic(env.BROWSER, stableUrl, candidateFetch);
     }
 
     const afterRevision = await readRuntime(env, request, project, "revision");
@@ -563,33 +662,61 @@ async function publishImmutable(
     if (!await ownsActivePublishClaim(env, project.id, claimToken)) {
       throw new Error("The native publish claim expired or changed before route activation.");
     }
+    if (launch && !prepared) {
+      const preparedRow = await env.DB.prepare(
+        "INSERT INTO native_publish_releases(user_id,project_id,revision,script_name,slug,public_url,status) VALUES(?,?,?,?,?,?,'pending') RETURNING *",
+      ).bind(project.user_id, project.id, expectedRevision, deployed.scriptName, slug, stableUrl).first<any>();
+      if (!preparedRow) throw new Error("The immutable release could not be prepared before route activation.");
+    }
     writtenRoute = JSON.stringify({ scriptName, metadata: {} });
     routeWritten = true;
     await env.STAGING_ROUTES.put(slug, writtenRoute);
     // Verify the stable customer URL only after the candidate passed direct
     // dispatch, exact-source, required-asset, and rendered-page checks.
-    await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
-    await verifyPublic(env.BROWSER, publicUrl, candidateFetch);
+    await checkReady(gateway!, stableUrl);
+    await verifyPublic(env.BROWSER, stableUrl, candidateFetch);
+    if (launch) await verifyStableRoute(gateway!, stableUrl, slug, scriptName);
     const finalRevision = await readRuntime(env, request, project, "revision");
     if (finalRevision?.commitHash?.toLowerCase() !== expectedRevision) throw new Error("Project revision changed during public route verification.");
     if (!await ownsActivePublishClaim(env, project.id, claimToken)) throw new Error("The native publish claim expired or changed.");
     if (await env.STAGING_ROUTES.get(slug) !== writtenRoute) throw new Error("The public route mapping changed during verification.");
+    if (launch) await verifyStableRoute(gateway!, stableUrl, slug, scriptName);
 
-    const statements = [
+    const statements = launch ? [
+      env.DB.prepare("UPDATE runtime_project_links SET deployment_url=?,deployment_origin_url=?,deployment_script_name=?,subdomain_slug=?,hosting_provider='cloudflare',updated_at=datetime('now') WHERE project_id=? AND EXISTS (SELECT 1 FROM native_publish_releases WHERE project_id=? AND revision=? AND script_name=? AND slug=? AND public_url=? AND status='pending')")
+        .bind(stableUrl, deployed.url, deployed.scriptName, slug, project.id, project.id, expectedRevision, deployed.scriptName, slug, stableUrl),
+      env.DB.prepare("UPDATE native_publish_releases SET status='published' WHERE project_id=? AND revision=? AND script_name=? AND slug=? AND public_url=? AND status='pending' AND EXISTS (SELECT 1 FROM runtime_project_links WHERE project_id=? AND deployment_script_name=? AND deployment_url=?) RETURNING *")
+        .bind(project.id, expectedRevision, deployed.scriptName, slug, stableUrl, project.id, deployed.scriptName, stableUrl),
+    ] : [
       env.DB.prepare("UPDATE runtime_project_links SET deployment_url=?,deployment_origin_url=?,deployment_script_name=?,subdomain_slug=?,hosting_provider='cloudflare',updated_at=datetime('now') WHERE project_id=?")
-        .bind(publicUrl, deployed.url, deployed.scriptName, slug, project.id),
+        .bind(stableUrl, deployed.url, deployed.scriptName, slug, project.id),
       env.DB.prepare("INSERT INTO native_publish_releases(user_id,project_id,revision,script_name,slug,public_url,status) VALUES(?,?,?,?,?,?,'published') RETURNING *")
-        .bind(project.user_id, project.id, expectedRevision, deployed.scriptName, slug, publicUrl),
+        .bind(project.user_id, project.id, expectedRevision, deployed.scriptName, slug, stableUrl),
     ];
     const results = await env.DB.batch(statements);
     const row = results[1].results?.[0];
     if (!row) throw new Error("Native publish release could not be committed.");
-    return Response.json({ deploymentUrl: publicUrl, release: mapRelease(row), alreadyPublished: false }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    return Response.json({ deploymentUrl: stableUrl, release: mapRelease(row), alreadyPublished: false }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (routeWritten && await env.STAGING_ROUTES.get(slug) === writtenRoute) {
       if (await ownsActivePublishClaim(env, project.id, claimToken)) {
         if (savedRoute === null) await env.STAGING_ROUTES.delete(slug);
         else await env.STAGING_ROUTES.put(slug, savedRoute);
+        if (launch) {
+          try {
+            if (savedRoute === null) {
+              if (await env.STAGING_ROUTES.get(slug) !== null) throw new Error("The private launch route rollback did not clear the new mapping.");
+              await verifyStableRouteAbsent(gateway!, publicUrl(env, slug));
+            } else {
+              let restoredScript: unknown;
+              try { restoredScript = JSON.parse(savedRoute).scriptName; } catch { /* Fail closed below. */ }
+              if (typeof restoredScript !== "string") throw new Error("The last-known-good private launch route could not be parsed after rollback.");
+              await verifyStableRoute(gateway!, publicUrl(env, slug), slug, restoredScript);
+            }
+          } catch {
+            return errorResponse("The previous private launch route was restored but could not be verified.", 502);
+          }
+        }
       } else {
         return errorResponse("The native publish claim expired; route rollback was unsafe and was not attempted.", 502);
       }
@@ -609,7 +736,7 @@ export async function handleNativeThinkPublish(
   input: Record<string, unknown> = {},
   dependencies: NativePublishDependencies = {},
 ): Promise<Response | null> {
-  if (env.ENVIRONMENT !== "staging") return null;
+  if (env.ENVIRONMENT !== "staging" && !launchProfile(env)) return null;
   if (actor.id !== project.user_id) return errorResponse("Project not found", 404);
   if (operation === "publishing-capabilities" && request.method === "GET") {
     return Response.json(
@@ -642,12 +769,26 @@ export async function handleNativeThinkPublish(
     return Response.json({ subdomainSlug: slug, hostingProvider: "buildcustom", customDomain: "", customOrigin: "" }, { headers: { "Cache-Control": "no-store" } });
   }
   if (operation === "status" && request.method === "GET") {
-    const response = await handleThinkRuntime(env, request, project as any, operation);
-    if (!response || !response.ok) return response;
+    const response = dependencies.readThinkStatus
+      ? await dependencies.readThinkStatus(env, request, project)
+      : await handleThinkRuntime(env, request, project as any, operation);
+    if (!response) return null;
+    if (!response.ok) {
+      const headers = new Headers({ "Cache-Control": "no-store" });
+      const contentType = response.headers.get("Content-Type");
+      if (contentType) headers.set("Content-Type", contentType);
+      return new Response(response.body, { status: response.status, headers });
+    }
+    const previewCookie = launchPreviewCookie(response, env);
     const data = await response.json() as any;
     const release = await env.DB.prepare("SELECT public_url FROM native_publish_releases WHERE project_id=? AND status='published' ORDER BY id DESC LIMIT 1")
       .bind(project.id).first<any>();
-    return Response.json({ ...data, deploymentUrl: release?.public_url || null }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ ...data, deploymentUrl: release?.public_url || null }, {
+      headers: {
+        "Cache-Control": "no-store",
+        ...(previewCookie ? { "Set-Cookie": previewCookie } : {}),
+      },
+    });
   }
   if (operation === "publishing-settings" && request.method === "PUT") {
     if (!csrfPresent(request)) return errorResponse("A secure project request is required.", 403);

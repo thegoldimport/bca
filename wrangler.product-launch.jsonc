@@ -4,7 +4,13 @@
   "main": "cloudflare/worker.ts",
   "compatibility_date": "2026-09-20",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": false,
+  "workers_dev": true,
+  "assets": {
+    "directory": "./dist/public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -12,5 +18,48 @@
       "database_id": "ca820baf-6973-4318-ac52-529d56293bb6",
       "migrations_dir": "migrations/d1"
     }
-  ]
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "STAGING_ROUTES",
+      "id": "248ac5b6821a475794a7fe3d2b0c3718"
+    }
+  ],
+  "services": [
+    {
+      "binding": "VIBESDK_RUNTIME",
+      "service": "buildcustom-vibesdk-launch"
+    },
+    {
+      "binding": "AUTH_RUNTIME",
+      "service": "buildcustom-vibesdk-launch"
+    },
+    {
+      "binding": "STAGING_GATEWAY",
+      "service": "buildcustom-apps-gateway-launch"
+    }
+  ],
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "CONTROL_PLANE_PROFILE": "launch",
+    "AUTH_RUNTIME_URL": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+    "VIBESDK_RUNTIME_URL": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+    "STAGING_RUNTIME_URL": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+    "CONTROL_PLANE_ROUTE_KV_ID": "248ac5b6821a475794a7fe3d2b0c3718",
+    "STAGING_ROUTE_KV_ID": "248ac5b6821a475794a7fe3d2b0c3718",
+    "CONTROL_PLANE_DISPATCH_NAMESPACE": "buildcustom-vibesdk-launch-dispatch",
+    "STAGING_DISPATCH_NAMESPACE": "buildcustom-vibesdk-launch-dispatch",
+    "CONTROL_PLANE_ALLOWED_ORIGIN": "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
+    "STAGING_ALLOWED_ORIGIN": "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
+    "STAGING_MANAGED_GATEWAY_URL": "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p",
+    "STAGING_LOGIN_ENABLED": "true",
+    "STAGING_REGISTRATION_ENABLED": "true",
+    "RUNTIME_OPERATIONS_ENABLED": "true"
+  }
 }

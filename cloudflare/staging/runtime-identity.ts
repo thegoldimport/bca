@@ -1,6 +1,7 @@
 import { expiredSessionCookie, parseCookie, revokeSession, type SessionUser } from "./auth";
 
 const LAB_AUTH_URL = "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev";
+const LAUNCH_AUTH_URL = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
 const AUTH_COOKIE = "accessToken";
 const CSRF_COOKIE = "csrf-token";
 const clearCookie = (name: string) => `${name}=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax`;
@@ -9,6 +10,8 @@ type RuntimeAuthEnv = {
   DB: D1Database;
   AUTH_RUNTIME?: Fetcher;
   AUTH_RUNTIME_URL?: string;
+  ENVIRONMENT?: string;
+  CONTROL_PLANE_PROFILE?: string;
 };
 
 type RuntimeIdentity = {
@@ -25,7 +28,9 @@ export class RuntimeIdentityError extends Error {
 }
 
 function authRuntime(env: RuntimeAuthEnv): Fetcher {
-  if (env.AUTH_RUNTIME_URL !== LAB_AUTH_URL || !env.AUTH_RUNTIME) {
+  const expectedUrl = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
+    ? LAUNCH_AUTH_URL : LAB_AUTH_URL;
+  if (env.AUTH_RUNTIME_URL !== expectedUrl || !env.AUTH_RUNTIME) {
     throw new RuntimeIdentityError("Staging sign-in is not configured.", 503);
   }
   return env.AUTH_RUNTIME;
@@ -61,7 +66,7 @@ async function runtimeRequest(env: RuntimeAuthEnv, request: Request, path: strin
   if (csrf) headers.set("X-CSRF-Token", csrf);
   if (options.body) headers.set("Content-Type", "application/json");
   try {
-    return await authRuntime(env).fetch(new Request(`${LAB_AUTH_URL}${path}`, {
+    return await authRuntime(env).fetch(new Request(`${env.AUTH_RUNTIME_URL}${path}`, {
       method: options.method || "GET",
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,

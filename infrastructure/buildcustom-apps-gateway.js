@@ -2,6 +2,7 @@ const SUFFIX = ".apps.buildcustom.ai";
 const ZONE = "buildcustom.ai";
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SCRIPT = /^[a-z0-9_][a-z0-9-_]*$/;
+const CANDIDATE_SCRIPT = /^bc-r-[a-f0-9]{56}$/;
 const DEFAULT_FAVICON_URL = "https://buildcustom.ai/favicon.png";
 const DEFAULT_SOCIAL_IMAGE_URL = "https://buildcustom.ai/opengraph.jpg";
 
@@ -68,44 +69,140 @@ function removeElement() {
   return { element(element) { element.remove(); } };
 }
 
+function privateRoute(pathname) {
+  const match = pathname.match(/^\/([pc])\/([^/]+)(\/.*)?$/);
+  if (!match) return null;
+  const path = match[3] || "/";
+  if (match[1] === "p" && SLUG.test(match[2])) {
+    return { type: "project", slug: match[2], scriptName: null, prefix: `/p/${match[2]}`, path };
+  }
+  if (match[1] === "c" && CANDIDATE_SCRIPT.test(match[2])) {
+    return { type: "candidate", slug: null, scriptName: match[2], prefix: `/c/${match[2]}`, path };
+  }
+  return null;
+}
+
+function scopeRootRelativeUrl(value, prefix) {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return value;
+  if (value === prefix || value.startsWith(`${prefix}/`) || value.startsWith(`${prefix}?`) || value.startsWith(`${prefix}#`)) return value;
+  return `${prefix}${value}`;
+}
+
+function rewriteSrcset(value, prefix) {
+  return value.replace(/(^|,\s*)(\/(?!\/)[^\s,]*)/g, (_match, separator, url) =>
+    `${separator}${scopeRootRelativeUrl(url, prefix)}`);
+}
+
+function rewriteCssUrls(css, prefix) {
+  return css
+    .replace(/url\(\s*(?:(["'])(.*?)\1|([^)]*?))\s*\)/gi, (whole, quote, quotedUrl, unquotedUrl) => {
+      const url = quote ? quotedUrl : unquotedUrl.trim();
+      const scoped = scopeRootRelativeUrl(url, prefix);
+      return quote ? `url(${quote}${scoped}${quote})` : `url(${scoped})`;
+    })
+    .replace(/(@import\s+)(["'])([^"']+)\2/gi, (_match, prefixText, quote, url) =>
+      `${prefixText}${quote}${scopeRootRelativeUrl(url, prefix)}${quote}`);
+}
+
+function scopedHtmlUrls(prefix) {
+  return {
+    element(element) {
+      for (const attribute of ["href", "src"]) {
+        const value = element.getAttribute(attribute);
+        if (value !== null) element.setAttribute(attribute, scopeRootRelativeUrl(value, prefix));
+      }
+    },
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    const privateCanaryHost = typeof env.PRIVATE_CANARY_HOST === "string"
+      ? env.PRIVATE_CANARY_HOST.toLowerCase().replace(/\.$/, "")
+      : "";
+    const isPrivateCanary = Boolean(privateCanaryHost && hostname === privateCanaryHost);
+    const privatePath = isPrivateCanary ? privateRoute(url.pathname) : null;
+    const requestPath = isPrivateCanary ? privatePath?.path || null : url.pathname;
+    const isPrivateCandidate = isPrivateCanary && privatePath?.type === "candidate";
+    const rawSourceVerification = isPrivateCanary && request.headers.get("X-BuildCustom-Verify-Source") === "1";
+    const notFound = () => new Response("Not found", {
+      status: 404,
+      headers: isPrivateCanary ? { "X-Robots-Tag": "noindex, nofollow" } : undefined,
+    });
+
+    // The workers.dev canary is opt-in and path-scoped. It never changes
+    // dispatch behavior for the public managed/custom-host gateway.
+    if (isPrivateCanary && !privatePath) return notFound();
     if (hostname === ZONE || (hostname.endsWith(`.${ZONE}`) && !hostname.endsWith(SUFFIX))) {
       return fetch(request);
     }
-    const managedSlug = hostname.endsWith(SUFFIX) ? hostname.slice(0, -SUFFIX.length) : null;
-    const hostnameConfig = managedSlug
+    const managedSlug = isPrivateCanary
+      ? privatePath.type === "project" ? privatePath.slug : null
+      : hostname.endsWith(SUFFIX) ? hostname.slice(0, -SUFFIX.length) : null;
+    const hostnameConfig = managedSlug || isPrivateCandidate
       ? { slug: managedSlug, redirectTo: null, purpose: null, role: null, primaryHostname: null }
       : hostnameRoute(await env.ROUTES.get(`hostname:${hostname}`));
     const slug = hostnameConfig.slug;
-    if (typeof slug !== "string" || !SLUG.test(slug) || slug.includes(".")) return new Response("Not found", { status: 404 });
-
-    const raw = await env.ROUTES.get(slug);
-    if (!raw) return new Response("Project not found", { status: 404 });
-    const { scriptName, metadata } = routeConfig(raw);
-    if (!SCRIPT.test(scriptName || "")) return new Response("Project not found", { status: 404 });
+    let scriptName;
+    let metadata = {};
+    if (isPrivateCandidate) {
+      scriptName = privatePath.scriptName;
+    } else {
+      if (typeof slug !== "string" || !SLUG.test(slug) || slug.includes(".")) return notFound();
+      const raw = await env.ROUTES.get(slug);
+      if (!raw) return new Response("Project not found", {
+        status: 404,
+        headers: isPrivateCanary ? { "X-Robots-Tag": "noindex, nofollow" } : undefined,
+      });
+      ({ scriptName, metadata } = routeConfig(raw));
+      if (!SCRIPT.test(scriptName || "")) return new Response("Project not found", {
+        status: 404,
+        headers: isPrivateCanary ? { "X-Robots-Tag": "noindex, nofollow" } : undefined,
+      });
+    }
 
     if (!managedSlug && hostnameConfig.redirectTo && hostnameConfig.redirectTo !== hostname) {
       return Response.redirect(`https://${hostnameConfig.redirectTo}${url.pathname}${url.search}`, 301);
     }
 
-    if (url.pathname === "/_buildcustom/route-check") {
+    if (requestPath === "/_buildcustom/route-check") {
+      const requestedProject = url.searchParams.get("project");
+      const requestedScriptName = url.searchParams.get("scriptName");
+      const project = isPrivateCandidate ? requestedProject : slug;
+      const identityMatches = !isPrivateCanary || (
+        (!isPrivateCandidate || (typeof project === "string" && SLUG.test(project))) &&
+        (requestedProject === null || requestedProject === project) &&
+        (requestedScriptName === null || requestedScriptName === scriptName)
+      );
+      if (!identityMatches) {
+        return Response.json({ ok: false }, { status: 404, headers: {
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "X-Robots-Tag": "noindex, nofollow",
+        } });
+      }
       return Response.json(
         {
           ok: true,
-          project: slug,
+          project,
+          ...(isPrivateCanary ? { scriptName } : {}),
           redirectTo: hostnameConfig.redirectTo,
           purpose: hostnameConfig.purpose,
           role: hostnameConfig.role,
           primaryHostname: hostnameConfig.primaryHostname,
         },
-        { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
+        { headers: {
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          ...(isPrivateCanary ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
+        } },
       );
     }
 
-    if (url.pathname === "/_buildcustom/custom-host-route-check") {
+    if (requestPath === "/_buildcustom/custom-host-route-check") {
+      if (isPrivateCandidate) return notFound();
       const customHostname = (url.searchParams.get("hostname") || "").toLowerCase().replace(/\.$/, "");
       const mappedRoute = /^[a-z0-9.-]+$/.test(customHostname)
         ? hostnameRoute(await env.ROUTES.get(`hostname:${customHostname}`))
@@ -120,11 +217,16 @@ export default {
           role: mappedSlug === slug ? mappedRoute.role : null,
           primaryHostname: mappedSlug === slug ? mappedRoute.primaryHostname : null,
         },
-        { status: mappedSlug === slug ? 200 : 404, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } },
+        { status: mappedSlug === slug ? 200 : 404, headers: {
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          ...(isPrivateCanary ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
+        } },
       );
     }
 
-    if (url.pathname === "/_buildcustom/preview-image") {
+    if (requestPath === "/_buildcustom/preview-image") {
+      if (isPrivateCandidate) return notFound();
       const image = await env.ROUTES.get(`preview:${slug}`, "arrayBuffer");
       if (!image) return new Response("Preview image not found", { status: 404 });
       return new Response(image, {
@@ -136,19 +238,27 @@ export default {
       });
     }
 
-    if (url.pathname === "/robots.txt") {
-      const body = metadata.allowIndexing === false
+    if (requestPath === "/robots.txt") {
+      const body = isPrivateCanary || metadata.allowIndexing === false
         ? "User-agent: *\nDisallow: /\n"
         : `User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`;
       return new Response(body, {
-        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=3600",
+          ...(isPrivateCanary ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
+        },
       });
     }
-    if (url.pathname === "/sitemap.xml") {
+    if (requestPath === "/sitemap.xml") {
       const canonical = escapeHtml(metadata.canonicalUrl || url.origin);
       const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${canonical}</loc></url></urlset>`;
       return new Response(body, {
-        headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+          "Cache-Control": "public, max-age=3600",
+          ...(isPrivateCanary ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
+        },
       });
     }
 
@@ -158,17 +268,55 @@ export default {
     dispatchHeaders.delete("X-BuildCustom-Domain-Role");
     dispatchHeaders.delete("X-BuildCustom-Primary-Hostname");
     if (!managedSlug) {
-      dispatchHeaders.set("X-BuildCustom-Hostname", hostname);
-      if (hostnameConfig.purpose) dispatchHeaders.set("X-BuildCustom-Domain-Purpose", hostnameConfig.purpose);
-      if (hostnameConfig.role) dispatchHeaders.set("X-BuildCustom-Domain-Role", hostnameConfig.role);
-      if (hostnameConfig.primaryHostname) dispatchHeaders.set("X-BuildCustom-Primary-Hostname", hostnameConfig.primaryHostname);
+      if (!isPrivateCanary) {
+        dispatchHeaders.set("X-BuildCustom-Hostname", hostname);
+        if (hostnameConfig.purpose) dispatchHeaders.set("X-BuildCustom-Domain-Purpose", hostnameConfig.purpose);
+        if (hostnameConfig.role) dispatchHeaders.set("X-BuildCustom-Domain-Role", hostnameConfig.role);
+        if (hostnameConfig.primaryHostname) dispatchHeaders.set("X-BuildCustom-Primary-Hostname", hostnameConfig.primaryHostname);
+      }
     }
-    const response = await env.DISPATCHER.get(scriptName).fetch(new Request(request, { headers: dispatchHeaders }));
-    if (!response.headers.get("content-type")?.includes("text/html")) return response;
+    let dispatchRequest = new Request(request, { headers: dispatchHeaders });
+    if (isPrivateCanary) {
+      const dispatchUrl = new URL(request.url);
+      dispatchUrl.pathname = requestPath;
+      dispatchRequest = new Request(dispatchUrl, dispatchRequest);
+    }
+    let response = await env.DISPATCHER.get(scriptName).fetch(dispatchRequest);
+    if (isPrivateCanary) {
+      const headers = new Headers(response.headers);
+      headers.set("X-Robots-Tag", "noindex, nofollow");
+      const location = headers.get("Location");
+      if (location) headers.set("Location", scopeRootRelativeUrl(location, privatePath.prefix));
+      response = new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
+    if (rawSourceVerification) return response;
+    if (isPrivateCanary && (!response.body || request.method === "HEAD")) return response;
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() || "";
+    if (isPrivateCanary && contentType.includes("text/css")) {
+      const headers = new Headers(response.headers);
+      headers.delete("Content-Length");
+      return new Response(rewriteCssUrls(await response.text(), privatePath.prefix), {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+    if (!contentType.includes("text/html")) return response;
 
     const tags = metadataTags(metadata);
     if (!tags) return response;
     let rewriter = new HTMLRewriter();
+    if (isPrivateCanary) {
+      rewriter = rewriter
+        .on("[href], [src]", scopedHtmlUrls(privatePath.prefix))
+        .on("[srcset]", {
+          element(element) {
+            const value = element.getAttribute("srcset");
+            if (value !== null) element.setAttribute("srcset", rewriteSrcset(value, privatePath.prefix));
+          },
+        });
+    }
     if (metadata.title) rewriter = rewriter.on("title", removeElement());
     if (metadata.description) rewriter = rewriter.on('meta[name="description"]', removeElement());
     if (typeof metadata.allowIndexing === "boolean") rewriter = rewriter.on('meta[name="robots"]', removeElement());

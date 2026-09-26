@@ -1,5 +1,6 @@
 export type StagingEnv = {
   ENVIRONMENT?: string;
+  CONTROL_PLANE_PROFILE?: string;
   STAGING_RUNTIME_URL?: string;
   STAGING_ROUTE_KV_ID?: string;
   STAGING_DISPATCH_NAMESPACE?: string;
@@ -7,6 +8,14 @@ export type StagingEnv = {
   CONTROL_PLANE_ROUTE_KV_ID?: string;
   CONTROL_PLANE_DISPATCH_NAMESPACE?: string;
   VIBESDK_RUNTIME_URL?: string;
+  AUTH_RUNTIME_URL?: string;
+  STAGING_MANAGED_GATEWAY_URL?: string;
+  STAGING_LOGIN_ENABLED?: string;
+  STAGING_REGISTRATION_ENABLED?: string;
+  RUNTIME_OPERATIONS_ENABLED?: string;
+  STAGING_GATEWAY?: unknown;
+  AUTH_RUNTIME?: unknown;
+  VIBESDK_RUNTIME?: unknown;
 };
 
 const PROTECTED_HOSTS = [
@@ -40,6 +49,25 @@ export function assertStagingEnvironment(env: StagingEnv): void {
 }
 
 export function assertControlPlaneEnvironment(env: StagingEnv): void {
+  if (env.CONTROL_PLANE_PROFILE !== undefined && env.CONTROL_PLANE_PROFILE !== "launch") {
+    throw new Error("CONTROL_PLANE_PROFILE_REJECTED");
+  }
+  if (env.CONTROL_PLANE_PROFILE === "launch") {
+    const runtime = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
+    if (env.ENVIRONMENT !== "production"
+      || env.VIBESDK_RUNTIME_URL !== runtime || env.AUTH_RUNTIME_URL !== runtime
+      || env.STAGING_ROUTE_KV_ID !== "248ac5b6821a475794a7fe3d2b0c3718"
+      || env.CONTROL_PLANE_ROUTE_KV_ID !== "248ac5b6821a475794a7fe3d2b0c3718"
+      || env.STAGING_DISPATCH_NAMESPACE !== "buildcustom-vibesdk-launch-dispatch"
+      || env.CONTROL_PLANE_DISPATCH_NAMESPACE !== "buildcustom-vibesdk-launch-dispatch"
+      || env.STAGING_MANAGED_GATEWAY_URL !== "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p"
+      || !env.STAGING_GATEWAY || !env.AUTH_RUNTIME || !env.VIBESDK_RUNTIME
+      || env.STAGING_LOGIN_ENABLED !== "true" || env.STAGING_REGISTRATION_ENABLED !== "true"
+      || env.RUNTIME_OPERATIONS_ENABLED !== "true") {
+      throw new Error("LAUNCH_CONTROL_PLANE_CONFIGURATION_REQUIRED");
+    }
+    return;
+  }
   if (env.ENVIRONMENT === "staging") {
     assertStagingEnvironment(env);
     return;

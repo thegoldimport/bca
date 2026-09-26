@@ -187,7 +187,7 @@ test("native Publish sends one CSRF-protected project deployment and renders pub
           error: document.querySelector('[role="alert"]')?.textContent,
           url: document.querySelector('[data-testid="link-native-public-url"]')?.getAttribute("href"),
         }));
-        assert.equal(result.requests.filter((request) => request.method === "PUT").length, 1);
+        assert.equal(result.requests.filter((request) => request.method === "PUT").length, 0);
         assert.equal(result.requests.filter((request) => request.method === "POST").length, 1);
         assert.match(result.status, /Publish failed/);
         assert.equal(result.error, "The publish service rejected this request.");

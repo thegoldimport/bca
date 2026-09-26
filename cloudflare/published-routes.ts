@@ -1,6 +1,7 @@
 type RoutesEnv = {
   STAGING_ROUTES: KVNamespace;
   ENVIRONMENT: string;
+  CONTROL_PLANE_PROFILE?: string;
   STAGING_ROUTE_KV_ID: string;
   CONTROL_PLANE_ROUTE_KV_ID?: string;
 };
@@ -9,6 +10,14 @@ const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const scriptPattern = /^[a-z0-9_][a-z0-9-_]*$/;
 
 export function assertRouteBinding(env: RoutesEnv): void {
+  if (env.CONTROL_PLANE_PROFILE === "launch") {
+    if (env.ENVIRONMENT !== "production"
+      || env.STAGING_ROUTE_KV_ID !== "248ac5b6821a475794a7fe3d2b0c3718"
+      || env.CONTROL_PLANE_ROUTE_KV_ID !== "248ac5b6821a475794a7fe3d2b0c3718") {
+      throw new Error("LAUNCH_ROUTE_KV_REQUIRED");
+    }
+    return;
+  }
   if (env.ENVIRONMENT === "staging" && env.STAGING_ROUTE_KV_ID !== "e5e119fa2abc4c26a8c027e0d8a8d82c") {
     throw new Error("ISOLATED_ROUTE_KV_REQUIRED");
   }

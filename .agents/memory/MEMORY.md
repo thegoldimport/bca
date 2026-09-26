@@ -1,6 +1,7 @@
 - [Direct Gemini routing](direct-gemini-routing.md) — direct ThinkAgent calls need Google model IDs and must preserve provider Authorization.
 - [Workers for Platforms URLs](workers-for-platforms-urls.md) — route public dispatch URLs through staging and use service bindings for Worker-to-Worker HTTP/WebSockets.
 - [Embedded staging previews](embedded-staging-previews.md) — BuildCustom iframe previews require partitioned cross-site cookies and a rebuilt worker bundle before deploy.
+- [Private launch previews](private-launch-previews.md) — sandboxed same-origin previews need token-scoped assets; cookie-only HTML success does not prove CSS loads.
 - [Plan approval gate](plan-approval-gate.md) — Plan uses the same ThinkAgent model with all tools disabled; only an approved follow-up may build.
 - [Published release restores](published-release-restores.md) — restore old releases forward into Development; Production changes only through a new approved publish.
 - [VibeSDK generation completion](vibesdk-generation-completion.md) — completion signals can disagree with active tools; persist results before reconnect clears commit state.

@@ -175,7 +175,7 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
                     title={`${project.name} live page snapshot`}
                     tabIndex={-1}
                     aria-hidden="true"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts"
                     className="pointer-events-none h-full w-full select-none border-0 bg-white"
                   />
                   <div className="absolute inset-0" aria-hidden="true" />
@@ -2715,7 +2715,7 @@ export default function ProjectDetail() {
                     title={`${project.name} runtime preview`}
                     tabIndex={-1}
                     aria-hidden="true"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts"
                     loading="lazy"
                     className="pointer-events-none absolute left-0 top-0 h-[700px] w-[960px] origin-top-left scale-[0.15] select-none border-0 bg-white"
                   />

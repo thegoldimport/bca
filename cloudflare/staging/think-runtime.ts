@@ -2,8 +2,10 @@ import git from "isomorphic-git";
 import { createFsFromVolume, Volume } from "memfs";
 import { refreshProjectAgent } from "./project-initialization";
 import { RuntimeIdentityError } from "./runtime-identity";
+import { launchPreviewCookie, launchPreviewProxyUrl } from "./preview-proxy";
 
 const STOCK_RUNTIME_URL = "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev";
+const LAUNCH_RUNTIME_URL = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
 const AGENT_ID = /^[a-zA-Z0-9_-]{1,120}$/;
 const HASH = /^[a-f0-9]{40}$/i;
 const CLIENT_FRAME_LIMIT = 8_500_000;
@@ -22,6 +24,8 @@ type Env = {
   DB: D1Database;
   AUTH_RUNTIME?: Fetcher;
   AUTH_RUNTIME_URL?: string;
+  ENVIRONMENT?: string;
+  CONTROL_PLANE_PROFILE?: string;
   STAGING_ALLOWED_ORIGIN?: string;
   CONTROL_PLANE_ALLOWED_ORIGIN?: string;
 };
@@ -40,10 +44,17 @@ type SocketPair = { 0: WebSocket; 1: WebSocket };
 type StockResponse = Response & { webSocket?: WebSocket };
 
 function stockRuntime(env: Env): Fetcher {
-  if (env.AUTH_RUNTIME_URL !== STOCK_RUNTIME_URL || !env.AUTH_RUNTIME) {
+  const expectedUrl = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
+    ? LAUNCH_RUNTIME_URL : STOCK_RUNTIME_URL;
+  if (env.AUTH_RUNTIME_URL !== expectedUrl || !env.AUTH_RUNTIME) {
     throw new RuntimeIdentityError("The owner-authorized staging runtime is not configured.", 503);
   }
   return env.AUTH_RUNTIME;
+}
+
+function stockRuntimeUrl(env: Env): string {
+  stockRuntime(env);
+  return env.AUTH_RUNTIME_URL!;
 }
 
 function ownerCookies(request: Request, includeCloudflareOAuth = false): string {
@@ -93,7 +104,7 @@ export async function stockThinkRequest(
     if (csrf) headers.set("X-CSRF-Token", csrf);
   }
   try {
-    return await stockRuntime(env).fetch(new Request(`${STOCK_RUNTIME_URL}${path}`, {
+    return await stockRuntime(env).fetch(new Request(`${stockRuntimeUrl(env)}${path}`, {
       method,
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
@@ -255,7 +266,7 @@ function gitHttpAdapter(env: Env, agentId: string, token: string): {
       const isInfoRefs = target.pathname === `${expectedRepo}/info/refs`;
       const isUploadPack = target.pathname === `${expectedRepo}/git-upload-pack`;
       const expectedQuery = isInfoRefs && target.search === "?service=git-upload-pack";
-      if (target.origin !== STOCK_RUNTIME_URL || target.username || target.password || target.hash
+      if (target.origin !== stockRuntimeUrl(env) || target.username || target.password || target.hash
         || !(isInfoRefs && expectedQuery && gitRequest.method === "GET"
           || isUploadPack && !target.search && gitRequest.method === "POST")) {
         throw new RuntimeIdentityError("Unsupported project Git request.", 502);
@@ -339,13 +350,13 @@ async function currentGitSnapshot(
   const http = gitHttpAdapter(env, agentId, token);
   try {
     await http.request({
-      url: `${STOCK_RUNTIME_URL}/apps/${agentId}.git/info/refs?service=git-upload-pack`,
+          url: `${stockRuntimeUrl(env)}/apps/${agentId}.git/info/refs?service=git-upload-pack`,
       method: "GET",
       headers: { Accept: "application/x-git-upload-pack-advertisement" },
     });
     if (http.isEmptyRepository()) return { fs, dir, commitHash: null, files: [] };
     await git.clone({
-      fs, http, dir, url: `${STOCK_RUNTIME_URL}/apps/${agentId}.git`,
+      fs, http, dir, url: `${stockRuntimeUrl(env)}/apps/${agentId}.git`,
       ref: branch, singleBranch: true, noCheckout: true,
     });
   } catch (error) {
@@ -430,7 +441,7 @@ async function issueTicket(env: Env, request: Request, agentId: string): Promise
   const accessCookie = ownerAccessCookie(request);
   let csrfResponse: Response;
   try {
-    csrfResponse = await stockRuntime(env).fetch(new Request(`${STOCK_RUNTIME_URL}/api/auth/csrf-token`, {
+    csrfResponse = await stockRuntime(env).fetch(new Request(`${stockRuntimeUrl(env)}/api/auth/csrf-token`, {
       method: "GET",
       headers: { Accept: "application/json", Cookie: accessCookie, "Cache-Control": "no-store" },
       redirect: "manual",
@@ -451,7 +462,7 @@ async function issueTicket(env: Env, request: Request, agentId: string): Promise
   }
   let response: Response;
   try {
-    response = await stockRuntime(env).fetch(new Request(`${STOCK_RUNTIME_URL}/api/ws-ticket`, {
+    response = await stockRuntime(env).fetch(new Request(`${stockRuntimeUrl(env)}/api/ws-ticket`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -483,7 +494,7 @@ export async function openStockAgentWebSocket(env: Env, request: Request, agentI
   let response: StockResponse;
   try {
     response = await stockRuntime(env).fetch(new Request(
-      `${STOCK_RUNTIME_URL}/api/agent/${agentId}/ws?ticket=${encodeURIComponent(ticket)}`,
+      `${stockRuntimeUrl(env)}/api/agent/${agentId}/ws?ticket=${encodeURIComponent(ticket)}`,
       { headers, signal: AbortSignal.timeout(15_000) },
     )) as StockResponse;
   } catch {
@@ -839,6 +850,10 @@ export async function handleThinkRuntime(
       stockStatusSnapshot(env, request, linkedAgentId),
       listCurrentFiles(env, request, linkedAgentId).then((files) => files.length),
     ]);
+    const previewUrl = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
+      ? launchPreviewProxyUrl(env, linkedAgentId, snapshot.previewUrl)
+      : snapshot.previewUrl;
+    const previewCookie = await launchPreviewCookie(env, linkedAgentId, snapshot.previewUrl);
     return Response.json({
       nativeThink: true,
       runtimeStatus: link.initialization_status,
@@ -848,9 +863,12 @@ export async function handleThinkRuntime(
         shouldBeGenerating: snapshot.shouldBeGenerating,
         generation: { status: snapshot.shouldBeGenerating ? "running" : "idle" },
       },
-      previewUrl: snapshot.previewUrl,
+      previewUrl,
       deploymentUrl: null,
-    }, { headers: { "Cache-Control": "no-store" } });
+    }, { headers: {
+      "Cache-Control": "no-store",
+      ...(previewCookie ? { "Set-Cookie": previewCookie } : {}),
+    } });
   }
   if (operation === "files" && request.method === "GET") {
     return Response.json(await listCurrentFiles(env, request, linkedAgentId), { headers: { "Cache-Control": "no-store" } });
@@ -867,7 +885,18 @@ export async function handleThinkRuntime(
     const data = await responseJson(response);
     const url = allowedPreviewUrl(env, linkedAgentId, data?.previewURL || data?.url);
     if (!url) return Response.json({ message: "The project preview could not be verified." }, { status: 502 });
-    return Response.json({ url }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    const previewUrl = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
+      ? launchPreviewProxyUrl(env, linkedAgentId, url)
+      : url;
+    if (!previewUrl) return Response.json({ message: "The project preview could not be verified." }, { status: 502 });
+    const previewCookie = await launchPreviewCookie(env, linkedAgentId, url);
+    return Response.json({ url: previewUrl }, {
+      status: 201,
+      headers: {
+        "Cache-Control": "no-store",
+        ...(previewCookie ? { "Set-Cookie": previewCookie } : {}),
+      },
+    });
   }
   return null;
 }

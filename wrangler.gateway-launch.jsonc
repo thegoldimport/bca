@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buildcustom-apps-gateway-launch",
+  "main": "infrastructure/buildcustom-apps-gateway.js",
+  "compatibility_date": "2026-09-20",
+  "workers_dev": true,
+  "kv_namespaces": [
+    {
+      "binding": "ROUTES",
+      "id": "248ac5b6821a475794a7fe3d2b0c3718"
+    }
+  ],
+  "dispatch_namespaces": [
+    {
+      "binding": "DISPATCHER",
+      "namespace": "buildcustom-vibesdk-launch-dispatch"
+    }
+  ],
+  "vars": {
+    "PRIVATE_CANARY_HOST": "buildcustom-apps-gateway-launch.thegoldimport.workers.dev"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

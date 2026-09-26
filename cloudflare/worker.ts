@@ -13,6 +13,7 @@ import { handleStagingCustomerAuth, resolveRuntimeProductUser, RuntimeIdentityEr
 import { createProductProject, initializeProjectAgent, refreshProjectAgent } from "./staging/project-initialization";
 import { handleThinkRuntime } from "./staging/think-runtime";
 import { handleNativeThinkPublish } from "./staging/native-publish";
+import { handleLaunchPreviewProxy, isPreviewProductApiRequest } from "./staging/preview-proxy";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -23,6 +24,7 @@ export type Env = {
   ASSETS: Fetcher;
   STAGING_ROUTES: KVNamespace;
   ENVIRONMENT: string;
+  CONTROL_PLANE_PROFILE?: string;
   STAGING_RUNTIME_URL: string;
   VIBESDK_RUNTIME_URL?: string;
   VIBESDK_API_KEY?: string;
@@ -199,19 +201,34 @@ export default {
       assertSafeStagingTarget(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
       assertOrigin(request, env.CONTROL_PLANE_ALLOWED_ORIGIN || env.STAGING_ALLOWED_ORIGIN);
       const url = new URL(request.url);
+      const launchProfile = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch";
+      const previewProxyResponse = await handleLaunchPreviewProxy(env, request);
+      if (previewProxyResponse) return previewProxyResponse;
+      if (launchProfile && isPreviewProductApiRequest(request, env.CONTROL_PLANE_ALLOWED_ORIGIN || env.STAGING_ALLOWED_ORIGIN || "")) {
+        return json({ message: "Not found" }, { status: 404 });
+      }
       const input = (request.method === "GET" || request.method === "HEAD") ? {} : await readBody(request);
       if (request.headers.has("x-user-id")) return json({ message: "Browser-supplied identity is not accepted." }, { status: 400 });
-      const adminResponse = await handleAdminRoute({ request, env, url, input });
-      if (adminResponse) return adminResponse;
+      if (!launchProfile) {
+        const adminResponse = await handleAdminRoute({ request, env, url, input });
+        if (adminResponse) return adminResponse;
+      } else if (url.pathname.startsWith("/api/admin/")) {
+        return json({ message: "Not found" }, { status: 404 });
+      }
       const contentResponse = await handleContentRoute({ request, env, url, input });
       if (contentResponse) return contentResponse;
       const stagingCustomer = env.ENVIRONMENT === "staging";
-      if (stagingCustomer) {
+      const launchCustomer = launchProfile;
+      const runtimeCustomer = stagingCustomer || launchCustomer;
+      if (runtimeCustomer) {
         if (url.pathname === "/api/auth/register" && env.STAGING_REGISTRATION_ENABLED !== "true") {
           return json({ message: "Staging registration is closed." }, { status: 403 });
         }
         const response = await handleStagingCustomerAuth(env, request, url.pathname, input);
         if (response) return response;
+        if (launchCustomer && url.pathname.startsWith("/api/auth/")) {
+          return json({ message: "This account setting is not available yet." }, { status: 404 });
+        }
       }
 
       if (url.pathname === "/api/auth/register" && request.method === "POST") {
@@ -244,13 +261,14 @@ export default {
         await revokeSession(env.DB, request);
         return new Response(null, { status: 204, headers: { "Set-Cookie": expiredSessionCookie() } });
       }
-      const user = stagingCustomer ? await resolveRuntimeProductUser(env, request) : await resolveSession(env.DB, request);
+      const user = runtimeCustomer ? await resolveRuntimeProductUser(env, request) : await resolveSession(env.DB, request);
       if (!user) {
         if (url.pathname.startsWith("/api/")) return json({ message: "Unauthorized" }, { status: 401 });
         const asset = await env.ASSETS.fetch(request);
         return asset.status === 404 ? env.ASSETS.fetch(new Request(new URL("/index.html", request.url))) : asset;
       }
       if (url.pathname === "/api/auth/profile" && request.method === "PUT") {
+        if (launchCustomer) return json({ message: "This account setting is not available yet." }, { status: 404 });
         const name = typeof input.name === "string" ? input.name.trim().slice(0, 120) : "";
         const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
         if (!name && !email) return json({ message: "Nothing to update" }, { status: 400 });
@@ -259,6 +277,7 @@ export default {
         return json(serializeUser(await env.DB.prepare("SELECT id,username,email,plan,role,created_at FROM users WHERE id=?").bind(user.id).first()));
       }
       if (url.pathname === "/api/auth/password" && request.method === "PUT") {
+        if (launchCustomer) return json({ message: "This account setting is not available yet." }, { status: 404 });
         if (typeof input.currentPassword !== "string" || typeof input.newPassword !== "string" || input.newPassword.length < 6) return json({ message: "Current and new passwords are required; new password must be at least 6 characters." }, { status: 400 });
         const row = await env.DB.prepare("SELECT password FROM users WHERE id=?").bind(user.id).first<any>();
         if (!row || !(await bcrypt.compare(input.currentPassword, row.password))) return json({ message: "Current password is incorrect" }, { status: 401 });
@@ -268,18 +287,18 @@ export default {
 
       const projectMatch = url.pathname.match(/^\/api\/projects\/(\d+)$/);
       const projectId = projectIdFromPath(url.pathname);
-      const stagingLinkFields = stagingCustomer ? ",l.initialization_status,l.initialization_error,l.runtime_provider" : "";
+      const stagingLinkFields = runtimeCustomer ? ",l.initialization_status,l.initialization_error,l.runtime_provider" : "";
       const projectSql = `SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.id=? AND p.user_id=?`;
       const project = projectId === null ? null : await env.DB.prepare(projectSql).bind(projectId, user.id).first<any>();
       const projectList = async () => (await env.DB.prepare(`SELECT p.*,l.agent_id,l.preview_url,l.deployment_url${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC`).bind(user.id).all()).results.map(serializeProject);
       if (url.pathname === "/api/projects" && request.method === "GET") return json(await projectList());
       if (url.pathname === "/api/projects" && request.method === "POST") {
-        if (stagingCustomer && !request.headers.get("X-CSRF-Token")) {
+        if (runtimeCustomer && !request.headers.get("X-CSRF-Token")) {
           return json({ message: "A secure project request is required." }, { status: 403 });
         }
         const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM projects WHERE user_id=?").bind(user.id).first<any>();
         const details = projectInput(input, `Project${Number(count?.count || 0) + 1}`);
-        if (stagingCustomer) {
+        if (runtimeCustomer) {
           const result = await createProductProject(env, request, user.id, details);
           const created = await env.DB.prepare(projectSql).bind(result.project.id, user.id).first<any>();
           return json(serializeProject(created), {
@@ -292,18 +311,20 @@ export default {
       }
       if (projectId !== null && !project) return json({ message: "Project not found" }, { status: 404 });
       if (project && request.method === "GET" && projectMatch) {
-        if (stagingCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
+        if (runtimeCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
           await refreshProjectAgent(env, request, project);
           return json(serializeProject(await env.DB.prepare(projectSql).bind(project.id, user.id).first()));
         }
         return json(serializeProject(project));
       }
       if (project && request.method === "PUT" && projectMatch) {
+        if (launchCustomer && !request.headers.get("X-CSRF-Token")) return json({ message: "A secure project request is required." }, { status: 403 });
         const details = projectInput(input, project.name);
         await env.DB.prepare("UPDATE projects SET name=?,type=?,description=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(details.name, details.type, details.description, project.id, user.id).run();
         return json(serializeProject(await env.DB.prepare("SELECT * FROM projects WHERE id=?").bind(project.id).first()));
       }
       if (project && request.method === "DELETE" && projectMatch) {
+        if (launchCustomer && !request.headers.get("X-CSRF-Token")) return json({ message: "A secure project request is required." }, { status: 403 });
         await deleteProjectWithRoutes(env, project.id);
         return json({ success: true });
       }
@@ -314,13 +335,16 @@ export default {
         const runtimeProject = project?.id === id ? { id: project.id, name: project.name, type: project.type, description: project.description, agentId: project.agent_id } : null;
         if (!runtimeProject) return json({ message: "Project not found" }, { status: 404 });
         const operation = runtimeMatch[2];
-        if (stagingCustomer && operation === "initialize" && request.method === "POST") {
+        if (launchCustomer && request.method !== "GET" && !request.headers.get("X-CSRF-Token")) {
+          return json({ message: "A secure project request is required." }, { status: 403 });
+        }
+        if (runtimeCustomer && operation === "initialize" && request.method === "POST") {
           await initializeProjectAgent(env, request, project);
           return json(serializeProject(await env.DB.prepare(projectSql).bind(id, user.id).first()));
         }
         // A project may be visible between its D1 insert and link claim.
         // Its creation key still identifies the stock-only staging path.
-        if (stagingCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
+        if (runtimeCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
           if (operation === "ws" && request.method === "GET" && !rateLimit(`think-ws:${user.id}:${id}`, 60)) {
             return json({ message: "Too many project connections." }, { status: 429 });
           }
@@ -345,6 +369,7 @@ export default {
           // adapter, including previews, messages, and publishing mutations.
           return json({ message: "This project feature will be available in a later release." }, { status: 501 });
         }
+        if (launchCustomer) return json({ message: "This launch project feature is not available." }, { status: 501 });
         const readOnly = isReadOnlyRuntimeOperation(request.method, operation);
         if (env.RUNTIME_OPERATIONS_ENABLED !== "true" && !readOnly) return json({ message: "Isolated VibeSDK compatibility gate has not passed." }, { status: 503 });
         const adapter = createVibeSdkAdapter({
@@ -411,6 +436,7 @@ export default {
         if (operation === "deployments" && request.method === "POST") {
           const stagingTiming: Record<string, number> = {};
           if (env.ENVIRONMENT === "staging") stagingTiming.requestStartedAt = Date.now();
+          if (launchCustomer) return json({ message: "Use native immutable publishing for launch Think projects." }, { status: 409 });
           if (!canPublishInStaging(user.role)) return json({ message: "Staging publish requires a super administrator." }, { status: 403 });
           if (env.ENVIRONMENT === "staging" && !hasExactStagingGatewayConfig(env.STAGING_MANAGED_GATEWAY_URL, env.STAGING_GATEWAY, env.STAGING_MANAGED_HOSTNAME_SUFFIX)) {
             return json({ message: "Staging managed gateway is not configured." }, { status: 503 });
