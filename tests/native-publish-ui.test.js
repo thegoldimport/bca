@@ -19,8 +19,12 @@ test("native editor publish flow sends an authenticated project-scoped deploymen
   assert.match(publishFlow, /authHeaders\(\)/);
   assert.match(publishFlow, /const token = await csrfToken\(\)/);
   assert.match(publishFlow, /"X-CSRF-Token": token/);
+  assert.match(publishFlow, /runtime\/publishing-capabilities/);
+  assert.match(publishFlow, /capability\.buildId !== "immutable-v2"/);
+  assert.match(publishFlow, /capability\.publishProtocol !== "immutable-v2"/);
+  assert.match(publishFlow, /"X-Publish-Protocol": capability\.publishProtocol/);
   assert.match(publishFlow, /method: "PUT"[\s\S]*subdomainSlug: safeSlug[\s\S]*hostingProvider: "buildcustom"[\s\S]*customDomain: ""/);
-  assert.match(publishFlow, /fetch\(`\/api\/projects\/\$\{projectId\}\/runtime\/deployments`, \{[\s\S]*method: "POST"[\s\S]*body: JSON\.stringify\(\{\}\)/);
+  assert.match(publishFlow, /fetch\(`\/api\/projects\/\$\{projectId\}\/runtime\/publish-immutable-v2`, \{[\s\S]*method: "POST"[\s\S]*body: JSON\.stringify\(\{\}\)/);
   assert.match(publishFlow, /data\.deploymentUrl/);
   assert.doesNotMatch(publishFlow, /agentId|agent_id|scriptName|VibeSDK|Cloudflare/);
   assert.match(source, /disabled=\{publishing\}[\s\S]*data-testid="button-publish-native"/);

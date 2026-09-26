@@ -3,6 +3,7 @@ import { CloudflareAPI } from './api/cloudflare-api';
 import { WorkerDeployer } from './deployer';
 import type { AssetConfig, WorkerBinding, WorkerObservability } from './types';
 import { createAssetManifest } from './utils';
+import { createImmutablePlatformScriptName, isCommitRevision } from './platform-deployment-identity';
 
 const APP_BINDING = 'VIBE_APP';
 const OBSERVABILITY: WorkerObservability = {
@@ -76,8 +77,9 @@ interface ThinkBundleArtifacts {
 async function buildThinkBundleArtifacts(
 	bundle: BranchDeploymentBundle,
 	appName: string,
+	platformScriptName?: string,
 ): Promise<ThinkBundleArtifacts> {
-	const scriptName = sanitizeWorkerName(appName);
+	const scriptName = platformScriptName ?? sanitizeWorkerName(appName);
 	const modules = new Map<string, string>();
 	for (const [name, value] of Object.entries(bundle.modules)) {
 		modules.set(name, normalizeModule(value));
@@ -142,6 +144,7 @@ async function deployArtifacts(
 	deployer: WorkerDeployer,
 	artifacts: ThinkBundleArtifacts,
 	dispatchNamespace: string | undefined,
+	allowScriptPutRetry = true,
 ): Promise<void> {
 	if (artifacts.assets) {
 		await deployer.deployWithAssets(
@@ -158,6 +161,7 @@ async function deployArtifacts(
 			undefined,
 			artifacts.migration,
 			OBSERVABILITY,
+			allowScriptPutRetry,
 		);
 	} else {
 		await deployer.deploySimple(
@@ -171,6 +175,7 @@ async function deployArtifacts(
 			undefined,
 			artifacts.migration,
 			OBSERVABILITY,
+			allowScriptPutRetry,
 		);
 	}
 }
@@ -206,10 +211,35 @@ export async function deployThinkBundleToPlatform(input: {
 	previewDomain: string;
 	appName: string;
 	bundle: BranchDeploymentBundle;
+	immutableRelease?: {
+		agentId: string;
+		expectedRevision: string;
+	};
 }): Promise<ThinkUserDeploymentResult> {
-	const artifacts = await buildThinkBundleArtifacts(input.bundle, input.appName);
+	let platformScriptName: string | undefined;
+	if (input.immutableRelease) {
+		if (!isCommitRevision(input.immutableRelease.expectedRevision)) {
+			throw new Error('Invalid expected commit revision for immutable platform deployment');
+		}
+		if (!isCommitRevision(input.bundle.commitHash)
+			|| input.bundle.commitHash !== input.immutableRelease.expectedRevision) {
+			throw new Error('Deployment bundle revision does not match expected revision');
+		}
+		platformScriptName = await createImmutablePlatformScriptName(
+			input.immutableRelease.agentId,
+			input.bundle.commitHash,
+		);
+		const api = new CloudflareAPI(input.accountId, input.apiToken);
+		await api.assertDispatchScriptDoesNotExist(platformScriptName, input.dispatchNamespace);
+	}
+	const artifacts = await buildThinkBundleArtifacts(input.bundle, input.appName, platformScriptName);
 	const deployer = new WorkerDeployer(input.accountId, input.apiToken);
-	await deployArtifacts(deployer, artifacts, input.dispatchNamespace);
+	await deployArtifacts(
+		deployer,
+		artifacts,
+		input.dispatchNamespace,
+		input.immutableRelease === undefined,
+	);
 
 	return {
 		deploymentId: artifacts.scriptName,

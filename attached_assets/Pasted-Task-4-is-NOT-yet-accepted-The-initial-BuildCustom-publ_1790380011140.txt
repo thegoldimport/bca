@@ -1,0 +1,734 @@
+Task 4 is NOT yet accepted.
+
+The initial BuildCustom publish flow itself is proven:
+
+Project 10
+→ same owner-linked ThinkAgent
+→ stock platform deployment
+→ lab dispatch namespace
+→ BuildCustom release metadata
+→ separate BuildCustom slug
+→ shared generated-app gateway
+→ public application
+
+The currently published application is working at:
+
+northstar-coffee-live.lab-apps.buildcustom.ai
+
+Do NOT disturb that working deployment.
+
+We have ONE remaining Task 4 architecture issue:
+
+A future stock publish may reuse/overwrite the existing script identity before
+BuildCustom verifies the replacement.
+
+That prevents a true last-known-good publishing guarantee.
+
+Proceed with ONLY:
+
+TASK 4B — IMMUTABLE / COLLISION-SAFE RELEASE DEPLOYMENTS
+
+STAGING/LAB ONLY.
+
+Do NOT begin production cutover.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Make each successful BuildCustom publish target a NEW immutable/collision-safe
+Workers for Platforms script identity.
+
+The stable BuildCustom public hostname must continue pointing to the previous
+known-good deployment until the new deployment has:
+
+1. uploaded successfully
+2. been identified
+3. been publicly verified
+4. passed asset/render verification
+
+ONLY THEN should BuildCustom switch the stable slug mapping to the new
+deployment.
+
+Conceptually:
+
+PUBLIC SLUG:
+
+northstar-coffee-live
+        ↓
+CURRENT MAPPING
+        ↓
+release script A
+
+Future publish:
+
+create release script B
+→ verify B
+→ atomically/safely change mapping A → B
+
+If B fails:
+
+public mapping remains A.
+
+==================================================
+DO NOT CHANGE THE PUBLIC URL
+==================================================
+
+The BuildCustom public URL must remain stable:
+
+https://northstar-coffee-live.lab-apps.buildcustom.ai/
+
+Customers should not receive a different hostname for every release.
+
+The immutable identity is INTERNAL deployment identity.
+
+==================================================
+FIRST — INSPECT STOCK DEPLOY NAMING
+==================================================
+
+Before implementing anything, trace the exact stock VibeSDK platform deploy
+path responsible for selecting:
+
+northstar-coffee
+
+as the dispatched script identity.
+
+Determine:
+
+- where the script name originates
+- whether the stock deploy protocol accepts an explicit deployment/script name
+- whether an existing project/app field controls it
+- whether the dispatch upload helper accepts an explicit script name
+- whether a supported stock configuration hook exists
+- whether BuildCustom can safely supply a release-specific identity WITHOUT
+  forking/reimplementing the stock deployment system
+
+Report this internally before selecting the implementation.
+
+Prefer the SMALLEST supported extension point.
+
+==================================================
+IMPORTANT CONSTRAINT
+==================================================
+
+Do NOT solve this by:
+
+- manually uploading generated Workers outside the stock publishing path
+- creating a second bundler
+- copying generated bundles into BuildCustom
+- creating one dispatch namespace per release
+- creating one gateway Worker per release
+- creating Cloudflare Workflows
+- creating queues
+- building a deployment orchestration service
+
+We need one small release-identity capability, not another deployment
+platform.
+
+==================================================
+IF STOCK ALREADY SUPPORTS AN IDENTITY INPUT
+==================================================
+
+If the stock deploy path already supports a caller-controlled or
+configuration-controlled script/deployment identity:
+
+USE IT.
+
+Do not modify VibeSDK unnecessarily.
+
+==================================================
+IF STOCK DOES NOT SUPPORT IT
+==================================================
+
+If stock VibeSDK hard-codes/derives the dispatched script identity and
+provides no supported caller input:
+
+identify the SMALLEST narrow change required to make the deployment identity
+caller-selectable.
+
+The change should conceptually be:
+
+existing stock deploy
++
+optional safe deployment identity
+
+NOT:
+
+new BuildCustom deploy engine.
+
+Preserve all existing stock:
+
+- build behavior
+- asset upload
+- Workers for Platforms upload
+- bindings
+- deployment result
+- dispatch behavior
+
+If a tiny VibeSDK patch is genuinely required, isolate and document it.
+
+Do not implement a broader fork.
+
+==================================================
+RELEASE IDENTITY
+==================================================
+
+Use a collision-safe internal identity.
+
+It should NOT depend only on:
+
+- project title
+- public slug
+
+Prefer something deterministic or unique from:
+
+BuildCustom project ID
++
+authoritative revision
+
+or equivalent.
+
+For example conceptually:
+
+bc-p10-b53e777aa048
+
+The exact format may differ based on Cloudflare/VibeSDK naming constraints.
+
+Requirements:
+
+- hostname/script safe
+- unique across projects
+- different revision can produce different identity
+- retry of SAME project + SAME revision can reuse the same intended identity
+- two projects with same title cannot collide
+
+Do not expose this identity as customer-facing branding.
+
+==================================================
+CURRENT WORKING RELEASE
+==================================================
+
+Do NOT overwrite or delete the current working script:
+
+northstar-coffee
+
+The current mapping:
+
+northstar-coffee-live
+→ northstar-coffee
+
+must remain active while testing the replacement release.
+
+Treat it as LAST KNOWN GOOD.
+
+==================================================
+NO NEW AI EDIT
+==================================================
+
+Do NOT send another prompt.
+
+Do NOT generate another revision.
+
+We already have revision:
+
+b53e777aa0481108f8d8bcce09de73b23afe0da6
+
+For LIVE infrastructure acceptance, it is acceptable to publish this SAME
+authoritative revision into the new immutable deployment identity.
+
+This is a deployment test, not an AI test.
+
+ZERO inference is expected.
+
+==================================================
+LIVE TEST — PHASE 1
+==================================================
+
+Publish the existing revision through the corrected release-identity path.
+
+It must create/use a NEW collision-safe deployment identity.
+
+Before switching the public slug:
+
+verify the old public mapping still points to:
+
+northstar-coffee
+
+and the existing public URL still returns:
+
+BUILDCUSTOM_TASK3_EDIT_OK
+
+==================================================
+VERIFY NEW DEPLOYMENT BEFORE SWITCH
+==================================================
+
+Verify the NEW immutable deployment directly through a safe lab verification
+mechanism.
+
+Do not switch:
+
+northstar-coffee-live
+
+yet.
+
+PASS requires the candidate deployment to contain:
+
+BUILDCUSTOM_TASK3_EDIT_OK
+
+and:
+
+Fresh coffee. Simple mornings.
+
+Verify:
+
+- deployment exists
+- root app response
+- required assets
+- stylesheet
+- rendered application where possible
+
+If direct verification requires a temporary LAB-ONLY candidate route, use
+the smallest safe mechanism.
+
+Do not alter the stable production-style slug during candidate verification.
+
+==================================================
+CUTOVER
+==================================================
+
+ONLY after candidate verification succeeds:
+
+change the BuildCustom route mapping:
+
+northstar-coffee-live
+→ NEW immutable deployment identity
+
+Then verify:
+
+https://northstar-coffee-live.lab-apps.buildcustom.ai/
+
+still returns:
+
+HTTP 200
+
+BUILDCUSTOM_TASK3_EDIT_OK
+
+Fresh coffee. Simple mornings.
+
+stylesheet works
+
+rendering works
+
+==================================================
+RELEASE METADATA
+==================================================
+
+Record the new successful release separately.
+
+Do NOT overwrite historical release metadata.
+
+We should be able to know:
+
+Release A
+- old deployment/script identity
+- revision
+- published timestamp
+
+Release B
+- new immutable deployment/script identity
+- revision
+- published timestamp
+
+Even though this infrastructure test republishes the same revision, they are
+separate deployment records if the existing schema supports that cleanly.
+
+Do not create a complicated release ledger if the current table already
+handles this.
+
+==================================================
+FAILED CANDIDATE GUARANTEE
+==================================================
+
+Add deterministic tests proving:
+
+stable slug → deployment A
+
+candidate deployment B begins
+
+If B:
+
+- upload fails
+- returns malformed result
+- times out
+- fails HTTP verification
+- fails asset verification
+- fails rendered verification
+
+then:
+
+stable slug MUST still point to deployment A.
+
+Deployment A must remain publicly available.
+
+No failed release should become the active mapping.
+
+==================================================
+FUTURE CHANGED-REVISION REPUBLISH
+==================================================
+
+We do NOT need another AI generation.
+
+Use deterministic fixtures/mocks to prove:
+
+revision A
+→ deployment identity A
+→ stable slug maps A
+
+revision B
+→ deployment identity B
+
+Before verification:
+stable slug maps A
+
+After successful verification:
+stable slug maps B
+
+If revision B fails:
+stable slug remains A
+
+This is the key acceptance condition that Task 4 previously could not meet.
+
+==================================================
+SAME-REVISION IDEMPOTENCY
+==================================================
+
+Retrying publish for:
+
+same project
++
+same authoritative revision
+
+must NOT create endless new deployment identities.
+
+The intended deployment identity should be deterministic/reusable for that
+project+revision OR otherwise guarded by existing release metadata.
+
+A browser retry should resolve the existing successful release where
+appropriate.
+
+==================================================
+CONCURRENT PUBLISH
+==================================================
+
+Retain the existing project-level publish guard.
+
+Two simultaneous publish requests for the same project must not race two
+candidate deployments into the active mapping.
+
+Do not add a queue.
+
+==================================================
+RECOVERY MUST NEVER DEPLOY
+==================================================
+
+The earlier acceptance run accidentally caused a second stock upload because
+a recovery request reached an older control-plane version.
+
+Make this invariant explicit:
+
+METADATA / RECONCILIATION / RECOVERY ENDPOINTS MUST NEVER INVOKE STOCK
+DEPLOY.
+
+Only an explicit authenticated publish action may initiate deployment.
+
+Add an automated test that fails if a recovery/reconciliation path invokes
+the deploy function.
+
+==================================================
+STALE CONTROL-PLANE VERSION SAFETY
+==================================================
+
+Investigate the narrow reason the earlier recovery request reached the older
+staging control-plane version.
+
+Do not turn this into infrastructure archaeology.
+
+Add the smallest practical deployment/version guard so acceptance requests
+cannot silently hit an older staging implementation after a new staging
+revision is expected.
+
+This might be a staging build/version identifier exposed by the Worker and
+checked by the acceptance harness.
+
+Use the simplest mechanism appropriate to the current code.
+
+Do not build a general distributed versioning system.
+
+==================================================
+GATEWAY
+==================================================
+
+The shared lab gateway should continue doing:
+
+BuildCustom slug
+→ mapped immutable script identity
+→ dispatch
+
+Do not add per-release routes.
+
+Do not add per-project Workers.
+
+One wildcard gateway remains the architecture.
+
+==================================================
+ASSET FALLBACK
+==================================================
+
+Task 4 reported that the gateway supplies a mapped-route fallback because
+the generated app links /styles.css while the verified stylesheet endpoint
+was /style.css.
+
+Inspect this narrowly.
+
+Do NOT create gateway behavior that guesses arbitrary missing asset names.
+
+Determine whether:
+
+A. the generated app actually contains the requested /styles.css asset
+
+B. stock WfP asset routing is transforming something
+
+C. the gateway is currently masking a generated-app path mistake
+
+If the current gateway contains a special-case style.css/styles.css rewrite,
+REMOVE that special-case unless it is part of a generic, justified routing
+mechanism.
+
+A generated app should serve the paths it actually references.
+
+Do not modify the Task 3 generated app during this task.
+
+If its HTML genuinely references a nonexistent asset but the page happens to
+look styled only because of a gateway hack, report that separately.
+
+It should not determine the immutable-release architecture.
+
+==================================================
+SECURITY
+==================================================
+
+Retain:
+
+- owner-only publish
+- cross-user denial
+- server-side project → agent resolution
+- no arbitrary agent selection
+- private editor
+- public published application
+
+Do not weaken Task 1–3 security.
+
+==================================================
+ZERO INFERENCE
+==================================================
+
+Record AI Gateway request count before and after.
+
+PASS requires:
+
+ZERO new inference requests.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do NOT modify:
+
+- generated Task 3 application files
+- ThinkAgent behavior
+- SpaceDO behavior
+- Unified Billing
+- AI Gateway
+- model configuration
+- production resources
+- production DNS
+- *.apps.buildcustom.ai
+- app.buildcustom.ai
+- customer custom domains
+
+==================================================
+AUTOMATED TESTS
+==================================================
+
+Add/update tests for:
+
+1. deterministic/collision-safe deployment identity
+
+2. same title across two projects cannot collide
+
+3. same project + same revision retry safety
+
+4. different revision receives different deployment identity
+
+5. candidate deploy does not change stable mapping
+
+6. candidate verification success allows mapping switch
+
+7. candidate verification failure preserves old mapping
+
+8. stock upload failure preserves old mapping
+
+9. malformed result preserves old mapping
+
+10. timeout preserves old mapping
+
+11. asset/render verification failure preserves old mapping
+
+12. concurrent publish guard
+
+13. recovery endpoint can NEVER invoke deploy
+
+14. stale-version acceptance guard
+
+15. shared gateway resolves slug → immutable deployment identity
+
+16. owner security remains enforced
+
+17. no generation/inference occurs
+
+Run the complete relevant test suite.
+
+==================================================
+LIVE ACCEPTANCE LIMIT
+==================================================
+
+Perform ONE live candidate deployment using the EXISTING authoritative
+revision.
+
+Do not generate.
+
+Do not edit.
+
+Do not repeatedly deploy while debugging.
+
+If wiring fails before stock deployment starts, fix the wiring without
+deploying.
+
+If the candidate stock deployment fails, capture the complete result and
+STOP before retrying.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+PASS requires:
+
+1. current public site remains live during candidate deployment
+
+2. new deployment uses collision-safe immutable identity
+
+3. old deployment is not overwritten
+
+4. candidate is verified before route switch
+
+5. stable BuildCustom slug switches only after candidate passes
+
+6. public hostname remains unchanged
+
+7. public site works after switch
+
+8. release metadata records candidate identity
+
+9. future changed-revision republish is proven safe deterministically
+
+10. failed candidate preserves last-known-good deployment
+
+11. same-revision retry is idempotent
+
+12. recovery/reconciliation cannot invoke deploy
+
+13. no asset-path gateway hack is required for general publishing
+
+14. zero inference
+
+15. no new agent
+
+16. no generation
+
+17. production untouched
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. stock script-name source discovered
+
+2. whether stock supported caller-selected identity
+
+3. exact implementation chosen
+
+4. whether any VibeSDK source change was required
+
+5. immutable deployment naming format
+
+6. old deployment identity
+
+7. new candidate deployment identity
+
+8. public BuildCustom slug
+
+9. stable hostname
+
+10. mapping before candidate
+
+11. candidate verification result
+
+12. mapping after candidate
+
+13. public HTTP/render result after switch
+
+14. old deployment preservation result
+
+15. release metadata result
+
+16. same-revision retry result
+
+17. future changed-revision deterministic result
+
+18. failed candidate preservation tests
+
+19. concurrent publish result
+
+20. recovery-never-deploy result
+
+21. stale-version guard implemented
+
+22. asset-path investigation result
+
+23. cross-user security result
+
+24. complete automated test results
+
+25. AI Gateway count before/after
+
+26. confirmation zero inference
+
+27. confirmation no generation
+
+28. files changed
+
+29. migrations added, if any
+
+30. production untouched confirmation
+
+31. remaining limitations
+
+32. whether Task 4 can NOW be fully accepted
+
+33. recommendation for NEXT SINGLE STEP
+
+Then STOP.
+
+Do not begin production cutover.

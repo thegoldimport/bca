@@ -4,7 +4,10 @@ import { browserContent, requiredAssets } from "./published-readiness";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const RESERVED = new Set(["www", "api", "app", "apps", "admin", "billing", "support", "status", "docs", "mail", "customers", "editor", "gateway"]);
+const PUBLISH_PROTOCOL = "immutable-v2";
+const PUBLISH_BUILD_ID = "immutable-v2";
 const PUBLISH_TIMEOUT = 240_000;
+const AGENT_UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
 type NativeEnv = {
   DB: D1Database;
@@ -38,8 +41,7 @@ export type NativePublishDependencies = {
     path?: string,
   ) => Promise<any>;
   openSocket?: (env: NativeEnv, request: Request, agentId: string) => Promise<WebSocket>;
-  waitForDeploy?: (socket: WebSocket) => Promise<string>;
-  waitForAgentState?: (socket: WebSocket) => Promise<any>;
+  waitForDeploy?: (socket: WebSocket, expectedRevision: string) => Promise<string>;
   verifyReady?: (gateway: Fetcher, url: string) => Promise<void>;
   verifyPublic?: (
     browser: BrowserRunBinding | undefined,
@@ -58,12 +60,25 @@ export function normalizedNativeSlug(name: string, projectId: number): string {
   return validNativeSlug(normalized) ? normalized : `project-${projectId}`;
 }
 
-export function parseStockDeploymentUrl(value: unknown): { scriptName: string; url: string; dispatchUrl: string } | null {
+export async function nativeReleaseScriptName(agentId: string, revision: string): Promise<string | null> {
+  if (typeof agentId !== "string" || !AGENT_UUID.test(agentId)
+    || typeof revision !== "string" || !/^[a-f0-9]{40}$/i.test(revision)) return null;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${agentId.toLowerCase()}:${revision.toLowerCase()}`),
+  );
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const name = `bc-r-${hash.slice(0, 56)}`;
+  return name.length === 61 && /^bc-r-[a-f0-9]{56}$/.test(name) ? name : null;
+}
+
+export function parseStockDeploymentUrl(value: unknown, expectedScriptName?: string): { scriptName: string; url: string; dispatchUrl: string } | null {
   if (typeof value !== "string" || value.length > 2048) return null;
   try {
     const url = new URL(value);
-    const match = url.hostname.match(/^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]))\.(?:lab-apps\.buildcustom\.ai|bc-vibesdk-lab-20260925\.thegoldimport\.workers\.dev)$/);
-    if (url.protocol !== "https:" || !match || url.pathname !== "/" || url.search || url.hash
+    const match = url.hostname.match(/^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9]))\./);
+    if (url.protocol !== "https:" || !match || (expectedScriptName && match[1] !== expectedScriptName)
+      || url.pathname !== "/" || url.search || url.hash
       || url.username || url.password || url.port) return null;
     return {
       scriptName: match[1],
@@ -101,50 +116,18 @@ async function runtimeData(
   return response.json();
 }
 
-async function awaitNativeAgentState(socket: WebSocket, timeoutMs = 10_000): Promise<any> {
-  socket.accept();
-  return new Promise<any>((resolve, reject) => {
-    let settled = false;
-    const finish = (error?: Error, state?: any) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      socket.removeEventListener("message", onMessage);
-      socket.removeEventListener("close", onClose);
-      socket.removeEventListener("error", onError);
-      try { socket.close(); } catch { /* already closed */ }
-      if (error) reject(error);
-      else resolve(state);
-    };
-    const timer = setTimeout(() => finish(new Error("Think agent state timed out.")), timeoutMs);
-    const onMessage = (event: MessageEvent) => {
-      let message: any;
-      try {
-        if (typeof event.data !== "string") throw new Error();
-        message = JSON.parse(event.data);
-      } catch {
-        finish(new Error("Think agent state was malformed."));
-        return;
-      }
-      if (message?.type !== "agent_connected") return;
-      if (!message.state || typeof message.state !== "object" || Array.isArray(message.state)) {
-        finish(new Error("Think agent state was incomplete."));
-        return;
-      }
-      finish(undefined, message.state);
-    };
-    const onClose = () => finish(new Error("Think connection closed before agent state was read."));
-    const onError = () => finish(new Error("Think agent state connection failed."));
-    socket.addEventListener("message", onMessage);
-    socket.addEventListener("close", onClose);
-    socket.addEventListener("error", onError);
-  });
-}
-
-export async function awaitNativeDeployResult(socket: WebSocket, timeoutMs = PUBLISH_TIMEOUT): Promise<string> {
+export async function awaitNativeDeployResult(
+  socket: WebSocket,
+  expectedRevision: string,
+  timeoutMs = PUBLISH_TIMEOUT,
+): Promise<string> {
+  if (!/^[a-f0-9]{40}$/.test(expectedRevision)) {
+    throw new Error("An authoritative lowercase Git revision is required for immutable deployment.");
+  }
   socket.accept();
   return new Promise<string>((resolve, reject) => {
     let settled = false;
+    let deploySent = false;
     const finish = (error?: Error, deploymentUrl?: string) => {
       if (settled) return;
       settled = true;
@@ -167,9 +150,33 @@ export async function awaitNativeDeployResult(socket: WebSocket, timeoutMs = PUB
         finish(new Error("Think returned a malformed publish response."));
         return;
       }
-      if (message.type === "cloudflare_deployment_error" || message.type === "error") {
+      if (message.type === "agent_connected" && !deploySent) {
+        if (message.deploymentCapabilities?.platformImmutableRelease !== true) {
+          finish(new Error("The linked stock runtime does not support immutable platform deployment identities."));
+          return;
+        }
+        if (message.state?.shouldBeGenerating !== false) {
+          finish(new Error("Think must be idle before publishing an immutable candidate."));
+          return;
+        }
+        try {
+          socket.send(JSON.stringify({
+            type: "deploy",
+            target: "platform",
+            immutableRelease: true,
+            expectedRevision,
+          }));
+          deploySent = true;
+        } catch {
+          finish(new Error("The immutable Think publish request could not be sent."));
+        }
+      } else if (message.type === "cloudflare_deployment_error" || message.type === "error") {
         finish(new Error(typeof message.error === "string" ? message.error : "Think reported a publish error."));
       } else if (message.type === "cloudflare_deployment_completed") {
+        if (!deploySent) {
+          finish(new Error("The stock runtime returned a deployment before confirming immutable identity support."));
+          return;
+        }
         if (typeof message.deploymentUrl !== "string") finish(new Error("Think returned a malformed deployment URL."));
         else finish(undefined, message.deploymentUrl);
       }
@@ -179,11 +186,6 @@ export async function awaitNativeDeployResult(socket: WebSocket, timeoutMs = PUB
     socket.addEventListener("message", onMessage);
     socket.addEventListener("close", onClose);
     socket.addEventListener("error", onError);
-    try {
-      socket.send(JSON.stringify({ type: "deploy", target: "platform" }));
-    } catch {
-      finish(new Error("Think publish request could not be sent."));
-    }
   });
 }
 
@@ -199,25 +201,6 @@ async function verifyReady(gateway: Fetcher, url: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 750));
   }
   throw new Error(`Published route was not ready${lastStatus ? ` (HTTP ${lastStatus})` : ""}.`);
-}
-
-async function verifyNativeStyleAlias(gateway: Fetcher, publicUrl: string, expectedCss?: string): Promise<void> {
-  const stylesheetUrl = new URL("/style.css", publicUrl);
-  const response = await gateway.fetch(new Request(stylesheetUrl, { method: "GET", headers: { Accept: "text/css" } }));
-  const contentType = response.headers.get("content-type")?.toLowerCase() || "";
-  if (response.status !== 200 || !contentType.includes("text/css")) {
-    await response.body?.cancel();
-    throw new Error(`Native public stylesheet fallback failed (${response.status}).`);
-  }
-  if (expectedCss !== undefined) {
-    const actual = await readBoundedResponse(response, 2_000_000);
-    const expected = new TextEncoder().encode(expectedCss);
-    if (actual.byteLength !== expected.byteLength || actual.some((byte, index) => byte !== expected[index])) {
-      throw new Error("Native public stylesheet fallback does not match the authoritative Think source.");
-    }
-    return;
-  }
-  await response.body?.cancel();
 }
 
 async function readBoundedResponse(response: Response, maxBytes: number): Promise<Uint8Array> {
@@ -381,19 +364,29 @@ async function assertNoForeignScriptCollision(env: NativeEnv, projectId: number,
   }
 }
 
-async function publish(
+async function ownsActivePublishClaim(env: NativeEnv, projectId: number, claimToken: string): Promise<boolean> {
+  const claim = await env.DB.prepare(
+    "SELECT claim_token FROM native_publish_claims WHERE project_id=? AND claim_token=? AND expires_at>unixepoch()",
+  ).bind(projectId, claimToken).first<any>();
+  return Boolean(claim);
+}
+
+async function publishImmutable(
   env: NativeEnv,
   request: Request,
   project: NativeProject,
   dependencies: NativePublishDependencies,
-  reconcileOnly = false,
 ): Promise<Response> {
   if (!csrfPresent(request)) return errorResponse("A secure project request is required.", 403);
+  if (request.headers.get("X-Publish-Protocol") !== PUBLISH_PROTOCOL) {
+    return errorResponse("Refresh publishing capabilities before publishing.", 409);
+  }
   if (!env.LAB_APPS_GATEWAY) return errorResponse("The lab apps gateway is not configured.", 503);
 
-  // The project lookup in worker.ts is owner-filtered. Refresh the same server-side
-  // link before any Think operation; no browser-provided agent identifier is read.
-  const link = await env.DB.prepare("SELECT agent_id,initialization_status,hosting_provider FROM runtime_project_links WHERE project_id=?")
+  // Project and agent identity come only from owner-filtered server-side rows.
+  const link = await env.DB.prepare(
+    "SELECT agent_id,initialization_status,hosting_provider,subdomain_slug,deployment_script_name,deployment_url,deployment_origin_url FROM runtime_project_links WHERE project_id=?",
+  )
     .bind(project.id).first<any>();
   if (!link?.agent_id || link.initialization_status !== "ready") return errorResponse("This project is not ready for runtime access.", 409);
   const slug = await currentSlug(env, project);
@@ -404,43 +397,78 @@ async function publish(
   if (typeof revision?.commitHash !== "string" || !/^[a-f0-9]{40}$/i.test(revision.commitHash)) {
     return errorResponse("A committed Git revision is required before publishing.", 409);
   }
-  const already = await env.DB.prepare("SELECT * FROM native_publish_releases WHERE project_id=? AND revision=? AND status='published' ORDER BY id DESC LIMIT 1")
-    .bind(project.id, revision.commitHash).first<any>();
+  const expectedRevision = revision.commitHash.toLowerCase();
+  const scriptName = await nativeReleaseScriptName(link.agent_id, expectedRevision);
+  if (!scriptName) return errorResponse("A collision-safe deployment identity could not be derived.", 409);
+  const already = await env.DB.prepare(
+    "SELECT * FROM native_publish_releases WHERE project_id=? AND revision=? AND script_name=? AND status='published' ORDER BY id DESC LIMIT 1",
+  ).bind(project.id, expectedRevision, scriptName).first<any>();
   if (already) {
-    if (reconcileOnly) return errorResponse("A native release already exists; reconciliation is only for an unpublished dispatch.", 409);
+    const publicUrl = `https://${slug}.lab-apps.buildcustom.ai/`;
+    try {
+      const savedRoute = await env.STAGING_ROUTES.get(slug);
+      let mapped: any;
+      try { mapped = savedRoute === null ? null : JSON.parse(savedRoute); } catch { mapped = null; }
+      if (link.deployment_script_name !== scriptName || link.deployment_url !== publicUrl
+        || already.public_url !== publicUrl || mapped?.scriptName !== scriptName) {
+        return errorResponse("This immutable release is not the active published route.", 409);
+      }
+      const authoritativeSources = await readAuthoritativeSources(env, request, project, readRuntime);
+      const directUrl = `https://${scriptName}.lab-apps.buildcustom.ai/`;
+      const fetchPublic = (target: string) => env.LAB_APPS_GATEWAY!.fetch(new Request(target, {
+        headers: { Accept: new URL(target).pathname === "/" ? "text/html" : "text/css" },
+        signal: AbortSignal.timeout(5_000),
+      }));
+      const checkReady = dependencies.verifyReady || verifyReady;
+      const verifyPublic = dependencies.verifyPublic || verifyNativePublicRoute;
+      await verifyDispatchedSources(env.LAB_APPS_GATEWAY, directUrl, authoritativeSources);
+      await checkReady(env.LAB_APPS_GATEWAY, directUrl);
+      await verifyPublic(env.BROWSER, directUrl, fetchPublic);
+      await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
+      await verifyPublic(env.BROWSER, publicUrl, fetchPublic);
+      const latestLink = await env.DB.prepare(
+        "SELECT agent_id,initialization_status,deployment_script_name,deployment_url FROM runtime_project_links WHERE project_id=?",
+      ).bind(project.id).first<any>();
+      const latestRoute = await env.STAGING_ROUTES.get(slug);
+      const latestStatus = await readRuntime(env, request, project, "status");
+      const latestRevision = await readRuntime(env, request, project, "revision");
+      if (latestLink?.agent_id !== link.agent_id || latestLink?.initialization_status !== "ready"
+        || latestLink?.deployment_script_name !== scriptName || latestLink?.deployment_url !== publicUrl
+        || latestRoute !== savedRoute || latestStatus?.state?.generation?.status !== "idle"
+        || latestRevision?.commitHash?.toLowerCase() !== expectedRevision) {
+        return errorResponse("The active immutable release changed during verification.", 409);
+      }
+    } catch (error) {
+      return errorResponse(
+        error instanceof Error ? `The existing immutable release could not be verified: ${error.message}` : "The existing immutable release could not be verified.",
+        409,
+      );
+    }
     return Response.json({ deploymentUrl: already.public_url, release: mapRelease(already), alreadyPublished: true }, { headers: { "Cache-Control": "no-store" } });
   }
-  const priorRelease = await env.DB.prepare("SELECT revision,script_name FROM native_publish_releases WHERE project_id=? AND status='published' ORDER BY id DESC LIMIT 1")
-    .bind(project.id).first<any>();
-  if (priorRelease) {
-    return errorResponse(
-      "A changed-revision republish is paused because Think may overwrite the existing stock script in place. A versioned stock deployment name is required to preserve the current release.",
-      409,
-    );
-  }
-  if (project.deployment_script_name) {
-    const linkedCollision = await env.DB.prepare(
-      "SELECT project_id FROM runtime_project_links WHERE deployment_script_name=? AND project_id<>? LIMIT 1",
-    ).bind(project.deployment_script_name, project.id).first<any>();
-    const releaseCollision = await env.DB.prepare(
-      "SELECT project_id FROM native_publish_releases WHERE script_name=? AND project_id<>? AND status='published' LIMIT 1",
-    ).bind(project.deployment_script_name, project.id).first<any>();
-    if (linkedCollision || releaseCollision) return errorResponse("The stock deployment script name is already used by another project.", 409);
+  const priorRelease = await env.DB.prepare(
+    "SELECT * FROM native_publish_releases WHERE project_id=? AND status='published' ORDER BY id DESC LIMIT 1",
+  ).bind(project.id).first<any>();
+  const oldScriptName = link.deployment_script_name || priorRelease?.script_name || null;
+  if (oldScriptName === scriptName) return errorResponse("The candidate identity is already active without matching release metadata.", 409);
+  try {
+    await assertNoForeignScriptCollision(env, project.id, scriptName);
+  } catch (error) {
+    return errorResponse(error instanceof Error ? error.message : "The candidate deployment identity is already in use.", 409);
   }
 
   const existingSlug = await env.DB.prepare("SELECT project_id FROM runtime_project_links WHERE subdomain_slug=? AND project_id<>?")
     .bind(slug, project.id).first<any>();
   if (existingSlug) return errorResponse("This publishing address is already in use.", 409);
-  // Check the route owner before consuming the one-shot stock publish. A value
-  // owned by this project may be replaced; unknown/foreign mappings fail closed.
-  let savedRoute: string | null = null;
-  savedRoute = await env.STAGING_ROUTES.get(slug);
-  if (savedRoute !== null) {
-    if (reconcileOnly) return errorResponse("The reconciliation publishing address is already mapped.", 409);
+  const savedRoute = await env.STAGING_ROUTES.get(slug);
+  if (oldScriptName) {
     let previous: any;
-    try { previous = JSON.parse(savedRoute); } catch { return errorResponse("This publishing address has an unknown route mapping.", 409); }
-    const ownsOldRoute = project.deployment_script_name && previous?.scriptName === project.deployment_script_name;
-    if (!ownsOldRoute) return errorResponse("This publishing address is already in use.", 409);
+    try { previous = savedRoute === null ? null : JSON.parse(savedRoute); } catch { previous = null; }
+    if (previous?.scriptName !== oldScriptName) {
+      return errorResponse("The current public route does not match the last-known-good deployment.", 409);
+    }
+  } else if (savedRoute !== null) {
+    return errorResponse("This publishing address already has an unknown route mapping.", 409);
   }
   const owner = await env.DB.prepare("SELECT user_id FROM projects WHERE id=?").bind(project.id).first<any>();
   if (!owner || owner.user_id !== project.user_id) return errorResponse("Project not found.", 404);
@@ -459,71 +487,99 @@ async function publish(
   let routeWritten = false;
   let writtenRoute: string | null = null;
   try {
+    const authoritativeSources = await readAuthoritativeSources(env, request, project, readRuntime);
+    const publicUrl = `https://${slug}.lab-apps.buildcustom.ai/`;
+    const referencedCss = requiredAssets(authoritativeSources.indexHtml, publicUrl)
+      .filter((asset) => asset.kind === "css");
+    if (!referencedCss.some((asset) => new URL(asset.path, publicUrl).pathname === "/styles.css")) {
+      throw new Error("The authoritative project HTML must reference its existing public/styles.css asset.");
+    }
+    const candidateFetch = (target: string) => env.LAB_APPS_GATEWAY!.fetch(new Request(target, {
+      headers: { Accept: new URL(target).pathname === "/" ? "text/html" : "text/css" },
+      signal: AbortSignal.timeout(5_000),
+    }));
+    const checkReady = dependencies.verifyReady || verifyReady;
+    const verifyPublic = dependencies.verifyPublic || verifyNativePublicRoute;
+
+    if (oldScriptName) {
+      const oldDirectUrl = `https://${oldScriptName}.lab-apps.buildcustom.ai/`;
+      await checkReady(env.LAB_APPS_GATEWAY, oldDirectUrl);
+      if (priorRelease?.revision === expectedRevision) {
+        await verifyDispatchedSources(env.LAB_APPS_GATEWAY, oldDirectUrl, authoritativeSources);
+      }
+      await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
+      await verifyPublic(env.BROWSER, publicUrl, candidateFetch);
+    }
+
     const latestStatus = await readRuntime(env, request, project, "status");
     if (latestStatus?.state?.generation?.status !== "idle") throw new Error("Stop Think generation before publishing.");
     const beforeRevision = await readRuntime(env, request, project, "revision");
-    if (beforeRevision?.commitHash !== revision.commitHash) throw new Error("Project revision changed before deployment.");
+    if (beforeRevision?.commitHash?.toLowerCase() !== expectedRevision) throw new Error("Project revision changed before deployment.");
 
-    const latestLink = await env.DB.prepare("SELECT agent_id,initialization_status FROM runtime_project_links WHERE project_id=?")
+    const latestLink = await env.DB.prepare(
+      "SELECT agent_id,initialization_status,deployment_script_name,deployment_url FROM runtime_project_links WHERE project_id=?",
+    )
       .bind(project.id).first<any>();
-    if (!latestLink?.agent_id || latestLink.agent_id !== link.agent_id || latestLink.initialization_status !== "ready") {
+    if (!latestLink?.agent_id || latestLink.agent_id !== link.agent_id
+      || latestLink.initialization_status !== "ready"
+      || latestLink.deployment_script_name !== link.deployment_script_name
+      || latestLink.deployment_url !== link.deployment_url) {
       throw new Error("This project is not ready for runtime access.");
     }
+    // Stock performs the authoritative Cloudflare dispatch-script preflight and
+    // create-once guard. The shared gateway reports an absent dispatch as HTTP
+    // 500, so it cannot safely distinguish absence from an existing candidate.
     const socket = await (dependencies.openSocket || openStockAgentWebSocket)(env, request, latestLink.agent_id);
-    let deployed: { scriptName: string; url: string; dispatchUrl: string } | null;
-    let authoritativeSources: { indexHtml: string; stylesCss: string } | undefined;
-    if (reconcileOnly) {
-      const agentState = await (dependencies.waitForAgentState || awaitNativeAgentState)(socket);
-      if (agentState?.shouldBeGenerating !== false) throw new Error("Think must be idle before dispatch reconciliation.");
-      deployed = parseStockDeploymentUrl(agentState?.cloudflareDeploymentUrl);
-      if (!deployed) throw new Error("The owner-authorized Think state has no valid stock dispatch URL.");
-    } else {
-      // Think chooses the script name only after its irreversible stock publish.
-      // A collision discovered below prevents routing/release writes but cannot undo
-      // a stock-side overwrite that may already have occurred.
-      deployed = parseStockDeploymentUrl(await (dependencies.waitForDeploy || awaitNativeDeployResult)(socket));
-    }
+    const deployed = parseStockDeploymentUrl(
+      await (dependencies.waitForDeploy || awaitNativeDeployResult)(socket, expectedRevision),
+      scriptName,
+    );
     if (!deployed) throw new Error("Think returned an invalid lab deployment URL.");
-    await assertNoForeignScriptCollision(env, project.id, deployed.scriptName);
-    if (reconcileOnly) {
-      authoritativeSources = await readAuthoritativeSources(env, request, project, readRuntime);
-      await verifyDispatchedSources(env.LAB_APPS_GATEWAY, deployed.dispatchUrl, authoritativeSources);
+    await verifyDispatchedSources(env.LAB_APPS_GATEWAY, deployed.dispatchUrl, authoritativeSources);
+
+    await checkReady(env.LAB_APPS_GATEWAY, deployed.dispatchUrl);
+    await verifyPublic(env.BROWSER, deployed.dispatchUrl, candidateFetch);
+
+    // The active slug is deliberately not touched until the new script and all
+    // required assets render successfully. Prove the last-known-good route is
+    // still live after candidate upload and before cutover.
+    if (oldScriptName) {
+      const activeRoute = await env.STAGING_ROUTES.get(slug);
+      if (activeRoute !== savedRoute) throw new Error("The active public route changed during candidate deployment.");
+      if (priorRelease?.revision === expectedRevision) {
+        await verifyDispatchedSources(
+          env.LAB_APPS_GATEWAY,
+          `https://${oldScriptName}.lab-apps.buildcustom.ai/`,
+          authoritativeSources,
+        );
+      }
+      await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
+      await verifyPublic(env.BROWSER, publicUrl, candidateFetch);
     }
-    const publicUrl = `https://${slug}.lab-apps.buildcustom.ai/`;
 
     const afterRevision = await readRuntime(env, request, project, "revision");
-    if (afterRevision?.commitHash !== revision.commitHash) throw new Error("Project revision changed during deployment.");
+    if (afterRevision?.commitHash?.toLowerCase() !== expectedRevision) throw new Error("Project revision changed during deployment.");
     if (await env.STAGING_ROUTES.get(slug) !== savedRoute) throw new Error("Publishing address ownership changed during deployment.");
-    writtenRoute = JSON.stringify({
-      scriptName: deployed.scriptName,
-      metadata: { styleCssFallback: true },
-    });
+    if (!await ownsActivePublishClaim(env, project.id, claimToken)) {
+      throw new Error("The native publish claim expired or changed before route activation.");
+    }
+    writtenRoute = JSON.stringify({ scriptName, metadata: {} });
     routeWritten = true;
     await env.STAGING_ROUTES.put(slug, writtenRoute);
-    // Verify both direct script dispatch and the public slug route through the
-    // bound lab gateway before committing a release.
-    const checkReady = dependencies.verifyReady || verifyReady;
-    if (!RESERVED.has(deployed.scriptName)) await checkReady(env.LAB_APPS_GATEWAY, deployed.dispatchUrl);
+    // Verify the stable customer URL only after the candidate passed direct
+    // dispatch, exact-source, required-asset, and rendered-page checks.
     await checkReady(env.LAB_APPS_GATEWAY, publicUrl);
-    await verifyNativeStyleAlias(env.LAB_APPS_GATEWAY, publicUrl, authoritativeSources?.stylesCss);
-    const fetchPublic = (target: string) => env.LAB_APPS_GATEWAY!.fetch(new Request(target, {
-      headers: { Accept: target === publicUrl ? "text/html" : "text/css" },
-      signal: AbortSignal.timeout(5_000),
-    }));
-    await (dependencies.verifyPublic || verifyNativePublicRoute)(env.BROWSER, publicUrl, fetchPublic);
+    await verifyPublic(env.BROWSER, publicUrl, candidateFetch);
     const finalRevision = await readRuntime(env, request, project, "revision");
-    if (finalRevision?.commitHash !== revision.commitHash) throw new Error("Project revision changed during public route verification.");
-    const activeClaim = await env.DB.prepare(
-      "SELECT claim_token FROM native_publish_claims WHERE project_id=? AND claim_token=? AND expires_at>unixepoch()",
-    ).bind(project.id, claimToken).first<any>();
-    if (!activeClaim) throw new Error("The native publish claim expired or changed.");
+    if (finalRevision?.commitHash?.toLowerCase() !== expectedRevision) throw new Error("Project revision changed during public route verification.");
+    if (!await ownsActivePublishClaim(env, project.id, claimToken)) throw new Error("The native publish claim expired or changed.");
     if (await env.STAGING_ROUTES.get(slug) !== writtenRoute) throw new Error("The public route mapping changed during verification.");
 
     const statements = [
       env.DB.prepare("UPDATE runtime_project_links SET deployment_url=?,deployment_origin_url=?,deployment_script_name=?,subdomain_slug=?,hosting_provider='cloudflare',updated_at=datetime('now') WHERE project_id=?")
         .bind(publicUrl, deployed.url, deployed.scriptName, slug, project.id),
       env.DB.prepare("INSERT INTO native_publish_releases(user_id,project_id,revision,script_name,slug,public_url,status) VALUES(?,?,?,?,?,?,'published') RETURNING *")
-        .bind(project.user_id, project.id, revision.commitHash, deployed.scriptName, slug, publicUrl),
+        .bind(project.user_id, project.id, expectedRevision, deployed.scriptName, slug, publicUrl),
     ];
     const results = await env.DB.batch(statements);
     const row = results[1].results?.[0];
@@ -531,8 +587,12 @@ async function publish(
     return Response.json({ deploymentUrl: publicUrl, release: mapRelease(row), alreadyPublished: false }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (routeWritten && await env.STAGING_ROUTES.get(slug) === writtenRoute) {
-      if (savedRoute === null) await env.STAGING_ROUTES.delete(slug);
-      else await env.STAGING_ROUTES.put(slug, savedRoute);
+      if (await ownsActivePublishClaim(env, project.id, claimToken)) {
+        if (savedRoute === null) await env.STAGING_ROUTES.delete(slug);
+        else await env.STAGING_ROUTES.put(slug, savedRoute);
+      } else {
+        return errorResponse("The native publish claim expired; route rollback was unsafe and was not attempted.", 502);
+      }
     }
     return errorResponse(error instanceof Error ? error.message : "Think publish failed.", 502);
   } finally {
@@ -551,15 +611,24 @@ export async function handleNativeThinkPublish(
 ): Promise<Response | null> {
   if (env.ENVIRONMENT !== "staging") return null;
   if (actor.id !== project.user_id) return errorResponse("Project not found", 404);
+  if (operation === "publishing-capabilities" && request.method === "GET") {
+    return Response.json(
+      { buildId: PUBLISH_BUILD_ID, publishProtocol: PUBLISH_PROTOCOL },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  if (operation === "publish-immutable-v2" && request.method === "POST") {
+    if (Object.keys(input).length > 0) return errorResponse("Publish accepts no client-provided deployment details.", 400);
+    return publishImmutable(env, request, project, dependencies);
+  }
+  if (operation === "publish-immutable" && request.method === "POST") {
+    return errorResponse("Use the current immutable publishing operation.", 410);
+  }
   if (operation === "deployments" && request.method === "POST") {
-    if (Object.prototype.hasOwnProperty.call(input, "reconcileOnly")) {
-      return errorResponse("Reconciliation uses POST /runtime/reconcile-deployment.", 400);
-    }
-    return publish(env, request, project, dependencies);
+    return errorResponse("Refresh publishing capabilities and use the immutable publish endpoint.", 410);
   }
   if (operation === "reconcile-deployment" && request.method === "POST") {
-    if (Object.keys(input).length > 0) return errorResponse("Reconciliation does not accept deployment details.", 400);
-    return publish(env, request, project, dependencies, true);
+    return errorResponse("Recovery and reconciliation never invoke stock deploy. Use explicit Publish to create a candidate.", 409);
   }
   if (operation === "releases" && request.method === "GET") {
     const rows = await env.DB.prepare("SELECT * FROM native_publish_releases WHERE project_id=? ORDER BY created_at DESC,id DESC")

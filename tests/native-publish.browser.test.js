@@ -25,6 +25,11 @@ function installPublishMocks(options) {
     const method = String(init.method || "GET").toUpperCase();
     const headers = Object.fromEntries(new Headers(init.headers || {}).entries());
     const body = init.body ? String(init.body) : "";
+    if (url.pathname.endsWith("/runtime/publishing-capabilities") && method === "GET") {
+      return options.staleCapabilities
+        ? json({ publishProtocol: "immutable-v1" })
+        : json({ buildId: "immutable-v2", publishProtocol: "immutable-v2" });
+    }
     if (url.pathname.endsWith("/runtime/publishing-settings") && method === "GET") {
       return json({ subdomainSlug: "native-publish-test", hostingProvider: "buildcustom", customDomain: "", customOrigin: "" });
     }
@@ -32,7 +37,7 @@ function installPublishMocks(options) {
       requests.push({ path: url.pathname, method, headers, body });
       return json({ subdomainSlug: JSON.parse(body).subdomainSlug, hostingProvider: "buildcustom" });
     }
-    if (url.pathname.endsWith("/runtime/deployments") && method === "POST") {
+    if (url.pathname.endsWith("/runtime/publish-immutable-v2") && method === "POST") {
       requests.push({ path: url.pathname, method, headers, body });
       return options.rejectDeployment
         ? json({ message: "The publish service rejected this request." }, 503)
@@ -156,9 +161,10 @@ test("native Publish sends one CSRF-protected project deployment and renders pub
         assert.equal(settingsRequests.length, 1);
         assert.equal(deployments.length, 1);
         assert.equal(settingsRequests[0].path, "/api/projects/10/runtime/publishing-settings");
-        assert.equal(deployments[0].path, "/api/projects/10/runtime/deployments");
+        assert.equal(deployments[0].path, "/api/projects/10/runtime/publish-immutable-v2");
         for (const request of [...settingsRequests, ...deployments]) {
           assert.equal(request.headers["x-csrf-token"], "browser-test-csrf");
+          assert.equal(request.headers["x-publish-protocol"], "immutable-v2");
           assert.doesNotMatch(request.body, /agentId|agent_id|prompt/i);
         }
         assert.deepEqual(JSON.parse(deployments[0].body), {});
@@ -186,6 +192,22 @@ test("native Publish sends one CSRF-protected project deployment and renders pub
         assert.match(result.status, /Publish failed/);
         assert.equal(result.error, "The publish service rejected this request.");
         assert.equal(result.url, existingUrl);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("stale capability build cannot save settings or invoke publish", async () => {
+      const page = await openEditor(serverUrl, browser, { staleCapabilities: true });
+      try {
+        await page.click('[data-testid="button-publish-native"]');
+        await page.waitForFunction(() => document.querySelector('[data-testid="native-publish-status"]')?.textContent?.includes("Publish failed"));
+        const result = await page.evaluate(() => ({
+          requests: window.__nativePublishHarness.requests,
+          error: document.querySelector('[role="alert"]')?.textContent,
+        }));
+        assert.deepEqual(result.requests, []);
+        assert.match(result.error, /not ready for immutable publishing/);
       } finally {
         await page.close();
       }

@@ -1230,7 +1230,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     /**
      * Deploy the generated code to Cloudflare Workers
      */
-    async deployToCloudflare(target: DeploymentTarget = 'platform'): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
+    async deployToCloudflare(
+        target: DeploymentTarget = 'platform',
+        immutableRelease?: { immutableRelease: true; expectedRevision: string },
+    ): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
+        if (immutableRelease !== undefined) {
+            throw new Error('Immutable releases are supported only for Think platform deployments.');
+        }
         try {
             // Ensure sandbox instance exists first
             if (!this.state.sandboxInstanceId) {

@@ -2575,10 +2575,19 @@ function EditorPage() {
     try {
       const token = await csrfToken();
       const headers = { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() };
+      const capabilityResponse = await fetch(`/api/projects/${projectId}/runtime/publishing-capabilities`, {
+        headers: authHeaders(),
+      });
+      const capability = await capabilityResponse.json().catch(() => ({}));
+      if (!capabilityResponse.ok || capability.buildId !== "immutable-v2"
+        || capability.publishProtocol !== "immutable-v2") {
+        throw new Error("This staging server is not ready for immutable publishing. Refresh and try again.");
+      }
+      const publishHeaders = { ...headers, "X-Publish-Protocol": capability.publishProtocol };
       if (safeSlug) {
         const settingsResponse = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, {
           method: "PUT",
-          headers,
+          headers: publishHeaders,
           body: JSON.stringify({
             subdomainSlug: safeSlug,
             hostingProvider: "buildcustom",
@@ -2591,9 +2600,9 @@ function EditorPage() {
         setSubdomainSlug(settings.subdomainSlug || safeSlug);
       }
 
-      const response = await fetch(`/api/projects/${projectId}/runtime/deployments`, {
+      const response = await fetch(`/api/projects/${projectId}/runtime/publish-immutable-v2`, {
         method: "POST",
-        headers,
+        headers: publishHeaders,
         body: JSON.stringify({}),
       });
       const data = await response.json().catch(() => ({}));

@@ -588,7 +588,21 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal(stock.calls.filter((path) => /\/api\/agent\/[^/]+\/preview$/.test(path)).length, 1);
   assert.equal(stock.calls.some((path) => /deploy|publish/i.test(path)), false);
   assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/messages`, "POST", { prompt: "Do not send" })).status, 501);
-  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/deployments`, "POST", {})).status, 403);
+  const stockSocketCallsBeforePublishGuards = stock.calls.filter((path) => /\/api\/agent\/[^/]+\/ws/.test(path)).length;
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/deployments`, "POST", {})).status, 410);
+  assert.equal((await a.send(
+    `/api/projects/${projectA.id}/runtime/publish-immutable-v2`,
+    "POST",
+    {},
+    { "X-Publish-Protocol": "immutable-v2" },
+  )).status, 403);
+  assert.equal((await b.send(
+    `/api/projects/${projectA.id}/runtime/publish-immutable-v2`,
+    "POST",
+    {},
+    { "X-Publish-Protocol": "immutable-v2" },
+  )).status, 404);
+  assert.equal(stock.calls.filter((path) => /\/api\/agent\/[^/]+\/ws/.test(path)).length, stockSocketCallsBeforePublishGuards);
   assert.equal(stock.agents.size, 2);
 
   assert.equal((await a.send("/api/projects", "POST", { name: "Forged" }, { "x-user-id": bMe.id })).status, 400);

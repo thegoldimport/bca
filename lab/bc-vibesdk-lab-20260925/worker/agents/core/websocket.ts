@@ -7,6 +7,7 @@ import { type CredentialsPayload } from '../inferutils/config.types';
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { DeploymentTarget } from './types';
+import { isCommitRevision } from '../../services/deployer/platform-deployment-identity';
 
 // Type for incoming WebSocket messages
 interface IncomingWebSocketMessage {
@@ -16,6 +17,9 @@ interface IncomingWebSocketMessage {
     credentials?: CredentialsPayload;
     commitHash?: string;
     target?: DeploymentTarget;
+    scriptName?: unknown;
+    immutableRelease?: unknown;
+    expectedRevision?: unknown;
     data?: {
         url?: string;
         viewport?: unknown;
@@ -80,7 +84,31 @@ export async function handleWebSocketMessage(
                     sendError(connection, `Unsupported deployment target: ${String(target)}`);
                     return;
                 }
-                agent.deployToCloudflare(target).then((deploymentResult) => {
+                const hasScriptName = Object.prototype.hasOwnProperty.call(parsedMessage, 'scriptName');
+                if (hasScriptName) {
+                    sendError(connection, 'Caller-supplied scriptName is not supported.');
+                    return;
+                }
+                const hasImmutableRelease = Object.prototype.hasOwnProperty.call(parsedMessage, 'immutableRelease');
+                const hasExpectedRevision = Object.prototype.hasOwnProperty.call(parsedMessage, 'expectedRevision');
+                const requestsImmutableRelease = hasImmutableRelease || hasExpectedRevision;
+                if (requestsImmutableRelease && (
+                    parsedMessage.immutableRelease !== true
+                    || !isCommitRevision(parsedMessage.expectedRevision)
+                    || parsedMessage.target !== 'platform'
+                    || agent.state.behaviorType !== 'think'
+                    || agent.env.ENABLE_USER_ACCOUNT_DEPLOY === 'true'
+                )) {
+                    sendError(connection, 'Immutable releases require a valid expected revision on Think platform deployments.');
+                    return;
+                }
+                const deployment = requestsImmutableRelease
+                    ? agent.deployToCloudflare('platform', {
+                        immutableRelease: true,
+                        expectedRevision: parsedMessage.expectedRevision as string,
+                    })
+                    : agent.deployToCloudflare(target);
+                deployment.then((deploymentResult) => {
                     if (!deploymentResult?.deploymentUrl) {
                         logger.error('Deployment failed', { target });
                         return;

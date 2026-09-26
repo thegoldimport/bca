@@ -248,6 +248,8 @@ export type CloudflareDeploymentCompletedMessage = {
 	instanceId: string;
 	deploymentUrl: string;
 	workersUrl?: string;
+	deploymentId?: string;
+	commitHash?: string;
 };
 
 /**

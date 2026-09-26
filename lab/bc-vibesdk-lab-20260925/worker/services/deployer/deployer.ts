@@ -41,6 +41,7 @@ export class WorkerDeployer {
 		compatibilityFlags?: string[],
 		migrations?: WranglerConfig['migrations'],
 		observability?: WorkerObservability,
+		allowScriptPutRetry = true,
 	): Promise<void> {
 		logger.info('🚀 Starting deployment process...');
 		logger.info(`📦 Worker: ${scriptName}`);
@@ -154,6 +155,7 @@ export class WorkerDeployer {
 			dispatchNamespace,
 			additionalModules,
 			durableObjectClasses,
+			allowScriptPutRetry,
 		);
 	}
 
@@ -172,6 +174,7 @@ export class WorkerDeployer {
 		compatibilityFlags?: string[],
 		migrations?: WranglerConfig['migrations'],
 		observability?: WorkerObservability,
+		allowScriptPutRetry = true,
 	): Promise<void> {
 		logger.info('🚀 Starting simple deployment (no assets)...');
 		logger.info(`📦 Worker: ${scriptName}`);
@@ -217,6 +220,7 @@ export class WorkerDeployer {
 			dispatchNamespace,
 			additionalModules,
 			durableObjectClasses,
+			allowScriptPutRetry,
 		);
 	}
 }

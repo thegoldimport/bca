@@ -40,16 +40,6 @@ export default {
     }
 
     const script = env.DISPATCHER.get(scriptName);
-    const styleFallbackEnabled = route?.metadata.styleCssFallback === true;
-    const shouldCheckStyleFallback = styleFallbackEnabled && new URL(request.url).pathname === "/style.css";
-    const retryRequest = shouldCheckStyleFallback ? request.clone() : null;
-    const response = await script.fetch(request);
-    if (!shouldCheckStyleFallback || response.status !== 404) {
-      return response;
-    }
-
-    const fallbackUrl = new URL(retryRequest.url);
-    fallbackUrl.pathname = "/styles.css";
-    return script.fetch(new Request(fallbackUrl, retryRequest));
+    return script.fetch(request);
   },
 };

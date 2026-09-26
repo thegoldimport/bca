@@ -147,7 +147,7 @@ test("editor host is not routed to the lab VibeSDK editor", async () => {
   assert.equal(dispatched, false);
 });
 
-test("mapped style fallback preserves an existing /style.css response without retrying", async () => {
+test("mapped /style.css response is forwarded unchanged without fallback", async () => {
   const dispatchedPaths = [];
   const env = {
     ROUTES: {
@@ -180,7 +180,7 @@ test("mapped style fallback preserves an existing /style.css response without re
   assert.deepEqual(dispatchedPaths, ["/style.css?v=1"]);
 });
 
-test("mapped style fallback retries /styles.css only after /style.css returns 404", async () => {
+test("mapped missing /style.css remains 404 and is never rewritten", async () => {
   const dispatchedUrls = [];
   const env = {
     ROUTES: {
@@ -193,13 +193,7 @@ test("mapped style fallback retries /styles.css only after /style.css returns 40
       get: () => ({
         fetch: async (request) => {
           dispatchedUrls.push(request.url);
-          if (new URL(request.url).pathname === "/style.css") {
-            return new Response("missing", { status: 404 });
-          }
-          return new Response("/* generated stylesheet */", {
-            status: 200,
-            headers: { "content-type": "text/css" },
-          });
+          return new Response("missing", { status: 404 });
         },
       }),
     },
@@ -210,36 +204,72 @@ test("mapped style fallback retries /styles.css only after /style.css returns 40
     env,
   );
 
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("content-type"), "text/css");
-  assert.equal(await response.text(), "/* generated stylesheet */");
-  assert.deepEqual(dispatchedUrls, [
-    "https://northstar-coffee.lab-apps.buildcustom.ai/style.css?theme=dark",
-    "https://northstar-coffee.lab-apps.buildcustom.ai/styles.css?theme=dark",
-  ]);
+  assert.equal(response.status, 404);
+  assert.deepEqual(dispatchedUrls, ["https://northstar-coffee.lab-apps.buildcustom.ai/style.css?theme=dark"]);
 });
 
-test("unmapped direct-script requests never use the style fallback", async () => {
+test("mapped /styles.css reaches the real generated stylesheet unchanged", async () => {
+  let dispatchedPath;
+  const response = await gateway.fetch(
+    new Request("https://northstar-coffee.lab-apps.buildcustom.ai/styles.css?v=1"),
+    {
+      ROUTES: {
+        get: async () => JSON.stringify({
+          scriptName: "stock-worker",
+          metadata: { styleCssFallback: true },
+        }),
+      },
+      DISPATCHER: {
+        get: (scriptName) => {
+          assert.equal(scriptName, "stock-worker");
+          return {
+            fetch: async (request) => {
+              dispatchedPath = new URL(request.url).pathname + new URL(request.url).search;
+              return new Response("/* real generated stylesheet */", {
+                headers: { "content-type": "text/css" },
+              });
+            },
+          };
+        },
+      },
+    },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "/* real generated stylesheet */");
+  assert.equal(dispatchedPath, "/styles.css?v=1");
+});
+
+test("unmapped direct-script hosts still serve /styles.css and do not rewrite missing /style.css", async () => {
   const dispatchedPaths = [];
   const env = {
     ROUTES: { get: async () => null },
     DISPATCHER: {
       get: () => ({
         fetch: async (request) => {
-          dispatchedPaths.push(new URL(request.url).pathname);
-          return new Response("missing", { status: 404 });
+          const pathname = new URL(request.url).pathname;
+          dispatchedPaths.push(pathname);
+          return pathname === "/styles.css"
+            ? new Response("/* direct generated stylesheet */", { headers: { "content-type": "text/css" } })
+            : new Response("missing", { status: 404 });
         },
       }),
     },
   };
 
-  const response = await gateway.fetch(
+  const realStylesheet = await gateway.fetch(
+    new Request("https://bc-p10-b53e777a.lab-apps.buildcustom.ai/styles.css"),
+    env,
+  );
+  const missingStylesheet = await gateway.fetch(
     new Request("https://northstar-coffee.lab-apps.buildcustom.ai/style.css"),
     env,
   );
 
-  assert.equal(response.status, 404);
-  assert.deepEqual(dispatchedPaths, ["/style.css"]);
+  assert.equal(realStylesheet.status, 200);
+  assert.equal(await realStylesheet.text(), "/* direct generated stylesheet */");
+  assert.equal(missingStylesheet.status, 404);
+  assert.deepEqual(dispatchedPaths, ["/styles.css", "/style.css"]);
 });
 
 test("mapped requests to paths other than exactly /style.css are not rewritten", async () => {

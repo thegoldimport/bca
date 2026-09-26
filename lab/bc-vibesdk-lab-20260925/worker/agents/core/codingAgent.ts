@@ -284,7 +284,10 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             sendToConnection(connection, WebSocketMessageResponses.AGENT_CONNECTED, {
                 state: this.state,
                 templateDetails: this.behavior.getTemplateDetails(),
-                previewUrl: previewUrl
+                previewUrl: previewUrl,
+                    ...(this.state.behaviorType === 'think' && this.env.ENABLE_USER_ACCOUNT_DEPLOY !== 'true'
+                        ? { deploymentCapabilities: { platformImmutableRelease: true } }
+                    : {}),
             });
         })();
     }
@@ -416,8 +419,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.behavior.deployToSandbox(files, redeploy, commitMessage, clearLogs);
     }
 
-    deployToCloudflare(target?: DeploymentTarget): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
-        return this.behavior.deployToCloudflare(target);
+    deployToCloudflare(
+        target?: DeploymentTarget,
+        immutableRelease?: { immutableRelease: true; expectedRevision: string },
+    ): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
+        return this.behavior.deployToCloudflare(target, immutableRelease);
     }
 
     deployProject(options?: DeployOptions): Promise<DeployResult> {

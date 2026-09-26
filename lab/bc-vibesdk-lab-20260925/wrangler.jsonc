@@ -223,11 +223,5 @@
         "DEV_BROWSER_PREVIEW_ORIGIN": "http://localhost:5173"
     },
 "workers_dev": true,
-"preview_urls": true,
-"artifacts": [
-    {
-        "binding": "ARTIFACTS",
-        "namespace": "bc-vibesdk-lab-20260925-artifacts"
-    }
-]
+"preview_urls": true
 }

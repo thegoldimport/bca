@@ -1,18 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   awaitNativeDeployResult,
   handleNativeThinkPublish,
-  normalizedNativeSlug,
+  nativeReleaseScriptName,
   parseStockDeploymentUrl,
   validNativeSlug,
+  verifyNativePublicRoute,
 } from "../cloudflare/staging/native-publish";
 
+const revisionA = "a".repeat(40);
+const revisionB = "b".repeat(40);
+const agentId = "11111111-2222-4333-8444-555555555555";
+const slug = "northstar-coffee-live";
+const publicUrl = `https://${slug}.lab-apps.buildcustom.ai/`;
+const oldScript = "northstar-coffee";
+const oldRoute = JSON.stringify({ scriptName: oldScript, metadata: { styleCssFallback: true } });
+const indexHtml =
+  '<!doctype html><html><head><link rel="stylesheet" href="/styles.css"></head><body><h1>BUILDCUSTOM_TASK3_EDIT_OK</h1><p>Fresh coffee. Simple mornings.</p></body></html>';
+const stylesCss = "body { background: #0f141c; }\n";
 const project = {
-  id: 10, name: "Task 3 acceptance a", user_id: "owner-a", runtime_provider: "stock-think",
-  deployment_script_name: "old-script",
+  id: 10,
+  name: "Northstar Coffee",
+  user_id: "owner-a",
+  runtime_provider: "stock-think",
+  deployment_script_name: oldScript,
 };
 const owner = { id: "owner-a" };
+const wrongOwner = { id: "owner-b" };
+const validScript = (rev = revisionA, linkedAgentId = agentId) =>
+  `bc-r-${createHash("sha256").update(`${linkedAgentId.toLowerCase()}:${rev.toLowerCase()}`).digest("hex").slice(0, 56)}`;
 
 class MockSocket extends EventTarget {
   sent: string[] = [];
@@ -23,188 +41,120 @@ class MockSocket extends EventTarget {
   message(value: unknown) { this.dispatchEvent(new MessageEvent("message", { data: value })); }
 }
 
-function mockEnv(query: (sql: string, values: unknown[]) => any = () => null) {
-  const db: any = {
-    prepare(sql: string) {
-      let values: unknown[] = [];
-      const statement = {
-        bind(...bound: unknown[]) { values = bound; return statement; },
-        async first() { return query(sql, values); },
-        async all() { return { results: query(sql, values) || [] }; },
-        async run() { query(sql, values); return { meta: { changes: 1 } }; },
-      };
-      return statement;
-    },
-  };
-  const kv = new Map<string, string>();
-  return {
-    env: {
-      ENVIRONMENT: "staging",
-      DB: db,
-      STAGING_ROUTE_KV_ID: "test",
-      STAGING_ROUTES: {
-        async get(key: string) { return kv.get(key) ?? null; },
-        async put(key: string, value: string) { kv.set(key, value); },
-        async delete(key: string) { kv.delete(key); },
-      },
-      LAB_APPS_GATEWAY: { async fetch() { return new Response("<html></html>", { headers: { "content-type": "text/html" } }); } },
-    } as any,
-    kv,
-  };
-}
+type FixtureOptions = {
+  legacy?: boolean;
+  revision?: string;
+  failCandidateAsset?: boolean;
+  failCandidateRender?: boolean;
+  failStableAfterSwitch?: boolean;
+  loseClaimOnStableFailure?: boolean;
+  expireClaimBeforeActivation?: boolean;
+  preexistingExpiredClaim?: boolean;
+  candidateProbeStatus?: number;
+  stockAlreadyExists?: boolean;
+  failBatch?: boolean;
+  collisionScript?: string;
+  stockUrl?: (scriptName: string) => string;
+  holdDeploy?: boolean;
+};
 
-test("native deployment URL parser requires the stock lab origin and yields script independently", () => {
-  assert.deepEqual(parseStockDeploymentUrl("https://sanitized-worker.lab-apps.buildcustom.ai/"), {
-    scriptName: "sanitized-worker",
-    url: "https://sanitized-worker.lab-apps.buildcustom.ai/",
-    dispatchUrl: "https://sanitized-worker.lab-apps.buildcustom.ai/",
-  });
-  assert.deepEqual(parseStockDeploymentUrl("https://northstar-coffee.bc-vibesdk-lab-20260925.thegoldimport.workers.dev/"), {
-    scriptName: "northstar-coffee",
-    url: "https://northstar-coffee.bc-vibesdk-lab-20260925.thegoldimport.workers.dev/",
-    dispatchUrl: "https://northstar-coffee.lab-apps.buildcustom.ai/",
-  });
-  for (const invalid of [
-    "http://worker.lab-apps.buildcustom.ai/",
-    "https://worker.example.com/",
-    "https://worker.lab-apps.buildcustom.ai/path",
-    "https://worker.lab-apps.buildcustom.ai/?x=1",
-    "https://worker.lab-apps.buildcustom.ai.evil.example/",
-    "https://user@worker.lab-apps.buildcustom.ai/",
-    "https://worker.bc-vibesdk-lab-20260925.thegoldimport.workers.dev.evil.example/",
-  ]) assert.equal(parseStockDeploymentUrl(invalid), null);
-});
-
-test("native publishing slugs normalize legacy names and reject reserved or unsafe names", () => {
-  assert.equal(normalizedNativeSlug("Task 3 acceptance a", 10), "task-3-acceptance-a");
-  assert.equal(validNativeSlug("task-3-acceptance-a"), true);
-  assert.equal(validNativeSlug("api"), false);
-  assert.equal(validNativeSlug("bad slug"), false);
-});
-
-test("publish socket sends only the platform deploy command and accepts a completion URL", async () => {
-  const socket = new MockSocket();
-  const pending = awaitNativeDeployResult(socket as any, 100);
-  assert.deepEqual(socket.sent, ['{"type":"deploy","target":"platform"}']);
-  socket.message(JSON.stringify({ type: "cloudflare_deployment_completed", deploymentUrl: "https://worker.lab-apps.buildcustom.ai/" }));
-  assert.equal(await pending, "https://worker.lab-apps.buildcustom.ai/");
-  assert.equal(socket.closed, true);
-});
-
-test("publish socket rejects errors, malformed events, and premature close", async () => {
-  for (const fire of [
-    (socket: MockSocket) => socket.message(JSON.stringify({ type: "cloudflare_deployment_error", error: "failed" })),
-    (socket: MockSocket) => socket.message("{bad-json"),
-    (socket: MockSocket) => socket.dispatchEvent(new Event("close")),
-    (socket: MockSocket) => socket.message(JSON.stringify({ type: "cloudflare_deployment_completed" })),
-  ]) {
-    const socket = new MockSocket();
-    const pending = awaitNativeDeployResult(socket as any, 100);
-    fire(socket);
-    await assert.rejects(pending);
-    assert.equal(socket.closed, true);
-  }
-  const timeout = new MockSocket();
-  await assert.rejects(awaitNativeDeployResult(timeout as any, 1), /timed out/);
-  assert.equal(timeout.closed, true);
-});
-
-test("native settings write enforces CSRF and safe slugs but is not gated by super-admin role", async () => {
-  const state: { slug?: string } = {};
-  const { env } = mockEnv((sql, values) => {
-    if (sql.includes("SELECT id FROM native_publish_releases")) return null;
-    if (sql.includes("SELECT project_id FROM runtime_project_links")) return null;
-    if (sql.startsWith("INSERT INTO runtime_project_links")) { state.slug = String(values[1]); return null; }
-    return null;
-  });
-  const unsafe = await handleNativeThinkPublish(env, new Request("https://control.test/api", {
-    method: "PUT", headers: { "X-CSRF-Token": "csrf" },
-  }), project, "publishing-settings", owner, { subdomainSlug: "api" });
-  assert.equal(unsafe?.status, 400);
-  const noCsrf = await handleNativeThinkPublish(env, new Request("https://control.test/api", { method: "PUT" }), project,
-    "publishing-settings", owner, { subdomainSlug: "safe-site" });
-  assert.equal(noCsrf?.status, 403);
-  const response = await handleNativeThinkPublish(env, new Request("https://control.test/api", {
-    method: "PUT", headers: { "X-CSRF-Token": "csrf" },
-  }), project, "publishing-settings", owner, { subdomainSlug: "safe-site" });
-  assert.equal(response?.status, 200);
-  assert.equal(state.slug, "safe-site");
-});
-
-test("native GET settings normalizes an invalid preexisting slug; releases are project-scoped", async () => {
-  const { env } = mockEnv((sql) => {
-    if (sql.includes("SELECT subdomain_slug FROM runtime_project_links")) return { subdomain_slug: "task 3 acceptance a" };
-    if (sql.includes("SELECT * FROM native_publish_releases")) return [{
-      id: 7, project_id: 10, revision: "a".repeat(40), script_name: "stock-generated-script",
-      slug: "task-3-acceptance-a", public_url: "https://task-3-acceptance-a.lab-apps.buildcustom.ai/",
-      status: "published", created_at: "2026-01-01 00:00:00",
-    }];
-    return null;
-  });
-  const settings = await handleNativeThinkPublish(env, new Request("https://control.test/api"), project, "publishing-settings", owner);
-  assert.deepEqual(await settings?.json(), {
-    subdomainSlug: "task-3-acceptance-a", hostingProvider: "buildcustom", customDomain: "", customOrigin: "",
-  });
-  const releases = await handleNativeThinkPublish(env, new Request("https://control.test/api"), project, "releases", owner);
-  assert.deepEqual(await releases?.json(), { releases: [{
-    id: 7, projectId: 10, commitHash: "a".repeat(40), scriptName: "stock-generated-script",
-    subdomainSlug: "task-3-acceptance-a", deploymentUrl: "https://task-3-acceptance-a.lab-apps.buildcustom.ai/",
-    status: "published", createdAt: "2026-01-01 00:00:00",
-  }] });
-});
-
-function nativePublishEnv(options: {
-  held?: boolean; expired?: boolean; oldRoute?: string | null; scriptCollision?: boolean; collisionScriptName?: string;
-  styleAliasFails?: boolean;
-} = {}) {
+function fixture(options: FixtureOptions = {}) {
+  const currentRevision = options.revision ?? revisionA;
+  const events: string[] = [];
+  const browserVisits: { url: string; mappedScript: string | null }[] = [];
+  const defaultLegacy = options.legacy !== false;
   const state: any = {
-    held: Boolean(options.held), expiresAt: options.expired ? 0 : Math.floor(Date.now() / 1000) + 360,
-    route: options.oldRoute ?? null, claimToken: null,
-    link: { agent_id: "owner-agent", initialization_status: "ready" },
-    releases: [], claimed: false,
+    releases: defaultLegacy ? [{
+      id: 1,
+      user_id: "owner-a",
+      project_id: 10,
+      revision: revisionA,
+      script_name: oldScript,
+      slug,
+      public_url: publicUrl,
+      status: "published",
+      created_at: "2026-09-25 23:24:36",
+    }] : [],
+    link: {
+      agent_id: agentId,
+      initialization_status: "ready",
+      hosting_provider: "cloudflare",
+      subdomain_slug: slug,
+      deployment_script_name: defaultLegacy ? oldScript : null,
+      deployment_url: defaultLegacy ? publicUrl : null,
+      deployment_origin_url: null,
+    },
+    claimToken: null as string | null,
+    claimExpired: false,
+    uploadedScripts: new Set<string>(),
+    route: defaultLegacy ? oldRoute : null as string | null,
   };
+  if (options.preexistingExpiredClaim) {
+    state.claimToken = "expired-old-claim";
+    state.claimExpired = true;
+  }
   const query = (sql: string, values: unknown[]) => {
+    if (sql.includes("SELECT subdomain_slug,hosting_provider")) return state.link;
     if (sql.includes("SELECT agent_id,initialization_status,hosting_provider")) return state.link;
-    if (sql.includes("SELECT subdomain_slug,hosting_provider")) return { subdomain_slug: "task-3-acceptance-a", hosting_provider: "cloudflare" };
-    if (sql.includes("SELECT agent_id,initialization_status FROM runtime_project_links")) return state.link;
-    if (sql.includes("WHERE deployment_script_name=?")) {
-      return options.scriptCollision || options.collisionScriptName === values[0] ? { project_id: 99 } : null;
-    }
+    if (sql.includes("SELECT agent_id,initialization_status,deployment_script_name,deployment_url")) return state.link;
     if (sql.includes("WHERE script_name=? AND project_id<>?")) {
-      return options.collisionScriptName === values[0] ? { project_id: 99 } : null;
+      return options.collisionScript === values[0] ? { project_id: 99 } : null;
+    }
+    if (sql.includes("WHERE deployment_script_name=?")) {
+      return options.collisionScript === values[0] ? { project_id: 99 } : null;
     }
     if (sql.includes("SELECT project_id FROM runtime_project_links")) return null;
     if (sql.includes("SELECT user_id FROM projects")) return { user_id: "owner-a" };
+    if (sql.includes("SELECT * FROM native_publish_releases") && sql.includes("script_name=?")) {
+      return state.releases.find((row: any) =>
+        row.project_id === values[0] && row.revision === values[1]
+        && row.script_name === values[2] && row.status === "published",
+      ) || null;
+    }
+    if (sql.includes("SELECT * FROM native_publish_releases") && sql.includes("ORDER BY id DESC LIMIT 1")) {
+      return state.releases.filter((row: any) => row.project_id === values[0] && row.status === "published").at(-1) || null;
+    }
     if (sql.includes("INSERT INTO native_publish_claims")) {
-      if (state.held && state.expiresAt > Math.floor(Date.now() / 1000)) return null;
-      state.held = true;
-      state.claimToken = values[1];
-      state.expiresAt = Math.floor(Date.now() / 1000) + 360;
-      return { project_id: 10 };
+      if (state.claimToken && !state.claimExpired) return null;
+      state.claimToken = String(values[1]);
+      state.claimExpired = false;
+      return { project_id: values[0] };
     }
     if (sql.includes("SELECT claim_token FROM native_publish_claims")) {
-      return state.claimToken === values[1] ? { claim_token: state.claimToken } : null;
+      return state.claimToken === values[1] && !state.claimExpired ? { claim_token: state.claimToken } : null;
     }
-    if (sql.includes("SELECT * FROM native_publish_releases") && sql.includes("revision=?")) {
-      return state.releases.find((release: any) => release.project_id === values[0] && release.revision === values[1] && release.status === "published") || null;
-    }
-    if (sql.includes("SELECT revision,script_name FROM native_publish_releases")) return state.releases.at(-1) || null;
     if (sql.includes("UPDATE runtime_project_links SET deployment_url")) {
       state.link = {
-        ...state.link, deployment_url: values[0], deployment_origin_url: values[1],
-        deployment_script_name: values[2], subdomain_slug: values[3],
+        ...state.link,
+        deployment_url: values[0],
+        deployment_origin_url: values[1],
+        deployment_script_name: values[2],
+        subdomain_slug: values[3],
       };
       return null;
     }
     if (sql.includes("INSERT INTO native_publish_releases")) {
       const row = {
-        id: state.releases.length + 1, user_id: values[0], project_id: values[1], revision: values[2],
-        script_name: values[3], slug: values[4], public_url: values[5], status: "published", created_at: "2026-01-01 00:00:00",
+        id: state.releases.length + 1,
+        user_id: values[0],
+        project_id: values[1],
+        revision: values[2],
+        script_name: values[3],
+        slug: values[4],
+        public_url: values[5],
+        status: "published",
+        created_at: "2026-09-26 00:00:00",
       };
       state.releases.push(row);
       return row;
     }
-    if (sql.includes("DELETE FROM native_publish_claims")) { state.held = false; state.claimToken = null; return null; }
+    if (sql.includes("DELETE FROM native_publish_claims")) {
+      if (state.claimToken === values[1]) {
+        state.claimToken = null;
+        state.claimExpired = false;
+      }
+      return null;
+    }
     return null;
   };
   const db: any = {
@@ -212,415 +162,471 @@ function nativePublishEnv(options: {
       let values: unknown[] = [];
       const statement: any = {
         sql,
+        values,
         bind(...bound: unknown[]) { values = bound; statement.values = values; return statement; },
         async first() { return query(sql, values); },
-        async all() { return { results: state.releases }; },
+        async all() {
+          if (sql.includes("FROM native_publish_releases") && sql.includes("project_id=?")) {
+            return { results: state.releases.filter((row: any) => row.project_id === values[0]) };
+          }
+          return { results: [] };
+        },
         async run() { query(sql, values); return { meta: { changes: 1 } }; },
       };
       return statement;
     },
     async batch(statements: any[]) {
-      const out: any[] = [];
-      for (const statement of statements) out.push({ results: [query(statement.sql, statement.values)] });
-      return out;
+      if (options.failBatch) throw new Error("D1 unavailable");
+      return statements.map((statement) => ({ results: [query(statement.sql, statement.values)] }));
     },
   };
-  const kv = new Map<string, string>();
-  if (state.route !== null) kv.set("task-3-acceptance-a", state.route);
-  const env: any = {
-    ENVIRONMENT: "staging", DB: db, STAGING_ROUTE_KV_ID: "test",
-    STAGING_ROUTES: {
-      async get(key: string) { return kv.get(key) ?? null; },
-      async put(key: string, value: string) { kv.set(key, value); state.route = value; },
-      async delete(key: string) { kv.delete(key); state.route = null; },
+  const routes = new Map<string, string>();
+  if (state.route !== null) routes.set(slug, state.route);
+  const routeStore = {
+    async get(key: string) { return routes.get(key) ?? null; },
+    async put(key: string, value: string) {
+      routes.set(key, value);
+      state.route = value;
+      events.push(`kv:${JSON.parse(value).scriptName}`);
     },
-    LAB_APPS_GATEWAY: {
-      async fetch(request: Request) {
-        if (new URL(request.url).pathname === "/style.css") {
-          return options.styleAliasFails
-            ? new Response("not found", { status: 404, headers: { "content-type": "text/html" } })
-            : new Response("body {}", { headers: { "content-type": "text/css" } });
-        }
-        return new Response("<html></html>", { headers: { "content-type": "text/html" } });
-      },
-    },
+    async delete(key: string) { routes.delete(key); state.route = null; },
   };
-  return { env, state, kv };
-}
-
-const publishRequest = () => new Request("https://control.test/api", {
-  method: "POST", headers: { "X-CSRF-Token": "csrf", Cookie: "accessToken=owner-session" },
-});
-const publishDeps = (
-  revisions = ["a".repeat(40), "a".repeat(40), "a".repeat(40), "a".repeat(40)],
-  verifyReady?: () => Promise<void>,
-  verifyPublic?: (url: string) => Promise<void>,
-  stockResult = "https://sanitized-script.lab-apps.buildcustom.ai/",
-) => {
-  let index = 0;
-  let deploys = 0;
-  const readyUrls: string[] = [];
-  return {
-    get deploys() { return deploys; },
-    readyUrls,
-    dependencies: {
-      async readRuntime(_env: any, _request: any, _project: any, operation: string) {
-        if (operation === "status") return { state: { generation: { status: "idle" } } };
-        const current = revisions[Math.min(index, revisions.length - 1)];
-        index += 1;
-        return { commitHash: current };
-      },
-      async openSocket(_env: any, _request: any, agentId: string) { assert.equal(agentId, "owner-agent"); return {} as WebSocket; },
-      async waitForDeploy() { deploys++; return stockResult; },
-      async verifyReady(_gateway: any, url: string) { readyUrls.push(url); await verifyReady?.(); },
-      async verifyPublic(_browser: any, url: string) { await verifyPublic?.(url); },
-    },
-  };
-};
-
-function reconciliationDeps(options: {
-  stateUrl?: string;
-  generating?: boolean;
-  sourceCss?: string;
-  deployedCss?: string;
-  publicAliasCss?: string;
-} = {}) {
-  const socket = new MockSocket();
-  let deploys = 0;
-  const indexHtml = '<html><body><link rel="stylesheet" href="/styles.css"></body></html>';
-  const stylesCss = options.sourceCss ?? "body { color: blue; }\n";
-  const deployedCss = options.deployedCss ?? stylesCss;
-  const envState = nativePublishEnv();
-  const gatewayHosts: string[] = [];
-  const requestedFilePaths: unknown[] = [];
-  envState.env.BROWSER = {
-    async quickAction(_action: string, actionOptions: any) {
-      assert.equal(actionOptions.url, "https://task-3-acceptance-a.lab-apps.buildcustom.ai/");
-      return new Response(JSON.stringify({ result: indexHtml }));
-    },
-  };
-  envState.env.LAB_APPS_GATEWAY = {
+  function routeTarget(host: string) {
+    if (host === `${slug}.lab-apps.buildcustom.ai`) {
+      try { return JSON.parse(state.route || "null")?.scriptName ?? slug; } catch { return null; }
+    }
+    return host.split(".")[0];
+  }
+  const gateway = {
     async fetch(request: Request) {
       const url = new URL(request.url);
-      gatewayHosts.push(url.hostname);
-      if (url.hostname.endsWith(".bc-vibesdk-lab-20260925.thegoldimport.workers.dev")) {
-        return new Response("gateway rejects workers.dev", { status: 404, headers: { "content-type": "text/html" } });
+      const target = routeTarget(url.hostname);
+      events.push(`fetch:${target}:${url.pathname}`);
+      if (!target) return new Response("Not found", { status: 404 });
+      if (target.startsWith("bc-r-") && options.candidateProbeStatus !== undefined
+        && !state.uploadedScripts.has(target)) {
+        return new Response("candidate probe status", { status: options.candidateProbeStatus });
       }
-      if (url.hostname === "northstar-coffee.lab-apps.buildcustom.ai") {
-        if (url.pathname === "/styles.css") {
-          return new Response(deployedCss, { headers: { "content-type": "text/css" } });
-        }
-        return new Response(indexHtml, { headers: { "content-type": "text/html" } });
+      if (target.startsWith("bc-r-") && !state.uploadedScripts.has(target)) {
+        return new Response("The shared dispatcher could not resolve this candidate.", { status: 500 });
       }
-      if (url.pathname === "/style.css") {
-        return new Response(options.publicAliasCss ?? stylesCss, { headers: { "content-type": "text/css" } });
+      if (options.failCandidateAsset && target === validScript(currentRevision) && url.pathname === "/styles.css") {
+        return new Response("missing", { status: 404, headers: { "content-type": "text/html" } });
       }
       if (url.pathname === "/styles.css") {
         return new Response(stylesCss, { headers: { "content-type": "text/css" } });
       }
-      return new Response(indexHtml, { headers: { "content-type": "text/html" } });
+      if (url.pathname === "/") {
+        return new Response(indexHtml, { headers: { "content-type": "text/html" } });
+      }
+      return new Response("Not found", { status: 404 });
     },
   };
-  const dependencies = {
+  const browser = {
+    async quickAction(_action: string, actionOptions: any) {
+      const url = new URL(actionOptions.url);
+      const target = routeTarget(url.hostname);
+      browserVisits.push({ url: url.toString(), mappedScript: state.route ? JSON.parse(state.route).scriptName : null });
+      if (options.failCandidateRender && target === validScript(currentRevision)) {
+        return new Response("Candidate render failed", { status: 502 });
+      }
+      if (options.failStableAfterSwitch && url.hostname === `${slug}.lab-apps.buildcustom.ai`
+        && target === validScript(currentRevision)) {
+        if (options.loseClaimOnStableFailure) {
+          state.claimToken = "replacement-claim";
+          state.claimExpired = false;
+        }
+        return new Response("Switched candidate render failed", { status: 502 });
+      }
+      return new Response(JSON.stringify({ result: indexHtml }), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  };
+  const env: any = {
+    ENVIRONMENT: "staging",
+    DB: db,
+    STAGING_ROUTE_KV_ID: "test-routes",
+    STAGING_ROUTES: routeStore,
+    LAB_APPS_GATEWAY: gateway,
+    BROWSER: browser,
+  };
+  let revisionReads = 0;
+  let deploys = 0;
+  let completeDeploy!: () => void;
+  const dependencies: any = {
     async readRuntime(_env: any, _request: Request, _project: any, operation: string, path?: string) {
       if (operation === "status") return { state: { generation: { status: "idle" } } };
-      if (operation === "revision") return { commitHash: "a".repeat(40) };
+      if (operation === "revision") {
+        revisionReads++;
+        return { commitHash: currentRevision };
+      }
       if (operation === "files") return [{ path: "public/index.html" }, { path: "public/styles.css" }];
-      requestedFilePaths.push(path);
-      if (path === "public/index.html") return { path, content: indexHtml };
-      if (path === "public/styles.css") return { path, content: stylesCss };
+      if (operation === "files/content" && path === "public/index.html") return { path, content: indexHtml };
+      if (operation === "files/content" && path === "public/styles.css") return { path, content: stylesCss };
       return null;
     },
-    async openSocket(_env: any, _request: any, agentId: string) {
-      assert.equal(agentId, "owner-agent");
-      setTimeout(() => socket.message(JSON.stringify({
-        type: "agent_connected",
-        state: {
-          shouldBeGenerating: options.generating ?? false,
-          cloudflareDeploymentUrl: options.stateUrl
-            ?? "https://northstar-coffee.bc-vibesdk-lab-20260925.thegoldimport.workers.dev/",
-        },
-      })), 0);
-      return socket as any;
+    async openSocket(_env: any, _request: Request, linkedAgentId: string) {
+      assert.equal(linkedAgentId, agentId);
+      return {} as WebSocket;
     },
-    async waitForDeploy() { deploys++; throw new Error("reconciliation must not deploy"); },
+    async waitForDeploy(_socket: WebSocket, expectedRevision: string) {
+      const scriptName = validScript(expectedRevision);
+      deploys++;
+      events.push(`stock:${expectedRevision}`);
+      if (options.stockAlreadyExists) {
+        throw new Error("Cloudflare dispatch script already exists; refusing immutable upload.");
+      }
+      state.uploadedScripts.add(scriptName);
+      if (options.holdDeploy) {
+        return await new Promise<string>((resolve) => {
+          completeDeploy = () => resolve(options.stockUrl?.(scriptName) ?? `https://${scriptName}.any-preview-host.test/`);
+        });
+      }
+      return options.stockUrl?.(scriptName) ?? `https://${scriptName}.any-preview-host.test/`;
+    },
     async verifyReady(_gateway: any, url: string) {
-      assert.equal(new URL(url).hostname.endsWith(".bc-vibesdk-lab-20260925.thegoldimport.workers.dev"), false);
+      events.push(`ready:${new URL(url).hostname}`);
+      if (options.expireClaimBeforeActivation
+        && new URL(url).hostname === `${validScript(currentRevision)}.lab-apps.buildcustom.ai`) {
+        state.claimExpired = true;
+      }
+      if (new URL(url).hostname === "verify-failure.lab-apps.buildcustom.ai") {
+        throw new Error("candidate readiness failed");
+      }
     },
   };
+  const request = (headers: Record<string, string> = {}) => new Request("https://control.test/api", {
+    method: "POST",
+    headers: {
+      "X-CSRF-Token": "csrf",
+      "X-Publish-Protocol": "immutable-v2",
+      Cookie: "accessToken=owner-session",
+      ...headers,
+    },
+  });
   return {
-    ...envState,
-    socket,
+    env,
+    gateway,
+    state,
+    routes,
+    events,
+    browserVisits,
     dependencies,
-    gatewayHosts,
-    requestedFilePaths,
+    request,
     get deploys() { return deploys; },
+    get revisionReads() { return revisionReads; },
+    finishDeploy() { completeDeploy(); },
   };
 }
 
-test("native publish claims atomically, maps slug to independent stock script, and republish is idempotent", async () => {
-  const { env, state, kv } = nativePublishEnv();
-  const fake = publishDeps();
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 201);
-  const result = await response!.json() as any;
-  assert.equal(result.deploymentUrl, "https://task-3-acceptance-a.lab-apps.buildcustom.ai/");
-  assert.equal(result.release.scriptName, "sanitized-script");
-  assert.deepEqual(JSON.parse(kv.get("task-3-acceptance-a")!), {
-    scriptName: "sanitized-script", metadata: { styleCssFallback: true },
+async function publish(target: ReturnType<typeof fixture>, projectOverride = project, actor = owner, input: Record<string, unknown> = {}) {
+  return handleNativeThinkPublish(
+    target.env, target.request(), projectOverride, "publish-immutable-v2", actor, input, target.dependencies,
+  );
+}
+
+test("release identity hashes the linked agent UUID and full authoritative revision", async () => {
+  const first = await nativeReleaseScriptName(agentId, revisionA);
+  assert.equal(first, validScript(revisionA));
+  assert.equal(first?.length, 61);
+  assert.notEqual(first, await nativeReleaseScriptName("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", revisionA));
+  assert.notEqual(first, await nativeReleaseScriptName(agentId, revisionB));
+  assert.equal(await nativeReleaseScriptName("not-an-agent-uuid", revisionA), null);
+  assert.equal(await nativeReleaseScriptName(agentId, "a".repeat(39)), null);
+  assert.equal(validNativeSlug("northstar-coffee-live"), true);
+  assert.equal(validNativeSlug("api"), false);
+});
+
+test("stock URL only supplies the confirmed script identity; preview host is not assumed", () => {
+  const name = validScript(revisionA);
+  assert.deepEqual(parseStockDeploymentUrl(`https://${name}.preview.invalid/`, name), {
+    scriptName: name,
+    url: `https://${name}.preview.invalid/`,
+    dispatchUrl: `https://${name}.lab-apps.buildcustom.ai/`,
   });
-  assert.equal(state.releases.length, 1);
-  const repeated = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
+  assert.equal(parseStockDeploymentUrl(`https://another-script.preview.invalid/`, name), null);
+  assert.equal(parseStockDeploymentUrl(`https://${name}.preview.invalid/path`, name), null);
+  assert.equal(parseStockDeploymentUrl(`http://${name}.preview.invalid/`, name), null);
+});
+
+test("stock WebSocket waits for immutable capability and idle state before deploying", async () => {
+  const socket = new MockSocket();
+  const pending = awaitNativeDeployResult(socket as any, revisionA, 500);
+  assert.deepEqual(socket.sent, []);
+  socket.message(JSON.stringify({
+    type: "agent_connected",
+    deploymentCapabilities: { platformImmutableRelease: true },
+    state: { shouldBeGenerating: false },
+  }));
+  assert.deepEqual(socket.sent, [`{"type":"deploy","target":"platform","immutableRelease":true,"expectedRevision":"${revisionA}"}`]);
+  socket.message(JSON.stringify({
+    type: "cloudflare_deployment_completed",
+    deploymentUrl: `https://${validScript(revisionA)}.stock-preview.invalid/`,
+  }));
+  assert.equal(await pending, `https://${validScript(revisionA)}.stock-preview.invalid/`);
+  assert.equal(socket.closed, true);
+});
+
+test("stale stock worker, generating agent, timeout, and premature completion never send deploy", async () => {
+  const expectedRevision = revisionA;
+  const stale = new MockSocket();
+  const stalePending = awaitNativeDeployResult(stale as any, expectedRevision, 500);
+  stale.message(JSON.stringify({ type: "agent_connected", state: { shouldBeGenerating: false } }));
+  await assert.rejects(stalePending, /does not support immutable/);
+  assert.deepEqual(stale.sent, []);
+
+  const generating = new MockSocket();
+  const generatingPending = awaitNativeDeployResult(generating as any, expectedRevision, 500);
+  generating.message(JSON.stringify({
+    type: "agent_connected",
+    deploymentCapabilities: { platformImmutableRelease: true },
+    state: { shouldBeGenerating: true },
+  }));
+  await assert.rejects(generatingPending, /must be idle/);
+  assert.deepEqual(generating.sent, []);
+
+  const premature = new MockSocket();
+  const prematurePending = awaitNativeDeployResult(premature as any, expectedRevision, 500);
+  premature.message(JSON.stringify({ type: "cloudflare_deployment_completed", deploymentUrl: `https://${validScript()}.test/` }));
+  await assert.rejects(prematurePending, /before confirming/);
+  assert.deepEqual(premature.sent, []);
+
+  const timeout = new MockSocket();
+  await assert.rejects(awaitNativeDeployResult(timeout as any, expectedRevision, 1), /timed out/);
+  assert.deepEqual(timeout.sent, []);
+});
+
+test("legacy release A stays public while same-revision immutable candidate B is verified, then is retained", async () => {
+  const f = fixture();
+  const response = await publish(f);
+  assert.equal(response?.status, 201, await response?.clone().text());
+  const payload = await response!.json() as any;
+  const candidate = validScript(revisionA);
+  assert.equal(payload.deploymentUrl, publicUrl);
+  assert.equal(payload.release.scriptName, candidate);
+  assert.equal(f.deploys, 1);
+  assert.equal(f.state.releases.length, 2);
+  assert.equal(f.state.releases[0].script_name, oldScript);
+  assert.equal(f.state.releases[0].revision, revisionA);
+  assert.equal(f.state.releases[1].script_name, candidate);
+  assert.equal(f.state.releases[1].revision, revisionA);
+  assert.equal(f.state.link.deployment_script_name, candidate);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, candidate);
+  assert.deepEqual(f.state.releases.map((row: any) => row.script_name), [oldScript, candidate]);
+  assert.ok(f.browserVisits.some((visit) => visit.url.startsWith(`https://${candidate}.lab-apps.buildcustom.ai/`)));
+  const candidateIndex = f.events.findIndex((event) => event === `fetch:${candidate}:/`);
+  const cutoverIndex = f.events.findIndex((event) => event === `kv:${candidate}`);
+  assert.ok(candidateIndex >= 0 && candidateIndex < cutoverIndex);
+  const oldDuringCandidate = f.browserVisits.find((visit) => visit.url.startsWith(`https://${candidate}.lab-apps.buildcustom.ai/`));
+  assert.equal(oldDuringCandidate?.mappedScript, oldScript);
+});
+
+test("same-revision retry returns existing immutable release without opening another stock deployment", async () => {
+  const f = fixture();
+  const first = await publish(f);
+  const firstBody = await first!.json() as any;
+  const visitsBeforeRetry = f.browserVisits.length;
+  const repeated = await publish(f);
   assert.equal(repeated?.status, 200);
   assert.equal((await repeated!.json() as any).alreadyPublished, true);
-  assert.equal(fake.deploys, 1);
-
-  const previousRoute = kv.get("task-3-acceptance-a");
-  const changedRevision = publishDeps(["b".repeat(40)]);
-  const blockedRepublish = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, changedRevision.dependencies);
-  assert.equal(blockedRepublish?.status, 409);
-  assert.equal(changedRevision.deploys, 0);
-  assert.equal(kv.get("task-3-acceptance-a"), previousRoute);
-  assert.equal(state.releases.length, 1);
+  assert.equal(f.deploys, 1);
+  assert.equal(f.state.releases.length, 2);
+  assert.equal(firstBody.release.scriptName, validScript(revisionA));
+  assert.ok(f.browserVisits.length >= visitsBeforeRetry + 2);
 });
 
-test("reconcile-only adopts an owner-linked idle Think dispatch without sending deploy", async () => {
-  const fixture = reconciliationDeps();
-  const response = await handleNativeThinkPublish(
-    fixture.env, publishRequest(), project, "reconcile-deployment", owner, {}, fixture.dependencies,
-  );
+test("same-revision retry refuses stale link or route metadata instead of claiming the old release is active", async () => {
+  const f = fixture();
+  assert.equal((await publish(f))?.status, 201);
+  const visitsBefore = f.browserVisits.length;
+  f.state.link.deployment_script_name = oldScript;
+  const retry = await publish(f);
+  assert.equal(retry?.status, 409);
+  assert.equal(f.deploys, 1);
+  assert.equal(f.browserVisits.length, visitsBefore);
+});
+
+test("same-revision retry requires a healthy direct and stable route", async () => {
+  const options: FixtureOptions = {};
+  const f = fixture(options);
+  assert.equal((await publish(f))?.status, 201);
+  options.failStableAfterSwitch = true;
+  const retry = await publish(f);
+  assert.equal(retry?.status, 409);
+  assert.equal(f.deploys, 1);
+});
+
+test("a later revision receives a new identity, activates only after verification, and preserves both releases", async () => {
+  const f = fixture({ revision: revisionB });
+  const response = await publish(f);
   assert.equal(response?.status, 201, await response?.clone().text());
-  assert.equal(fixture.deploys, 0);
-  assert.deepEqual(fixture.socket.sent, []);
-  assert.equal(fixture.state.releases.length, 1);
-  assert.equal(fixture.state.releases[0].script_name, "northstar-coffee");
-  assert.deepEqual(fixture.requestedFilePaths, ["public/index.html", "public/styles.css"]);
-  assert.ok(fixture.gatewayHosts.includes("northstar-coffee.lab-apps.buildcustom.ai"));
-  assert.equal(fixture.gatewayHosts.some((host) => host.endsWith(".bc-vibesdk-lab-20260925.thegoldimport.workers.dev")), false);
-  assert.deepEqual(JSON.parse(fixture.kv.get("task-3-acceptance-a")!), {
-    scriptName: "northstar-coffee", metadata: { styleCssFallback: true },
-  });
+  assert.notEqual(validScript(revisionA), validScript(revisionB));
+  assert.deepEqual(f.state.releases.map((row: any) => row.script_name), [oldScript, validScript(revisionB)]);
+  assert.equal(f.state.releases[1].revision, revisionB);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, validScript(revisionB));
+  assert.equal(f.state.link.deployment_url, publicUrl);
 });
 
-test("deployments endpoint rejects reconcileOnly flags without opening a stock socket", async () => {
-  const { env, state, kv } = nativePublishEnv();
-  const fake = publishDeps();
-  for (const reconcileOnly of [true, false]) {
-    const response = await handleNativeThinkPublish(
-      env, publishRequest(), project, "deployments", owner, { reconcileOnly }, fake.dependencies,
-    );
-    assert.equal(response?.status, 400);
+test("stock upload errors and malformed/wrong identities leave the old route and release history intact", async () => {
+  for (const options of [
+    { stockUrl: () => { throw new Error("stock upload failed"); } },
+    { stockAlreadyExists: true },
+    { stockUrl: () => "not a URL" },
+    { stockUrl: () => "https://another-worker.preview.invalid/" },
+  ]) {
+    const f = fixture(options as FixtureOptions);
+    const before = f.routes.get(slug);
+    const response = await publish(f);
+    assert.equal(response?.status, 502);
+    assert.equal(f.routes.get(slug), before);
+    assert.equal(f.state.releases.length, 1);
   }
-  assert.equal(fake.deploys, 0);
-  assert.equal(kv.has("task-3-acceptance-a"), false);
-  assert.equal(state.releases.length, 0);
 });
 
-test("normal publish resolves workers.dev origin through the lab gateway dispatch host", async () => {
-  const { env, state } = nativePublishEnv();
-  const stockOrigin = "https://northstar-coffee.bc-vibesdk-lab-20260925.thegoldimport.workers.dev/";
-  const fake = publishDeps(undefined, undefined, undefined, stockOrigin);
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 201);
-  assert.deepEqual(fake.readyUrls, [
-    "https://northstar-coffee.lab-apps.buildcustom.ai/",
-    "https://task-3-acceptance-a.lab-apps.buildcustom.ai/",
-  ]);
-  assert.equal(state.link.deployment_origin_url, stockOrigin);
+test("candidate asset and rendered verification failures retain the last-known-good slug", async () => {
+  for (const options of [{ failCandidateAsset: true }, { failCandidateRender: true }]) {
+    const f = fixture(options);
+    const before = f.routes.get(slug);
+    const response = await publish(f);
+    assert.equal(response?.status, 502);
+    assert.equal(f.routes.get(slug), before);
+    assert.equal(f.state.releases.length, 1);
+    assert.equal(f.state.link.deployment_script_name, oldScript);
+  }
 });
 
-test("reconcile-only rejects deployed source mismatch before mapping or release", async () => {
-  const fixture = reconciliationDeps({ deployedCss: "body { color: red; }\n" });
-  const response = await handleNativeThinkPublish(
-    fixture.env, publishRequest(), project, "reconcile-deployment", owner, {}, fixture.dependencies,
-  );
+test("a gateway HTTP 500 for an absent candidate does not block stock's authoritative create-once publish", async () => {
+  const f = fixture({ candidateProbeStatus: 500 });
+  const absentCandidate = await f.gateway.fetch(new Request(`https://${validScript()}.lab-apps.buildcustom.ai/`));
+  assert.equal(absentCandidate.status, 500);
+  await absentCandidate.body?.cancel();
+  const response = await publish(f);
+  assert.equal(response?.status, 201, await response?.clone().text());
+  assert.equal(f.deploys, 1);
+  assert.equal(f.state.releases.length, 2);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, validScript());
+  assert.equal(f.events.some((event) => event === `stock:${revisionA}`), true);
+  const stockIndex = f.events.indexOf(`stock:${revisionA}`);
+  const candidateDispatchIndex = f.events.findIndex((event, index) => index > stockIndex && event === `fetch:${validScript()}:/`);
+  assert.ok(candidateDispatchIndex > stockIndex);
+});
+
+test("an expired claim cannot activate a candidate, and an expired lease may be taken over", async () => {
+  const expiredBeforeActivation = fixture({ expireClaimBeforeActivation: true });
+  assert.equal((await publish(expiredBeforeActivation))?.status, 502);
+  assert.equal(expiredBeforeActivation.deploys, 1);
+  assert.equal(JSON.parse(expiredBeforeActivation.routes.get(slug)!).scriptName, oldScript);
+  assert.equal(expiredBeforeActivation.state.releases.length, 1);
+
+  const takeover = fixture({ preexistingExpiredClaim: true });
+  assert.equal((await publish(takeover))?.status, 201);
+  assert.equal(takeover.deploys, 1);
+  assert.equal(takeover.state.releases.length, 2);
+});
+
+test("rollback fails closed rather than restoring over a route after the claim is lost", async () => {
+  const f = fixture({ failStableAfterSwitch: true, loseClaimOnStableFailure: true });
+  const response = await publish(f);
   assert.equal(response?.status, 502);
-  assert.equal(fixture.deploys, 0);
-  assert.deepEqual(fixture.socket.sent, []);
-  assert.equal(fixture.kv.has("task-3-acceptance-a"), false);
-  assert.equal(fixture.state.releases.length, 0);
+  assert.match((await response!.json() as any).message, /rollback was unsafe/);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, validScript());
+  assert.equal(f.state.releases.length, 1);
 });
 
-test("reconcile-only rolls back when mapped /style.css differs from authoritative source", async () => {
-  const fixture = reconciliationDeps({ publicAliasCss: "body { color: green; }\n" });
-  const response = await handleNativeThinkPublish(
-    fixture.env, publishRequest(), project, "reconcile-deployment", owner, {}, fixture.dependencies,
-  );
+test("stable-route verification failure rolls the cutover back to release A", async () => {
+  const f = fixture({ failStableAfterSwitch: true });
+  const response = await publish(f);
   assert.equal(response?.status, 502);
-  assert.equal(fixture.deploys, 0);
-  assert.deepEqual(fixture.socket.sent, []);
-  assert.equal(fixture.kv.has("task-3-acceptance-a"), false);
-  assert.equal(fixture.state.releases.length, 0);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, oldScript);
+  assert.equal(f.state.releases.length, 1);
+  assert.equal(f.state.link.deployment_script_name, oldScript);
 });
 
-test("reconcile-only rejects an untrusted stock state URL without writes", async () => {
-  const fixture = reconciliationDeps({ stateUrl: "https://northstar-coffee.evil.example/" });
-  const response = await handleNativeThinkPublish(
-    fixture.env, publishRequest(), project, "reconcile-deployment", owner, {}, fixture.dependencies,
-  );
+test("D1 persistence failure rolls the cutover back without replacing release A", async () => {
+  const f = fixture({ failBatch: true });
+  const response = await publish(f);
   assert.equal(response?.status, 502);
-  assert.equal(fixture.deploys, 0);
-  assert.deepEqual(fixture.socket.sent, []);
-  assert.equal(fixture.kv.has("task-3-acceptance-a"), false);
-  assert.equal(fixture.state.releases.length, 0);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, oldScript);
+  assert.equal(f.state.releases.length, 1);
+  assert.equal(f.state.link.deployment_script_name, oldScript);
 });
 
-test("native publish rejects active claims and restores the prior mapping after readiness failure", async () => {
-  const busy = nativePublishEnv({ held: true });
-  const fake = publishDeps();
-  const busyResponse = await handleNativeThinkPublish(busy.env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(busyResponse?.status, 409);
-  assert.equal(fake.deploys, 0);
-
-  const previous = JSON.stringify({ scriptName: "old-script" });
-  const envState = nativePublishEnv({ oldRoute: previous });
-  const failed = publishDeps(undefined, async () => { throw new Error("not ready"); });
-  const response = await handleNativeThinkPublish(envState.env, publishRequest(), project, "deployments", owner, {}, failed.dependencies);
-  assert.equal(response?.status, 502);
-  assert.equal(envState.kv.get("task-3-acceptance-a"), previous);
-  assert.equal(envState.state.releases.length, 0);
+test("a missing route starts an immutable release without depending on a stylesheet alias", async () => {
+  const f = fixture({ legacy: false });
+  const response = await publish(f);
+  assert.equal(response?.status, 201, await response?.clone().text());
+  assert.deepEqual(JSON.parse(f.routes.get(slug)!), { scriptName: validScript(), metadata: {} });
+  assert.equal(f.events.some((event) => event.includes("/style.css")), false);
 });
 
-test("native publish preflights a foreign KV route before consuming the stock publish", async () => {
-  const foreign = JSON.stringify({ scriptName: "foreign-script", metadata: {} });
-  const { env, state, kv } = nativePublishEnv({ oldRoute: foreign });
-  const fake = publishDeps();
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
+test("publishing refuses a foreign script collision before the stock socket opens", async () => {
+  const f = fixture({ collisionScript: validScript() });
+  const response = await publish(f);
   assert.equal(response?.status, 409);
-  assert.equal(fake.deploys, 0);
-  assert.equal(kv.get("task-3-acceptance-a"), foreign);
-  assert.equal(state.releases.length, 0);
+  assert.equal(f.deploys, 0);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, oldScript);
+  assert.equal(f.state.releases.length, 1);
 });
 
-test("native publish preflights a known D1 script-name collision before stock deploy", async () => {
-  const { env, state } = nativePublishEnv({ scriptCollision: true });
-  const fake = publishDeps();
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 409);
-  assert.equal(fake.deploys, 0);
-  assert.equal(state.releases.length, 0);
+test("the project claim prevents concurrent candidates from racing the active route", async () => {
+  const f = fixture({ holdDeploy: true });
+  const first = publish(f);
+  while (!f.state.claimToken) await new Promise((resolve) => setTimeout(resolve, 0));
+  const second = await publish(f);
+  assert.equal(second?.status, 409);
+  assert.equal(f.deploys, 1);
+  f.finishDeploy();
+  assert.equal((await first)?.status, 201);
+  assert.equal(f.state.releases.length, 2);
 });
 
-test("normal publish rejects a returned script already owned by another project before mapping", async () => {
-  const { env, state, kv } = nativePublishEnv({ collisionScriptName: "taken-script" });
-  const fake = publishDeps(
-    undefined, undefined, undefined, "https://taken-script.lab-apps.buildcustom.ai/",
+test("publishing capabilities, protocol header, legacy path, recovery, and ownership fail closed", async () => {
+  const f = fixture();
+  const get = new Request("https://control.test/api", { method: "GET" });
+  const capability = await handleNativeThinkPublish(f.env, get, project, "publishing-capabilities", owner);
+  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2" });
+
+  const missingProtocol = await handleNativeThinkPublish(
+    f.env, f.request({ "X-Publish-Protocol": "wrong" }), project, "publish-immutable-v2", owner, {}, f.dependencies,
   );
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 502);
-  assert.equal(fake.deploys, 1);
-  assert.equal(kv.has("task-3-acceptance-a"), false);
-  assert.equal(state.releases.length, 0);
+  assert.equal(missingProtocol?.status, 409);
+  assert.equal(f.deploys, 0);
+
+  const oldRoute = await handleNativeThinkPublish(f.env, f.request(), project, "deployments", owner, {}, f.dependencies);
+  assert.equal(oldRoute?.status, 410);
+  const recovery = await handleNativeThinkPublish(f.env, f.request(), project, "reconcile-deployment", owner, {}, f.dependencies);
+  assert.equal(recovery?.status, 409);
+  const oldVersion = await handleNativeThinkPublish(f.env, f.request(), project, "publish-immutable", owner, {}, f.dependencies);
+  assert.equal(oldVersion?.status, 410);
+  const userB = await handleNativeThinkPublish(f.env, f.request(), project, "publish-immutable-v2", wrongOwner, {}, f.dependencies);
+  assert.equal(userB?.status, 404);
+  const forged = await handleNativeThinkPublish(
+    f.env, f.request(), project, "publish-immutable-v2", owner, { scriptName: "northstar-coffee" }, f.dependencies,
+  );
+  assert.equal(forged?.status, 400);
+  assert.equal(f.deploys, 0);
+  assert.equal(JSON.parse(f.routes.get(slug)!).scriptName, oldScript);
 });
 
-test("expired publish claims can be taken over after the bounded lease", async () => {
-  const { env, state } = nativePublishEnv({ held: true, expired: true });
-  const fake = publishDeps();
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 201);
-  assert.equal(fake.deploys, 1);
-  assert.equal(state.held, false);
-});
-
-test("native publish restores the previous route if release persistence fails", async () => {
-  const previous = JSON.stringify({ scriptName: "old-script", metadata: {} });
-  const { env, state, kv } = nativePublishEnv({ oldRoute: previous });
-  env.DB.batch = async () => { throw new Error("D1 unavailable"); };
-  const fake = publishDeps();
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 502);
-  assert.equal(kv.get("task-3-acceptance-a"), previous);
-  assert.equal(state.releases.length, 0);
-  assert.equal(state.held, false);
-});
-
-test("public-browser verifier checks real browser rendering and service-bound HTML/stylesheets", async () => {
-  const { verifyNativePublicRoute } = await import("../cloudflare/staging/native-publish");
-  const visited: string[] = [];
+test("public verification checks rendered HTML and every required stylesheet without an alias", async () => {
+  const visits: string[] = [];
   const browser: any = {
     async quickAction(_action: string, options: any) {
-      visited.push(options.url);
-      return new Response(JSON.stringify({ result: '<html><body><link rel="stylesheet" href="/assets/site.css"></body></html>' }));
+      visits.push(options.url);
+      return new Response(JSON.stringify({ result: indexHtml }));
     },
   };
-  const serviceRequests: string[] = [];
-  const rootHtml = '<html><body><link rel="stylesheet" href="/assets/site.css"></body></html>';
-  const serviceBinding = {
+  const requests: string[] = [];
+  const gateway = {
     async fetch(request: Request) {
-      const url = request.url;
-      serviceRequests.push(url);
-      return url.endsWith(".css")
-        ? new Response("body { color: red }", { headers: { "content-type": "text/css" } })
-        : new Response(rootHtml, { headers: { "content-type": "text/html" } });
+      requests.push(request.url);
+      return new URL(request.url).pathname === "/styles.css"
+        ? new Response(stylesCss, { headers: { "content-type": "text/css" } })
+        : new Response(indexHtml, { headers: { "content-type": "text/html" } });
     },
   };
-  await verifyNativePublicRoute(browser, "https://site.lab-apps.buildcustom.ai/",
-    (url) => serviceBinding.fetch(new Request(url)));
-  assert.deepEqual(visited, ["https://site.lab-apps.buildcustom.ai/"]);
-  assert.deepEqual(serviceRequests, [
-    "https://site.lab-apps.buildcustom.ai/",
-    "https://site.lab-apps.buildcustom.ai/assets/site.css",
-  ]);
-  await assert.rejects(verifyNativePublicRoute(browser, "https://site.lab-apps.buildcustom.ai/", async (url) =>
-    url.endsWith(".css")
-      ? new Response("not css", { status: 404, headers: { "content-type": "text/html" } })
-      : new Response("not html", { status: 404, headers: { "content-type": "text/html" } })), /root request failed/);
-  await assert.rejects(verifyNativePublicRoute(browser, "https://site.lab-apps.buildcustom.ai/", async (url) =>
-    url.endsWith(".css")
-      ? new Response("not css", { status: 404, headers: { "content-type": "text/html" } })
-      : new Response(rootHtml, { headers: { "content-type": "text/html" } })), /stylesheet verification failed/);
-});
-
-test("public browser failure after deployment rolls back mapping and does not persist release", async () => {
-  const previous = JSON.stringify({ scriptName: "old-script", metadata: {} });
-  const { env, state, kv } = nativePublishEnv({ oldRoute: previous });
-  const failed = publishDeps(undefined, undefined, async () => { throw new Error("public route unavailable"); });
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, failed.dependencies);
-  assert.equal(response?.status, 502);
-  assert.equal(kv.get("task-3-acceptance-a"), previous);
-  assert.equal(state.releases.length, 0);
-});
-
-test("failed /style.css fallback check rolls back route and release", async () => {
-  const previous = JSON.stringify({ scriptName: "old-script", metadata: {} });
-  const { env, state, kv } = nativePublishEnv({ oldRoute: previous, styleAliasFails: true });
-  const fake = publishDeps();
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 502);
-  assert.equal(kv.get("task-3-acceptance-a"), previous);
-  assert.equal(state.releases.length, 0);
-});
-
-test("malformed stock deployment URL is rejected without route or release writes", async () => {
-  const { env, state, kv } = nativePublishEnv();
-  const fake = publishDeps(undefined, undefined, undefined, "https://stock.example.com/");
-  const response = await handleNativeThinkPublish(env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 502);
-  assert.equal(kv.has("task-3-acceptance-a"), false);
-  assert.equal(state.releases.length, 0);
-});
-
-test("native publish rejects revision drift and missing CSRF without touching route mappings", async () => {
-  const envState = nativePublishEnv({ oldRoute: JSON.stringify({ scriptName: "old-script", metadata: {} }) });
-  const previous = envState.kv.get("task-3-acceptance-a");
-  const drift = publishDeps(["a".repeat(40), "a".repeat(40), "b".repeat(40)]);
-  const changed = await handleNativeThinkPublish(envState.env, publishRequest(), project, "deployments", owner, {}, drift.dependencies);
-  assert.equal(changed?.status, 502);
-  assert.equal(envState.kv.get("task-3-acceptance-a"), previous);
-  const noCsrf = await handleNativeThinkPublish(envState.env, new Request("https://control.test/api", { method: "POST" }), project, "deployments", owner);
-  assert.equal(noCsrf?.status, 403);
-  const otherOwner = await handleNativeThinkPublish(envState.env, publishRequest(), project, "deployments", { id: "owner-b" }, {}, drift.dependencies);
-  assert.equal(otherOwner?.status, 404);
-});
-
-test("revision is checked again after readiness and public verification", async () => {
-  const previous = JSON.stringify({ scriptName: "old-script", metadata: {} });
-  const envState = nativePublishEnv({ oldRoute: previous });
-  const revisions = ["a".repeat(40), "a".repeat(40), "a".repeat(40), "b".repeat(40)];
-  const fake = publishDeps(revisions);
-  const response = await handleNativeThinkPublish(envState.env, publishRequest(), project, "deployments", owner, {}, fake.dependencies);
-  assert.equal(response?.status, 502);
-  assert.equal(fake.deploys, 1);
-  assert.equal(envState.kv.get("task-3-acceptance-a"), previous);
-  assert.equal(envState.state.releases.length, 0);
+  await verifyNativePublicRoute(browser, publicUrl, (url) => gateway.fetch(new Request(url)));
+  assert.deepEqual(visits, [publicUrl]);
+  assert.deepEqual(requests, [publicUrl, `https://${slug}.lab-apps.buildcustom.ai/styles.css`]);
 });

@@ -33,6 +33,7 @@ import { CloudflareAccountService } from '../../../services/cloudflare/Cloudflar
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
 import { resolveCloudflareAccessToken } from '../../../services/rate-limit/usageChecker';
 import type { CloudflareDeploymentErrorCode } from '../../../api/websocketTypes';
+import { InFlightLock, isCommitRevision } from '../../../services/deployer/platform-deployment-identity';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -112,6 +113,7 @@ export class ThinkCodingBehavior
 	extends BaseCodingBehavior<ThinkState>
 	implements ICodingAgent {
 	protected static readonly PROJECT_NAME_PREFIX_MAX_LENGTH = 20;
+	private readonly immutableReleaseDeploymentLock = new InFlightLock();
 
 	override getBehavior(): 'think' { return 'think'; }
 
@@ -904,8 +906,35 @@ export class ThinkCodingBehavior
 
 	async deployToCloudflare(
 		target: DeploymentTarget = 'user',
+		immutableRelease?: { immutableRelease: true; expectedRevision: string },
 	): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
 		const userAccountDeployEnabled = this.env.ENABLE_USER_ACCOUNT_DEPLOY === 'true';
+		if (immutableRelease !== undefined && (
+			immutableRelease.immutableRelease !== true
+			|| !isCommitRevision(immutableRelease.expectedRevision)
+			|| target !== 'platform'
+			|| userAccountDeployEnabled
+		)) {
+			this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_ERROR, {
+				message: 'Immutable releases are supported only for Think platform deployments',
+				instanceId: this.getAgentId(),
+			});
+			return null;
+		}
+
+		if (immutableRelease) {
+			const deployment = await this.immutableReleaseDeploymentLock.runExclusive(
+				() => this.deployThinkAppToPlatform(immutableRelease),
+			);
+			if (!deployment.acquired) {
+				this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_ERROR, {
+					message: 'An immutable release deployment is already in progress for this agent',
+					instanceId: this.getAgentId(),
+				});
+				return null;
+			}
+			return deployment.value;
+		}
 
 		if (!userAccountDeployEnabled) {
 			return this.deployThinkAppToPlatform();
@@ -990,7 +1019,9 @@ export class ThinkCodingBehavior
 	 * Default think deploy when `ENABLE_USER_ACCOUNT_DEPLOY` is off: publish the
 	 * SpaceDO bundle to the platform's dispatch namespace with platform creds.
 	 */
-	private async deployThinkAppToPlatform(): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
+	private async deployThinkAppToPlatform(
+		immutableRelease?: { immutableRelease: true; expectedRevision: string },
+	): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
 		const instanceId = this.getAgentId();
 		this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_STARTED, {
 			message: 'Starting deployment to Cloudflare Workers...',
@@ -1015,6 +1046,12 @@ export class ThinkCodingBehavior
 				this.logger.debug('No new workspace changes to commit before publishing', error);
 			}
 			const bundle = await this.callSpace((space) => space.getDeploymentBundle(branch));
+			if (immutableRelease && (
+				!isCommitRevision(bundle.commitHash)
+				|| bundle.commitHash !== immutableRelease.expectedRevision
+			)) {
+				throw new Error('Deployment bundle revision does not match expected revision');
+			}
 			const result = await deployThinkBundleToPlatform({
 				accountId,
 				apiToken,
@@ -1022,6 +1059,12 @@ export class ThinkCodingBehavior
 				previewDomain: getPreviewDomain(this.env),
 				appName: this.state.blueprint.title || this.state.projectName || `vibe-${instanceId}`,
 				bundle,
+				...(immutableRelease ? {
+					immutableRelease: {
+						agentId: instanceId,
+						expectedRevision: immutableRelease.expectedRevision,
+					},
+				} : {}),
 			});
 			await new AppService(this.env).updateDeploymentId(instanceId, result.deploymentId);
 			this.setState({ ...this.state, cloudflareDeploymentUrl: result.deploymentUrl });
@@ -1030,6 +1073,10 @@ export class ThinkCodingBehavior
 				instanceId,
 				deploymentUrl: result.deploymentUrl,
 				workersUrl: result.deploymentUrl,
+				...(immutableRelease ? {
+					deploymentId: result.deploymentId,
+					commitHash: immutableRelease.expectedRevision,
+				} : {}),
 			});
 			return { deploymentUrl: result.deploymentUrl, workersUrl: result.deploymentUrl };
 		} catch (error) {

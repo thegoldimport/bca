@@ -1,6 +1,59 @@
 import { AssetManifest, UploadAssetSession, WorkerMetadata } from '../types';
 import { getMimeType } from '../utils/index';
 
+const MAX_DISPATCH_SCRIPT_LOOKUP_BYTES = 16 * 1024;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function readBoundedResponseText(response: Response, maxBytes: number): Promise<string> {
+	const contentLength = Number(response.headers.get('content-length'));
+	if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+		throw new Error(`Response exceeds ${maxBytes} byte limit`);
+	}
+	const reader = response.body?.getReader();
+	if (!reader) return '';
+
+	const chunks: Uint8Array[] = [];
+	let totalBytes = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (totalBytes + value.byteLength > maxBytes) {
+				try {
+					await reader.cancel();
+				} catch {
+					// The response will be rejected regardless; cancellation is best effort.
+				}
+				throw new Error(`Response exceeds ${maxBytes} byte limit`);
+			}
+			chunks.push(value);
+			totalBytes += value.byteLength;
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	const body = new Uint8Array(totalBytes);
+	let offset = 0;
+	for (const chunk of chunks) {
+		body.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return new TextDecoder().decode(body);
+}
+
+function matchesDispatchNamespace(value: unknown, expectedNamespace: string): boolean {
+	if (typeof value === 'string') return value === expectedNamespace;
+	if (!isRecord(value)) return false;
+	const names = [value.name, value.namespace]
+		.filter((candidate): candidate is string => typeof candidate === 'string');
+	if (names.length > 0) return names.every((name) => name === expectedNamespace);
+	return value.id === expectedNamespace;
+}
+
 /**
  * Cloudflare API client for Worker deployment operations
  */
@@ -116,6 +169,58 @@ export class CloudflareAPI {
 	}
 
 	/**
+	 * Fail closed unless the authoritative dispatch-script lookup proves this
+	 * immutable release identity has never been created.
+	 */
+	async assertDispatchScriptDoesNotExist(
+		scriptName: string,
+		dispatchNamespace: string,
+	): Promise<void> {
+		const url = `${this.baseUrl}/accounts/${encodeURIComponent(this.accountId)}/workers/dispatch/namespaces/${encodeURIComponent(dispatchNamespace)}/scripts/${encodeURIComponent(scriptName)}`;
+		let response: Response;
+		try {
+			response = await fetch(url, {
+				method: 'GET',
+				headers: this.getHeaders(),
+			});
+		} catch (error) {
+			throw new Error(
+				`Failed to verify immutable dispatch script availability: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+
+		// The Workers-for-Platforms scripts endpoint documents 404 as the
+		// not-found result for this exact script path.
+		if (response.status === 404) return;
+		if (response.status === 200) {
+			let payload: unknown;
+			try {
+				const body = await readBoundedResponseText(response, MAX_DISPATCH_SCRIPT_LOOKUP_BYTES);
+				payload = JSON.parse(body) as unknown;
+			} catch (error) {
+				throw new Error(
+					`Could not verify immutable dispatch script response: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+			if (!isRecord(payload) || payload.success !== true || !isRecord(payload.result)) {
+				throw new Error('Could not verify immutable dispatch script response: unexpected response shape');
+			}
+			if (!matchesDispatchNamespace(payload.result.dispatch_namespace, dispatchNamespace)) {
+				throw new Error('Could not verify immutable dispatch script response: dispatch namespace mismatch');
+			}
+			const script = payload.result.script;
+			if (script === undefined || script === null) return;
+			if (isRecord(script) && script.id === scriptName) {
+				throw new Error(`Immutable dispatch script "${scriptName}" already exists; refusing to overwrite it`);
+			}
+			throw new Error('Could not verify immutable dispatch script response: unexpected script metadata');
+		}
+		throw new Error(
+			`Could not verify immutable dispatch script availability: unexpected status ${response.status}`,
+		);
+	}
+
+	/**
 	 * Deploy a Worker script to Cloudflare
 	 * Includes metadata, bindings, and assets configuration
 	 */
@@ -126,6 +231,7 @@ export class CloudflareAPI {
 		dispatchNamespace?: string,
 		additionalModules?: Map<string, string>,
 		durableObjectClasses?: string[],
+		allowMigrationRetry = true,
 	): Promise<void> {
 		const url = dispatchNamespace
 			? `${this.baseUrl}/accounts/${this.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${scriptName}`
@@ -174,6 +280,9 @@ export class CloudflareAPI {
 
 		if (!response.ok) {
 			const error = await response.text();
+			if (!allowMigrationRetry) {
+				throw new Error(`Failed to deploy worker: ${response.status} - ${error}`);
+			}
 			const errorObj = JSON.parse(error);
 
 			// Check if error is about migrations for existing DO classes
