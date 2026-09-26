@@ -1,0 +1,505 @@
+diff --git a/src/api-types.ts b/src/api-types.ts
+index bf4035f..d8ec1b6 100644
+--- a/src/api-types.ts
++++ b/src/api-types.ts
+@@ -285,6 +285,7 @@ export interface AuthProvidersResponseData {
+   };
+   hasOAuth: boolean;
+   requiresEmailAuth: boolean;
++  registrationEnabled?: boolean;
+   csrfToken?: string;
+   csrfExpiresIn?: number;
+ }
+diff --git a/src/components/auth/login-modal.tsx b/src/components/auth/login-modal.tsx
+index b902d45..5e381d3 100644
+--- a/src/components/auth/login-modal.tsx
++++ b/src/components/auth/login-modal.tsx
+@@ -65,7 +65,7 @@ export function LoginModal({
+ 	actionContext,
+ 	showCloseButton = true,
+ }: LoginModalProps) {
+-	const { authProviders, hasOAuth } = useAuth();
++	const { authProviders, hasOAuth, registrationEnabled } = useAuth();
+ 	const [mode, setMode] = useState<AuthMode>('login');
+ 	const [showPassword, setShowPassword] = useState(false);
+ 	const [isLoading, setIsLoading] = useState(false);
+@@ -86,7 +86,9 @@ export function LoginModal({
+ 	// whether any OAuth provider is also configured.
+ 	const emailAuthEnabled = authProviders?.email ?? true;
+ 	const hasEmailAuth = emailAuthEnabled && !!onEmailLogin;
+-	const hasRegistration = emailAuthEnabled && !!onRegister;
++	const hasRegistration =
++		registrationEnabled && emailAuthEnabled && !!onRegister;
++	const isRegisterMode = mode === 'register' && hasRegistration;
+ 	const showGitHub = authProviders?.github && hasOAuth;
+ 	const showGoogle = authProviders?.google && hasOAuth;
+ 	const showCloudflare = authProviders?.cloudflare && hasOAuth;
+@@ -166,13 +168,21 @@ export function LoginModal({
+ 	const handleSubmit = async (e: React.FormEvent) => {
+ 		e.preventDefault();
+ 
++		// The provider response can change while the modal is open. Never let a
++		// stale register-mode form reach the registration callback.
++		if (mode === 'register' && !hasRegistration) {
++			setMode('login');
++			resetForm();
++			return;
++		}
++
+ 		if (!validateForm()) return;
+ 
+ 		setIsLoading(true);
+ 		try {
+-			if (mode === 'login' && onEmailLogin) {
++			if (!isRegisterMode && onEmailLogin) {
+ 				await onEmailLogin({ email, password });
+-			} else if (mode === 'register' && onRegister) {
++			} else if (isRegisterMode && onRegister) {
+ 				await onRegister({ email, password, name: name.trim() });
+ 			}
+ 			// Don't auto-close here - let the parent handle success/error
+@@ -198,13 +208,13 @@ export function LoginModal({
+ 
+ 	const title = actionContext
+ 		? `Sign in ${actionContext}`
+-		: hasEmailAuth && mode === 'register'
++		: hasEmailAuth && isRegisterMode
+ 			? 'Create an account'
+ 			: 'Welcome back';
+ 
+ 	const description = actionContext
+ 		? 'Authentication required for this action'
+-		: hasEmailAuth && mode === 'register'
++		: hasEmailAuth && isRegisterMode
+ 			? 'Join to start building amazing applications'
+ 			: 'Sign in to save your apps and access your workspace';
+ 
+@@ -357,7 +367,7 @@ export function LoginModal({
+ 							onSubmit={handleSubmit}
+ 							className="flex w-full flex-col gap-3"
+ 						>
+-							{mode === 'register' && (
++							{isRegisterMode && (
+ 								<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
+ 									<Input
+ 										label="Full name"
+@@ -413,7 +423,7 @@ export function LoginModal({
+ 											setPassword(e.target.value)
+ 										}
+ 										autoComplete={
+-											mode === 'register'
++											isRegisterMode
+ 												? 'new-password'
+ 												: 'current-password'
+ 										}
+@@ -446,7 +456,7 @@ export function LoginModal({
+ 								</InputGroup>
+ 							</div>
+ 
+-							{mode === 'register' && (
++							{isRegisterMode && (
+ 								<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
+ 									<Input
+ 										label="Confirm password"
+@@ -470,10 +480,10 @@ export function LoginModal({
+ 								className="w-full justify-center"
+ 							>
+ 								{isLoading
+-									? mode === 'register'
++									? isRegisterMode
+ 										? 'Creating account...'
+ 										: 'Signing in...'
+-									: mode === 'register'
++									: isRegisterMode
+ 										? 'Create account'
+ 										: 'Sign in'}
+ 							</OrangeButton>
+@@ -490,12 +500,12 @@ export function LoginModal({
+ 								type="button"
+ 								onClick={() =>
+ 									switchMode(
+-										mode === 'login' ? 'register' : 'login',
++										isRegisterMode ? 'login' : 'register',
+ 									)
+ 								}
+ 								className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
+ 							>
+-								{mode === 'login'
++								{!isRegisterMode
+ 									? "Don't have an account? Sign up"
+ 									: 'Already have an account? Sign in'}
+ 							</button>
+diff --git a/src/contexts/auth-context.tsx b/src/contexts/auth-context.tsx
+index 39cc1e7..b68f19e 100644
+--- a/src/contexts/auth-context.tsx
++++ b/src/contexts/auth-context.tsx
+@@ -57,6 +57,7 @@ interface AuthContextType {
+ 		cloudflare: boolean;
+ 		email: boolean;
+ 	} | null;
++	registrationEnabled: boolean;
+ 	hasOAuth: boolean;
+ 	requiresEmailAuth: boolean;
+ 
+@@ -104,6 +105,7 @@ const DEFAULT_AUTH_PROVIDERS: AuthProvidersResponseData = {
+ 	},
+ 	hasOAuth: false,
+ 	requiresEmailAuth: true,
++registrationEnabled: false,
+ };
+ 
+ const INTENDED_URL_KEY = 'auth_intended_url';
+@@ -431,6 +433,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
+ 			isLoading,
+ 			error,
+ 			authProviders: providers?.providers ?? null,
++registrationEnabled: providers?.registrationEnabled ?? false,
+ 			hasOAuth: providers?.hasOAuth ?? false,
+ 			requiresEmailAuth: providers?.requiresEmailAuth ?? true,
+ 			login,
+diff --git a/worker/api/controllers/auth/controller.test.ts b/worker/api/controllers/auth/controller.test.ts
+index 25227a4..cd8e3fd 100644
+--- a/worker/api/controllers/auth/controller.test.ts
++++ b/worker/api/controllers/auth/controller.test.ts
+@@ -2,12 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { AuthController } from './controller';
+ import type { RouteContext } from '../../types/route-context';
+ 
+-const { mockGetOAuthAuthorizationUrl, mockHandleOAuthCallback, mockGetPendingLinkUserId, mockProvisionFromToken } =
++const {
++	mockGetOAuthAuthorizationUrl,
++	mockHandleOAuthCallback,
++	mockGetPendingLinkUserId,
++	mockProvisionFromToken,
++	mockRegister,
++	mockLogin,
++} =
+ 	vi.hoisted(() => ({
+ 		mockGetOAuthAuthorizationUrl: vi.fn(),
+ 		mockHandleOAuthCallback: vi.fn(),
+ 		mockGetPendingLinkUserId: vi.fn(),
+ 		mockProvisionFromToken: vi.fn(),
++		mockRegister: vi.fn(),
++		mockLogin: vi.fn(),
+ 	}));
+ 
+ vi.mock('../../../database/services/AuthService', () => ({
+@@ -15,6 +24,8 @@ vi.mock('../../../database/services/AuthService', () => ({
+ 		getOAuthAuthorizationUrl: mockGetOAuthAuthorizationUrl,
+ 		handleOAuthCallback: mockHandleOAuthCallback,
+ 		getPendingLinkUserId: mockGetPendingLinkUserId,
++		register: mockRegister,
++		login: mockLogin,
+ 	})),
+ }));
+ 
+@@ -46,6 +57,125 @@ function makeContext(overrides: Partial<RouteContext> = {}): RouteContext {
+ 	} as unknown as RouteContext;
+ }
+ 
++describe('AuthController registration gate', () => {
++	beforeEach(() => {
++		vi.clearAllMocks();
++		mockRegister.mockResolvedValue({
++			user: { id: 'user-1', email: 'user@example.com' },
++			sessionId: 'session-1',
++			expiresAt: new Date(Date.now() + 60_000),
++			accessToken: 'session-token',
++		});
++		mockLogin.mockResolvedValue({
++			user: { id: 'user-1', email: 'user@example.com' },
++			sessionId: 'session-1',
++			expiresAt: new Date(Date.now() + 60_000),
++			accessToken: 'session-token',
++		});
++	});
++
++	it('allows registration when the gate is enabled by default', async () => {
++		const response = await AuthController.register(
++			new Request(`${BASE_URL}/api/auth/register`, {
++				method: 'POST',
++				headers: { 'content-type': 'application/json' },
++				body: JSON.stringify({
++					email: 'user@example.com',
++					password: 'Valid-Test-Password123!',
++					name: 'Test User',
++				}),
++			}),
++			testEnv,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++
++		expect(response.status).toBe(200);
++		expect(mockRegister).toHaveBeenCalledOnce();
++	});
++
++	it('rejects registration with the explicit disabled code when the gate is off', async () => {
++		const response = await AuthController.register(
++			new Request(`${BASE_URL}/api/auth/register`, {
++				method: 'POST',
++				headers: { 'content-type': 'application/json' },
++				body: JSON.stringify({
++					email: 'user@example.com',
++					password: 'Valid-Test-Password123!',
++				}),
++			}),
++			{ ...testEnv, REGISTRATION_ENABLED: 'false' } as Env,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++
++		expect(response.status).toBe(403);
++		expect(await response.json()).toMatchObject({
++			success: false,
++    error: { message: 'REGISTRATION_DISABLED' },
++		});
++		expect(mockRegister).not.toHaveBeenCalled();
++	});
++
++	it('keeps password login available while registration is disabled', async () => {
++		const response = await AuthController.login(
++			new Request(`${BASE_URL}/api/auth/login`, {
++				method: 'POST',
++				headers: { 'content-type': 'application/json' },
++				body: JSON.stringify({
++					email: 'user@example.com',
++					password: 'Valid-Test-Password123!',
++				}),
++			}),
++			{ ...testEnv, REGISTRATION_ENABLED: 'false' } as Env,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++
++		expect(response.status).toBe(200);
++		expect(mockLogin).toHaveBeenCalledOnce();
++	});
++
++	it('keeps password login available when registration is enabled', async () => {
++		const response = await AuthController.login(
++			new Request(`${BASE_URL}/api/auth/login`, {
++				method: 'POST',
++				headers: { 'content-type': 'application/json' },
++				body: JSON.stringify({
++					email: 'user@example.com',
++					password: 'Valid-Test-Password123!',
++				}),
++			}),
++			{ ...testEnv, REGISTRATION_ENABLED: 'true' } as Env,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++
++		expect(response.status).toBe(200);
++		expect(mockLogin).toHaveBeenCalledOnce();
++	});
++
++	it('reports registration availability independently in the provider list', async () => {
++		const enabled = await AuthController.getAuthProviders(
++			new Request(`${BASE_URL}/api/auth/providers`),
++			testEnv,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++		const disabled = await AuthController.getAuthProviders(
++			new Request(`${BASE_URL}/api/auth/providers`),
++			{ ...testEnv, REGISTRATION_ENABLED: 'false' } as Env,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++
++expect((await enabled.json() as { data: { registrationEnabled: boolean } }).data.registrationEnabled)
++			.toBe(true);
++expect((await disabled.json() as { data: { registrationEnabled: boolean } }).data.registrationEnabled)
++			.toBe(false);
++	});
++});
++
+ describe('AuthController.initiateOAuth failure', () => {
+ 	beforeEach(() => {
+ 		vi.clearAllMocks();
+diff --git a/worker/api/controllers/auth/controller.ts b/worker/api/controllers/auth/controller.ts
+index 1403575..e8f004e 100644
+--- a/worker/api/controllers/auth/controller.ts
++++ b/worker/api/controllers/auth/controller.ts
+@@ -35,7 +35,7 @@ import { encryptTokens, type EncryptedTokenData } from '../../../utils/tokenEncr
+ import { CloudflareConnectOAuthProvider } from '../../../services/oauth/cloudflare-connect';
+ import { CloudflareProvisioningService } from '../../../services/cloudflare/CloudflareProvisioningService';
+ import { isCloudflareGatewayLimitsEnabled } from '../../../services/rate-limit';
+-import { isEmailAuthEnabled } from '../../../utils/envs';
++import { isEmailAuthEnabled, isRegistrationEnabled } from '../../../utils/envs';
+ /**
+  * Authentication Controller
+  */
+@@ -48,6 +48,9 @@ export class AuthController extends BaseController {
+      */
+     static async register(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+         try {
++            if (!isRegistrationEnabled(env)) {
++                return AuthController.createErrorResponse('REGISTRATION_DISABLED', 403);
++            }
+             if (!isEmailAuthEnabled(env)) {
+                 return AuthController.createErrorResponse(
+                     'Email/password authentication is disabled on this deployment.',
+@@ -835,6 +838,7 @@ export class AuthController extends BaseController {
+             
+             const response = AuthController.createSuccessResponse({
+                 providers,
++                registrationEnabled: isRegistrationEnabled(env) && isEmailAuthEnabled(env),
+                 hasOAuth,
+                 requiresEmailAuth: !hasOAuth,
+                 csrfToken,
+diff --git a/worker/database/services/AuthService.test.ts b/worker/database/services/AuthService.test.ts
+index e383f5c..e76565c 100644
+--- a/worker/database/services/AuthService.test.ts
++++ b/worker/database/services/AuthService.test.ts
+@@ -1,6 +1,8 @@
+-import { describe, it, expect } from 'vitest';
++import { describe, it, expect, vi } from 'vitest';
+ import { AuthService, providerLabel } from './AuthService';
+ import { JWTUtils } from '../../utils/jwtUtils';
++import * as schema from '../schema';
++import type { OAuthUserInfo } from '../../types/auth-types';
+ 
+ describe('providerLabel', () => {
+ 	it('maps known OAuth providers to display names', () => {
+@@ -40,3 +42,61 @@ describe('AuthService token session binding', () => {
+ 		await expect(service.validateTokenAndGetUser(accessToken, env)).resolves.toBeNull();
+ 	});
+ });
++
++describe('AuthService OAuth registration gate', () => {
++	const oauthUser: OAuthUserInfo = {
++		id: 'provider-user-1',
++		email: 'oauth@example.com',
++		emailVerified: true,
++		name: 'OAuth User',
++	};
++
++	function createService(existingEmailUser: unknown = null) {
++		const service = Object.create(AuthService.prototype) as AuthService;
++		Object.defineProperty(service, 'env', { value: { REGISTRATION_ENABLED: 'false' } });
++		Object.defineProperty(service, 'database', {
++			value: {
++				select: () => ({
++					from: (table: unknown) => ({
++						where: () => ({
++							get: async () => table === schema.userOauthIdentities ? null : existingEmailUser,
++						}),
++					}),
++				}),
++				insert: () => {
++					throw new Error('OAuth registration gate must reject before inserting');
++				},
++			},
++		});
++		return service;
++	}
++
++	it('rejects a new OAuth account when registration is disabled', async () => {
++		const service = createService();
++		const resolver = service as unknown as {
++			findOrCreateOAuthUser(provider: 'google', userInfo: OAuthUserInfo): Promise<unknown>;
++		};
++
++		await expect(resolver.findOrCreateOAuthUser('google', oauthUser)).rejects.toMatchObject({
++			message: 'REGISTRATION_DISABLED',
++			statusCode: 403,
++		});
++	});
++
++	it('continues OAuth login for an existing account when registration is disabled', async () => {
++		const existingUser = {
++			id: 'existing-user',
++			email: oauthUser.email,
++			provider: 'email',
++		};
++		const service = createService(existingUser);
++		const linkIdentity = vi.fn().mockResolvedValue(undefined);
++		Object.defineProperty(service, 'linkOAuthIdentity', { value: linkIdentity });
++		const resolver = service as unknown as {
++			findOrCreateOAuthUser(provider: 'google', userInfo: OAuthUserInfo): Promise<unknown>;
++		};
++
++		await expect(resolver.findOrCreateOAuthUser('google', oauthUser)).resolves.toBe(existingUser);
++		expect(linkIdentity).toHaveBeenCalledWith('existing-user', 'google', oauthUser);
++	});
++});
+diff --git a/worker/database/services/AuthService.ts b/worker/database/services/AuthService.ts
+index e7ab3b4..9b54897 100644
+--- a/worker/database/services/AuthService.ts
++++ b/worker/database/services/AuthService.ts
+@@ -26,6 +26,7 @@ import {
+     OAuthProvider
+ } from '../../types/auth-types';
+ import { mapUserResponse, validateRedirectUrl, enforceAllowedEmail } from '../../utils/authUtils';
++import { isRegistrationEnabled } from '../../utils/envs';
+ import { createLogger } from '../../logger';
+ import { validateEmail, validatePassword } from '../../utils/validationUtils';
+ import { extractRequestMetadata } from '../../utils/authUtils';
+@@ -89,6 +90,9 @@ export class AuthService extends BaseService {
+      */
+     async register(data: RegistrationData, request: Request): Promise<AuthResult> {
+         try {
++            if (!isRegistrationEnabled(this.env)) {
++                throw new SecurityError(SecurityErrorType.UNAUTHORIZED, 'REGISTRATION_DISABLED', 403);
++            }
+             // Deployment-level admission gate (ALLOWED_EMAIL)
+             enforceAllowedEmail(this.env, data.email, 'register');
+ 
+@@ -679,6 +683,9 @@ export class AuthService extends BaseService {
+         provider: OAuthProvider,
+         oauthUserInfo: OAuthUserInfo
+     ): Promise<schema.User> {
++        if (!isRegistrationEnabled(this.env)) {
++            throw new SecurityError(SecurityErrorType.UNAUTHORIZED, 'REGISTRATION_DISABLED', 403);
++        }
+         const userId = generateId();
+         const now = new Date();
+         const email = oauthUserInfo.email.toLowerCase();
+diff --git a/worker/types/env.d.ts b/worker/types/env.d.ts
+index 084602d..a448115 100644
+--- a/worker/types/env.d.ts
++++ b/worker/types/env.d.ts
+@@ -6,6 +6,7 @@ declare namespace Cloudflare {
+ 		ENABLE_ARTIFACTS?: string;
+ 		ENABLE_CLOUDFLARE_LIMITS?: string;
+ 		ENABLE_EMAIL_AUTH?: string;
++REGISTRATION_ENABLED?: string;
+ 		ENABLE_READ_REPLICAS?: string;
+ 		ENABLE_USER_ACCOUNT_DEPLOY?: string;
+ 		USE_CLOUDFLARE_IMAGES?: string;
+diff --git a/worker/utils/envs.test.ts b/worker/utils/envs.test.ts
+new file mode 100644
+index 0000000..85dd13a
+--- /dev/null
++++ b/worker/utils/envs.test.ts
+@@ -0,0 +1,13 @@
++import { describe, expect, it } from 'vitest';
++import { isRegistrationEnabled } from './envs';
++
++describe('isRegistrationEnabled', () => {
++	it('enables registration by default and when explicitly enabled', () => {
++		expect(isRegistrationEnabled({} as Env)).toBe(true);
++		expect(isRegistrationEnabled({ REGISTRATION_ENABLED: 'true' } as Env)).toBe(true);
++	});
++
++	it('disables registration only when REGISTRATION_ENABLED is false', () => {
++		expect(isRegistrationEnabled({ REGISTRATION_ENABLED: 'false' } as Env)).toBe(false);
++	});
++});
+\ No newline at end of file
+diff --git a/worker/utils/envs.ts b/worker/utils/envs.ts
+index 71917a5..d28f851 100644
+--- a/worker/utils/envs.ts
++++ b/worker/utils/envs.ts
+@@ -15,3 +15,8 @@ export function isDev(env: Env) {
+ export function isEmailAuthEnabled(env: Env) {
+     return (env.ENABLE_EMAIL_AUTH as string | undefined) !== 'false';
+ }
++
++/** Independent admission gate; disabling signup must not disable login. */
++export function isRegistrationEnabled(env: Env) {
++    return env.REGISTRATION_ENABLED !== 'false';
++}

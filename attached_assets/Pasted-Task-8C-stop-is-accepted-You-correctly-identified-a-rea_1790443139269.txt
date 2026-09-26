@@ -1,0 +1,811 @@
+Task 8C stop is accepted.
+
+You correctly identified a real registration-boundary problem.
+
+We want registration CLOSED during the controlled public cutover interval.
+
+It is not sufficient for only the BuildCustom control plane to reject signup
+if the separately reachable production VibeSDK runtime can still create new
+runtime identities through its own registration endpoint.
+
+You are authorized to make ONE narrow runtime-side change:
+
+TASK 8D — RUNTIME REGISTRATION-ONLY GATE
+
+Then, if and only if that gate passes private acceptance, resume Task 8C and
+complete the secure tester acceptance.
+
+==================================================
+ARCHITECTURAL INTENT
+==================================================
+
+We need THREE independent concepts:
+
+AUTHENTICATION ENABLED
+
+EXISTING USER LOGIN ENABLED
+
+NEW USER REGISTRATION ENABLED / DISABLED
+
+The current stock runtime apparently couples email authentication and
+registration too closely.
+
+Do NOT solve this by disabling email authentication because existing users
+must still be able to log in.
+
+The required behavior is:
+
+REGISTRATION_ENABLED=false
+
+existing user login:
+ALLOWED
+
+existing session validation:
+ALLOWED
+
+logout:
+ALLOWED
+
+fresh login after logout:
+ALLOWED
+
+new account registration:
+DENIED
+
+This must be enforced SERVER-SIDE at the runtime registration endpoint.
+
+==================================================
+IMPORTANT ARCHITECTURE RULE
+==================================================
+
+This is a narrow security/capability patch to the accepted production runtime.
+
+Production runtime baseline becomes:
+
+PINNED STOCK VIBESDK
++
+TASK 4B IMMUTABLE RELEASE PATCH
++
+TASK 6A LOGOUT REVOCATION PATCH
++
+TASK 8D REGISTRATION-ONLY GATE
+
+Do NOT redesign authentication.
+
+Do NOT create another auth service.
+
+Do NOT create another user database.
+
+Do NOT create invitations.
+
+Do NOT create an allowlist system.
+
+Do NOT create admin-created users.
+
+Do NOT create a special tester bypass.
+
+Do NOT remove the stock runtime identity authority.
+
+==================================================
+STEP 1 — CONFIRM ROOT CAUSE
+==================================================
+
+Before changing source, identify exactly:
+
+1. runtime registration endpoint implementation
+
+2. runtime login endpoint implementation
+
+3. configuration currently controlling email authentication
+
+4. why that configuration controls both registration and login
+
+5. whether the runtime frontend exposes registration independently
+
+6. whether any OTHER runtime endpoint can create a new user
+
+7. whether OAuth/social/provider login, if present, can implicitly create a
+   new runtime user
+
+This last point matters.
+
+When registration is CLOSED, we mean:
+
+NO NEW RUNTIME USER CREATION
+
+not merely:
+
+POST /register returns 403
+
+Existing users must still authenticate normally.
+
+==================================================
+STEP 2 — IMPLEMENT NARROW CAPABILITY
+==================================================
+
+Introduce the smallest explicit runtime configuration/capability equivalent
+to:
+
+REGISTRATION_ENABLED=true|false
+
+Use the naming/style most consistent with the existing runtime configuration.
+
+Do not overload the existing email-auth switch.
+
+Conceptually:
+
+EMAIL_AUTH_ENABLED=true
+REGISTRATION_ENABLED=false
+
+must be valid.
+
+When false:
+
+- email registration endpoint rejects new accounts
+- runtime registration UI does not offer signup if exposed
+- any automatic account-creation path is prevented
+- existing email login continues working
+- existing sessions continue working
+- logout continues working
+
+When true:
+
+normal stock registration behavior remains available.
+
+==================================================
+STEP 3 — SERVER-SIDE ENFORCEMENT
+==================================================
+
+The security boundary must be runtime-side.
+
+Do not rely on:
+
+- hidden UI
+- BuildCustom control-plane UI
+- browser flags
+- client JavaScript
+- Origin alone
+
+Direct requests to the runtime registration endpoint must fail while
+registration is closed.
+
+Use an intentional response such as:
+
+403 REGISTRATION_DISABLED
+
+or the most appropriate existing error convention.
+
+==================================================
+STEP 4 — CHECK ALL USER-CREATION PATHS
+==================================================
+
+Inspect the pinned runtime for every way a new user could be created.
+
+Classify each as:
+
+EXISTING-USER AUTH ONLY
+
+or
+
+CAN CREATE USER
+
+When REGISTRATION_ENABLED=false:
+
+all CAN CREATE USER paths must either:
+
+- reject creation
+
+or
+
+- authenticate only if the corresponding runtime user already exists
+
+Do not accidentally disable existing-user authentication.
+
+Document what was checked.
+
+==================================================
+STEP 5 — TEST MATRIX
+==================================================
+
+Add focused regression tests.
+
+At minimum:
+
+REGISTRATION_ENABLED=true:
+
+new email registration
+→ succeeds
+
+existing user login
+→ succeeds
+
+REGISTRATION_ENABLED=false:
+
+new email registration
+→ rejected
+
+direct registration endpoint
+→ rejected
+
+existing user login
+→ succeeds
+
+existing auth/check
+→ succeeds
+
+logout
+→ succeeds
+
+exact revoked session
+→ rejected
+
+fresh login after logout
+→ succeeds
+
+If another authentication provider/path exists:
+
+new identity through that path
+→ must NOT create a new runtime user while registration is closed
+
+existing linked user through that path
+→ should continue according to existing supported semantics
+
+Do not invent provider support that the runtime does not have.
+
+==================================================
+STEP 6 — PRESERVE TASK 6A
+==================================================
+
+Explicitly verify the Task 6A logout security behavior after this patch:
+
+signed token bound to stored session owner
+
+logout revokes exact session
+
+revocation confirmed before cookie clearing
+
+exact old cookie rejected
+
+another same-user session remains valid
+
+another user's session remains valid
+
+The registration patch must not regress this.
+
+==================================================
+STEP 7 — PATCH ISOLATION
+==================================================
+
+Keep Task 8D isolated as its own production patch.
+
+Record:
+
+- upstream baseline
+- changed files
+- changed functions
+- tests added
+- normalized diff
+- SHA-256
+
+Do NOT merge it conceptually into Task 4B or Task 6A.
+
+Do NOT add the historical restore patch.
+
+==================================================
+STEP 8 — BUILD + PRIVATE DEPLOYMENT
+==================================================
+
+Run:
+
+- typecheck
+- relevant focused tests
+- full runtime test suite
+- build
+- immutable identity vector check
+
+Then deploy ONLY the existing isolated production runtime:
+
+buildcustom-vibesdk-launch
+
+Do NOT deploy to:
+
+legacy vibesdk
+buildcustom-vibesdk-staging
+lab runtime
+
+Do NOT change any public hostname or route.
+
+Record the NEW runtime Worker version.
+
+==================================================
+STEP 9 — LIVE PRIVATE REGISTRATION TEST
+==================================================
+
+Set the launch runtime to:
+
+registration CLOSED
+
+Then directly test the runtime itself.
+
+Require:
+
+direct new registration
+→ rejected
+
+runtime registration UI/API
+→ closed
+
+existing-user login
+→ succeeds
+
+auth/check
+→ succeeds
+
+logout
+→ succeeds
+
+old session reuse
+→ rejected
+
+fresh login
+→ succeeds
+
+Do NOT rely only on BuildCustom's control-plane registration block.
+
+==================================================
+STEP 10 — CONTROL-PLANE REGISTRATION TEST
+==================================================
+
+Verify the existing Task 8B control-plane candidate still reports:
+
+registration CLOSED
+
+Then verify:
+
+BuildCustom signup UI
+→ closed
+
+BuildCustom registration API
+→ rejected
+
+runtime direct registration
+→ rejected
+
+existing BuildCustom/runtime user login
+→ allowed
+
+We want both layers aligned.
+
+==================================================
+STEP 11 — SECURE CUTOVER TESTER
+==================================================
+
+Once runtime-side registration is PROVEN CLOSED, we still need one tester.
+
+Do NOT reopen general registration to create it unless you can do so in a
+strictly private/reversible acceptance context without exposing an open
+registration window.
+
+Preferred approach:
+
+Use the approved secure secret mechanism to obtain:
+
+BUILDCUSTOM_CUTOVER_TESTER_PASSWORD
+
+Do NOT ask for the password in chat.
+
+Then create ONE disposable normal tester through the normal registration
+logic using a controlled private bootstrap procedure.
+
+The bootstrap procedure may temporarily enable registration ONLY for the
+single controlled server-side creation operation if:
+
+1. the public/direct runtime endpoint is not left open during the operation
+
+2. exactly one intended user is created
+
+3. registration is immediately returned to CLOSED
+
+4. the CLOSED state is verified afterward
+
+5. no special auth semantics remain for that tester
+
+The resulting account must be indistinguishable from a normal:
+
+role=user
+
+account.
+
+If you cannot safely guarantee this without exposing registration:
+
+STOP and report the smallest alternative.
+
+Do NOT build a permanent tester bypass.
+
+==================================================
+STEP 12 — CREATE ONE TESTER PROJECT
+==================================================
+
+Using the secure tester credentials:
+
+fresh login
+
+dashboard
+
+create ONE small project
+
+exactly one owner-specific ThinkAgent
+
+If needed, ONE small generation is authorized.
+
+Marker:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+Record:
+
+product user ID
+project ID
+runtime agent ID
+committed revision
+
+Do not expose credentials.
+
+==================================================
+STEP 13 — RETURN TO CLOSED STATE
+==================================================
+
+Before continuing:
+
+runtime registration:
+CLOSED
+
+control-plane registration:
+CLOSED
+
+BuildCustom signup UI:
+CLOSED
+
+direct runtime registration:
+REJECTED
+
+control-plane registration:
+REJECTED
+
+existing tester login:
+ALLOWED
+
+Verify this explicitly.
+
+==================================================
+STEP 14 — COMPLETE OUTSTANDING TASK 8C CHECKS
+==================================================
+
+Now complete the previously blocked authenticated acceptance:
+
+A. fresh known-credential tester login
+
+B. auth/check
+
+C. dashboard
+
+D. project reopen
+
+E. authoritative files
+
+F. preview
+
+G. idle ThinkAgent WebSocket
+
+H. existing conversation
+
+I. live stale legacy-cookie test
+
+J. logout
+
+K. exact old-session rejection
+
+L. fresh login after logout
+
+M. authenticated browser network audit
+
+N. Publish UI safety with:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+O. Replit-development-workflow-off authenticated test
+
+No additional generation.
+
+No public publish.
+
+==================================================
+STEP 15 — AUTHENTICATED NETWORK AUDIT
+==================================================
+
+Require zero browser requests to:
+
+replit.com
+replit.dev
+replit.app
+legacy vibesdk Worker
+staging runtime
+lab runtime
+old BuildCustom API
+
+Check:
+
+login
+dashboard
+project reopen
+files
+preview
+idle WebSocket
+
+==================================================
+STEP 16 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish the public Replit autoscale deployment because marketing
+still uses its waitlist endpoint.
+
+With development workflow unavailable verify:
+
+tester login
+dashboard
+project reopen
+files
+preview
+idle builder
+
+Then restore development workflow if needed.
+
+==================================================
+STEP 17 — FREEZE BOTH CUTOVER COMPONENTS
+==================================================
+
+If everything passes, freeze:
+
+A. NEW accepted production runtime Worker version containing:
+
+stock
++
+Task 4B
++
+Task 6A
++
+Task 8D
+
+B. accepted BuildCustom control-plane Worker version:
+
+82515081-9c15-4669-9e59-8ffa916331ec
+
+unless Task 8D integration required a new control-plane deployment.
+
+If the control plane changes, rerun its affected acceptance tests and freeze
+the new exact version instead.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+Do NOT modify:
+
+app.buildcustom.ai association
+
+app.buildcustom.ai DNS
+
+*.apps.buildcustom.ai
+
+public buildcustom-apps-gateway
+
+public gateway bindings
+
+buildcustom.ai
+
+marketing Pages
+
+marketing waitlist
+
+public Replit autoscale deployment
+
+old production D1
+
+legacy vibesdk Worker
+
+BuyerMagnets
+
+production dispatch namespace architecture
+
+Do not delete anything.
+
+==================================================
+FAILURE RULE
+==================================================
+
+If implementing a registration-only gate requires a broad auth rewrite:
+
+STOP.
+
+If the runtime has another unavoidable user-creation path that cannot be
+closed without disabling existing login:
+
+STOP.
+
+If tester bootstrap cannot be performed without leaving registration
+publicly exposed:
+
+STOP.
+
+Do not work around a security boundary merely to make acceptance pass.
+
+==================================================
+TASK 8D + 8C ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. explicit runtime registration-only capability exists
+
+2. runtime registration CLOSED works independently of control plane
+
+3. direct runtime registration is rejected
+
+4. all discovered new-user creation paths are gated
+
+5. existing login remains functional
+
+6. Task 6A logout behavior remains intact
+
+7. Task 4B immutable identity remains intact
+
+8. Task 8D patch isolated and fingerprinted
+
+9. secure normal tester exists
+
+10. registration is CLOSED after tester creation
+
+11. tester fresh login passes
+
+12. tester dashboard passes
+
+13. tester project reopen passes
+
+14. tester files pass
+
+15. tester preview passes
+
+16. idle WebSocket/conversation passes
+
+17. legacy-cookie test passes
+
+18. logout revocation passes
+
+19. exact old session rejected
+
+20. fresh login after logout passes
+
+21. authenticated network audit clean
+
+22. Publish UI hides private URL
+
+23. Replit-development-off authenticated flow passes
+
+24. control-plane registration remains CLOSED
+
+25. runtime registration remains CLOSED
+
+26. public generated apps remain DISABLED
+
+27. no public hostname/route changed
+
+28. exact runtime version frozen
+
+29. exact control-plane version frozen
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. root cause of runtime registration issue
+
+2. runtime registration endpoint/function
+
+3. all user-creation paths discovered
+
+4. Task 8D files/functions changed
+
+5. Task 8D patch SHA-256
+
+6. registration configuration name
+
+7. registration=true test result
+
+8. registration=false direct-runtime result
+
+9. existing-user login result while closed
+
+10. Task 6A regression result
+
+11. Task 4B identity-vector result
+
+12. runtime full test result
+
+13. new runtime Worker version
+
+14. secure tester bootstrap method
+
+15. tester product user ID
+
+16. tester role
+
+17. tester project ID
+
+18. tester runtime agent ID
+
+19. tester committed revision
+
+20. inference count/cost
+
+21. final runtime registration state
+
+22. final control-plane registration state
+
+23. tester fresh-login result
+
+24. dashboard result
+
+25. reopen result
+
+26. files result
+
+27. preview result
+
+28. idle WebSocket/conversation result
+
+29. legacy-cookie result
+
+30. logout revocation result
+
+31. exact-old-session rejection result
+
+32. fresh-login-after-logout result
+
+33. authenticated network-audit result
+
+34. Publish UI safety result
+
+35. Replit-development-off result
+
+36. final PUBLIC_GENERATED_APPS_ENABLED state
+
+37. frozen runtime Worker version
+
+38. frozen control-plane Worker version
+
+39. confirmation app.buildcustom.ai untouched
+
+40. confirmation *.apps.buildcustom.ai untouched
+
+41. confirmation public gateway untouched
+
+42. confirmation marketing/public Replit deployment untouched
+
+43. remaining HIGH risks
+
+44. remaining MEDIUM risks
+
+45. whether TASK 8D + remaining TASK 8C acceptance is ACCEPTED or NOT ACCEPTED
+
+46. whether we are READY for app.buildcustom.ai reassignment
+
+47. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CUT OVER app.buildcustom.ai.
+DO NOT SWITCH *.apps.buildcustom.ai.
