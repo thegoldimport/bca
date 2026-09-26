@@ -73,6 +73,7 @@ import {
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import logoMark from "@/assets/logo-mark.png";
+import { publicGeneratedAppUrl, usePublicCapabilities } from "@/hooks/use-public-capabilities";
 import previewPortfolio from "@/assets/preview-portfolio.jpg";
 import previewFitness from "@/assets/preview-fitness.jpg";
 import previewGame from "@/assets/preview-game.jpg";
@@ -650,7 +651,7 @@ function PreviewMockup({ device }: { device: "desktop" | "tablet" | "mobile" }) 
   );
 }
 
-type RuntimeRelease = { id: number; commitHash: string; deploymentUrl: string; createdAt: string };
+type RuntimeRelease = { id: number; commitHash: string; deploymentUrl?: string | null; publicAvailable?: boolean; createdAt: string };
 type RuntimeBuilderTurn = {
   id: number;
   mode: "plan" | "build";
@@ -905,6 +906,7 @@ function clearNativeOperationBaseline(projectId: number): void {
 function EditorPage() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+  const { publicGeneratedAppsEnabled } = usePublicCapabilities();
   const planEntitlement = getPlanEntitlement(getAppUser()?.plan);
   const [, routeParams] = useRoute("/app/editor/:id");
   const projectId = Number(routeParams?.id || 0);
@@ -929,6 +931,8 @@ function EditorPage() {
   const [loadingTurnFile, setLoadingTurnFile] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
   const [productionUrl, setProductionUrl] = useState("");
+  const [nativeDeploymentComplete, setNativeDeploymentComplete] = useState(false);
+  const [nativePublicAvailable, setNativePublicAvailable] = useState<boolean | null>(null);
   const [previewEnvironment, setPreviewEnvironment] = useState<"development" | "production">("development");
   const [publishing, setPublishing] = useState(false);
   const nativePublishingRef = useRef(false);
@@ -1155,6 +1159,11 @@ function EditorPage() {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
+    setProductionUrl("");
+    setNativeDeploymentComplete(false);
+    setNativePublicAvailable(null);
+    setReleases([]);
+    setSubdomainSlug("");
     setRuntimeCapabilityError("");
     const loadRuntime = async () => {
       try {
@@ -1166,7 +1175,12 @@ function EditorPage() {
         setRuntimeCapability({ projectId, nativeThink: isNativeThink, status });
         setNativeProgress([]);
         if (isNativeThink) {
-          setProductionUrl(status.deploymentUrl || "");
+          setProductionUrl("");
+          if (status.deploymentUrl || status.publicAvailable === true
+            || status.published === true || status.deploymentComplete === true) {
+            setNativeDeploymentComplete(true);
+          }
+          if (typeof status.publicAvailable === "boolean") setNativePublicAvailable(status.publicAvailable);
           setPreviewEnvironment("development");
           const nativePreviewUrl = status.previewUrl || status.previewURL || status.state?.previewUrl || status.state?.previewURL;
           setPreviewUrl(typeof nativePreviewUrl === "string" ? nativePreviewUrl : "");
@@ -1231,9 +1245,17 @@ function EditorPage() {
     const response = await fetch(`/api/projects/${projectId}/runtime/releases`, { headers: authHeaders() });
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
-      const nextReleases = data.releases || [];
+      const releaseRows = Array.isArray(data.releases) ? data.releases : [];
+      const latestRelease = releaseRows[0];
+      const nextReleases = releaseRows.map((release: RuntimeRelease) => {
+        const { deploymentUrl: _privateDeploymentUrl, ...safeRelease } = release;
+        return safeRelease;
+      });
       setReleases(nextReleases);
-      if (nextReleases[0]?.deploymentUrl) setProductionUrl(nextReleases[0].deploymentUrl);
+      if (activeProjectIdRef.current === projectId && releaseRows.length > 0) {
+        setNativeDeploymentComplete(true);
+        if (typeof latestRelease?.publicAvailable === "boolean") setNativePublicAvailable(latestRelease.publicAvailable);
+      }
     }
   };
 
@@ -2607,10 +2629,15 @@ function EditorPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || "The project could not be published.");
-      const publicUrl = typeof data.deploymentUrl === "string" ? data.deploymentUrl : "";
-      if (!publicUrl) throw new Error("The project was published, but no public address was returned.");
-      setProductionUrl(publicUrl);
-      setPublishFlow({ status: "complete", message: "Published" });
+      const publicAvailable = typeof data.publicAvailable === "boolean"
+        ? data.publicAvailable
+        : publicGeneratedAppsEnabled;
+      setNativeDeploymentComplete(true);
+      setNativePublicAvailable(publicAvailable);
+      setPublishFlow({
+        status: "complete",
+        message: publicAvailable ? "Published" : "Published internally; public apps are not enabled yet.",
+      });
       await loadReleases().catch(() => undefined);
     } catch (error: any) {
       setPublishFlow({ status: "failed", message: error.message || "The project could not be published." });
@@ -2680,12 +2707,19 @@ function EditorPage() {
   };
 
   const deviceWidths = { desktop: "100%", tablet: "768px", mobile: "390px" };
+  const nativeHasDeployment = nativeDeploymentComplete;
+  const nativePublicUrl = publicGeneratedAppUrl(
+    subdomainSlug,
+    publicGeneratedAppsEnabled && nativePublicAvailable !== false,
+  );
   const deviceButtons = [
     { id: "desktop" as const, icon: Monitor, label: "Desktop" },
     { id: "tablet" as const, icon: Tablet, label: "Tablet" },
     { id: "mobile" as const, icon: Smartphone, label: "Mobile" },
   ];
-  const activePreviewUrl = previewEnvironment === "development" ? previewUrl : productionUrl;
+  const activePreviewUrl = previewEnvironment === "development"
+    ? previewUrl
+    : nativeThink ? (nativeHasDeployment ? nativePublicUrl || "" : "") : productionUrl;
   const managedCnameTarget = subdomainSlug ? `${subdomainSlug}.apps.buildcustom.ai` : "";
   const activePreviewSrc = (() => {
     if (!activePreviewUrl || previewEnvironment === "production" || previewPath === "/") return activePreviewUrl;
@@ -3282,7 +3316,7 @@ function EditorPage() {
               <div className="truncate text-center">
                 {activePreviewUrl ? customDomain || activePreviewUrl : (
                 previewEnvironment === "production"
-                  ? "Not published yet"
+                  ? nativeThink && nativeHasDeployment ? "Not publicly available yet" : "Not published yet"
                   : projectId ? "Waiting for an Agent preview…" : "Select a runtime project"
                 )}
               </div>
@@ -3291,7 +3325,7 @@ function EditorPage() {
           {canPublishNative && <button
             onClick={() => {
               setPublishDrawerOpen(true);
-              setPublishFlow(productionUrl
+              setPublishFlow(nativeHasDeployment
                 ? { status: "complete", message: "Published" }
                 : { status: "idle", message: "" });
             }}
@@ -3545,13 +3579,15 @@ function EditorPage() {
                   {nativeThink ? (
                     <section className={`space-y-5 rounded-2xl border p-4 ${theme === "dark" ? "border-white/10 bg-white/[0.03]" : "border-gray-200 bg-gray-50"}`} data-testid="native-publish-panel">
                       <div>
-                        <label htmlFor="native-publish-slug" className="mb-2 block text-xs font-semibold">Project address (optional)</label>
+                        <label htmlFor="native-publish-slug" className="mb-2 block text-xs font-semibold">
+                          {publicGeneratedAppsEnabled ? "Project address (optional)" : "Reserved project address (not live)"}
+                        </label>
                         <div className={`flex overflow-hidden rounded-xl border focus-within:border-cyan-400/60 ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-white"}`}>
                           <input
                             id="native-publish-slug"
                             value={subdomainSlug.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "").slice(0, 63)}
                             onChange={(event) => setSubdomainSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "").slice(0, 63))}
-                            disabled={Boolean(productionUrl) || publishing}
+                            disabled={nativeHasDeployment || publishing}
                             maxLength={63}
                             aria-label="Project address"
                             className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-right text-sm outline-none disabled:cursor-not-allowed disabled:opacity-55"
@@ -3564,16 +3600,31 @@ function EditorPage() {
                         <div className="flex items-center gap-2">
                           {publishing ? <RefreshCw size={15} className="animate-spin text-cyan-400" /> :
                             publishFlow.status === "failed" ? <X size={15} className="text-red-400" /> :
-                            publishFlow.status === "complete" || productionUrl ? <Check size={15} className="text-emerald-400" /> :
+                            publishFlow.status === "complete" || nativeHasDeployment ? <Check size={15} className="text-emerald-400" /> :
                             <Cloud size={15} className="text-cyan-400" />}
-                          <span className="text-sm font-semibold">{publishing ? "Publishing" : publishFlow.status === "failed" ? "Publish failed" : (publishFlow.status === "complete" || productionUrl) ? "Published" : "Ready to publish"}</span>
+                          <span className="text-sm font-semibold">
+                            {publishing ? "Publishing" : publishFlow.status === "failed" ? "Publish failed"
+                              : nativeHasDeployment ? (nativePublicUrl ? "Published" : "Published internally")
+                              : publishFlow.status === "complete" ? (nativePublicUrl ? "Published" : "Published internally")
+                              : "Ready to publish"}
+                          </span>
                         </div>
                         {publishFlow.status === "failed" && <p role="alert" className={`mt-2 text-xs ${theme === "dark" ? "text-red-300" : "text-red-600"}`}>{publishFlow.message}</p>}
-                        {productionUrl && (
-                          <a href={productionUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex max-w-full items-center gap-1.5 break-all text-xs font-semibold text-cyan-400 underline" data-testid="link-native-public-url">
-                            <ExternalLink size={13} className="shrink-0" />{productionUrl}
+                        {nativePublicUrl && nativeHasDeployment ? (
+                          <a href={nativePublicUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex max-w-full items-center gap-1.5 break-all text-xs font-semibold text-cyan-400 underline" data-testid="link-native-public-url">
+                            <ExternalLink size={13} className="shrink-0" />{nativePublicUrl}
                           </a>
-                        )}
+                        ) : nativeHasDeployment || !publicGeneratedAppsEnabled || nativePublicAvailable === false ? (
+                          <p className={`mt-2 text-xs ${theme === "dark" ? "text-amber-200/80" : "text-amber-700"}`} data-testid="native-public-apps-disabled">
+                            {nativeHasDeployment
+                              ? publicGeneratedAppsEnabled
+                                ? "This deployment is not publicly available yet."
+                                : "This deployment is internal only; its private address is hidden until public apps are enabled."
+                              : publicGeneratedAppsEnabled
+                                ? "A public address is not available yet."
+                                : "Public generated apps are not enabled yet. This reserved address will not be live until the public gateway is enabled."}
+                          </p>
+                        ) : null}
                       </div>
                       <button
                         type="button"
@@ -3582,7 +3633,7 @@ function EditorPage() {
                         className="w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                         data-testid="button-publish-native"
                       >
-                        {publishing ? "Publishing…" : productionUrl ? "Publish updates" : "Publish"}
+                        {publishing ? "Publishing…" : nativeHasDeployment ? "Publish updates" : "Publish"}
                       </button>
                     </section>
                   ) : (

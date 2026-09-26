@@ -1,4 +1,5 @@
 import { RuntimeIdentityError } from "./runtime-identity";
+import { controlOriginForRequest, configuredControlOrigin } from "./control-origin";
 
 const LAUNCH_RUNTIME_ORIGIN = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
 const PREVIEW_PATH = "/_private_preview";
@@ -14,6 +15,7 @@ export type LaunchPreviewEnv = {
   AUTH_RUNTIME?: Fetcher;
   AUTH_RUNTIME_URL?: string;
   CONTROL_PLANE_ALLOWED_ORIGIN?: string;
+  CONTROL_PLANE_CANARY_ORIGIN?: string;
   STAGING_ALLOWED_ORIGIN?: string;
 };
 
@@ -36,7 +38,7 @@ function runtimeOrigin(env: LaunchPreviewEnv): string {
 }
 
 function controlOrigin(env: LaunchPreviewEnv): string {
-  const value = env.CONTROL_PLANE_ALLOWED_ORIGIN || env.STAGING_ALLOWED_ORIGIN || "";
+  const value = configuredControlOrigin(env);
   try {
     const parsed = new URL(value);
     if (parsed.protocol !== "https:" || parsed.origin !== value || parsed.pathname !== "/"
@@ -124,11 +126,11 @@ function fromRuntimePreviewUrl(
 }
 
 /** Convert a verified runtime URL into a same-origin, branch-scoped preview URL. */
-export function launchPreviewProxyUrl(env: LaunchPreviewEnv, agentId: string, value: unknown): string | null {
+export function launchPreviewProxyUrl(env: LaunchPreviewEnv, agentId: string, value: unknown, request?: Request): string | null {
   if (!isLaunch(env)) return null;
   const capability = fromRuntimePreviewUrl(env, agentId, value);
   if (!capability) return null;
-  return capabilityPrefix(controlOrigin(env), capability);
+  return capabilityPrefix(request ? controlOriginForRequest(env, request) : controlOrigin(env), capability);
 }
 
 async function previewCookieName(agentId: string, branch: string): Promise<string> {
@@ -369,7 +371,7 @@ export async function handleLaunchPreviewProxy(
   const requestUrl = new URL(request.url);
   let origin: string;
   try {
-    origin = controlOrigin(env);
+    origin = controlOriginForRequest(env, request);
     runtimeOrigin(env);
   } catch {
     return simpleResponse(503, "Private preview is unavailable.");

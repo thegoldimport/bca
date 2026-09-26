@@ -478,6 +478,7 @@ test("launch status preserves only the path-scoped preview capability cookie", a
     nativeThink: true,
     previewUrl: "/_private_preview/agent/main/",
     deploymentUrl: null,
+    publicAvailable: false,
   });
 });
 
@@ -698,7 +699,7 @@ test("publishing capabilities, protocol header, legacy path, recovery, and owner
   const f = fixture();
   const get = new Request("https://control.test/api", { method: "GET" });
   const capability = await handleNativeThinkPublish(f.env, get, project, "publishing-capabilities", owner);
-  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2" });
+  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2", publicGeneratedAppsEnabled: true });
 
   const missingProtocol = await handleNativeThinkPublish(
     f.env, f.request({ "X-Publish-Protocol": "wrong" }), project, "publish-immutable-v2", owner, {}, f.dependencies,
@@ -732,7 +733,7 @@ test("launch native publish exposes owner-scoped capabilities and requires its p
   const capability = await handleNativeThinkPublish(
     f.env, new Request("https://control.test/api", { method: "GET" }), project, "publishing-capabilities", owner,
   );
-  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2" });
+  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2", publicGeneratedAppsEnabled: false });
   const response = await publish(f);
   assert.equal(response?.status, 503);
   assert.match((await response!.json()).message, /private launch apps gateway/i);
@@ -744,7 +745,9 @@ test("launch owner publish verifies the immutable dispatch candidate before the 
   const response = await publish(f);
   assert.equal(response?.status, 201, await response?.clone().text());
   const result = await response!.json() as any;
-  assert.equal(result.deploymentUrl, `https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p/${slug}/`);
+  assert.equal(result.deploymentUrl, null);
+  assert.equal(result.publicAvailable, false);
+  assert.equal(result.release.deploymentUrl, null);
   assert.equal(f.state.route && JSON.parse(f.state.route).scriptName, validScript(revisionA));
   const routeWrite = f.events.indexOf(`kv:${validScript(revisionA)}`);
   const candidateReady = f.events.indexOf("ready:buildcustom-apps-gateway-launch.thegoldimport.workers.dev");

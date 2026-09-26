@@ -55,11 +55,13 @@
     "STAGING_ROUTE_KV_ID": "248ac5b6821a475794a7fe3d2b0c3718",
     "CONTROL_PLANE_DISPATCH_NAMESPACE": "buildcustom-vibesdk-launch-dispatch",
     "STAGING_DISPATCH_NAMESPACE": "buildcustom-vibesdk-launch-dispatch",
-    "CONTROL_PLANE_ALLOWED_ORIGIN": "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
-    "STAGING_ALLOWED_ORIGIN": "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
+    "CONTROL_PLANE_ALLOWED_ORIGIN": "https://app.buildcustom.ai",
+    "STAGING_ALLOWED_ORIGIN": "https://app.buildcustom.ai",
+    "CONTROL_PLANE_CANARY_ORIGIN": "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
+    "PUBLIC_GENERATED_APPS_ENABLED": "false",
     "STAGING_MANAGED_GATEWAY_URL": "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p",
     "STAGING_LOGIN_ENABLED": "true",
-    "STAGING_REGISTRATION_ENABLED": "true",
+    "STAGING_REGISTRATION_ENABLED": "false",
     "RUNTIME_OPERATIONS_ENABLED": "true"
   }
 }

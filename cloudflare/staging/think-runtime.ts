@@ -3,6 +3,7 @@ import { createFsFromVolume, Volume } from "memfs";
 import { refreshProjectAgent } from "./project-initialization";
 import { RuntimeIdentityError } from "./runtime-identity";
 import { launchPreviewCookie, launchPreviewProxyUrl } from "./preview-proxy";
+import { controlOriginForRequest } from "./control-origin";
 
 const STOCK_RUNTIME_URL = "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev";
 const LAUNCH_RUNTIME_URL = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
@@ -810,7 +811,7 @@ export async function handleThinkRuntime(
   operation: string,
 ): Promise<Response | null> {
   if (project.runtime_provider !== "stock-think" && !project.creation_key) return null;
-  const origin = env.CONTROL_PLANE_ALLOWED_ORIGIN || env.STAGING_ALLOWED_ORIGIN || "";
+  const origin = controlOriginForRequest(env, request);
   const agentId = project.agent_id || "";
   if (operation === "ws" && request.method === "GET") return bridgeWebSocket(env, request, project, origin);
 
@@ -851,7 +852,7 @@ export async function handleThinkRuntime(
       listCurrentFiles(env, request, linkedAgentId).then((files) => files.length),
     ]);
     const previewUrl = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
-      ? launchPreviewProxyUrl(env, linkedAgentId, snapshot.previewUrl)
+      ? launchPreviewProxyUrl(env, linkedAgentId, snapshot.previewUrl, request)
       : snapshot.previewUrl;
     const previewCookie = await launchPreviewCookie(env, linkedAgentId, snapshot.previewUrl);
     return Response.json({
@@ -886,7 +887,7 @@ export async function handleThinkRuntime(
     const url = allowedPreviewUrl(env, linkedAgentId, data?.previewURL || data?.url);
     if (!url) return Response.json({ message: "The project preview could not be verified." }, { status: 502 });
     const previewUrl = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
-      ? launchPreviewProxyUrl(env, linkedAgentId, url)
+      ? launchPreviewProxyUrl(env, linkedAgentId, url, request)
       : url;
     if (!previewUrl) return Response.json({ message: "The project preview could not be verified." }, { status: 502 });
     const previewCookie = await launchPreviewCookie(env, linkedAgentId, url);

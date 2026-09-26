@@ -12,8 +12,9 @@ import { StagingPublishNotReadyError, waitForStagingAppReady } from "./staging/p
 import { handleStagingCustomerAuth, resolveRuntimeProductUser, RuntimeIdentityError } from "./staging/runtime-identity";
 import { createProductProject, initializeProjectAgent, refreshProjectAgent } from "./staging/project-initialization";
 import { handleThinkRuntime } from "./staging/think-runtime";
-import { handleNativeThinkPublish } from "./staging/native-publish";
+import { customerDeploymentUrl, handleNativeThinkPublish } from "./staging/native-publish";
 import { handleLaunchPreviewProxy, isPreviewProductApiRequest } from "./staging/preview-proxy";
+import { controlOriginForRequest } from "./staging/control-origin";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
 // It has no active binding and is not used by the simplified control plane.
@@ -35,6 +36,8 @@ export type Env = {
   STAGING_DISPATCH_NAMESPACE: string;
   STAGING_ALLOWED_ORIGIN: string;
   CONTROL_PLANE_ALLOWED_ORIGIN?: string;
+  CONTROL_PLANE_CANARY_ORIGIN?: string;
+  PUBLIC_GENERATED_APPS_ENABLED?: string;
   CONTROL_PLANE_ROUTE_KV_ID?: string;
   CONTROL_PLANE_DISPATCH_NAMESPACE?: string;
   STAGING_LOGIN_ENABLED: string;
@@ -65,7 +68,7 @@ const jsonArray = (value: unknown): unknown[] => {
     return [];
   }
 };
-export const serializeProject = (row: any) => ({
+export const serializeProject = (row: any, launchEnv?: Env) => ({
   id: row.id,
   userId: row.user_id ?? row.userId,
   name: row.name,
@@ -81,7 +84,8 @@ export const serializeProject = (row: any) => ({
     ? { runtimeStatus: row.initialization_status ?? (row.agent_id ? "ready" : "missing"), runtimeError: row.initialization_error ?? null }
     : {}),
   previewUrl: row.preview_url ?? row.previewUrl ?? null,
-  deploymentUrl: row.deployment_url ?? row.deploymentUrl ?? null,
+  deploymentUrl: launchEnv ? customerDeploymentUrl(launchEnv, row.subdomain_slug ?? row.subdomainSlug)
+    : row.deployment_url ?? row.deploymentUrl ?? null,
   previewImageUrl: row.has_preview_image && (row.deployment_url ?? row.deploymentUrl)
     ? `/api/public/projects/${row.id}/preview-image?v=${encodeURIComponent(row.seo_updated_at || "")}` : null,
 });
@@ -199,12 +203,13 @@ export default {
     try {
       assertControlPlaneEnvironment(env);
       assertSafeStagingTarget(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
-      assertOrigin(request, env.CONTROL_PLANE_ALLOWED_ORIGIN || env.STAGING_ALLOWED_ORIGIN);
+      const controlOrigin = controlOriginForRequest(env, request);
+      assertOrigin(request, controlOrigin);
       const url = new URL(request.url);
       const launchProfile = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch";
       const previewProxyResponse = await handleLaunchPreviewProxy(env, request);
       if (previewProxyResponse) return previewProxyResponse;
-      if (launchProfile && isPreviewProductApiRequest(request, env.CONTROL_PLANE_ALLOWED_ORIGIN || env.STAGING_ALLOWED_ORIGIN || "")) {
+      if (launchProfile && isPreviewProductApiRequest(request, controlOrigin)) {
         return json({ message: "Not found" }, { status: 404 });
       }
       const input = (request.method === "GET" || request.method === "HEAD") ? {} : await readBody(request);
@@ -220,9 +225,15 @@ export default {
       const stagingCustomer = env.ENVIRONMENT === "staging";
       const launchCustomer = launchProfile;
       const runtimeCustomer = stagingCustomer || launchCustomer;
+      if (url.pathname === "/api/public/capabilities" && request.method === "GET") {
+        return json({
+          registrationEnabled: env.STAGING_REGISTRATION_ENABLED === "true",
+          publicGeneratedAppsEnabled: launchProfile ? env.PUBLIC_GENERATED_APPS_ENABLED === "true" : true,
+        });
+      }
       if (runtimeCustomer) {
         if (url.pathname === "/api/auth/register" && env.STAGING_REGISTRATION_ENABLED !== "true") {
-          return json({ message: "Staging registration is closed." }, { status: 403 });
+          return json({ message: "Registration is closed." }, { status: 403 });
         }
         const response = await handleStagingCustomerAuth(env, request, url.pathname, input);
         if (response) return response;
@@ -290,7 +301,7 @@ export default {
       const stagingLinkFields = runtimeCustomer ? ",l.initialization_status,l.initialization_error,l.runtime_provider" : "";
       const projectSql = `SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.id=? AND p.user_id=?`;
       const project = projectId === null ? null : await env.DB.prepare(projectSql).bind(projectId, user.id).first<any>();
-      const projectList = async () => (await env.DB.prepare(`SELECT p.*,l.agent_id,l.preview_url,l.deployment_url${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC`).bind(user.id).all()).results.map(serializeProject);
+      const projectList = async () => (await env.DB.prepare(`SELECT p.*,l.agent_id,l.preview_url,l.deployment_url,l.subdomain_slug${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC`).bind(user.id).all()).results.map((row) => serializeProject(row, launchCustomer ? env : undefined));
       if (url.pathname === "/api/projects" && request.method === "GET") return json(await projectList());
       if (url.pathname === "/api/projects" && request.method === "POST") {
         if (runtimeCustomer && !request.headers.get("X-CSRF-Token")) {
@@ -301,7 +312,7 @@ export default {
         if (runtimeCustomer) {
           const result = await createProductProject(env, request, user.id, details);
           const created = await env.DB.prepare(projectSql).bind(result.project.id, user.id).first<any>();
-          return json(serializeProject(created), {
+          return json(serializeProject(created, launchCustomer ? env : undefined), {
             status: result.created ? (result.link?.initialization_status === "ready" ? 201 : 202) : 200,
           });
         }
@@ -313,9 +324,9 @@ export default {
       if (project && request.method === "GET" && projectMatch) {
         if (runtimeCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
           await refreshProjectAgent(env, request, project);
-          return json(serializeProject(await env.DB.prepare(projectSql).bind(project.id, user.id).first()));
+          return json(serializeProject(await env.DB.prepare(projectSql).bind(project.id, user.id).first(), launchCustomer ? env : undefined));
         }
-        return json(serializeProject(project));
+        return json(serializeProject(project, launchCustomer ? env : undefined));
       }
       if (project && request.method === "PUT" && projectMatch) {
         if (launchCustomer && !request.headers.get("X-CSRF-Token")) return json({ message: "A secure project request is required." }, { status: 403 });
@@ -340,7 +351,7 @@ export default {
         }
         if (runtimeCustomer && operation === "initialize" && request.method === "POST") {
           await initializeProjectAgent(env, request, project);
-          return json(serializeProject(await env.DB.prepare(projectSql).bind(id, user.id).first()));
+          return json(serializeProject(await env.DB.prepare(projectSql).bind(id, user.id).first(), launchCustomer ? env : undefined));
         }
         // A project may be visible between its D1 insert and link claim.
         // Its creation key still identifies the stock-only staging path.
@@ -381,7 +392,9 @@ export default {
         if (!readOnly && !rateLimit(`runtime:${user.id}:${id}`, 30, 60_000)) return json({ message: "Too many runtime mutations." }, { status: 429 });
         if (operation === "status" && request.method === "GET") {
           const status = await adapter.status(runtimeProject);
-          return json({ ...status, previewUrl: status.state?.previewUrl || project.preview_url || null, deploymentUrl: project.deployment_url || null, previewImageUrl: serializeProject(project).previewImageUrl });
+          return json({ ...status, previewUrl: status.state?.previewUrl || project.preview_url || null,
+            deploymentUrl: launchCustomer ? customerDeploymentUrl(env, project.subdomain_slug) : project.deployment_url || null,
+            previewImageUrl: serializeProject(project).previewImageUrl });
         }
         if (operation === "console" && request.method === "GET") {
           const status = await adapter.status(runtimeProject);

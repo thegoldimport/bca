@@ -683,12 +683,24 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await worker.fetch(new Request(`${origin}/api/projects`, {
     headers: { Cookie: "__Host-bc_session=legacy-session" },
   }), env)).status, 401);
+  // Stale legacy cookies are not a new stock session. A fresh login replaces
+  // their host-scoped values; closed registration does not disable login.
+  const oldAccess = a.jar.get("accessToken")!;
+  a.jar.set("accessToken", "stale-legacy-session");
+  a.jar.set("csrf-token", "stale-legacy-csrf");
+  assert.equal(await (await a.send("/api/auth/me")).json(), null);
+  assert.equal((await a.send("/api/projects")).status, 401);
+  env.STAGING_REGISTRATION_ENABLED = "false";
+  assert.equal((await a.auth("/api/auth/register", { name: "Denied", email: "denied@example.test", password: "not-created" })).status, 403);
+  assert.equal((await a.auth("/api/auth/login", { email: "a@example.test", password: "Str0ng!PasswordA" })).status, 200);
+  assert.notEqual(a.jar.get("accessToken"), oldAccess);
+  assert.notEqual(a.jar.get("accessToken"), "stale-legacy-session");
 
   // A new page request with the same cookie restores the same identity.
   assert.equal((await (await a.send("/api/auth/me")).json() as { id: string }).id, aMe.id);
   const oldCookie = [...a.jar].map(([key, value]) => `${key}=${value}`).join("; ");
   assert.equal((await a.auth("/api/auth/logout", {})).status, 204);
-  assert.ok(stock.calls.includes("/api/auth/sessions/runtime-session-1"));
+  assert.ok(stock.calls.some((path) => /^\/api\/auth\/sessions\/runtime-session-\d+$/.test(path)));
   assert.equal(await (await a.send("/api/auth/me")).json(), null);
   assert.equal((await a.send("/api/projects")).status, 401);
   assert.equal((await worker.fetch(new Request(`${origin}/api/projects`, { headers: { Cookie: oldCookie } }), env)).status, 401);

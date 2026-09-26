@@ -1,23 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { csrfToken, setAppUser } from "@/lib/auth";
+import { usePublicCapabilities } from "@/hooks/use-public-capabilities";
 
 export default function AppAuth() {
   const [location, navigate] = useLocation();
-  const [mode, setMode] = useState<"login" | "signup">(location.includes("signup") ? "signup" : "login");
+  const { registrationEnabled } = usePublicCapabilities();
+  const [mode, setMode] = useState<"login" | "signup">(
+    location.includes("signup") && registrationEnabled ? "signup" : "login",
+  );
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+
+  useEffect(() => {
+    if (location.includes("signup") && registrationEnabled) setMode("signup");
+    else if (!registrationEnabled || !location.includes("signup")) setMode("login");
+  }, [location, registrationEnabled]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (mode === "signup" && !registrationEnabled) {
+      setMode("login");
+      setError("New account registration is currently closed. Sign in with an existing account.");
+      return;
+    }
     setLoading(true);
     try {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
@@ -61,8 +75,15 @@ export default function AppAuth() {
             {mode === "login" ? "Welcome back" : "Create your account"}
           </h1>
           <p className="text-white/40 text-sm">
-            {mode === "login" ? "Sign in to your BuildCustom.Ai dashboard" : "Start building with AI today"}
+            {mode === "login"
+              ? "Sign in to your BuildCustom.Ai dashboard"
+              : "Start building with AI today"}
           </p>
+          {location.includes("signup") && !registrationEnabled && (
+            <p className="mt-3 text-sm text-amber-300" role="status" data-testid="registration-closed-notice">
+              New account registration is currently closed. Existing users can sign in below.
+            </p>
+          )}
         </div>
 
         <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-8">
@@ -137,24 +158,29 @@ export default function AppAuth() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          {registrationEnabled && <div className="mt-6 text-center">
             <p className="text-white/30 text-sm">
               {mode === "login" ? "Don't have an account?" : "Already have an account?"}
               {" "}
               <button
-                onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }}
+                onClick={() => {
+                  const nextMode = mode === "login" ? "signup" : "login";
+                  setMode(nextMode);
+                  setError("");
+                  navigate(nextMode === "signup" ? "/app/signup" : "/app/login");
+                }}
                 className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
                 data-testid="button-switch-mode"
               >
                 {mode === "login" ? "Sign up free" : "Sign in"}
               </button>
             </p>
-          </div>
+          </div>}
         </div>
 
-        <p className="text-center text-white/20 text-xs mt-6">
+        {registrationEnabled && <p className="text-center text-white/20 text-xs mt-6">
           By signing up you agree to our Terms of Service and Privacy Policy
-        </p>
+        </p>}
       </motion.div>
     </div>
   );

@@ -17,6 +17,7 @@ type NativeEnv = {
   STAGING_ROUTE_KV_ID: string;
   ENVIRONMENT: string;
   CONTROL_PLANE_PROFILE?: string;
+  PUBLIC_GENERATED_APPS_ENABLED?: string;
   STAGING_MANAGED_GATEWAY_URL?: string;
   STAGING_GATEWAY?: Fetcher;
 } & Parameters<typeof openStockAgentWebSocket>[0];
@@ -393,10 +394,22 @@ export async function verifyNativePublicRoute(
   }
 }
 
-function mapRelease(row: any) {
+export function customerDeploymentUrl(env: NativeEnv, slug: unknown): string | null {
+  if (!launchProfile(env)) return null;
+  return env.PUBLIC_GENERATED_APPS_ENABLED === "true" && validNativeSlug(slug)
+    ? `https://${slug}.apps.buildcustom.ai` : null;
+}
+
+function visibleDeploymentUrl(env: NativeEnv, row: any): string | null {
+  return launchProfile(env) ? customerDeploymentUrl(env, row.slug) : row.public_url;
+}
+
+function mapRelease(row: any, env: NativeEnv) {
   return {
     id: row.id, projectId: row.project_id, commitHash: row.revision, scriptName: row.script_name,
-    subdomainSlug: row.slug, deploymentUrl: row.public_url, status: row.status, createdAt: row.created_at,
+    subdomainSlug: row.slug, deploymentUrl: visibleDeploymentUrl(env, row),
+    publicAvailable: !launchProfile(env) || Boolean(customerDeploymentUrl(env, row.slug)),
+    status: row.status, createdAt: row.created_at,
   };
 }
 
@@ -522,7 +535,8 @@ async function publishImmutable(
         409,
       );
     }
-    return Response.json({ deploymentUrl: already.public_url, release: mapRelease(already), alreadyPublished: true }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ deploymentUrl: visibleDeploymentUrl(env, already), release: mapRelease(already, env), alreadyPublished: true,
+      publicAvailable: !launch || Boolean(customerDeploymentUrl(env, already.slug)) }, { headers: { "Cache-Control": "no-store" } });
   }
   const prepared = launch
     ? await env.DB.prepare(
@@ -696,7 +710,8 @@ async function publishImmutable(
     const results = await env.DB.batch(statements);
     const row = results[1].results?.[0];
     if (!row) throw new Error("Native publish release could not be committed.");
-    return Response.json({ deploymentUrl: stableUrl, release: mapRelease(row), alreadyPublished: false }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    return Response.json({ deploymentUrl: visibleDeploymentUrl(env, row), release: mapRelease(row, env), alreadyPublished: false,
+      publicAvailable: !launch || Boolean(customerDeploymentUrl(env, row.slug)) }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (routeWritten && await env.STAGING_ROUTES.get(slug) === writtenRoute) {
       if (await ownsActivePublishClaim(env, project.id, claimToken)) {
@@ -740,7 +755,8 @@ export async function handleNativeThinkPublish(
   if (actor.id !== project.user_id) return errorResponse("Project not found", 404);
   if (operation === "publishing-capabilities" && request.method === "GET") {
     return Response.json(
-      { buildId: PUBLISH_BUILD_ID, publishProtocol: PUBLISH_PROTOCOL },
+      { buildId: PUBLISH_BUILD_ID, publishProtocol: PUBLISH_PROTOCOL,
+        publicGeneratedAppsEnabled: !launchProfile(env) || env.PUBLIC_GENERATED_APPS_ENABLED === "true" },
       { headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -760,7 +776,7 @@ export async function handleNativeThinkPublish(
   if (operation === "releases" && request.method === "GET") {
     const rows = await env.DB.prepare("SELECT * FROM native_publish_releases WHERE project_id=? ORDER BY created_at DESC,id DESC")
       .bind(project.id).all<any>();
-    return Response.json({ releases: rows.results.map(mapRelease) }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ releases: rows.results.map((row) => mapRelease(row, env)) }, { headers: { "Cache-Control": "no-store" } });
   }
   if (operation === "publishing-settings" && request.method === "GET") {
     const link = await env.DB.prepare("SELECT subdomain_slug FROM runtime_project_links WHERE project_id=?")
@@ -781,9 +797,10 @@ export async function handleNativeThinkPublish(
     }
     const previewCookie = launchPreviewCookie(response, env);
     const data = await response.json() as any;
-    const release = await env.DB.prepare("SELECT public_url FROM native_publish_releases WHERE project_id=? AND status='published' ORDER BY id DESC LIMIT 1")
+    const release = await env.DB.prepare("SELECT public_url,slug FROM native_publish_releases WHERE project_id=? AND status='published' ORDER BY id DESC LIMIT 1")
       .bind(project.id).first<any>();
-    return Response.json({ ...data, deploymentUrl: release?.public_url || null }, {
+    return Response.json({ ...data, deploymentUrl: release ? visibleDeploymentUrl(env, release) : null,
+      publicAvailable: Boolean(release && (!launchProfile(env) || customerDeploymentUrl(env, release.slug))) }, {
       headers: {
         "Cache-Control": "no-store",
         ...(previewCookie ? { "Set-Cookie": previewCookie } : {}),

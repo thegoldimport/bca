@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders, csrfToken } from "@/lib/auth";
+import { publicGeneratedAppUrl, usePublicCapabilities } from "@/hooks/use-public-capabilities";
 import { getDomain } from "tldts";
 import { actionableDomainDnsRecords, dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
@@ -84,6 +85,7 @@ function fmtDate(dateStr: string) {
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
 function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project: any; blogCount: number; projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
+  const { publicGeneratedAppsEnabled } = usePublicCapabilities();
   const queryClient = useQueryClient();
   const isWebsite = project.type === "website";
   const nativeThink = runtimeStatus?.nativeThink === true;
@@ -92,7 +94,7 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
   const [previewError, setPreviewError] = useState("");
   const publishingQuery = useQuery({
     queryKey: ["publishing-settings", projectId],
-    enabled: Boolean(runtimeStatus && !nativeThink),
+    enabled: Boolean(runtimeStatus),
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() });
       const body = await res.json().catch(() => ({}));
@@ -122,6 +124,9 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
     onError: (error: any) => setPreviewError(error.message),
   });
   const deploymentUrl = runtimeStatus?.deploymentUrl || "";
+  const publicDeploymentUrl = nativeThink
+    ? publicGeneratedAppUrl(publishingQuery.data?.subdomainSlug, publicGeneratedAppsEnabled)
+    : deploymentUrl;
   const nativePreviewUrl = nativeThink
     ? runtimeStatus?.previewUrl || runtimeStatus?.previewURL || runtimeStatus?.state?.previewUrl || runtimeStatus?.state?.previewURL || ""
     : "";
@@ -129,6 +134,7 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
     ? previewUrl || nativePreviewUrl
     : deploymentUrl || nativePreviewUrl || previewUrl;
   const published = Boolean(deploymentUrl);
+  const publiclyAvailable = nativeThink ? Boolean(published && publicDeploymentUrl) : published;
   const publishingSettings = publishingQuery.data;
 
   useEffect(() => {
@@ -139,7 +145,18 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
   return (
     <div className="space-y-6">
       <div className={`grid gap-4 ${isWebsite ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-3"}`}>
-        <StatCard label="Status" value={published ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)} sub={published ? new URL(deploymentUrl).hostname : "Not deployed"} trend={published ? "up" : "neutral"} />
+        <StatCard
+          label="Status"
+          value={nativeThink && !publicGeneratedAppsEnabled
+            ? "Not publicly available"
+            : nativeThink && published && !publiclyAvailable
+            ? "Not publicly available"
+            : publiclyAvailable ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+          sub={publiclyAvailable && publicDeploymentUrl
+            ? new URL(publicDeploymentUrl).hostname
+            : nativeThink && published ? "Public apps are not enabled yet" : "Not deployed"}
+          trend={publiclyAvailable ? "up" : "neutral"}
+        />
         {isWebsite && <StatCard label="Monthly Visitors" value="—" sub="Analytics not connected" trend="neutral" />}
         {isWebsite && <StatCard label="Blog Posts" value={String(blogCount)} sub="total posts" trend="neutral" />}
         {isWebsite && <StatCard label="SEO Score" value="—" sub="Configure SEO tab" trend="neutral" />}
@@ -207,8 +224,8 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
                   <Code2 size={15} /> Open in Builder
                 </button>
               </Link>
-              {deploymentUrl && (
-                <a href={deploymentUrl} target="_blank" rel="noopener noreferrer">
+              {publiclyAvailable && publicDeploymentUrl && (
+                <a href={publicDeploymentUrl} target="_blank" rel="noopener noreferrer">
                   <button className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${theme === "dark" ? "bg-white/10 text-white hover:bg-white/15" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                     data-testid="button-view-live"><ExternalLink size={15} /> View Live</button>
                 </a>
@@ -222,9 +239,14 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
               <button className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${theme === "dark" ? "bg-white/10 text-white hover:bg-white/15" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
                 data-testid="button-share"><Share2 size={15} /> Share</button>
             </div>
-            {nativeThink && deploymentUrl && (
+            {nativeThink && publiclyAvailable && publicDeploymentUrl && (
               <div className={`mt-4 rounded-xl border px-3 py-2.5 text-xs ${theme === "dark" ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`} data-testid="native-public-address">
-                Public address: <a href={deploymentUrl} target="_blank" rel="noopener noreferrer" className="ml-1 break-all font-semibold underline">{deploymentUrl}</a>
+                Public address: <a href={publicDeploymentUrl} target="_blank" rel="noopener noreferrer" className="ml-1 break-all font-semibold underline">{publicDeploymentUrl}</a>
+              </div>
+            )}
+            {nativeThink && published && !publiclyAvailable && (
+              <div className={`mt-4 rounded-xl border px-3 py-2.5 text-xs ${theme === "dark" ? "border-amber-400/20 bg-amber-400/[0.06] text-amber-200" : "border-amber-200 bg-amber-50 text-amber-800"}`} data-testid="native-public-apps-disabled">
+                This deployment is not publicly available yet. Its private address is hidden until public apps are enabled.
               </div>
             )}
           </GlassCard>
@@ -257,7 +279,9 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
                 <span className={`text-xs font-semibold ${published ? "text-emerald-400" : theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{published ? "Live" : "Draft"}</span>
               </div>
               <div className="flex items-start justify-between gap-3">
-                <span className={`shrink-0 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Included address</span>
+                <span className={`shrink-0 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+                  {nativeThink && !publicGeneratedAppsEnabled ? "Reserved address (not live)" : "Included address"}
+                </span>
                 <span className={`break-all text-right text-xs font-medium ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>
                   {publishingSettings?.subdomainSlug ? `${publishingSettings.subdomainSlug}.apps.buildcustom.ai` : "Not assigned"}
                 </span>
@@ -644,7 +668,7 @@ export function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId
   );
 }
 
-function ProjectSettingsTab({ project, projectId, runtimeStatus }: { project: any; projectId: number; runtimeStatus: any }) {
+function ProjectSettingsTab({ project, projectId, runtimeStatus, publicDeploymentUrl }: { project: any; projectId: number; runtimeStatus: any; publicDeploymentUrl?: string | null }) {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
@@ -714,7 +738,11 @@ function ProjectSettingsTab({ project, projectId, runtimeStatus }: { project: an
         <PublishingSettingsCard projectId={projectId} deploymentUrl={runtimeStatus?.deploymentUrl} />
       )}
 
-      <SEOTab projectId={projectId} project={project} deploymentUrl={runtimeStatus?.deploymentUrl} />
+      <SEOTab
+        projectId={projectId}
+        project={project}
+        deploymentUrl={runtimeStatus?.nativeThink === true ? publicDeploymentUrl || undefined : runtimeStatus?.deploymentUrl}
+      />
 
       <GlassCard>
         <h3 className="font-semibold mb-2 text-red-400">Danger Zone</h3>
@@ -2666,6 +2694,17 @@ export default function ProjectDetail() {
     },
     enabled: !!projectId,
   });
+  const { publicGeneratedAppsEnabled } = usePublicCapabilities();
+  const { data: runtimePublishingSettings } = useQuery({
+    queryKey: ["publishing-settings", projectId],
+    enabled: Boolean(projectId && runtimeStatus?.nativeThink === true),
+    queryFn: async () => {
+      const response = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "Unable to load publishing settings.");
+      return body;
+    },
+  });
 
   if (isLoading) {
     return (
@@ -2691,6 +2730,11 @@ export default function ProjectDetail() {
   const isWebsite = project.type === "website";
   const nativeThink = runtimeStatus?.nativeThink === true;
   const isPublished = Boolean(runtimeStatus?.deploymentUrl);
+  const nativePublicUrl = publicGeneratedAppUrl(runtimePublishingSettings?.subdomainSlug, publicGeneratedAppsEnabled);
+  const isPubliclyAvailable = nativeThink ? Boolean(isPublished && nativePublicUrl) : isPublished;
+  const headerPreviewUrl = nativeThink
+    ? runtimeStatus?.previewUrl || runtimeStatus?.previewURL || runtimeStatus?.state?.previewUrl || runtimeStatus?.state?.previewURL
+    : runtimeStatus?.deploymentUrl;
   const allTabs = isWebsite ? [...UNIVERSAL_TABS, ...WEBSITE_TABS] : UNIVERSAL_TABS;
   const headerPreview = PREVIEW_IMAGES[project.type] || PREVIEW_IMAGES.website;
 
@@ -2708,10 +2752,10 @@ export default function ProjectDetail() {
             <div className={`relative h-[104px] w-[144px] shrink-0 overflow-hidden rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-100"}`}>
               {runtimeStatus?.previewImageUrl ? (
                 <img src={runtimeStatus.previewImageUrl} alt={`${project.name} live page thumbnail`} className="h-full w-full object-cover" />
-              ) : runtimeStatus?.deploymentUrl || (nativeThink && (runtimeStatus?.previewUrl || runtimeStatus?.previewURL || runtimeStatus?.state?.previewUrl || runtimeStatus?.state?.previewURL)) ? (
+              ) : headerPreviewUrl ? (
                 <>
                   <iframe
-                    src={runtimeStatus.deploymentUrl || runtimeStatus.previewUrl || runtimeStatus.previewURL || runtimeStatus.state?.previewUrl || runtimeStatus.state?.previewURL}
+                    src={headerPreviewUrl}
                     title={`${project.name} runtime preview`}
                     tabIndex={-1}
                     aria-hidden="true"
@@ -2732,8 +2776,11 @@ export default function ProjectDetail() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className={`text-2xl font-display font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{project.name}</h1>
-                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isPublished ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" : project.status === "building" ? "bg-amber-500/15 text-amber-400 border border-amber-500/20" : theme === "dark" ? "bg-white/10 text-white/50 border border-white/10" : "bg-gray-100 text-gray-500 border border-gray-200"}`}>
-                  {isPublished && "● "}{isPublished ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isPubliclyAvailable ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" : project.status === "building" ? "bg-amber-500/15 text-amber-400 border border-amber-500/20" : theme === "dark" ? "bg-white/10 text-white/50 border border-white/10" : "bg-gray-100 text-gray-500 border border-gray-200"}`}>
+                  {isPubliclyAvailable && "● "}
+                  {nativeThink && (!publicGeneratedAppsEnabled || (isPublished && !isPubliclyAvailable))
+                    ? "Not publicly available"
+                    : isPubliclyAvailable ? "Published" : project.status.charAt(0).toUpperCase() + project.status.slice(1)}
                 </span>
               </div>
               <p className={`text-sm mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{project.description || "No description"}</p>
@@ -2799,17 +2846,25 @@ export default function ProjectDetail() {
             {activeTab === "files" && <FilesTab />}
             {activeTab === "console" && <ConsoleTab />}
             {activeTab === "history" && <HistoryTab projectId={projectId} runtimeStatus={runtimeStatus} />}
-            {activeTab === "settings" && <ProjectSettingsTab project={project} projectId={projectId} runtimeStatus={runtimeStatus} />}
+            {activeTab === "settings" && <ProjectSettingsTab project={project} projectId={projectId} runtimeStatus={runtimeStatus} publicDeploymentUrl={nativePublicUrl} />}
             {activeTab === "pages" && <PagesTab projectId={projectId} />}
             {activeTab === "blog" && <BlogTab projectId={projectId} />}
             {activeTab === "autoblogger" && <AutoBloggerTab projectId={projectId} />}
-            {activeTab === "seo" && <SEOTab projectId={projectId} project={project} deploymentUrl={runtimeStatus?.deploymentUrl} />}
+            {activeTab === "seo" && <SEOTab projectId={projectId} project={project} deploymentUrl={nativeThink ? nativePublicUrl || undefined : runtimeStatus?.deploymentUrl} />}
             {activeTab === "analytics" && <AnalyticsTab />}
             {activeTab === "domain" && (nativeThink ? (
               <GlassCard>
                 <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Project address</h3>
-                {runtimeStatus?.deploymentUrl ? (
-                  <a href={runtimeStatus.deploymentUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex break-all text-sm font-semibold text-cyan-400 underline" data-testid="native-domain-public-url">{runtimeStatus.deploymentUrl}</a>
+                {isPubliclyAvailable && nativePublicUrl ? (
+                  <a href={nativePublicUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex break-all text-sm font-semibold text-cyan-400 underline" data-testid="native-domain-public-url">{nativePublicUrl}</a>
+                ) : nativeThink && !publicGeneratedAppsEnabled ? (
+                  <p className={`mt-3 text-sm ${theme === "dark" ? "text-amber-200/80" : "text-amber-700"}`} data-testid="native-public-apps-disabled">
+                    Public generated apps are not enabled yet. The reserved address will become available after the public gateway is enabled.
+                  </p>
+                ) : isPublished ? (
+                  <p className={`mt-3 text-sm ${theme === "dark" ? "text-amber-200/80" : "text-amber-700"}`} data-testid="native-public-apps-disabled">
+                    This deployment is not publicly available yet. Its private address is hidden until public apps are enabled.
+                  </p>
                 ) : (
                   <div className="mt-3 flex items-center justify-between gap-4">
                     <p className={`text-sm ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Publish this project to make it available at a public address.</p>
