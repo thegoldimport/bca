@@ -1,0 +1,982 @@
+Task 8D implementation is accepted as the current private runtime candidate,
+but Task 8D + Task 8C acceptance remains incomplete exactly as reported.
+
+Do NOT reopen the local remote-D1 bootstrap approach.
+
+Do NOT retry the failed ambiguous registration request.
+
+Remote D1 already confirmed zero tester accounts, so we have a clean state.
+
+Proceed with ONLY:
+
+TASK 8E — ONE-TIME PRIVATE TESTER BOOTSTRAP + COMPLETE AUTHENTICATED ACCEPTANCE
+
+==================================================
+OBJECTIVE
+==================================================
+
+Create exactly ONE normal runtime account through the EXISTING normal
+AuthService.register path without opening general registration.
+
+Then permanently remove/disable the bootstrap mechanism and complete all
+remaining Task 8C authenticated acceptance checks.
+
+This is an ACCEPTANCE BOOTSTRAP ONLY.
+
+It is NOT product architecture.
+
+==================================================
+CURRENT CANDIDATES
+==================================================
+
+Runtime candidate:
+
+buildcustom-vibesdk-launch
+
+version:
+
+6ff58ba1-83f5-4951-a3b6-022160ea61c5
+
+Runtime baseline:
+
+PINNED STOCK VIBESDK
++
+TASK 4B
++
+TASK 6A
++
+TASK 8D
+
+Control-plane candidate:
+
+buildcustom-control-plane-launch
+
+version:
+
+82515081-9c15-4669-9e59-8ffa916331ec
+
+Current required states:
+
+runtime registration:
+CLOSED
+
+control-plane registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+app.buildcustom.ai:
+still legacy Worker
+
+*.apps.buildcustom.ai:
+still existing public gateway
+
+==================================================
+IMPORTANT CHANGE FROM PREVIOUS APPROACH
+==================================================
+
+Do NOT use a localhost Worker connected to remote D1.
+
+Do NOT fight Wrangler remote-D1 behavior further.
+
+Do NOT open normal runtime registration publicly.
+
+Do NOT insert a user/password directly into D1.
+
+Instead create a TEMPORARY, SECRET-PROTECTED, SINGLE-USE bootstrap path on the
+PRIVATE launch runtime that invokes the SAME normal runtime registration
+service used by normal registration.
+
+The resulting account must be a completely normal runtime user.
+
+==================================================
+STEP 1 — VERIFY CLEAN TESTER STATE
+==================================================
+
+Before changing anything:
+
+verify launch D1 contains ZERO users matching the intended tester email.
+
+Verify:
+
+runtime registration = CLOSED
+
+control-plane registration = CLOSED
+
+Do not proceed if an ambiguous tester account exists.
+
+==================================================
+STEP 2 — BOOTSTRAP DESIGN
+==================================================
+
+Implement the smallest possible temporary server-side bootstrap.
+
+It must satisfy ALL of these conditions:
+
+1. General registration remains CLOSED.
+
+2. Existing public registration endpoint continues returning:
+
+403 REGISTRATION_DISABLED
+
+3. Bootstrap requires a high-entropy secret stored ONLY in Replit/Cloudflare
+   secret storage.
+
+4. Bootstrap accepts ONLY the predetermined tester identity.
+
+5. Bootstrap can create AT MOST ONE account.
+
+6. Bootstrap calls the normal:
+
+AuthService.register
+
+or the exact same internal normal-registration logic.
+
+7. It must NOT write password data directly to D1.
+
+8. It must NOT create a different auth type.
+
+9. It must NOT create admin/super_admin.
+
+10. Resulting account must behave exactly like a normal role=user account.
+
+11. Bootstrap must fail closed on ambiguous results.
+
+12. Bootstrap must be removed or rendered permanently unusable immediately
+    after successful creation.
+
+==================================================
+STEP 3 — SECURE SECRETS
+==================================================
+
+Reuse the securely stored:
+
+BUILDCUSTOM_CUTOVER_TESTER_PASSWORD
+
+if it still exists.
+
+Create another high-entropy secret through an approved secure-secret mechanism
+for the one-time bootstrap authorization, for example:
+
+BUILDCUSTOM_TESTER_BOOTSTRAP_SECRET
+
+Do NOT print either secret.
+
+Do NOT put either secret in:
+
+source
+Git
+markdown
+reports
+logs
+D1 plaintext fields
+command output
+
+Do not ask me to paste either secret in chat.
+
+==================================================
+STEP 4 — PREDETERMINED IDENTITY
+==================================================
+
+Use exactly ONE predetermined disposable tester email, such as:
+
+cutover-test@buildcustom.ai
+
+The bootstrap must reject attempts to create any other email/user identity.
+
+Do not make this a generic secret-protected registration endpoint.
+
+==================================================
+STEP 5 — SINGLE-USE / FAIL-CLOSED SEMANTICS
+==================================================
+
+Before registration:
+
+query normal runtime storage for the predetermined tester identity.
+
+If tester already exists:
+
+DO NOT call register.
+
+Return an explicit already-exists result and inspect the account.
+
+If tester does not exist:
+
+perform exactly ONE normal registration call.
+
+After the call:
+
+query storage again.
+
+Acceptance requires:
+
+exactly one matching runtime user.
+
+If the request returns an ambiguous network/server result:
+
+DO NOT RETRY.
+
+Query storage first.
+
+If one account exists:
+treat creation as completed and continue verification.
+
+If zero accounts exist:
+STOP.
+
+If more than one account somehow exists:
+STOP.
+
+Never blind-retry account creation.
+
+==================================================
+STEP 6 — PUBLIC REGISTRATION MUST REMAIN CLOSED
+==================================================
+
+Before bootstrap:
+
+direct normal runtime registration
+→ 403 REGISTRATION_DISABLED
+
+During bootstrap availability:
+
+direct normal runtime registration
+→ STILL 403 REGISTRATION_DISABLED
+
+After bootstrap:
+
+direct normal runtime registration
+→ STILL 403 REGISTRATION_DISABLED
+
+The bootstrap authorization must not affect the normal registration gate.
+
+==================================================
+STEP 7 — CREATE EXACTLY ONE TESTER
+==================================================
+
+Invoke the one-time bootstrap once.
+
+Require:
+
+exactly one runtime user created
+
+tester email matches predetermined identity
+
+normal email-auth identity
+
+not admin
+
+not super_admin
+
+normal password handling through AuthService.register
+
+Then verify the tester can authenticate through the NORMAL login endpoint.
+
+Do not use the bootstrap for login.
+
+==================================================
+STEP 8 — DESTROY BOOTSTRAP CAPABILITY
+==================================================
+
+Immediately after tester creation and normal-login verification:
+
+remove the bootstrap route/code from the runtime
+
+OR
+
+deploy a runtime version in which the bootstrap code does not exist.
+
+Deleting only the secret is not the preferred final state.
+
+The FINAL frozen runtime candidate should NOT contain a live tester-bootstrap
+endpoint.
+
+Prefer:
+
+temporary runtime version with bootstrap
+→ create tester
+→ deploy final runtime version containing Task 8D but NO bootstrap route
+
+The final runtime baseline remains:
+
+STOCK
++
+TASK 4B
++
+TASK 6A
++
+TASK 8D
+
+NOT:
+
++
+TASK 8E bootstrap
+
+Task 8E is temporary acceptance tooling only.
+
+==================================================
+STEP 9 — VERIFY BOOTSTRAP IS GONE
+==================================================
+
+Against the final runtime Worker version verify:
+
+bootstrap endpoint:
+404/410/not present
+
+normal direct registration:
+403 REGISTRATION_DISABLED
+
+existing tester login:
+200/success
+
+auth/check:
+success
+
+This is mandatory before continuing.
+
+==================================================
+STEP 10 — PRODUCT USER PROVISIONING
+==================================================
+
+Log into BuildCustom through the normal control-plane login flow using the
+tester credentials.
+
+Allow the existing accepted identity bridge to create/upsert the normal
+BuildCustom product-user mapping.
+
+Require:
+
+one product user
+
+role=user
+
+runtime identity correctly mapped
+
+legacy_password_hash=NULL
+
+no local password authority
+
+no local product session authority
+
+==================================================
+STEP 11 — CREATE ONE PROJECT
+==================================================
+
+Through the normal BuildCustom dashboard:
+
+create ONE project.
+
+Require:
+
+one product project
+
+one runtime link
+
+one owner-specific ThinkAgent
+
+If a committed application does not yet exist, ONE minimal generation is
+authorized.
+
+Prompt marker:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+No unnecessary edits.
+
+No public publish.
+
+==================================================
+STEP 12 — RECORD SAFE IDS
+==================================================
+
+Record:
+
+product user ID
+
+project ID
+
+runtime agent ID
+
+committed revision
+
+Do NOT record/report:
+
+password
+
+bootstrap secret
+
+session cookie
+
+CSRF token
+
+JWT
+
+runtime token
+
+API credentials
+
+==================================================
+STEP 13 — FRESH KNOWN-CREDENTIAL LOGIN
+==================================================
+
+Completely log out.
+
+Then perform a fresh login using the securely retained normal tester
+credentials.
+
+Verify:
+
+login
+auth/check
+correct product user
+dashboard
+correct existing project
+
+==================================================
+STEP 14 — PROJECT REOPEN
+==================================================
+
+Open the existing project.
+
+Verify:
+
+same project
+
+same runtime agent
+
+same committed revision
+
+existing conversation
+
+authoritative files
+
+No new generation.
+
+==================================================
+STEP 15 — FILES
+==================================================
+
+Verify the Files view is reading authoritative runtime/Git state.
+
+Require marker:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+in the committed application.
+
+==================================================
+STEP 16 — PREVIEW
+==================================================
+
+Verify normal BuildCustom preview:
+
+HTTP 200
+
+marker visible
+
+assets load
+
+styling works
+
+sandbox isolation remains intact
+
+No edit.
+
+==================================================
+STEP 17 — IDLE THINKAGENT
+==================================================
+
+Open the builder normally.
+
+Verify:
+
+authorized ticket
+
+WebSocket connects
+
+existing conversation loads
+
+current revision matches
+
+NO suggestion/prompt sent
+
+NO generation triggered
+
+==================================================
+STEP 18 — LIVE LEGACY COOKIE TEST
+==================================================
+
+Perform the outstanding same-host behavior test as closely as possible in the
+private acceptance environment.
+
+Present stale legacy cookie names:
+
+accessToken
+
+csrf-token
+
+with invalid legacy values.
+
+Verify:
+
+no false authentication
+
+no ownership bypass
+
+login remains possible
+
+normal tester login establishes correct new state
+
+dashboard/project work
+
+Then continue to logout test.
+
+==================================================
+STEP 19 — LIVE LOGOUT REVOCATION
+==================================================
+
+Using the normal tester session:
+
+capture the exact valid session internally
+
+logout normally
+
+verify server-side revocation
+
+verify browser cookie clearing
+
+reuse exact pre-logout session
+
+require rejection
+
+Then fresh-login again with normal tester credentials.
+
+Require success.
+
+Do not expose session values.
+
+==================================================
+STEP 20 — AUTHENTICATED NETWORK AUDIT
+==================================================
+
+Capture browser traffic for:
+
+login
+
+dashboard
+
+project reopen
+
+files
+
+preview
+
+idle builder/WebSocket
+
+Require ZERO browser requests to:
+
+replit.com
+
+replit.dev
+
+replit.app
+
+legacy vibesdk Worker
+
+staging runtime
+
+lab runtime
+
+old BuildCustom control plane/API
+
+Internal Cloudflare service bindings are expected and must not expose
+credentials to the browser.
+
+==================================================
+STEP 21 — PUBLISH UI SAFETY
+==================================================
+
+With:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+inspect the authenticated project UI.
+
+Require:
+
+private workers.dev generated-app URL is NOT shown as a public customer URL
+
+no misleading public-live claim
+
+public Open Site action unavailable
+
+future public URL remains based on:
+
+https://<stable-slug>.apps.buildcustom.ai
+
+only when the capability is later enabled.
+
+Do NOT create a new immutable deployment merely to test UI.
+
+If a publish is absolutely required:
+
+STOP and explain why first.
+
+==================================================
+STEP 22 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish:
+
+ai-build-studio.replit.app
+
+because marketing still uses it.
+
+While development workflow is unavailable verify:
+
+fresh tester login
+
+dashboard
+
+project reopen
+
+files
+
+preview
+
+idle builder/WebSocket
+
+No generation.
+
+No publish.
+
+Restore development workflow afterward if needed.
+
+==================================================
+STEP 23 — FINAL CLOSED-REGISTRATION PROOF
+==================================================
+
+At the end require ALL simultaneously:
+
+runtime direct registration:
+403 REGISTRATION_DISABLED
+
+runtime registration capability:
+false
+
+control-plane registration:
+403 / intentional closed response
+
+BuildCustom signup UI:
+closed
+
+tester existing-user login:
+works
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+bootstrap endpoint:
+absent
+
+bootstrap secret:
+removed if no longer needed
+
+==================================================
+STEP 24 — FULL FINAL VERIFICATION
+==================================================
+
+For the FINAL runtime version with NO bootstrap code run:
+
+Task 8D focused tests
+
+Task 6A logout tests
+
+Task 4B immutable identity test
+
+typecheck
+
+full runtime suite
+
+build
+
+For the unchanged control-plane candidate confirm its existing relevant test
+suite remains accepted.
+
+If any control-plane code changes:
+
+run its full required acceptance again and freeze the new version.
+
+==================================================
+STEP 25 — FREEZE CUTOVER COMPONENTS
+==================================================
+
+Only if everything passes freeze:
+
+FINAL RUNTIME CUTOVER COMPONENT
+
+and
+
+FINAL CONTROL-PLANE CUTOVER CANDIDATE
+
+The final runtime must NOT contain the temporary Task 8E bootstrap.
+
+==================================================
+FAIL-CLOSED RULES
+==================================================
+
+STOP immediately if:
+
+- tester existence is ambiguous
+
+- bootstrap request result is ambiguous and storage cannot resolve it
+
+- more than one tester is created
+
+- normal registration becomes publicly available
+
+- OAuth can create another new user while closed
+
+- bootstrap can create arbitrary identities
+
+- bootstrap remains available in final runtime
+
+- tester cannot log in normally after bootstrap removal
+
+- Task 6A regresses
+
+- Task 4B regresses
+
+- public hostname/route changes would be required
+
+Do NOT retry ambiguous account creation.
+
+Do NOT directly insert password/auth records.
+
+Do NOT temporarily open general public registration.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+Do NOT modify:
+
+app.buildcustom.ai association
+
+app.buildcustom.ai DNS
+
+*.apps.buildcustom.ai
+
+public buildcustom-apps-gateway
+
+public gateway bindings
+
+buildcustom.ai
+
+marketing Pages
+
+marketing waitlist
+
+public Replit autoscale deployment
+
+old production D1
+
+legacy vibesdk Worker
+
+BuyerMagnets
+
+production dispatch architecture
+
+Do not delete old infrastructure.
+
+==================================================
+TASK 8E ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. exactly one normal tester created
+
+2. no general registration window opened
+
+3. tester created through normal registration service
+
+4. tester can use normal login
+
+5. temporary bootstrap removed from final runtime
+
+6. direct runtime registration remains closed
+
+7. OAuth/new-user creation remains closed
+
+8. control-plane registration remains closed
+
+9. normal BuildCustom product user created
+
+10. tester role=user
+
+11. no second password authority
+
+12. one project created
+
+13. one owner-specific ThinkAgent
+
+14. valid committed revision
+
+15. fresh known-credential login passes
+
+16. dashboard passes
+
+17. reopen passes
+
+18. files pass
+
+19. preview passes
+
+20. idle WebSocket/conversation passes
+
+21. legacy-cookie test passes
+
+22. logout revocation passes
+
+23. exact old session rejected
+
+24. fresh login after logout passes
+
+25. authenticated network audit clean
+
+26. Publish UI safety passes
+
+27. Replit-development-off authenticated flow passes
+
+28. runtime registration remains closed
+
+29. control-plane registration remains closed
+
+30. public generated apps remain disabled
+
+31. Task 6A regression passes
+
+32. Task 4B regression passes
+
+33. final runtime contains NO Task 8E bootstrap
+
+34. no public hostname/route changed
+
+35. exact runtime version frozen
+
+36. exact control-plane version frozen
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. temporary bootstrap design
+
+2. proof it accepted only predetermined tester
+
+3. proof general registration remained closed
+
+4. tester runtime user creation result
+
+5. proof exactly one tester exists
+
+6. temporary bootstrap Worker version if one existed
+
+7. proof bootstrap removed
+
+8. final runtime source/patch composition
+
+9. final runtime Worker version
+
+10. final runtime registration state
+
+11. OAuth/new-user gate result
+
+12. tester product user ID
+
+13. tester role
+
+14. legacy_password_hash state
+
+15. tester project ID
+
+16. tester runtime agent ID
+
+17. tester committed revision
+
+18. inference count/cost
+
+19. fresh known-credential login result
+
+20. dashboard result
+
+21. project reopen result
+
+22. files result
+
+23. preview result
+
+24. idle WebSocket/conversation result
+
+25. legacy-cookie result
+
+26. logout revocation result
+
+27. exact-old-session rejection result
+
+28. fresh-login-after-logout result
+
+29. authenticated network-audit result
+
+30. Publish UI safety result
+
+31. Replit-development-off result
+
+32. final runtime registration endpoint result
+
+33. final control-plane registration result
+
+34. final signup UI state
+
+35. final PUBLIC_GENERATED_APPS_ENABLED state
+
+36. Task 6A regression result
+
+37. Task 4B identity result
+
+38. full runtime tests/typecheck/build
+
+39. frozen runtime Worker version
+
+40. frozen control-plane Worker version
+
+41. confirmation Task 8E bootstrap is absent from final runtime
+
+42. confirmation app.buildcustom.ai untouched
+
+43. confirmation *.apps.buildcustom.ai untouched
+
+44. confirmation public gateway untouched
+
+45. confirmation marketing/public Replit deployment untouched
+
+46. remaining HIGH risks
+
+47. remaining MEDIUM risks
+
+48. whether Tasks 8D/8E + remaining 8C acceptance are ACCEPTED
+
+49. whether we are READY for app.buildcustom.ai reassignment
+
+50. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CUT OVER app.buildcustom.ai.
+DO NOT SWITCH *.apps.buildcustom.ai.
