@@ -1,0 +1,725 @@
+Tasks 1 through 4 are accepted and FROZEN.
+
+Task 4B passed.
+
+Do not make additional changes to the proven staging architecture unless a
+production-readiness blocker requires one.
+
+We are now moving from migration validation into PRODUCTIONIZATION.
+
+Proceed with ONLY:
+
+TASK 5 — PRODUCTION CUTOVER PLAN + RESOURCE INVENTORY
+
+READ-ONLY / PLAN MODE.
+
+DO NOT DEPLOY ANYTHING.
+
+DO NOT MODIFY CLOUDFLARE.
+
+DO NOT MODIFY DNS.
+
+DO NOT MODIFY PRODUCTION D1.
+
+DO NOT MODIFY REPLIT DATA.
+
+DO NOT CREATE PRODUCTION RESOURCES YET.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Produce the exact implementation plan for taking the BuildCustom architecture
+we have now proven in staging/lab and making it the real production product.
+
+The target production architecture is:
+
+buildcustom.ai
+→ existing marketing site
+→ leave alone
+
+app.buildcustom.ai
+→ BuildCustom authenticated dashboard/editor/control plane
+
+BuildCustom control plane
+→ verified stock VibeSDK user identity
+→ BuildCustom D1 product metadata
+→ clean production stock VibeSDK runtime
+→ native ThinkAgent
+→ SpaceDO / Git / previews
+→ immutable Workers for Platforms releases
+
+*.apps.buildcustom.ai
+→ ONE shared BuildCustom generated-app gateway
+→ BuildCustom slug mapping
+→ immutable dispatched release script
+
+Customer custom domains
+→ existing Cloudflare for SaaS architecture
+→ shared gateway / BuildCustom deployment mapping
+
+Replit
+→ development environment only during cutover
+→ ZERO production runtime dependency after final acceptance
+
+==================================================
+IMPORTANT CONTEXT
+==================================================
+
+Do not design another architecture.
+
+Tasks 1–4 already established the architecture.
+
+Task 5 is inventory + exact cutover planning.
+
+We specifically do NOT want to carry forward obsolete architecture merely
+because it currently exists.
+
+The current development product is what matters.
+
+Old disposable test projects, agents, releases, and staging users do not
+need production migration.
+
+==================================================
+PROVEN ARCHITECTURE TO PRESERVE
+==================================================
+
+Preserve the architecture proven during Tasks 1–4:
+
+1. BuildCustom-branded authentication backed by stock VibeSDK runtime
+   identity.
+
+2. One verified runtime user owns their ThinkAgents.
+
+3. BuildCustom D1 stores product-level user/project/ownership metadata.
+
+4. BuildCustom project links to one owner-specific stock ThinkAgent.
+
+5. Native ThinkAgent WebSocket streaming.
+
+6. Stock runtime remains authoritative for conversation state.
+
+7. Stock Git/runtime remains authoritative for generated files.
+
+8. Stock preview behavior.
+
+9. BuildCustom completion/recovery state machine.
+
+10. Stock platform deployment.
+
+11. Immutable collision-safe release script identities.
+
+12. BuildCustom release metadata.
+
+13. Stable BuildCustom public slug separate from release identity.
+
+14. One shared generated-app gateway.
+
+15. Last-known-good route remains active until candidate verification passes.
+
+16. Recovery/reconciliation can never initiate deployment.
+
+Do not replace any of these with a new system during planning.
+
+==================================================
+PRODUCTION DOMAINS
+==================================================
+
+Target:
+
+MARKETING:
+
+buildcustom.ai
+
+Leave the existing marketing site alone during initial cutover.
+
+PRODUCT:
+
+app.buildcustom.ai
+
+This becomes the real authenticated BuildCustom application.
+
+GENERATED APPLICATIONS:
+
+<slug>.apps.buildcustom.ai
+
+This is the production equivalent of the proven:
+
+<slug>.lab-apps.buildcustom.ai
+
+CUSTOMER DOMAINS:
+
+Preserve the existing Cloudflare for SaaS design.
+
+Do not modify any domain during Task 5.
+
+==================================================
+CLEAN PRODUCTION VIBESDK RUNTIME
+==================================================
+
+We do NOT want to reuse the historical VibeSDK staging runtime as the new
+production coding engine.
+
+Plan a CLEAN production VibeSDK runtime using the exact stock architecture
+proven in the isolated lab.
+
+The clean lab proved:
+
+- stock VibeSDK
+- stock ThinkAgent
+- Google Gemini model
+- AI Gateway
+- Unified Billing
+- no provider BYOK
+- owner-authenticated runtime
+- generation
+- autonomous build correction
+- preview
+- platform deployment
+- generated-app routing
+
+The only intentional narrow runtime modification now required is the
+immutable/collision-safe release identity capability proven in Task 4B.
+
+Identify exactly what source/config should become the production runtime
+baseline.
+
+Do not perform deployment yet.
+
+==================================================
+UNIFIED BILLING
+==================================================
+
+Preserve the proven stock inference architecture.
+
+Do not reopen inference research.
+
+Do not switch to direct Google.
+
+Do not introduce provider BYOK.
+
+Do not redesign model routing.
+
+Production should use the same proven architecture:
+
+stock VibeSDK ThinkAgent
+→ Cloudflare AI Gateway
+→ Unified Billing
+→ Gemini
+
+Document the exact production configuration required.
+
+Do not create it yet.
+
+==================================================
+INVENTORY CURRENT CLOUDFLARE
+==================================================
+
+Perform READ-ONLY inventory of all relevant existing BuildCustom Cloudflare
+resources.
+
+At minimum identify:
+
+- Workers
+- D1 databases
+- KV namespaces
+- R2 buckets
+- dispatch namespaces
+- Durable Object namespaces/bindings
+- Containers/Sandbox dependencies
+- Browser Rendering bindings
+- AI Gateway resources/configuration
+- wildcard DNS records
+- Worker routes
+- TLS/certificate state
+- Cloudflare for SaaS configuration
+- Custom Hostnames configuration
+- existing generated-app gateway
+- existing app.buildcustom.ai state
+- existing *.apps.buildcustom.ai state
+- secrets/bindings by NAME only
+
+NEVER output secret values.
+
+Classify each relevant resource:
+
+KEEP
+REPLACE
+NEW
+RETIRE LATER
+UNKNOWN / INVESTIGATE
+
+==================================================
+PROTECTED EXISTING RESOURCES
+==================================================
+
+Do not mutate existing customer-facing resources.
+
+If a resource currently serves:
+
+- buildcustom.ai
+- an existing generated app
+- an existing custom domain
+- another production service
+
+mark it protected during cutover.
+
+Do not assume an old resource is disposable just because its name contains
+"staging".
+
+Use actual routes/bindings/current traffic role to classify it.
+
+==================================================
+APP.BUILDCUSTOM.AI
+==================================================
+
+Confirm current actual state of:
+
+app.buildcustom.ai
+
+We historically established that it was not serving the Replit production
+product and should become the first real production home of the dashboard.
+
+Verify that remains true.
+
+Plan exactly:
+
+DNS
+Worker route/custom domain
+TLS
+control-plane Worker
+frontend assets
+same-origin auth
+runtime service binding
+
+Do not attach the domain yet.
+
+==================================================
+PRODUCTION GENERATED-APP GATEWAY
+==================================================
+
+Inventory the existing:
+
+*.apps.buildcustom.ai
+
+architecture.
+
+Determine whether the existing shared production gateway can be adapted to
+the proven immutable release mapping architecture OR whether a clean
+replacement gateway should be deployed and switched during cutover.
+
+Do not create one yet.
+
+Target architecture remains:
+
+*.apps.buildcustom.ai
+→ one shared gateway
+→ slug lookup
+→ immutable dispatched release script
+
+No Worker-per-app routes.
+
+==================================================
+CUSTOM DOMAINS
+==================================================
+
+Inventory the existing Cloudflare for SaaS/custom-hostname path.
+
+We previously proved the conceptual architecture:
+
+customer hostname
+→ Cloudflare Custom Hostname
+→ BuildCustom shared gateway
+→ hostname lookup
+→ deployment
+→ Workers for Platforms dispatch
+
+Determine what existing production resources/data must be preserved for
+current customer domains, if any.
+
+Do NOT perform a new custom-domain experiment.
+
+Do NOT require Enterprise Apex Proxying if the current proven DNS approach
+does not require it.
+
+==================================================
+BUILDCUSTOM D1
+==================================================
+
+Inventory:
+
+- current staging schema after Tasks 1–4B
+- current production D1 schema
+- current production row counts
+- current Replit/Postgres data that could represent real product/customer
+  state
+
+Determine the smallest production D1 migration path.
+
+We care about preserving REAL state.
+
+We do NOT care about preserving disposable development/test state.
+
+Classify data into:
+
+MUST MIGRATE
+OPTIONAL
+DISPOSABLE TEST DATA
+UNKNOWN
+
+Do not migrate anything yet.
+
+==================================================
+REPLIT DEPENDENCIES
+==================================================
+
+Perform a code-grounded inventory of every remaining runtime dependency on
+Replit.
+
+Find references to:
+
+- DATABASE_URL
+- PostgreSQL/Drizzle writes
+- Express APIs
+- Replit domains/origins
+- Replit environment metadata
+- Replit-hosted static assets
+- Replit secrets required at runtime
+- callbacks/webhooks pointing to Replit
+- CORS rules involving Replit
+- hard-coded replit.dev/replit.app URLs
+- development-only fallback APIs
+- marketing forms/waitlist destinations
+- any frontend call that would fail if Replit disappeared
+
+Classify each:
+
+REMOVE BEFORE CUTOVER
+DEVELOPMENT ONLY / SAFE
+MIGRATE
+UNKNOWN
+
+The final production invariant is:
+
+DELETE/STOP REPLIT
+→ BUILDCUSTOM STILL WORKS
+
+==================================================
+AUTH PRODUCTIONIZATION
+==================================================
+
+Plan how the proven Task 1 auth architecture becomes production.
+
+Include:
+
+- signup
+- login
+- logout
+- session restoration
+- runtime owner identity
+- BuildCustom product user record
+- same-origin cookie behavior
+- app.buildcustom.ai
+- CSRF
+- registration state
+- role/admin handling
+
+Do not reintroduce BuildCustom passwords.
+
+Do not use shared runtime ownership.
+
+==================================================
+PROJECT PRODUCTIONIZATION
+==================================================
+
+Plan the exact production flow:
+
+Create Project
+→ BuildCustom D1 project
+→ verified owner
+→ stock POST /api/agent
+→ owner-specific ThinkAgent
+→ runtime_project_links
+→ editor
+
+Preserve retry/idempotency behavior from Task 2.
+
+==================================================
+EDITOR PRODUCTIONIZATION
+==================================================
+
+Plan the exact production path for:
+
+- owner-authorized WS bridge
+- stock tickets
+- streaming
+- conversation persistence
+- authoritative Git/files
+- preview
+- completion recovery
+- refresh/reopen
+
+Do not redesign it.
+
+==================================================
+PUBLISH PRODUCTIONIZATION
+==================================================
+
+Plan:
+
+current authoritative revision
+→ immutable release identity
+→ stock target:"platform"
+→ candidate deployment
+→ candidate verification
+→ release metadata
+→ slug mapping
+→ *.apps.buildcustom.ai
+
+Preserve Task 4B's last-known-good behavior.
+
+Explicitly identify how the narrow VibeSDK immutable-release patch will be
+carried into the clean production runtime and maintained against upstream.
+
+==================================================
+VERSIONING / SOURCE OF TRUTH
+==================================================
+
+Define what Git commit/repository state becomes the source of truth for:
+
+1. BuildCustom control plane/frontend
+
+2. production VibeSDK runtime
+
+3. generated-app gateway
+
+We should not deploy production from an unknown temporary checkout.
+
+Identify any uncommitted or staging-only changes that must be committed before
+production deployment.
+
+Do NOT commit/deploy them during this planning task unless explicitly
+authorized.
+
+==================================================
+SECRETS
+==================================================
+
+Inventory required secret NAMES only.
+
+For each production component identify which secrets/configuration are
+required.
+
+Do NOT display values.
+
+Classify:
+
+already exists
+needs production value
+staging-only
+obsolete
+
+==================================================
+CUTOVER SEQUENCE
+==================================================
+
+Produce a numbered production cutover sequence.
+
+The sequence should minimize risk and should roughly follow:
+
+1. freeze/commit known-good source
+
+2. create clean production VibeSDK resources
+
+3. configure production AI Gateway/Unified Billing
+
+4. deploy production VibeSDK privately
+
+5. run private runtime smoke tests
+
+6. deploy/update BuildCustom production control plane privately
+
+7. migrate required D1 product data
+
+8. verify auth/project/editor privately
+
+9. configure production generated-app dispatch/gateway
+
+10. publish disposable production acceptance app
+
+11. verify *.apps.buildcustom.ai
+
+12. verify custom-domain compatibility without disturbing existing domains
+
+13. attach app.buildcustom.ai
+
+14. enable registration/runtime operations
+
+15. run complete browser acceptance
+
+16. STOP Replit server / remove Replit runtime availability
+
+17. rerun complete product acceptance with Replit unavailable
+
+18. observe
+
+19. only then classify obsolete resources for later retirement
+
+Refine this based on the actual code/resource inventory.
+
+==================================================
+ROLLBACK
+==================================================
+
+For each MUTATING future cutover phase identify:
+
+- what changes
+- how success is measured
+- rollback action
+- what existing working resource remains untouched until acceptance
+
+We do not need enterprise-grade orchestration.
+
+We DO need a clear way back if:
+
+- auth fails
+- runtime fails
+- app.buildcustom.ai fails
+- generated apps fail
+- publishing fails
+- custom domains fail
+
+==================================================
+ACCEPTANCE TEST PLAN
+==================================================
+
+Define the final production acceptance test.
+
+It should prove with a disposable real production user:
+
+Signup
+→ Login
+→ Create Project
+→ Generate
+→ Stream
+→ Files
+→ Preview
+→ Edit
+→ Reopen
+→ Publish
+→ Public *.apps.buildcustom.ai URL
+→ Republish safely
+→ Logout
+→ Old session rejected
+
+Also test:
+
+- second user isolation
+- unauthenticated denial
+- Replit OFF
+
+Do not execute these tests yet.
+
+==================================================
+NO FEATURE WORK
+==================================================
+
+Do NOT include:
+
+- Stripe
+- customer billing
+- plans
+- credits
+- templates
+- blog
+- SEO
+- autoblogger
+- admin improvements
+- UI redesign
+- model selector
+- skills
+- custom-domain UX improvements
+
+unless one is an unavoidable blocker to the core production cutover.
+
+We are shipping the proven core first.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return ONE production-readiness report containing:
+
+1. current architecture summary
+
+2. current Cloudflare resource inventory
+
+3. KEEP resources
+
+4. REPLACE resources
+
+5. NEW resources required
+
+6. RETIRE-LATER resources
+
+7. protected resources
+
+8. app.buildcustom.ai current state
+
+9. *.apps.buildcustom.ai current state
+
+10. custom-domain current state
+
+11. staging D1 vs production D1 schema differences
+
+12. real data requiring migration
+
+13. disposable data
+
+14. remaining Replit runtime dependencies
+
+15. production auth plan
+
+16. production project plan
+
+17. production editor/runtime plan
+
+18. production publish plan
+
+19. immutable-release patch production strategy
+
+20. production AI Gateway/Unified Billing config
+
+21. source-of-truth Git state
+
+22. required production secret NAMES
+
+23. exact new production Cloudflare resources
+
+24. exact existing resources that must not be touched initially
+
+25. numbered cutover sequence
+
+26. rollback plan per mutating phase
+
+27. final production acceptance test
+
+28. Replit-off acceptance procedure
+
+29. unresolved blockers
+
+30. risks ranked HIGH / MEDIUM / LOW
+
+31. recommendation for the FIRST SINGLE implementation task
+
+Then STOP.
+
+Do not create resources.
+
+Do not deploy.
+
+Do not migrate data.
+
+Do not change DNS.
+
+Do not begin production cutover.
