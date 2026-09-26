@@ -40,3 +40,4 @@
 - [Browser test watcher limits](browser-test-watcher-limits.md) — parallel Vite dev servers can exhaust inotify watches; serve a built client for Chromium recovery tests.
 - [Staging publish recovery safety](staging-publish-recovery.md) — recovery needs a distinct fail-closed route; validate stock script identity through lab dispatch, not its returned URL alone.
 - [Staging D1 ledger drift](staging-d1-ledger-drift.md) — verify live schema against pending migrations before replaying an already-present ALTER.
+- [Stock runtime logout revocation](stock-logout-revocation.md) — a successful logout is not proof that the old session is revoked; test the pre-logout credential.
