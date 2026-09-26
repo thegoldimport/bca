@@ -1,0 +1,1126 @@
+diff --git a/worker/agents/core/behaviors/base.ts b/worker/agents/core/behaviors/base.ts
+index 535d8f6..6ee98c7 100644
+--- a/worker/agents/core/behaviors/base.ts
++++ b/worker/agents/core/behaviors/base.ts
+@@ -1230,7 +1230,13 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
+     /**
+      * Deploy the generated code to Cloudflare Workers
+      */
+-    async deployToCloudflare(target: DeploymentTarget = 'platform'): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
++    async deployToCloudflare(
++        target: DeploymentTarget = 'platform',
++        immutableRelease?: { immutableRelease: true; expectedRevision: string },
++    ): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
++        if (immutableRelease !== undefined) {
++            throw new Error('Immutable releases are supported only for Think platform deployments.');
++        }
+         try {
+             // Ensure sandbox instance exists first
+             if (!this.state.sandboxInstanceId) {
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index eb8dcb2..6c25fee 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -33,6 +33,7 @@ import { CloudflareAccountService } from '../../../services/cloudflare/Cloudflar
+ import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
+ import { resolveCloudflareAccessToken } from '../../../services/rate-limit/usageChecker';
+ import type { CloudflareDeploymentErrorCode } from '../../../api/websocketTypes';
++import { InFlightLock, isCommitRevision } from '../../../services/deployer/platform-deployment-identity';
+ 
+ /**
+  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
+@@ -112,6 +113,7 @@ export class ThinkCodingBehavior
+ 	extends BaseCodingBehavior<ThinkState>
+ 	implements ICodingAgent {
+ 	protected static readonly PROJECT_NAME_PREFIX_MAX_LENGTH = 20;
++	private readonly immutableReleaseDeploymentLock = new InFlightLock();
+ 
+ 	override getBehavior(): 'think' { return 'think'; }
+ 
+@@ -904,8 +906,35 @@ export class ThinkCodingBehavior
+ 
+ 	async deployToCloudflare(
+ 		target: DeploymentTarget = 'user',
++		immutableRelease?: { immutableRelease: true; expectedRevision: string },
+ 	): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
+ 		const userAccountDeployEnabled = this.env.ENABLE_USER_ACCOUNT_DEPLOY === 'true';
++		if (immutableRelease !== undefined && (
++			immutableRelease.immutableRelease !== true
++			|| !isCommitRevision(immutableRelease.expectedRevision)
++			|| target !== 'platform'
++			|| userAccountDeployEnabled
++		)) {
++			this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_ERROR, {
++				message: 'Immutable releases are supported only for Think platform deployments',
++				instanceId: this.getAgentId(),
++			});
++			return null;
++		}
++
++		if (immutableRelease) {
++			const deployment = await this.immutableReleaseDeploymentLock.runExclusive(
++				() => this.deployThinkAppToPlatform(immutableRelease),
++			);
++			if (!deployment.acquired) {
++				this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_ERROR, {
++					message: 'An immutable release deployment is already in progress for this agent',
++					instanceId: this.getAgentId(),
++				});
++				return null;
++			}
++			return deployment.value;
++		}
+ 
+ 		if (!userAccountDeployEnabled) {
+ 			return this.deployThinkAppToPlatform();
+@@ -990,7 +1019,9 @@ export class ThinkCodingBehavior
+ 	 * Default think deploy when `ENABLE_USER_ACCOUNT_DEPLOY` is off: publish the
+ 	 * SpaceDO bundle to the platform's dispatch namespace with platform creds.
+ 	 */
+-	private async deployThinkAppToPlatform(): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
++	private async deployThinkAppToPlatform(
++		immutableRelease?: { immutableRelease: true; expectedRevision: string },
++	): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
+ 		const instanceId = this.getAgentId();
+ 		this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_STARTED, {
+ 			message: 'Starting deployment to Cloudflare Workers...',
+@@ -1015,6 +1046,12 @@ export class ThinkCodingBehavior
+ 				this.logger.debug('No new workspace changes to commit before publishing', error);
+ 			}
+ 			const bundle = await this.callSpace((space) => space.getDeploymentBundle(branch));
++			if (immutableRelease && (
++				!isCommitRevision(bundle.commitHash)
++				|| bundle.commitHash !== immutableRelease.expectedRevision
++			)) {
++				throw new Error('Deployment bundle revision does not match expected revision');
++			}
+ 			const result = await deployThinkBundleToPlatform({
+ 				accountId,
+ 				apiToken,
+@@ -1022,6 +1059,12 @@ export class ThinkCodingBehavior
+ 				previewDomain: getPreviewDomain(this.env),
+ 				appName: this.state.blueprint.title || this.state.projectName || `vibe-${instanceId}`,
+ 				bundle,
++				...(immutableRelease ? {
++					immutableRelease: {
++						agentId: instanceId,
++						expectedRevision: immutableRelease.expectedRevision,
++					},
++				} : {}),
+ 			});
+ 			await new AppService(this.env).updateDeploymentId(instanceId, result.deploymentId);
+ 			this.setState({ ...this.state, cloudflareDeploymentUrl: result.deploymentUrl });
+@@ -1030,6 +1073,10 @@ export class ThinkCodingBehavior
+ 				instanceId,
+ 				deploymentUrl: result.deploymentUrl,
+ 				workersUrl: result.deploymentUrl,
++				...(immutableRelease ? {
++					deploymentId: result.deploymentId,
++					commitHash: immutableRelease.expectedRevision,
++				} : {}),
+ 			});
+ 			return { deploymentUrl: result.deploymentUrl, workersUrl: result.deploymentUrl };
+ 		} catch (error) {
+diff --git a/worker/agents/core/codingAgent.ts b/worker/agents/core/codingAgent.ts
+index c30ee9b..ff0b476 100644
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -284,7 +284,10 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+             sendToConnection(connection, WebSocketMessageResponses.AGENT_CONNECTED, {
+                 state: this.state,
+                 templateDetails: this.behavior.getTemplateDetails(),
+-                previewUrl: previewUrl
++                previewUrl: previewUrl,
++                    ...(this.state.behaviorType === 'think' && this.env.ENABLE_USER_ACCOUNT_DEPLOY !== 'true'
++                        ? { deploymentCapabilities: { platformImmutableRelease: true } }
++                    : {}),
+             });
+         })();
+     }
+@@ -416,8 +419,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+         return this.behavior.deployToSandbox(files, redeploy, commitMessage, clearLogs);
+     }
+ 
+-    deployToCloudflare(target?: DeploymentTarget): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
+-        return this.behavior.deployToCloudflare(target);
++    deployToCloudflare(
++        target?: DeploymentTarget,
++        immutableRelease?: { immutableRelease: true; expectedRevision: string },
++    ): Promise<{ deploymentUrl?: string; workersUrl?: string } | null> {
++        return this.behavior.deployToCloudflare(target, immutableRelease);
+     }
+ 
+     deployProject(options?: DeployOptions): Promise<DeployResult> {
+diff --git a/worker/agents/core/websocket.test.ts b/worker/agents/core/websocket.test.ts
+new file mode 100644
+index 0000000..096eac3
+--- /dev/null
++++ b/worker/agents/core/websocket.test.ts
+@@ -0,0 +1,117 @@
++import { describe, expect, it, vi } from 'vitest';
++import { handleWebSocketMessage } from './websocket';
++
++const EXPECTED_REVISION = 'a'.repeat(40);
++
++function setup(behaviorType = 'think', userAccountDeploy = false) {
++	const deployToCloudflare = vi.fn().mockResolvedValue({
++		deploymentUrl: 'https://verified.example/',
++	});
++	const sent: string[] = [];
++	const agent = {
++		state: { behaviorType },
++		env: { ENABLE_USER_ACCOUNT_DEPLOY: userAccountDeploy ? 'true' : 'false' },
++		deployToCloudflare,
++	} as any;
++	const connection = {
++		id: 'test-connection',
++		send(value: string) {
++			sent.push(value);
++		},
++	} as any;
++	return { agent, connection, deployToCloudflare, sent };
++}
++
++async function sendDeploy(
++	fixture: ReturnType<typeof setup>,
++	message: Record<string, unknown>,
++) {
++	await handleWebSocketMessage(fixture.agent, fixture.connection, JSON.stringify({
++		type: 'deploy',
++		...message,
++	}));
++}
++
++describe('platform immutable-release deploy WebSocket', () => {
++	it('forwards an expected revision only to explicit Think platform deployment', async () => {
++		const fixture = setup();
++		await sendDeploy(fixture, {
++			target: 'platform',
++			immutableRelease: true,
++			expectedRevision: EXPECTED_REVISION,
++		});
++		expect(fixture.deployToCloudflare).toHaveBeenCalledOnce();
++		expect(fixture.deployToCloudflare).toHaveBeenCalledWith('platform', {
++			immutableRelease: true,
++			expectedRevision: EXPECTED_REVISION,
++		});
++		expect(fixture.sent).toEqual([]);
++	});
++
++	it.each([
++		['missing platform target', { immutableRelease: true, expectedRevision: EXPECTED_REVISION }],
++		['user target', { target: 'user', immutableRelease: true, expectedRevision: EXPECTED_REVISION }],
++		['invalid revision', { target: 'platform', immutableRelease: true, expectedRevision: 'A'.repeat(40) }],
++		['short revision', { target: 'platform', immutableRelease: true, expectedRevision: 'a'.repeat(39) }],
++		['missing revision', { target: 'platform', immutableRelease: true }],
++		['missing opt-in', { target: 'platform', expectedRevision: EXPECTED_REVISION }],
++		['false opt-in', { target: 'platform', immutableRelease: false, expectedRevision: EXPECTED_REVISION }],
++	] as const)('rejects %s before invoking deploy', async (_label, request) => {
++		const fixture = setup();
++		await sendDeploy(fixture, request);
++		expect(fixture.deployToCloudflare).not.toHaveBeenCalled();
++		expect(JSON.parse(fixture.sent[0]).type).toBe('error');
++	});
++
++	it('rejects every caller-supplied scriptName, even a plausible one', async () => {
++		const fixture = setup();
++		await sendDeploy(fixture, {
++			target: 'platform',
++			scriptName: `bc-r-${'b'.repeat(56)}`,
++		});
++		expect(fixture.deployToCloudflare).not.toHaveBeenCalled();
++		expect(JSON.parse(fixture.sent[0]).type).toBe('error');
++	});
++
++	it('rejects a scriptName even when a valid immutable release is also requested', async () => {
++		const fixture = setup();
++		await sendDeploy(fixture, {
++			target: 'platform',
++			scriptName: `bc-r-${'b'.repeat(56)}`,
++			immutableRelease: true,
++			expectedRevision: EXPECTED_REVISION,
++		});
++		expect(fixture.deployToCloudflare).not.toHaveBeenCalled();
++		expect(JSON.parse(fixture.sent[0]).type).toBe('error');
++	});
++
++	it('rejects immutable release requests for non-Think agents', async () => {
++		const fixture = setup('agentic');
++		await sendDeploy(fixture, {
++			target: 'platform',
++			immutableRelease: true,
++			expectedRevision: EXPECTED_REVISION,
++		});
++		expect(fixture.deployToCloudflare).not.toHaveBeenCalled();
++		expect(JSON.parse(fixture.sent[0]).type).toBe('error');
++	});
++
++	it('rejects immutable release requests when user-account deploy is enabled', async () => {
++		const fixture = setup('think', true);
++		await sendDeploy(fixture, {
++			target: 'platform',
++			immutableRelease: true,
++			expectedRevision: EXPECTED_REVISION,
++		});
++		expect(fixture.deployToCloudflare).not.toHaveBeenCalled();
++		expect(JSON.parse(fixture.sent[0]).type).toBe('error');
++	});
++
++	it('preserves default Think user deployment without immutable release', async () => {
++		const fixture = setup();
++		await sendDeploy(fixture, {});
++		expect(fixture.deployToCloudflare).toHaveBeenCalledOnce();
++		expect(fixture.deployToCloudflare).toHaveBeenCalledWith('user');
++		expect(fixture.sent).toEqual([]);
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/core/websocket.ts b/worker/agents/core/websocket.ts
+index c3bda54..0ded5c8 100644
+--- a/worker/agents/core/websocket.ts
++++ b/worker/agents/core/websocket.ts
+@@ -7,6 +7,7 @@ import { type CredentialsPayload } from '../inferutils/config.types';
+ import { checkUsageAndBalance } from '../../services/rate-limit';
+ import type { CodeGeneratorAgent } from './codingAgent';
+ import type { DeploymentTarget } from './types';
++import { isCommitRevision } from '../../services/deployer/platform-deployment-identity';
+ 
+ // Type for incoming WebSocket messages
+ interface IncomingWebSocketMessage {
+@@ -16,6 +17,9 @@ interface IncomingWebSocketMessage {
+     credentials?: CredentialsPayload;
+     commitHash?: string;
+     target?: DeploymentTarget;
++    scriptName?: unknown;
++    immutableRelease?: unknown;
++    expectedRevision?: unknown;
+     data?: {
+         url?: string;
+         viewport?: unknown;
+@@ -80,7 +84,31 @@ export async function handleWebSocketMessage(
+                     sendError(connection, `Unsupported deployment target: ${String(target)}`);
+                     return;
+                 }
+-                agent.deployToCloudflare(target).then((deploymentResult) => {
++                const hasScriptName = Object.prototype.hasOwnProperty.call(parsedMessage, 'scriptName');
++                if (hasScriptName) {
++                    sendError(connection, 'Caller-supplied scriptName is not supported.');
++                    return;
++                }
++                const hasImmutableRelease = Object.prototype.hasOwnProperty.call(parsedMessage, 'immutableRelease');
++                const hasExpectedRevision = Object.prototype.hasOwnProperty.call(parsedMessage, 'expectedRevision');
++                const requestsImmutableRelease = hasImmutableRelease || hasExpectedRevision;
++                if (requestsImmutableRelease && (
++                    parsedMessage.immutableRelease !== true
++                    || !isCommitRevision(parsedMessage.expectedRevision)
++                    || parsedMessage.target !== 'platform'
++                    || agent.state.behaviorType !== 'think'
++                    || agent.env.ENABLE_USER_ACCOUNT_DEPLOY === 'true'
++                )) {
++                    sendError(connection, 'Immutable releases require a valid expected revision on Think platform deployments.');
++                    return;
++                }
++                const deployment = requestsImmutableRelease
++                    ? agent.deployToCloudflare('platform', {
++                        immutableRelease: true,
++                        expectedRevision: parsedMessage.expectedRevision as string,
++                    })
++                    : agent.deployToCloudflare(target);
++                deployment.then((deploymentResult) => {
+                     if (!deploymentResult?.deploymentUrl) {
+                         logger.error('Deployment failed', { target });
+                         return;
+diff --git a/worker/api/websocketTypes.ts b/worker/api/websocketTypes.ts
+index 92167d0..52ddcbb 100644
+--- a/worker/api/websocketTypes.ts
++++ b/worker/api/websocketTypes.ts
+@@ -248,6 +248,8 @@ export type CloudflareDeploymentCompletedMessage = {
+ 	instanceId: string;
+ 	deploymentUrl: string;
+ 	workersUrl?: string;
++	deploymentId?: string;
++	commitHash?: string;
+ };
+ 
+ /**
+diff --git a/worker/services/deployer/api/cloudflare-api.test.ts b/worker/services/deployer/api/cloudflare-api.test.ts
+new file mode 100644
+index 0000000..ad9af4d
+--- /dev/null
++++ b/worker/services/deployer/api/cloudflare-api.test.ts
+@@ -0,0 +1,94 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import { CloudflareAPI } from './cloudflare-api';
++
++const SCRIPT_NAME = `bc-r-${'a'.repeat(56)}`;
++const NAMESPACE = 'namespace-1';
++
++function lookupResponse(result: unknown, status = 200): Response {
++	return new Response(JSON.stringify({ success: true, result }), { status });
++}
++
++describe('CloudflareAPI immutable dispatch preflight', () => {
++	afterEach(() => {
++		vi.unstubAllGlobals();
++	});
++
++	it('treats authoritative 404 as an available script identity', async () => {
++		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
++		vi.stubGlobal('fetch', fetchMock);
++
++		await expect(new CloudflareAPI('account-1', 'token-1')
++			.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.resolves.toBeUndefined();
++
++		expect(fetchMock).toHaveBeenCalledOnce();
++		expect(fetchMock).toHaveBeenCalledWith(
++			`https://api.cloudflare.com/client/v4/accounts/account-1/workers/dispatch/namespaces/${NAMESPACE}/scripts/${SCRIPT_NAME}`,
++			{ method: 'GET', headers: { Authorization: 'Bearer token-1' } },
++		);
++	});
++
++	it('treats HTTP 200 with matching namespace metadata and no script as available', async () => {
++		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(lookupResponse({
++			dispatch_namespace: { name: NAMESPACE },
++		})));
++
++		await expect(new CloudflareAPI('account-1', 'token-1')
++			.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.resolves.toBeUndefined();
++	});
++
++	it('rejects HTTP 200 when the requested script exists', async () => {
++		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(lookupResponse({
++			dispatch_namespace: { name: NAMESPACE },
++			script: { id: SCRIPT_NAME },
++		})));
++
++		await expect(new CloudflareAPI('account-1', 'token-1')
++			.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.rejects.toThrow('already exists; refusing to overwrite it');
++	});
++
++	it.each([
++		['missing namespace metadata', { dispatch_namespace: null }],
++		['namespace mismatch', { dispatch_namespace: { name: 'other-namespace' } }],
++		['unexpected script metadata', {
++			dispatch_namespace: { name: NAMESPACE },
++			script: { id: 'some-other-script' },
++		}],
++	] as const)('fails closed on malformed success response: %s', async (_label, result) => {
++		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(lookupResponse(result)));
++
++		await expect(new CloudflareAPI('account-1', 'token-1')
++			.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.rejects.toThrow('Could not verify immutable dispatch script');
++	});
++
++	it('fails closed on unexpected HTTP 500 status', async () => {
++		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
++
++		await expect(new CloudflareAPI('account-1', 'token-1')
++			.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.rejects.toThrow('unexpected status 500');
++	});
++
++	it('fails closed on malformed JSON and oversized responses', async () => {
++		vi.stubGlobal('fetch', vi.fn()
++			.mockResolvedValueOnce(new Response('{not-json', { status: 200 }))
++			.mockResolvedValueOnce(new Response('x'.repeat(16 * 1024 + 1), { status: 200 })));
++
++		const api = new CloudflareAPI('account-1', 'token-1');
++		await expect(api.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.rejects.toThrow('Could not verify immutable dispatch script response');
++		await expect(api.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.rejects.toThrow('Response exceeds');
++	});
++
++	it('fails closed on network errors', async () => {
++		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network unavailable')));
++
++		await expect(new CloudflareAPI('account-1', 'token-1')
++			.assertDispatchScriptDoesNotExist(SCRIPT_NAME, NAMESPACE))
++			.rejects.toThrow('network unavailable');
++	});
++});
+\ No newline at end of file
+diff --git a/worker/services/deployer/api/cloudflare-api.ts b/worker/services/deployer/api/cloudflare-api.ts
+index 67007a3..761d9e5 100644
+--- a/worker/services/deployer/api/cloudflare-api.ts
++++ b/worker/services/deployer/api/cloudflare-api.ts
+@@ -1,6 +1,59 @@
+ import { AssetManifest, UploadAssetSession, WorkerMetadata } from '../types';
+ import { getMimeType } from '../utils/index';
+ 
++const MAX_DISPATCH_SCRIPT_LOOKUP_BYTES = 16 * 1024;
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++	return value !== null && typeof value === 'object' && !Array.isArray(value);
++}
++
++async function readBoundedResponseText(response: Response, maxBytes: number): Promise<string> {
++	const contentLength = Number(response.headers.get('content-length'));
++	if (Number.isFinite(contentLength) && contentLength > maxBytes) {
++		throw new Error(`Response exceeds ${maxBytes} byte limit`);
++	}
++	const reader = response.body?.getReader();
++	if (!reader) return '';
++
++	const chunks: Uint8Array[] = [];
++	let totalBytes = 0;
++	try {
++		while (true) {
++			const { done, value } = await reader.read();
++			if (done) break;
++			if (totalBytes + value.byteLength > maxBytes) {
++				try {
++					await reader.cancel();
++				} catch {
++					// The response will be rejected regardless; cancellation is best effort.
++				}
++				throw new Error(`Response exceeds ${maxBytes} byte limit`);
++			}
++			chunks.push(value);
++			totalBytes += value.byteLength;
++		}
++	} finally {
++		reader.releaseLock();
++	}
++
++	const body = new Uint8Array(totalBytes);
++	let offset = 0;
++	for (const chunk of chunks) {
++		body.set(chunk, offset);
++		offset += chunk.byteLength;
++	}
++	return new TextDecoder().decode(body);
++}
++
++function matchesDispatchNamespace(value: unknown, expectedNamespace: string): boolean {
++	if (typeof value === 'string') return value === expectedNamespace;
++	if (!isRecord(value)) return false;
++	const names = [value.name, value.namespace]
++		.filter((candidate): candidate is string => typeof candidate === 'string');
++	if (names.length > 0) return names.every((name) => name === expectedNamespace);
++	return value.id === expectedNamespace;
++}
++
+ /**
+  * Cloudflare API client for Worker deployment operations
+  */
+@@ -115,6 +168,58 @@ export class CloudflareAPI {
+ 		return null;
+ 	}
+ 
++	/**
++	 * Fail closed unless the authoritative dispatch-script lookup proves this
++	 * immutable release identity has never been created.
++	 */
++	async assertDispatchScriptDoesNotExist(
++		scriptName: string,
++		dispatchNamespace: string,
++	): Promise<void> {
++		const url = `${this.baseUrl}/accounts/${encodeURIComponent(this.accountId)}/workers/dispatch/namespaces/${encodeURIComponent(dispatchNamespace)}/scripts/${encodeURIComponent(scriptName)}`;
++		let response: Response;
++		try {
++			response = await fetch(url, {
++				method: 'GET',
++				headers: this.getHeaders(),
++			});
++		} catch (error) {
++			throw new Error(
++				`Failed to verify immutable dispatch script availability: ${error instanceof Error ? error.message : String(error)}`,
++			);
++		}
++
++		// The Workers-for-Platforms scripts endpoint documents 404 as the
++		// not-found result for this exact script path.
++		if (response.status === 404) return;
++		if (response.status === 200) {
++			let payload: unknown;
++			try {
++				const body = await readBoundedResponseText(response, MAX_DISPATCH_SCRIPT_LOOKUP_BYTES);
++				payload = JSON.parse(body) as unknown;
++			} catch (error) {
++				throw new Error(
++					`Could not verify immutable dispatch script response: ${error instanceof Error ? error.message : String(error)}`,
++				);
++			}
++			if (!isRecord(payload) || payload.success !== true || !isRecord(payload.result)) {
++				throw new Error('Could not verify immutable dispatch script response: unexpected response shape');
++			}
++			if (!matchesDispatchNamespace(payload.result.dispatch_namespace, dispatchNamespace)) {
++				throw new Error('Could not verify immutable dispatch script response: dispatch namespace mismatch');
++			}
++			const script = payload.result.script;
++			if (script === undefined || script === null) return;
++			if (isRecord(script) && script.id === scriptName) {
++				throw new Error(`Immutable dispatch script "${scriptName}" already exists; refusing to overwrite it`);
++			}
++			throw new Error('Could not verify immutable dispatch script response: unexpected script metadata');
++		}
++		throw new Error(
++			`Could not verify immutable dispatch script availability: unexpected status ${response.status}`,
++		);
++	}
++
+ 	/**
+ 	 * Deploy a Worker script to Cloudflare
+ 	 * Includes metadata, bindings, and assets configuration
+@@ -126,6 +231,7 @@ export class CloudflareAPI {
+ 		dispatchNamespace?: string,
+ 		additionalModules?: Map<string, string>,
+ 		durableObjectClasses?: string[],
++		allowMigrationRetry = true,
+ 	): Promise<void> {
+ 		const url = dispatchNamespace
+ 			? `${this.baseUrl}/accounts/${this.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${scriptName}`
+@@ -174,6 +280,9 @@ export class CloudflareAPI {
+ 
+ 		if (!response.ok) {
+ 			const error = await response.text();
++			if (!allowMigrationRetry) {
++				throw new Error(`Failed to deploy worker: ${response.status} - ${error}`);
++			}
+ 			const errorObj = JSON.parse(error);
+ 
+ 			// Check if error is about migrations for existing DO classes
+diff --git a/worker/services/deployer/deployer.ts b/worker/services/deployer/deployer.ts
+index c51eddc..3174315 100644
+--- a/worker/services/deployer/deployer.ts
++++ b/worker/services/deployer/deployer.ts
+@@ -41,6 +41,7 @@ export class WorkerDeployer {
+ 		compatibilityFlags?: string[],
+ 		migrations?: WranglerConfig['migrations'],
+ 		observability?: WorkerObservability,
++		allowScriptPutRetry = true,
+ 	): Promise<void> {
+ 		logger.info('🚀 Starting deployment process...');
+ 		logger.info(`📦 Worker: ${scriptName}`);
+@@ -154,6 +155,7 @@ export class WorkerDeployer {
+ 			dispatchNamespace,
+ 			additionalModules,
+ 			durableObjectClasses,
++			allowScriptPutRetry,
+ 		);
+ 	}
+ 
+@@ -172,6 +174,7 @@ export class WorkerDeployer {
+ 		compatibilityFlags?: string[],
+ 		migrations?: WranglerConfig['migrations'],
+ 		observability?: WorkerObservability,
++		allowScriptPutRetry = true,
+ 	): Promise<void> {
+ 		logger.info('🚀 Starting simple deployment (no assets)...');
+ 		logger.info(`📦 Worker: ${scriptName}`);
+@@ -217,6 +220,7 @@ export class WorkerDeployer {
+ 			dispatchNamespace,
+ 			additionalModules,
+ 			durableObjectClasses,
++			allowScriptPutRetry,
+ 		);
+ 	}
+ }
+diff --git a/worker/services/deployer/immutable-script-put.test.ts b/worker/services/deployer/immutable-script-put.test.ts
+new file mode 100644
+index 0000000..49292c6
+--- /dev/null
++++ b/worker/services/deployer/immutable-script-put.test.ts
+@@ -0,0 +1,174 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import type { BranchDeploymentBundle } from '@space-do/space';
++import { deployThinkBundleToPlatform } from './think-user-deploy';
++import { createImmutablePlatformScriptName } from './platform-deployment-identity';
++
++const REVISION = 'a'.repeat(40);
++const CLOUDFLARE_MIGRATION_ERROR = JSON.stringify({
++	errors: [{ code: 10074, message: "class 'App' already exists" }],
++});
++
++function makeBundle(withAssets = false): BranchDeploymentBundle {
++	return {
++		modules: {
++			'index.js': 'export class App {}\nexport default { fetch() { return new Response("ok"); } };',
++		},
++		mainModule: 'index.js',
++		assets: withAssets ? { '/index.html': '<html>immutable</html>' } : {},
++		assetConfig: {},
++		compatibilityDate: '2025-01-01',
++		commitHash: REVISION,
++	} as unknown as BranchDeploymentBundle;
++}
++
++function mockFetchForMigrationError() {
++	let putCount = 0;
++	const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
++		if (init?.method === 'GET') {
++			return new Response(null, { status: 404 });
++		}
++		if (init?.method === 'POST') {
++			return new Response(JSON.stringify({ result: { jwt: 'asset-jwt', buckets: [] } }), {
++				status: 200,
++			});
++		}
++		if (init?.method === 'PUT') {
++			putCount += 1;
++			return putCount === 1
++				? new Response(CLOUDFLARE_MIGRATION_ERROR, { status: 400 })
++				: new Response(null, { status: 200 });
++		}
++		throw new Error(`Unexpected Cloudflare request method: ${String(init?.method)}`);
++	});
++	vi.stubGlobal('fetch', fetchMock);
++	return { fetchMock, getPutCount: () => putCount };
++}
++
++describe('immutable script PUT retry policy', () => {
++	afterEach(() => {
++		vi.unstubAllGlobals();
++	});
++
++	it('issues exactly one script PUT on immutable publish and returns the full Cloudflare error', async () => {
++		const { fetchMock, getPutCount } = mockFetchForMigrationError();
++
++		await expect(deployThinkBundleToPlatform({
++			accountId: 'account-1',
++			apiToken: 'token-1',
++			dispatchNamespace: 'namespace-1',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: 'My App',
++			bundle: makeBundle(),
++			immutableRelease: {
++				agentId: '550e8400-e29b-41d4-a716-446655440000',
++				expectedRevision: REVISION,
++			},
++		})).rejects.toThrow(`Failed to deploy worker: 400 - ${CLOUDFLARE_MIGRATION_ERROR}`);
++
++		expect(getPutCount()).toBe(1);
++		expect(fetchMock).toHaveBeenCalledTimes(2);
++	});
++
++	it('also disables script PUT retries through the asset uploader path', async () => {
++		const { fetchMock, getPutCount } = mockFetchForMigrationError();
++
++		await expect(deployThinkBundleToPlatform({
++			accountId: 'account-1',
++			apiToken: 'token-1',
++			dispatchNamespace: 'namespace-1',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: 'My App',
++			bundle: makeBundle(true),
++			immutableRelease: {
++				agentId: '550e8400-e29b-41d4-a716-446655440000',
++				expectedRevision: REVISION,
++			},
++		})).rejects.toThrow(`Failed to deploy worker: 400 - ${CLOUDFLARE_MIGRATION_ERROR}`);
++
++		expect(getPutCount()).toBe(1);
++		expect(fetchMock).toHaveBeenCalledTimes(3);
++	});
++
++	it('keeps legacy platform migration retry behavior', async () => {
++		const { fetchMock, getPutCount } = mockFetchForMigrationError();
++
++		await expect(deployThinkBundleToPlatform({
++			accountId: 'account-1',
++			apiToken: 'token-1',
++			dispatchNamespace: 'namespace-1',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: 'My App',
++			bundle: makeBundle(),
++		})).resolves.toMatchObject({ deploymentId: 'my-app' });
++
++		expect(getPutCount()).toBe(2);
++		expect(fetchMock).toHaveBeenCalledTimes(2);
++	});
++
++	it('allows an HTTP 200 preflight response with matching namespace and no script', async () => {
++		const agentId = '550e8400-e29b-41d4-a716-446655440000';
++		const scriptName = await createImmutablePlatformScriptName(agentId, REVISION);
++		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
++			if (init?.method === 'GET') {
++				return new Response(JSON.stringify({
++					success: true,
++					result: { dispatch_namespace: { name: 'namespace-1' } },
++				}), { status: 200 });
++			}
++			if (init?.method === 'PUT') return new Response(null, { status: 200 });
++			throw new Error(`Unexpected Cloudflare request method: ${String(init?.method)}`);
++		});
++		vi.stubGlobal('fetch', fetchMock);
++
++		await expect(deployThinkBundleToPlatform({
++			accountId: 'account-1',
++			apiToken: 'token-1',
++			dispatchNamespace: 'namespace-1',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: 'My App',
++			bundle: makeBundle(),
++			immutableRelease: { agentId, expectedRevision: REVISION },
++		})).resolves.toMatchObject({ deploymentId: scriptName });
++
++		expect(fetchMock).toHaveBeenCalledTimes(2);
++		expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['GET', 'PUT']);
++	});
++
++	it.each(['occupied script', 'malformed success', 'server error'] as const)(
++		'does not upload on preflight %s',
++		async (scenario) => {
++			const agentId = '550e8400-e29b-41d4-a716-446655440000';
++			const scriptName = await createImmutablePlatformScriptName(agentId, REVISION);
++			const status = scenario === 'server error' ? 500 : 200;
++			const payload = scenario === 'occupied script'
++				? {
++					success: true,
++					result: {
++						dispatch_namespace: { name: 'namespace-1' },
++						script: { id: scriptName },
++					},
++				}
++				: scenario === 'malformed success'
++					? { success: true, result: {} }
++					: { success: false };
++			const fetchMock = vi.fn().mockResolvedValue(
++				new Response(JSON.stringify(payload), { status }),
++			);
++			vi.stubGlobal('fetch', fetchMock);
++
++			await expect(deployThinkBundleToPlatform({
++				accountId: 'account-1',
++				apiToken: 'token-1',
++				dispatchNamespace: 'namespace-1',
++				previewDomain: 'build-preview.cloudflare.dev',
++				appName: 'My App',
++				bundle: makeBundle(),
++				immutableRelease: { agentId, expectedRevision: REVISION },
++			})).rejects.toThrow();
++
++			expect(fetchMock).toHaveBeenCalledOnce();
++			expect(fetchMock.mock.calls[0][0]).toContain(`/scripts/${scriptName}`);
++			expect(fetchMock.mock.calls[0][1]?.method).toBe('GET');
++		},
++	);
++});
+\ No newline at end of file
+diff --git a/worker/services/deployer/platform-deployment-identity.test.ts b/worker/services/deployer/platform-deployment-identity.test.ts
+new file mode 100644
+index 0000000..37552c2
+--- /dev/null
++++ b/worker/services/deployer/platform-deployment-identity.test.ts
+@@ -0,0 +1,37 @@
++import { describe, expect, it, vi } from 'vitest';
++import { InFlightLock } from './platform-deployment-identity';
++
++describe('immutable platform deployment in-flight lock', () => {
++	it('serializes requests and releases after the operation completes', async () => {
++		const lock = new InFlightLock();
++		let finishFirst!: () => void;
++		const firstOperation = new Promise<void>((resolve) => {
++			finishFirst = resolve;
++		});
++		const operation = vi.fn(() => firstOperation);
++
++		const first = lock.runExclusive(operation);
++		await expect(lock.runExclusive(operation)).resolves.toEqual({ acquired: false });
++		expect(operation).toHaveBeenCalledOnce();
++
++		finishFirst();
++		await expect(first).resolves.toEqual({ acquired: true, value: undefined });
++		await expect(lock.runExclusive(operation)).resolves.toEqual({
++			acquired: true,
++			value: undefined,
++		});
++		expect(operation).toHaveBeenCalledTimes(2);
++	});
++
++	it('releases the lock when the operation fails', async () => {
++		const lock = new InFlightLock();
++		const failure = new Error('deployment failed');
++		await expect(lock.runExclusive(async () => {
++			throw failure;
++		})).rejects.toBe(failure);
++		await expect(lock.runExclusive(async () => 'retried')).resolves.toEqual({
++			acquired: true,
++			value: 'retried',
++		});
++	});
++});
+\ No newline at end of file
+diff --git a/worker/services/deployer/platform-deployment-identity.ts b/worker/services/deployer/platform-deployment-identity.ts
+new file mode 100644
+index 0000000..97ad312
+--- /dev/null
++++ b/worker/services/deployer/platform-deployment-identity.ts
+@@ -0,0 +1,34 @@
++const COMMIT_REVISION = /^[a-f0-9]{40}$/;
++
++export class InFlightLock {
++	private inFlight = false;
++
++	async runExclusive<T>(
++		operation: () => Promise<T>,
++	): Promise<{ acquired: true; value: T } | { acquired: false }> {
++		if (this.inFlight) return { acquired: false };
++		this.inFlight = true;
++		try {
++			return { acquired: true, value: await operation() };
++		} finally {
++			this.inFlight = false;
++		}
++	}
++}
++
++export function isCommitRevision(value: unknown): value is string {
++	return typeof value === 'string' && COMMIT_REVISION.test(value);
++}
++
++export async function createImmutablePlatformScriptName(
++	agentId: string,
++	commitHash: string,
++): Promise<string> {
++	if (!agentId || !isCommitRevision(commitHash)) {
++		throw new Error('Immutable platform deployment requires an agent ID and a 40-character lowercase commit revision');
++	}
++	const input = new TextEncoder().encode(`${agentId.toLowerCase()}:${commitHash.toLowerCase()}`);
++	const digest = await crypto.subtle.digest('SHA-256', input);
++	const digestHex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
++	return `bc-r-${digestHex.slice(0, 56)}`;
++}
+\ No newline at end of file
+diff --git a/worker/services/deployer/think-user-deploy.test.ts b/worker/services/deployer/think-user-deploy.test.ts
+index cc9d4b4..a93bfa2 100644
+--- a/worker/services/deployer/think-user-deploy.test.ts
++++ b/worker/services/deployer/think-user-deploy.test.ts
+@@ -1,11 +1,13 @@
+ import { beforeEach, describe, expect, it, vi } from 'vitest';
+ import type { BranchDeploymentBundle } from '@space-do/space';
+ import { sanitizeWorkerName } from './think-user-deploy';
++import { createImmutablePlatformScriptName } from './platform-deployment-identity';
+ 
+ const deployWithAssets = vi.fn();
+ const deploySimple = vi.fn();
+ const enableWorkersDev = vi.fn();
+ const getWorkersDevSubdomain = vi.fn();
++const assertDispatchScriptDoesNotExist = vi.fn().mockResolvedValue(undefined);
+ 
+ vi.mock('./deployer', () => ({
+ 	WorkerDeployer: vi.fn().mockImplementation(() => ({
+@@ -16,6 +18,7 @@ vi.mock('./deployer', () => ({
+ 
+ vi.mock('./api/cloudflare-api', () => ({
+ 	CloudflareAPI: vi.fn().mockImplementation(() => ({
++		assertDispatchScriptDoesNotExist,
+ 		enableWorkersDev,
+ 		getWorkersDevSubdomain,
+ 	})),
+@@ -33,7 +36,7 @@ function makeBundle(overrides?: Partial<BranchDeploymentBundle>): BranchDeployme
+ 		assets: { '/index.html': '<html><body>hi</body></html>' },
+ 		assetConfig: {},
+ 		compatibilityDate: '2025-01-01',
+-		commitHash: 'abcdef1234567890abcdef',
++		commitHash: 'a'.repeat(40),
+ 		...overrides,
+ 	} as unknown as BranchDeploymentBundle;
+ }
+@@ -54,6 +57,108 @@ describe('deployThinkBundleToPlatform', () => {
+ 		vi.clearAllMocks();
+ 	});
+ 
++	it('derives the immutable dispatch identity from agent ID and verified bundle revision', async () => {
++		const agentId = '550e8400-e29b-41d4-a716-446655440000';
++		const expectedRevision = 'a'.repeat(40);
++		const scriptName = await createImmutablePlatformScriptName(agentId, expectedRevision);
++		const result = await deployThinkBundleToPlatform({
++			accountId: 'platform-account',
++			apiToken: 'platform-token',
++			dispatchNamespace: 'vibesdk-default-namespace',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: 'My App',
++			bundle: makeBundle(),
++			immutableRelease: { agentId, expectedRevision },
++		});
++
++		expect(result.deploymentId).toBe(scriptName);
++		expect(result.deploymentUrl).toBe(`https://${scriptName}.build-preview.cloudflare.dev`);
++		expect(assertDispatchScriptDoesNotExist).toHaveBeenCalledWith(
++			scriptName,
++			'vibesdk-default-namespace',
++		);
++		expect(deployWithAssets.mock.calls[0][0]).toBe(scriptName);
++		expect(assertDispatchScriptDoesNotExist.mock.invocationCallOrder[0])
++			.toBeLessThan(deployWithAssets.mock.invocationCallOrder[0]);
++		expect(deployWithAssets.mock.calls[0][7]).toBe('vibesdk-default-namespace');
++	});
++
++	it.each([
++		['malformed expected revision', 'A'.repeat(40), 'A'.repeat(40)],
++		['bundle revision mismatch', 'b'.repeat(40), 'a'.repeat(40)],
++	] as const)('rejects %s before invoking the uploader', async (_label, expectedRevision, bundleRevision) => {
++		await expect(deployThinkBundleToPlatform({
++			accountId: 'platform-account',
++			apiToken: 'platform-token',
++			dispatchNamespace: 'vibesdk-default-namespace',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: 'My App',
++			bundle: makeBundle({ commitHash: bundleRevision }),
++			immutableRelease: {
++				agentId: '550e8400-e29b-41d4-a716-446655440000',
++				expectedRevision,
++			},
++		})).rejects.toThrow(
++			expectedRevision === bundleRevision
++				? 'Invalid expected commit revision'
++				: 'Deployment bundle revision does not match expected revision',
++		);
++
++		expect(deployWithAssets).not.toHaveBeenCalled();
++	});
++
++	it('refuses an occupied immutable script before invoking the uploader', async () => {
++		assertDispatchScriptDoesNotExist.mockRejectedValueOnce(
++			new Error('already exists; refusing to overwrite it'),
++		);
++		await expect(deployThinkBundleToPlatform({
++			accountId: 'platform-account',
++			apiToken: 'platform-token',
++			dispatchNamespace: 'vibesdk-default-namespace',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: 'My App',
++			bundle: makeBundle(),
++			immutableRelease: {
++				agentId: '550e8400-e29b-41d4-a716-446655440000',
++				expectedRevision: 'a'.repeat(40),
++			},
++		})).rejects.toThrow('already exists');
++
++		expect(deployWithAssets).not.toHaveBeenCalled();
++		expect(deploySimple).not.toHaveBeenCalled();
++	});
++
++	it('isolates same-title apps by agent and revision while staying deterministic', async () => {
++		const expectedRevision = 'c'.repeat(40);
++		const agentA = '550e8400-e29b-41d4-a716-446655440000';
++		const agentB = '550e8400-e29b-41d4-a716-446655440001';
++		const sameTitle = 'My App';
++		const deploy = (agentId: string, revision = expectedRevision) => deployThinkBundleToPlatform({
++			accountId: 'platform-account',
++			apiToken: 'platform-token',
++			dispatchNamespace: 'vibesdk-default-namespace',
++			previewDomain: 'build-preview.cloudflare.dev',
++			appName: sameTitle,
++			bundle: makeBundle({ commitHash: revision }),
++			immutableRelease: { agentId, expectedRevision: revision },
++		});
++
++		await deploy(agentA);
++		const agentAName = deployWithAssets.mock.calls[0][0];
++		await deploy(agentB);
++		const agentBName = deployWithAssets.mock.calls[1][0];
++		await deploy(agentA);
++		const repeatedAgentAName = deployWithAssets.mock.calls[2][0];
++		await deploy(agentA, 'd'.repeat(40));
++		const newRevisionName = deployWithAssets.mock.calls[3][0];
++
++		expect(agentAName).toMatch(/^bc-r-[a-f0-9]{56}$/);
++		expect(agentAName).toHaveLength(61);
++		expect(agentBName).not.toBe(agentAName);
++		expect(repeatedAgentAName).toBe(agentAName);
++		expect(newRevisionName).not.toBe(agentAName);
++	});
++
+ 	it('deploys into the dispatch namespace and returns a preview-domain URL', async () => {
+ 		const result = await deployThinkBundleToPlatform({
+ 			accountId: 'platform-account',
+@@ -67,6 +172,7 @@ describe('deployThinkBundleToPlatform', () => {
+ 		expect(result.deploymentId).toBe('my-app');
+ 		expect(result.deploymentUrl).toBe('https://my-app.build-preview.cloudflare.dev');
+ 		expect(deployWithAssets).toHaveBeenCalledTimes(1);
++		expect(assertDispatchScriptDoesNotExist).not.toHaveBeenCalled();
+ 		// dispatchNamespace is the 8th positional arg of deployWithAssets
+ 		expect(deployWithAssets.mock.calls[0][7]).toBe('vibesdk-default-namespace');
+ 		// Platform deploys never touch workers.dev
+diff --git a/worker/services/deployer/think-user-deploy.ts b/worker/services/deployer/think-user-deploy.ts
+index 2e4deba..dd930ea 100644
+--- a/worker/services/deployer/think-user-deploy.ts
++++ b/worker/services/deployer/think-user-deploy.ts
+@@ -3,6 +3,7 @@ import { CloudflareAPI } from './api/cloudflare-api';
+ import { WorkerDeployer } from './deployer';
+ import type { AssetConfig, WorkerBinding, WorkerObservability } from './types';
+ import { createAssetManifest } from './utils';
++import { createImmutablePlatformScriptName, isCommitRevision } from './platform-deployment-identity';
+ 
+ const APP_BINDING = 'VIBE_APP';
+ const OBSERVABILITY: WorkerObservability = {
+@@ -76,8 +77,9 @@ interface ThinkBundleArtifacts {
+ async function buildThinkBundleArtifacts(
+ 	bundle: BranchDeploymentBundle,
+ 	appName: string,
++	platformScriptName?: string,
+ ): Promise<ThinkBundleArtifacts> {
+-	const scriptName = sanitizeWorkerName(appName);
++	const scriptName = platformScriptName ?? sanitizeWorkerName(appName);
+ 	const modules = new Map<string, string>();
+ 	for (const [name, value] of Object.entries(bundle.modules)) {
+ 		modules.set(name, normalizeModule(value));
+@@ -142,6 +144,7 @@ async function deployArtifacts(
+ 	deployer: WorkerDeployer,
+ 	artifacts: ThinkBundleArtifacts,
+ 	dispatchNamespace: string | undefined,
++	allowScriptPutRetry = true,
+ ): Promise<void> {
+ 	if (artifacts.assets) {
+ 		await deployer.deployWithAssets(
+@@ -158,6 +161,7 @@ async function deployArtifacts(
+ 			undefined,
+ 			artifacts.migration,
+ 			OBSERVABILITY,
++			allowScriptPutRetry,
+ 		);
+ 	} else {
+ 		await deployer.deploySimple(
+@@ -171,6 +175,7 @@ async function deployArtifacts(
+ 			undefined,
+ 			artifacts.migration,
+ 			OBSERVABILITY,
++			allowScriptPutRetry,
+ 		);
+ 	}
+ }
+@@ -206,10 +211,35 @@ export async function deployThinkBundleToPlatform(input: {
+ 	previewDomain: string;
+ 	appName: string;
+ 	bundle: BranchDeploymentBundle;
++	immutableRelease?: {
++		agentId: string;
++		expectedRevision: string;
++	};
+ }): Promise<ThinkUserDeploymentResult> {
+-	const artifacts = await buildThinkBundleArtifacts(input.bundle, input.appName);
++	let platformScriptName: string | undefined;
++	if (input.immutableRelease) {
++		if (!isCommitRevision(input.immutableRelease.expectedRevision)) {
++			throw new Error('Invalid expected commit revision for immutable platform deployment');
++		}
++		if (!isCommitRevision(input.bundle.commitHash)
++			|| input.bundle.commitHash !== input.immutableRelease.expectedRevision) {
++			throw new Error('Deployment bundle revision does not match expected revision');
++		}
++		platformScriptName = await createImmutablePlatformScriptName(
++			input.immutableRelease.agentId,
++			input.bundle.commitHash,
++		);
++		const api = new CloudflareAPI(input.accountId, input.apiToken);
++		await api.assertDispatchScriptDoesNotExist(platformScriptName, input.dispatchNamespace);
++	}
++	const artifacts = await buildThinkBundleArtifacts(input.bundle, input.appName, platformScriptName);
+ 	const deployer = new WorkerDeployer(input.accountId, input.apiToken);
+-	await deployArtifacts(deployer, artifacts, input.dispatchNamespace);
++	await deployArtifacts(
++		deployer,
++		artifacts,
++		input.dispatchNamespace,
++		input.immutableRelease === undefined,
++	);
+ 
+ 	return {
+ 		deploymentId: artifacts.scriptName,

@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buildcustom-control-plane-launch",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-09-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "buildcustom-product-launch-db",
+      "database_id": "ca820baf-6973-4318-ac52-529d56293bb6",
+      "migrations_dir": "migrations/d1"
+    }
+  ]
+}

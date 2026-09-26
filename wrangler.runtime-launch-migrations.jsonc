@@ -1,0 +1,17 @@
+// D1 migration helper only. Never deploy this config as a Worker.
+// The migration files are byte-for-byte identical to pinned upstream
+// cloudflare/vibesdk commit 9da158d82c597a0e8f4bf033cdccd1053fb6fb15.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buildcustom-vibesdk-launch-migrations-only",
+  "main": "DO_NOT_DEPLOY_RUNTIME_MIGRATIONS_ONLY.ts",
+  "compatibility_date": "2026-05-23",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "buildcustom-vibesdk-launch-db",
+      "database_id": "716c6600-8c60-408a-9446-3779979d5316",
+      "migrations_dir": "lab/bc-vibesdk-lab-20260925/migrations"
+    }
+  ]
+}

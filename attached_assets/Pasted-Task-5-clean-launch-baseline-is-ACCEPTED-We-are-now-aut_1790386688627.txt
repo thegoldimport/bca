@@ -1,0 +1,762 @@
+Task 5 clean-launch baseline is ACCEPTED.
+
+We are now authorized to begin creating the NEW production infrastructure.
+
+Proceed with ONLY:
+
+TASK 6 — PROVISION + PROVE THE PRIVATE CLEAN PRODUCTION STACK
+
+This is the first production-resource creation task.
+
+IMPORTANT:
+
+You ARE authorized to create the NEW isolated production resources described
+in the accepted clean-launch manifest.
+
+You ARE authorized to deploy the NEW production VibeSDK runtime privately.
+
+You ARE authorized to create/bootstrap the NEW clean BuildCustom product D1.
+
+You ARE authorized to configure and test the NEW production AI Gateway /
+Unified Billing path privately.
+
+You ARE authorized to run a SMALL controlled amount of real AI inference
+needed to prove the new production runtime works.
+
+You ARE authorized to perform a private disposable platform deployment into
+the NEW production dispatch namespace if required for acceptance.
+
+You are NOT authorized to change any existing public product domain, route,
+Worker association, marketing site, or Replit deployment.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Build the completely clean production foundation that the real BuildCustom
+launch will use.
+
+At the end of this task we should have:
+
+NEW clean BuildCustom product D1
+
+NEW clean production VibeSDK runtime
+
+NEW runtime D1
+
+NEW runtime KV
+
+NEW runtime R2/template catalog
+
+NEW production dispatch namespace
+
+NEW runtime Durable Object namespaces
+
+NEW Sandbox/Container resources
+
+NEW production AI Gateway
+
+NEW clean route KV
+
+PRIVATE production runtime deployment
+
+PRIVATE production control-plane foundation if needed for acceptance
+
+and proof that the new runtime can actually:
+
+authenticate
+→ create owner-specific ThinkAgent
+→ generate
+→ persist files
+→ preview
+→ deploy immutably
+
+WITHOUT using:
+
+old BuildCustom product state
+old runtime state
+lab resources
+staging resources
+Replit runtime
+legacy VIBESDK_API_KEY ownership
+direct Google provider credentials
+
+==================================================
+SOURCE BASELINE — DO NOT DEVIATE
+==================================================
+
+Use the accepted Task 5 source baseline.
+
+STOCK VIBESDK:
+
+cloudflare/vibesdk
+
+commit:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Do NOT substitute the similarly named older v1.5.0 tag.
+
+Use the matching accepted lockfile.
+
+Apply ONLY the isolated Task 4B runtime patch whose normalized diff SHA-256
+was recorded as:
+
+49e57d3e4ae4eaef5ad0a43a10d62b3421fdbab501a15bdd4d5f74dd31e6b91b
+
+The patch already passed git apply --check against the pinned upstream commit.
+
+Do NOT include:
+
+docs/vibesdk-frozen-consistency.patch
+
+Do NOT copy unrelated lab experiments.
+
+Do NOT add the unsupported Artifacts binding merely because an old lab config
+contained it.
+
+==================================================
+IMMUTABLE RELEASE INVARIANT
+==================================================
+
+Before deployment verify the accepted deterministic vector:
+
+Agent:
+
+550e8400-e29b-41d4-a716-446655440000
+
+Revision:
+
+e7520d4a88db2e5c794a1dbf8668a1236eab35f7
+
+Expected script identity:
+
+bc-r-27f06beab314dec1b904ee4675f28f90140f97dc0ceb9cab11c4ca69
+
+If the production runtime source does not produce that result:
+
+STOP.
+
+Do not deploy it.
+
+==================================================
+RESOURCE NAMING
+==================================================
+
+Use the accepted clean-launch resource manifest as the starting point.
+
+Before creating anything:
+
+1. confirm every proposed name is available
+2. confirm there is no collision with an existing resource
+3. confirm each resource belongs to the intended Cloudflare account
+4. confirm no existing public route/domain references it
+
+Prefer the accepted names where available:
+
+buildcustom-control-plane-launch
+buildcustom-product-launch-db
+
+buildcustom-vibesdk-launch
+buildcustom-vibesdk-launch-db
+buildcustom-vibesdk-launch-kv
+buildcustom-vibesdk-launch-templates
+buildcustom-vibesdk-launch-dispatch
+buildcustom-vibesdk-launch-userappsandboxservice
+buildcustom-vibesdk-launch-ai
+buildcustom-app-routes-launch
+
+plus the six required NEW runtime Durable Object namespaces/classes:
+
+CodeGenObject
+Sandbox
+DORateLimitStore
+UserSecretsStore
+THINK_DO
+SPACE_DO
+
+If Cloudflare naming constraints require a minor name adjustment, document it.
+
+Do not silently reuse an old resource.
+
+==================================================
+STEP 1 — PRE-CREATION SAFETY SNAPSHOT
+==================================================
+
+Before any mutation, record read-only:
+
+- current Workers
+- current D1 databases
+- current KV namespaces
+- current R2 buckets
+- current dispatch namespaces
+- current AI Gateways
+- current relevant Worker routes
+- current app.buildcustom.ai association
+- current *.apps.buildcustom.ai route
+- current buildcustom-apps-gateway bindings
+- current marketing site state
+- current Replit deployment state
+
+This is the before snapshot.
+
+==================================================
+STEP 2 — CREATE CLEAN PRODUCT D1
+==================================================
+
+Create:
+
+buildcustom-product-launch-db
+
+or the approved collision-free equivalent.
+
+It must be EMPTY.
+
+Apply migrations:
+
+0001
+0002
+0003
+0004
+0005
+
+in order.
+
+Do not copy ANY rows from the old product D1.
+
+Verify:
+
+- migration ledger
+- expected 17-table final schema
+- zero initial users
+- zero initial projects
+- zero legacy releases
+- zero domain claims
+- foreign_key_check clean
+
+This becomes the future BuildCustom product metadata database.
+
+Do NOT connect the public control plane to it yet.
+
+==================================================
+STEP 3 — CREATE CLEAN STOCK RUNTIME RESOURCES
+==================================================
+
+Create completely NEW resources for the production runtime:
+
+runtime D1
+
+runtime KV
+
+runtime R2 template bucket
+
+Workers for Platforms dispatch namespace
+
+six required Durable Object namespaces/classes
+
+Sandbox/Container application
+
+AI Gateway
+
+Any required stock runtime platform bindings such as:
+
+AI
+BROWSER
+LOADER
+assets
+rate limiters
+
+must match the actual proven serving stock architecture.
+
+Do not invent optional bindings.
+
+Do not copy state from lab/staging.
+
+==================================================
+STEP 4 — BOOTSTRAP STOCK RUNTIME D1
+==================================================
+
+Apply the stock VibeSDK runtime's required nine migrations to the NEW runtime
+D1.
+
+Verify:
+
+- migration ledger
+- schema
+- FK integrity
+- zero legacy users
+- zero legacy agents/projects
+- clean initial state
+
+==================================================
+STEP 5 — POPULATE TEMPLATE CATALOG
+==================================================
+
+Populate the NEW production template R2 bucket using the template catalog
+matching the pinned stock runtime.
+
+Do not copy random lab artifacts.
+
+Verify each required template archive can be read and is structurally valid.
+
+Record:
+
+- template names
+- object count
+- validation result
+
+==================================================
+STEP 6 — PRODUCTION AI GATEWAY
+==================================================
+
+Create/configure the NEW production-only AI Gateway.
+
+Use the architecture already proven in the clean lab:
+
+stock VibeSDK ThinkAgent
+→ Cloudflare AI Gateway
+→ Unified Billing
+→ Gemini
+
+Requirements:
+
+- authenticated Gateway
+- Unified Billing
+- NO Google provider BYOK
+- NO direct Google key
+- NO historical GOOGLE_AI_STUDIO_API_KEY
+- NO lab Gateway/token
+- NO custom account-scoped inference transport
+- stock /compat path
+- stock model resolution
+
+Use distinct production credentials.
+
+Never display secret values.
+
+Verify the Gateway contains no stored provider credential that would
+accidentally turn this into BYOK.
+
+==================================================
+STEP 7 — BUILD PRODUCTION RUNTIME
+==================================================
+
+From:
+
+pinned stock commit
++
+accepted Task 4B patch
+
+perform a clean build.
+
+Verify:
+
+- lockfile
+- toolchain
+- immutable test vector
+- Task 4B markers
+- typecheck
+- relevant tests
+- dry-run bindings
+
+Record the resulting build fingerprint.
+
+If source differs from the accepted manifest unexpectedly:
+
+STOP.
+
+==================================================
+STEP 8 — DEPLOY PRIVATE PRODUCTION RUNTIME
+==================================================
+
+Deploy the NEW:
+
+buildcustom-vibesdk-launch
+
+runtime.
+
+It must initially be PRIVATE/ISOLATED from BuildCustom's public product
+domains.
+
+Do NOT attach:
+
+app.buildcustom.ai
+
+Do NOT modify:
+
+*.apps.buildcustom.ai
+
+Do NOT modify the existing public gateway.
+
+Do NOT add a public BuildCustom product route.
+
+If a workers.dev/private canary endpoint is required for acceptance, use only
+the isolated runtime's own endpoint and document it.
+
+==================================================
+STEP 9 — RUNTIME HEALTH / AUTH
+==================================================
+
+Verify the clean production runtime:
+
+- health
+- frontend/API boot if applicable
+- CSRF
+- registration
+- login
+- auth check
+- logout
+- session rejection after logout
+
+Create only disposable acceptance identities.
+
+Do not use legacy users.
+
+==================================================
+STEP 10 — TWO-USER OWNERSHIP TEST
+==================================================
+
+Create two disposable runtime users:
+
+User A
+User B
+
+Verify:
+
+- each gets independent runtime identity
+- A cannot access B's agent
+- B cannot access A's agent
+- browser-supplied owner substitution fails
+- owner-only connect/ticket behavior works
+
+Do not create unnecessary projects.
+
+==================================================
+STEP 11 — ONE CONTROLLED GENERATION
+==================================================
+
+Perform ONE controlled real generation on the NEW production runtime.
+
+Use User A.
+
+Create one disposable ThinkAgent.
+
+Prompt it to create a minimal valid app containing an unmistakable marker:
+
+BUILDCUSTOM_PROD_RUNTIME_OK
+
+Keep the application intentionally tiny.
+
+This generation is authorized because we need to prove the real production
+AI path.
+
+Do not run multiple generations unless the first one exposes a specific
+failure requiring a controlled fix.
+
+Verify AI Gateway logs show:
+
+- expected production Gateway
+- Gemini
+- successful requests
+- Unified Billing / wholesale path
+- no BYOK
+- no direct provider key
+- no authentication errors
+- no wholesale 429 pattern from the abandoned custom architecture
+
+Record request count and cost if available.
+
+==================================================
+STEP 12 — AUTHORITATIVE STATE
+==================================================
+
+After generation verify through STOCK runtime authority:
+
+- committed revision exists
+- generated files exist
+- expected marker exists
+- reconnect sees same state
+- conversation persisted
+- owner remains correct
+
+Do not create a second file store.
+
+==================================================
+STEP 13 — PREVIEW
+==================================================
+
+Verify the generated application through stock preview.
+
+Require:
+
+- HTTP 200
+- expected marker rendered
+- required local assets load
+- no required asset failures
+- no page-level runtime error
+
+If the agent autonomously repairs an initial build problem during the SAME
+generation loop, that is acceptable and should be documented.
+
+Do not initiate another generation merely to make the app prettier.
+
+==================================================
+STEP 14 — PRIVATE IMMUTABLE PLATFORM DEPLOYMENT
+==================================================
+
+Using the SAME committed revision:
+
+perform ONE owner-authorized stock:
+
+target:"platform"
+
+deployment into ONLY:
+
+buildcustom-vibesdk-launch-dispatch
+
+or its approved collision-free equivalent.
+
+Require the immutable Task 4B identity.
+
+Verify:
+
+- script identity matches the algorithm
+- candidate exists in ONLY the new dispatch namespace
+- old dispatch namespaces are unchanged
+- deployment succeeded
+- generated assets exist
+- no second upload occurred
+
+This is a PRIVATE acceptance deployment.
+
+Do NOT map it into:
+
+*.apps.buildcustom.ai
+
+Do NOT modify public route KV.
+
+==================================================
+STEP 15 — CLEAN ROUTE KV
+==================================================
+
+Create/verify:
+
+buildcustom-app-routes-launch
+
+as an EMPTY clean route namespace.
+
+Do not copy old mappings.
+
+For this task you may write ONLY a disposable private acceptance mapping if
+needed to test route-record serialization.
+
+Do not attach the public gateway to this KV yet.
+
+==================================================
+STEP 16 — CONTROL-PLANE PRODUCTIONIZATION ASSESSMENT
+==================================================
+
+Do NOT publicly deploy the control plane yet.
+
+Using what we learned from the real clean runtime, inspect the current
+BuildCustom control-plane source and identify the smallest code/config change
+needed for the NEXT task to support production:
+
+- stock auth outside staging
+- clean product D1
+- AUTH_RUNTIME pointing at the new runtime
+- owner-authorized normal customer publish
+- production route KV
+- production generated-app gateway
+- Browser Rendering
+- registration/runtime-operation gates
+
+Task 5 established that simply changing an environment flag is NOT enough.
+
+Do not solve this by restoring legacy auth or shared VIBESDK_API_KEY
+ownership.
+
+Prepare the exact next implementation plan.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+During Task 6 do NOT change:
+
+buildcustom.ai
+
+marketing Pages deployment
+
+marketing JavaScript
+
+marketing waitlist endpoint
+
+app.buildcustom.ai association
+
+*.apps.buildcustom.ai DNS
+
+*.apps.buildcustom.ai Worker route
+
+existing buildcustom-apps-gateway bindings
+
+existing production route KV
+
+existing old dispatch namespace
+
+BuyerMagnets DNS
+
+BuyerMagnets Custom Hostnames
+
+BuyerMagnets certificates
+
+old production BuildCustom D1
+
+legacy vibesdk Worker
+
+buildcustom-vibesdk-staging
+
+lab resources
+
+Replit autoscale deployment
+
+Do not delete anything.
+
+==================================================
+FAILURE RULE
+==================================================
+
+If a new clean resource fails:
+
+fix or recreate ONLY the new clean resource.
+
+Do not fall back to old production/staging/lab resources merely to make the
+test pass.
+
+If solving the problem would require touching an existing public resource:
+
+STOP and report the blocker.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+Task 6 passes only if:
+
+1. new clean product D1 exists at final schema
+
+2. zero old product rows were copied
+
+3. new clean stock runtime resources exist
+
+4. runtime D1 is correctly initialized
+
+5. templates are correctly populated
+
+6. new production AI Gateway exists
+
+7. runtime uses Unified Billing without BYOK
+
+8. pinned stock + accepted Task 4B patch is deployed
+
+9. immutable identity vector matches
+
+10. runtime auth works
+
+11. two-user ownership isolation works
+
+12. one real generation succeeds
+
+13. authoritative files/revision persist
+
+14. reconnect works
+
+15. preview works
+
+16. one immutable private platform deployment succeeds
+
+17. candidate exists only in new dispatch namespace
+
+18. clean route KV exists
+
+19. no public BuildCustom domain/route changed
+
+20. no old data/resource was reused as product state
+
+21. Replit was not required by the new runtime acceptance path
+
+22. exact next control-plane productionization task is identified
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. resources created
+
+2. exact resource names/IDs
+
+3. product D1 schema/migration result
+
+4. runtime D1 migration result
+
+5. template catalog result
+
+6. runtime source commit
+
+7. Task 4B patch verification
+
+8. immutable identity vector result
+
+9. deployed Worker version
+
+10. runtime bindings by NAME
+
+11. secret names by NAME only
+
+12. AI Gateway configuration summary
+
+13. proof Unified Billing was used
+
+14. AI request count/cost
+
+15. auth test result
+
+16. two-user isolation result
+
+17. disposable agent ID
+
+18. generation result
+
+19. committed revision
+
+20. authoritative files
+
+21. preview result
+
+22. immutable deployment script ID
+
+23. dispatch namespace result
+
+24. clean route KV result
+
+25. confirmation old resources were not used
+
+26. confirmation public domains/routes were untouched
+
+27. confirmation old product D1 untouched
+
+28. confirmation Replit was not required
+
+29. any deviations from accepted source/config
+
+30. any blockers discovered
+
+31. whether private clean production foundation is ACCEPTED or NOT ACCEPTED
+
+32. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+Do not proceed to public cutover.
