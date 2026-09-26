@@ -43,3 +43,4 @@
 - [Staging publish recovery safety](staging-publish-recovery.md) — recovery needs a distinct fail-closed route; validate stock script identity through lab dispatch, not its returned URL alone.
 - [Staging D1 ledger drift](staging-d1-ledger-drift.md) — verify live schema against pending migrations before replaying an already-present ALTER.
 - [Stock runtime logout revocation](stock-logout-revocation.md) — a successful logout is not proof that the old session is revoked; test the pre-logout credential.
+- [Registration bypass boundary](registration-bypass-boundary.md) — a closed product signup can still be bypassed through the separately exposed stock runtime registration route.

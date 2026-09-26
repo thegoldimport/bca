@@ -1,0 +1,641 @@
+Task 8B implementation is accepted as the current candidate, but Task 8B
+acceptance remains incomplete exactly as reported.
+
+Do NOT make additional architectural changes.
+
+Proceed with ONLY:
+
+TASK 8C — CREATE SECURE CUTOVER TESTER + COMPLETE TASK 8B ACCEPTANCE
+
+==================================================
+OBJECTIVE
+==================================================
+
+Close the remaining Task 8B acceptance gap by creating ONE disposable normal
+BuildCustom tester whose credentials can be securely retained long enough to
+perform the authenticated cutover checks.
+
+Then complete the missing private authenticated acceptance tests against the
+existing candidate:
+
+buildcustom-control-plane-launch
+
+version:
+
+82515081-9c15-4669-9e59-8ffa916331ec
+
+If all tests pass, freeze that exact version as the app.buildcustom.ai
+cutover candidate.
+
+Do NOT cut over app.buildcustom.ai.
+
+Do NOT switch *.apps.buildcustom.ai.
+
+==================================================
+SECURE TEST CREDENTIALS
+==================================================
+
+Use Replit's secure secret-input mechanism.
+
+Ask me through the secure secret form for ONE temporary tester password.
+
+Suggested secret name:
+
+BUILDCUSTOM_CUTOVER_TESTER_PASSWORD
+
+Do NOT ask me to paste the password into chat.
+
+Do NOT print it.
+
+Do NOT write it into:
+
+- source files
+- markdown
+- Git
+- logs
+- reports
+- database plaintext fields
+- scripts
+- shell history where avoidable
+
+Use a fixed disposable tester email such as:
+
+cutover-test@buildcustom.ai
+
+or another clearly disposable BuildCustom-owned test address.
+
+The password should exist only in the approved secure secret mechanism and
+the stock runtime's normal authentication storage.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT build:
+
+- credential vault
+- password recovery
+- invitation system
+- test-user subsystem
+- special tester authentication
+- bypass authentication
+- admin impersonation
+
+This tester must use the EXACT normal customer authentication path.
+
+==================================================
+STEP 1 — VERIFY CANDIDATE HAS NOT CHANGED
+==================================================
+
+Before creating the tester verify:
+
+control plane:
+buildcustom-control-plane-launch
+
+version:
+82515081-9c15-4669-9e59-8ffa916331ec
+
+runtime:
+buildcustom-vibesdk-launch
+
+version:
+699e38f7-4622-4932-a0a2-264e1f97d5a4
+
+registration:
+CLOSED
+
+canonical public origin:
+https://app.buildcustom.ai
+
+public generated apps:
+DISABLED
+
+app.buildcustom.ai:
+still legacy vibesdk
+
+*.apps.buildcustom.ai:
+still existing public gateway
+
+If any accepted component unexpectedly changed:
+
+STOP.
+
+==================================================
+STEP 2 — TEMPORARILY CREATE TESTER THROUGH NORMAL AUTH
+==================================================
+
+Registration is intentionally CLOSED for the future public cutover.
+
+Do NOT weaken the deployed candidate globally merely to create the tester.
+
+Use the narrowest safe method to create ONE tester through the normal stock
+authentication path.
+
+Preferred approach:
+
+temporarily enable registration ONLY in an isolated/private acceptance
+context, create the tester through normal registration, then immediately
+return registration to CLOSED before continuing.
+
+If doing that would require deploying a different Worker version or would
+change the frozen candidate:
+
+STOP and explain the smallest safe alternative.
+
+Do NOT insert a fake password directly into product D1.
+
+Do NOT create a second password authority.
+
+The resulting user must be a normal:
+
+role=user
+
+==================================================
+STEP 3 — CONFIRM REGISTRATION CLOSED AGAIN
+==================================================
+
+Before proceeding with authenticated acceptance:
+
+verify registration is CLOSED.
+
+Require:
+
+signup UI:
+closed-registration state
+
+registration API:
+403 / intentional registration-disabled response
+
+tester login:
+still allowed
+
+No further accounts should be creatable.
+
+==================================================
+STEP 4 — CREATE ONE TEST PROJECT
+==================================================
+
+Log in as the disposable tester through the normal customer login path.
+
+Create ONE small project through BuildCustom.
+
+Verify exactly one owner-specific ThinkAgent.
+
+Create the minimum valid committed application needed for future cutover
+testing.
+
+If generation is required, ONE small generation is authorized.
+
+Use marker:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+Do not beautify it.
+
+Do not perform unnecessary edits.
+
+Do not publish it publicly.
+
+==================================================
+STEP 5 — RECORD SAFE TESTER IDENTIFIERS
+==================================================
+
+Record only non-secret identifiers:
+
+- product user ID
+- project ID
+- runtime agent ID
+- committed revision
+
+Do NOT report:
+
+- password
+- password hash
+- session cookie
+- CSRF token
+- runtime token
+- API token
+
+==================================================
+STEP 6 — LIVE PRIVATE LOGIN TEST
+==================================================
+
+Log completely out.
+
+Then perform a fresh login using the securely retained tester credentials.
+
+This is important because Task 8B specifically lacked a fresh known-owner
+credential login.
+
+Verify:
+
+login succeeds
+auth/check succeeds
+correct user returned
+dashboard loads
+correct project appears
+
+==================================================
+STEP 7 — PROJECT REOPEN
+==================================================
+
+Open the existing tester project.
+
+Verify:
+
+same project
+same ThinkAgent
+same committed revision
+conversation available
+authoritative files available
+
+Do NOT create another agent.
+
+Do NOT generate again.
+
+==================================================
+STEP 8 — FILES
+==================================================
+
+Verify BuildCustom Files view reads the authoritative runtime/Git state.
+
+Require the marker:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+to exist in the committed app.
+
+==================================================
+STEP 9 — PREVIEW
+==================================================
+
+Create/open the normal BuildCustom preview.
+
+Verify:
+
+HTTP 200
+marker visible
+required local assets load
+expected styling applies
+sandbox isolation remains intact
+
+Do not modify the app.
+
+==================================================
+STEP 10 — IDLE THINKAGENT / CONVERSATION
+==================================================
+
+Connect through the normal builder path.
+
+Verify:
+
+authorized ticket
+WebSocket connects
+existing conversation loads
+current revision matches
+no new prompt sent
+no generation triggered
+
+This is an IDLE connectivity test only.
+
+==================================================
+STEP 11 — LIVE COOKIE COLLISION TEST
+==================================================
+
+Now close the remaining Task 8B cookie question.
+
+Against the private canary, simulate/present the legacy host-only cookie names:
+
+accessToken
+csrf-token
+
+with stale/invalid legacy values.
+
+Verify:
+
+- no false authentication
+- no ownership bypass
+- login page still works
+- normal tester login replaces/establishes correct new auth state
+- dashboard works
+
+Then verify normal logout.
+
+==================================================
+STEP 12 — LOGOUT REVOCATION
+==================================================
+
+Capture the tester's valid session internally for the test.
+
+Logout normally.
+
+Verify:
+
+logout succeeds
+server session is revoked
+browser cookie cleared
+
+Then reuse the EXACT pre-logout session.
+
+Require:
+
+authentication rejected
+
+Then perform another fresh login with the securely retained tester
+credentials.
+
+Require:
+
+fresh login succeeds.
+
+Do not expose any session value in the report.
+
+==================================================
+STEP 13 — AUTHENTICATED NETWORK AUDIT
+==================================================
+
+While logged in as the tester, capture browser network behavior for:
+
+login
+dashboard
+project reopen
+files
+preview
+idle builder/WebSocket
+
+Require ZERO browser requests to:
+
+replit.com
+replit.dev
+replit.app
+legacy vibesdk Worker URL
+staging Worker
+lab Worker
+old BuildCustom API/control plane
+
+Document approved destinations without exposing credentials.
+
+==================================================
+STEP 14 — PUBLISH UI SAFETY
+==================================================
+
+Because:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+inspect the authenticated tester's Publish experience.
+
+You do NOT need to create another immutable deployment if one is not needed
+to verify the UI.
+
+Require:
+
+- no private workers.dev gateway URL is presented as a customer public URL
+- no misleading "your site is live" public claim
+- public Open Site action hidden/disabled as designed
+- future public URL logic still derives from stable slug only when capability
+  is enabled
+
+If a live internal publish is necessary to verify this and would create a
+release, STOP and explain why before doing it.
+
+==================================================
+STEP 15 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish:
+
+ai-build-studio.replit.app
+
+because marketing still depends on it.
+
+With development workflow unavailable, perform:
+
+fresh tester login
+dashboard
+project reopen
+files
+preview
+idle builder connection
+
+No generation.
+
+No publish.
+
+Then restore the development workflow if needed.
+
+==================================================
+STEP 16 — FINAL REGISTRATION CHECK
+==================================================
+
+Before acceptance, verify again:
+
+registration CLOSED
+
+signup UI CLOSED
+
+registration API rejects creation
+
+existing tester login works
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+==================================================
+STEP 17 — FREEZE OR REJECT
+==================================================
+
+If ALL checks pass and no source/config/deployment change was required after
+version:
+
+82515081-9c15-4669-9e59-8ffa916331ec
+
+then freeze that exact version as:
+
+APP.BUILDCUSTOM.AI CUTOVER CANDIDATE
+
+If ANY code/config/deployment change creates a new Worker version:
+
+do NOT automatically call the old version accepted.
+
+Run the complete affected acceptance checks against the new version and
+report the new candidate version.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+Do NOT modify:
+
+app.buildcustom.ai
+
+app.buildcustom.ai DNS
+
+*.apps.buildcustom.ai
+
+public buildcustom-apps-gateway
+
+public gateway bindings
+
+buildcustom.ai
+
+marketing Pages
+
+marketing waitlist
+
+public Replit autoscale deployment
+
+old production D1
+
+legacy vibesdk Worker
+
+BuyerMagnets
+
+Task 6 runtime architecture
+
+Do not delete anything.
+
+==================================================
+TASK 8C ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. secure tester credentials retained through approved secret mechanism
+
+2. normal role=user tester exists
+
+3. registration is CLOSED after tester creation
+
+4. tester owns exactly one intended test project
+
+5. project has one owner-specific runtime agent
+
+6. valid committed revision exists
+
+7. fresh known-credential login passes
+
+8. dashboard passes
+
+9. project reopen passes
+
+10. files pass
+
+11. preview passes
+
+12. idle WebSocket/conversation passes
+
+13. live legacy-cookie test passes
+
+14. logout revocation passes
+
+15. exact old session rejected
+
+16. fresh login after logout passes
+
+17. authenticated network audit clean
+
+18. Publish UI does not expose private URL
+
+19. Replit-development-off authenticated flow passes
+
+20. registration remains CLOSED
+
+21. public generated apps remain DISABLED
+
+22. no public hostname/route changed
+
+23. one exact Worker version is frozen as cutover candidate
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. control-plane Worker version tested
+
+2. whether Worker version changed
+
+3. registration state before tester creation
+
+4. method used to create tester safely
+
+5. registration state afterward
+
+6. tester product user ID
+
+7. tester role
+
+8. tester project ID
+
+9. tester runtime agent ID
+
+10. tester committed revision
+
+11. number of inference prompts required
+
+12. inference cost if measurable
+
+13. fresh known-credential login result
+
+14. dashboard result
+
+15. project reopen result
+
+16. files result
+
+17. preview result
+
+18. idle WebSocket/conversation result
+
+19. live legacy-cookie result
+
+20. logout revocation result
+
+21. exact-old-session rejection result
+
+22. fresh-login-after-logout result
+
+23. authenticated network-audit result
+
+24. Publish UI safety result
+
+25. Replit-development-off result
+
+26. final registration API result
+
+27. final signup UI state
+
+28. final PUBLIC_GENERATED_APPS_ENABLED state
+
+29. tests/typecheck/build if source changed
+
+30. confirmation Task 6 runtime unchanged
+
+31. confirmation app.buildcustom.ai untouched
+
+32. confirmation *.apps.buildcustom.ai untouched
+
+33. confirmation public gateway untouched
+
+34. confirmation marketing/public Replit deployment untouched
+
+35. remaining HIGH risks
+
+36. remaining MEDIUM risks
+
+37. whether TASK 8B/8C is now ACCEPTED or NOT ACCEPTED
+
+38. exact frozen app.buildcustom.ai cutover candidate Worker version
+
+39. whether we are READY for the separately approved app.buildcustom.ai
+    reassignment
+
+40. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CUT OVER app.buildcustom.ai.
+DO NOT SWITCH *.apps.buildcustom.ai.
