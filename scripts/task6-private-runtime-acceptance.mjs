@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 import { randomBytes, randomUUID } from 'node:crypto';
+import { access, chmod, open, rename, unlink } from 'node:fs/promises';
 import WebSocket from 'ws';
 
 const BASE = 'https://buildcustom-vibesdk-launch.thegoldimport.workers.dev';
 const REQUIRED_BASE = 'https://buildcustom-vibesdk-launch.thegoldimport.workers.dev';
 const MARKER = 'BUILDCUSTOM_PROD_RUNTIME_OK';
+const CHECKPOINT_PATH = '/tmp/buildcustom-task6-private-runtime-checkpoint.json';
+const CHECKPOINT_LOCK_PATH = `${CHECKPOINT_PATH}.lock`;
 const REQUEST_TIMEOUT_MS = 30_000;
 const AGENT_INIT_TIMEOUT_MS = 120_000;
 const WS_CONNECT_TIMEOUT_MS = 20_000;
@@ -139,33 +142,156 @@ async function registerUser(session, label, email, password) {
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new Error(`${label}: registration did not produce an authenticated user identity.`);
   }
-  return userId;
+  const sessionId = profile.payload?.data?.sessionId;
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    throw new Error(`${label}: profile did not expose the active server session ID.`);
+  }
+  return { userId, sessionId };
 }
 
-async function verifyLogoutAndRelogin(session, email, password, userId) {
-  await session.refreshCsrf();
-  const oldSession = new RuntimeSession('revoked-session');
-  oldSession.cookies = new Map(session.cookies);
-
-  const logoutResponse = await session.request('/api/auth/logout', { method: 'POST' });
-  await requireStatus(logoutResponse, 200, 'User A logout');
-
-  const revoked = await oldSession.json('/api/auth/profile');
-  await requireStatus(revoked.response, [401, 403], 'revoked User A session');
-
-  session.cookies.clear();
-  session.csrfToken = undefined;
+async function loginUser(session, label, email, password, expectedUserId) {
   await session.refreshCsrf();
   const login = await session.json('/api/auth/login', {
     method: 'POST',
     body: { email, password },
   });
-  await requireStatus(login.response, 200, 'User A relogin');
+  await requireStatus(login.response, 200, `${label} login`);
+  const expiresAt = login.payload?.data?.expiresAt;
+  if (
+    typeof expiresAt !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt)
+  ) {
+    throw new Error(`${label}: login response omitted a valid session expiresAt.`);
+  }
+  const expirationMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expirationMs) || expirationMs <= Date.now()) {
+    throw new Error(`${label}: login response session expiresAt is malformed or already expired.`);
+  }
+  const sessionExpiresAt = new Date(expirationMs).toISOString();
   await session.refreshCsrf();
+
   const profile = await session.json('/api/auth/profile');
-  await requireStatus(profile.response, 200, 'User A relogin profile');
+  await requireStatus(profile.response, 200, `${label} profile`);
+  const userId = profile.payload?.data?.user?.id;
+  const sessionId = profile.payload?.data?.sessionId;
+  if (userId !== expectedUserId) throw new Error(`${label}: login returned a different owner identity.`);
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    throw new Error(`${label}: profile did not expose the active server session ID.`);
+  }
+  return { sessionId, sessionExpiresAt };
+}
+
+async function expectAuthCheck(session, expectedAuthenticated, stage, expectedUserId) {
+  const { response, payload } = await session.json('/api/auth/check');
+  await requireStatus(response, 200, stage);
+  const authenticated = payload?.data?.authenticated;
+  if (authenticated !== expectedAuthenticated) {
+    throw new Error(`${stage}: expected authenticated=${expectedAuthenticated}, received ${String(authenticated)}.`);
+  }
+  if (expectedAuthenticated && expectedUserId && payload?.data?.user?.id !== expectedUserId) {
+    throw new Error(`${stage}: authenticated check returned a different user identity.`);
+  }
+  return authenticated;
+}
+
+async function verifyLogoutAndRelogin(
+  session,
+  sameUserSession,
+  otherUserSession,
+  email,
+  password,
+  userId,
+  otherUserId,
+  sessionId,
+  sameUserSessionId,
+) {
+  if (sessionId === sameUserSessionId) {
+    throw new Error('User A primary and independent sessions unexpectedly share a server session ID.');
+  }
+
+  await expectAuthCheck(session, true, 'User A pre-logout auth/check', userId);
+  await expectAuthCheck(sameUserSession, true, 'User A second session pre-logout auth/check', userId);
+  await expectAuthCheck(otherUserSession, true, 'User B pre-logout auth/check', otherUserId);
+
+  await session.refreshCsrf();
+  const oldSession = new RuntimeSession('revoked-session');
+  oldSession.cookies = new Map(session.cookies);
+  oldSession.csrfToken = session.csrfToken;
+  oldSession.csrfHeader = session.csrfHeader;
+  await expectAuthCheck(oldSession, true, 'Exact pre-logout cookie auth/check', userId);
+
+  const logoutResponse = await session.request('/api/auth/logout', { method: 'POST' });
+  await requireStatus(logoutResponse, 200, 'User A logout');
+
+  await expectAuthCheck(oldSession, false, 'Revoked User A auth/check');
+  const revoked = await oldSession.json('/api/auth/profile');
+  await requireStatus(revoked.response, [401, 403], 'revoked User A session');
+  const logoutBody = await logoutResponse.json();
+  if (logoutBody?.success !== true) throw new Error('User A logout did not confirm success.');
+
+  session.cookies.clear();
+  session.csrfToken = undefined;
+  const freshSession = await loginUser(session, 'User A fresh login', email, password, userId);
+  await expectAuthCheck(session, true, 'User A fresh-session auth/check', userId);
+  await expectAuthCheck(oldSession, false, 'Revoked User A auth/check after fresh login');
+  await expectAuthCheck(sameUserSession, true, 'User A independent-session auth/check after logout', userId);
+  await expectAuthCheck(otherUserSession, true, 'User B auth/check after User A logout', otherUserId);
+
+  const profile = await session.json('/api/auth/profile');
+  await requireStatus(profile.response, 200, 'User A fresh-login profile');
   if (profile.payload?.data?.user?.id !== userId) {
-    throw new Error('User A relogin returned a different owner identity.');
+    throw new Error('User A fresh login returned a different owner identity.');
+  }
+  return freshSession;
+}
+
+async function acquireCheckpointLock() {
+  let lock;
+  try {
+    lock = await open(CHECKPOINT_LOCK_PATH, 'wx', 0o600);
+    await lock.close();
+    await access(CHECKPOINT_PATH);
+    await unlink(CHECKPOINT_LOCK_PATH);
+    throw new Error('A private acceptance checkpoint already exists; refusing to register users or create another agent.');
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      throw new Error('A private acceptance run or checkpoint already exists; refusing to create more test data.');
+    }
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  return async () => {
+    await unlink(CHECKPOINT_LOCK_PATH).catch(() => undefined);
+  };
+}
+
+async function writeCheckpoint(session, userId, sessionId, sessionExpiresAt, agentId, stage) {
+  const temporaryPath = `${CHECKPOINT_PATH}.${process.pid}.${randomUUID()}.tmp`;
+  const payload = {
+    base: BASE,
+    stage,
+    recordedAt: new Date().toISOString(),
+    sessionExpiresAt,
+    userId,
+    sessionId,
+    cookies: [...session.cookies.entries()],
+    csrfToken: session.csrfToken,
+    csrfHeader: session.csrfHeader,
+    agentId: agentId ?? null,
+    passwordsPersisted: false,
+  };
+  const file = await open(temporaryPath, 'wx', 0o600);
+  try {
+    await file.writeFile(`${JSON.stringify(payload)}\n`, 'utf8');
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  try {
+    await rename(temporaryPath, CHECKPOINT_PATH);
+    await chmod(CHECKPOINT_PATH, 0o600);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
   }
 }
 
@@ -331,17 +457,18 @@ async function runSingleGeneration(session, agentId) {
         return;
       }
 
-      if (event.type === 'conversation_response' && suggestionSent && event.isStreaming === false && !completed) {
+      if (event.type === 'conversation_response' && suggestionSent && event.isStreaming === false && !event.tool && !completed) {
         completed = true;
         clearTimeout(timer);
         setTimeout(() => {
           socket.close();
-          report('generation-finished', {
+          report('generation-stream-ended-authority-unverified', {
             agentId,
-            terminalResponse: true,
+            textResponseEnded: true,
             fileEvents,
             markerObservedInGeneratedFile,
             successfulToolEvents,
+            authoritativeGitAndPreviewStillRequired: true,
           });
           resolve({ fileEvents, successfulToolEvents });
         }, 1500);
@@ -412,31 +539,78 @@ async function verifyReconnect(session, agentId, expectedUserId) {
 }
 
 async function main() {
-  const health = await fetch(new URL('/health', BASE), {
-    redirect: 'manual',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  await requireStatus(health, 200, 'private runtime health');
-  report('health', { status: health.status });
-
-  const runId = randomUUID();
-  const userA = new RuntimeSession('user-a');
-  const userB = new RuntimeSession('user-b');
-  const emailA = `launch-a-${runId}@example.invalid`;
-  const emailB = `launch-b-${runId}@example.invalid`;
-  const passwordA = randomBytes(32).toString('base64url');
-  const passwordB = randomBytes(32).toString('base64url');
-
+  let releaseCheckpointLock;
   let userAId;
+  let agentId;
+  let authVerified = false;
+  let generationStreamEnded = false;
+  let reconnectVerified = false;
   try {
-    userAId = await registerUser(userA, 'User A', emailA, passwordA);
-    report('user-a-registration-profile', { authenticated: true, userId: userAId });
-    await verifyLogoutAndRelogin(userA, emailA, passwordA, userAId);
-    report('user-a-logout-relogin', { sessionRejectedAfterLogout: true, relogin: true });
+    releaseCheckpointLock = await acquireCheckpointLock();
 
-    const userBId = await registerUser(userB, 'User B', emailB, passwordB);
+    const health = await fetch(new URL('/health', BASE), {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    await requireStatus(health, 200, 'private runtime health');
+    report('health', { status: health.status });
+
+    const runId = randomUUID();
+    const userA = new RuntimeSession('user-a');
+    const userB = new RuntimeSession('user-b');
+    const userASecondSession = new RuntimeSession('user-a-second-session');
+    const emailA = `launch-a-${runId}@example.invalid`;
+    const emailB = `launch-b-${runId}@example.invalid`;
+    const passwordA = randomBytes(32).toString('base64url');
+    const passwordB = randomBytes(32).toString('base64url');
+
+    const userAAuth = await registerUser(userA, 'User A', emailA, passwordA);
+    userAId = userAAuth.userId;
+    report('user-a-registration-profile', { authenticated: true, userId: userAId });
+
+    const userBAuth = await registerUser(userB, 'User B', emailB, passwordB);
+    const userBId = userBAuth.userId;
     if (userAId === userBId) throw new Error('Disposable users unexpectedly share an identity.');
     report('user-b-registration-profile', { authenticated: true, independentIdentity: true, userId: userBId });
+
+    const userASecondSessionId = await loginUser(
+      userASecondSession,
+      'User A independent session',
+      emailA,
+      passwordA,
+      userAId,
+    );
+    const freshSession = await verifyLogoutAndRelogin(
+      userA,
+      userASecondSession,
+      userB,
+      emailA,
+      passwordA,
+      userAId,
+      userBId,
+      userAAuth.sessionId,
+      userASecondSessionId,
+    );
+    const { sessionId: freshSessionId, sessionExpiresAt } = freshSession;
+    if (freshSessionId === userAAuth.sessionId) {
+      throw new Error('Fresh User A login reused the revoked session ID.');
+    }
+    await expectAuthCheck(userASecondSession, true, 'User A second session after relogin', userAId);
+    await expectAuthCheck(userB, true, 'User B session after User A relogin', userBId);
+    authVerified = true;
+    report('logout-session-isolation', {
+      csrfPass: true,
+      registrationPass: true,
+      loginPass: true,
+      oldSessionRejected: true,
+      freshSessionAccepted: true,
+      revokedSessionStayedInvalid: true,
+      sameUserOtherSessionUnaffected: true,
+      otherUserSessionUnaffected: true,
+      deploysSent: 0,
+    });
+
+    await writeCheckpoint(userA, userAId, freshSessionId, sessionExpiresAt, null, 'auth-verified-agent-not-created');
 
     const createResponse = await userA.request('/api/agent', {
       method: 'POST',
@@ -448,7 +622,8 @@ async function main() {
       },
     });
     await requireStatus(createResponse, 200, 'one Think-agent creation');
-    const agentId = await readNdjsonAgentId(createResponse, AGENT_INIT_TIMEOUT_MS);
+    agentId = await readNdjsonAgentId(createResponse, AGENT_INIT_TIMEOUT_MS);
+    await writeCheckpoint(userA, userAId, freshSessionId, sessionExpiresAt, agentId, 'agent-created-generation-not-started');
 
     const owner = await userA.json(`/api/agent/${encodeURIComponent(agentId)}/connect`);
     await requireStatus(owner.response, 200, 'User A owner access');
@@ -461,19 +636,45 @@ async function main() {
     await requireStatus(nonOwnerTicket.response, [403, 404], 'User B owner-only ticket isolation');
     report('owner-isolation', { agentId, ownerAllowed: true, nonOwnerDenied: true, nonOwnerTicketDenied: true });
 
+    await writeCheckpoint(userA, userAId, freshSessionId, sessionExpiresAt, agentId, 'generation-starting');
     await runSingleGeneration(userA, agentId);
+    generationStreamEnded = true;
+    await writeCheckpoint(userA, userAId, freshSessionId, sessionExpiresAt, agentId, 'generation-stream-ended-authority-unverified');
     await verifyReconnect(userA, agentId, userAId);
-    report('acceptance-harness-finished', {
+    reconnectVerified = true;
+    await writeCheckpoint(userA, userAId, freshSessionId, sessionExpiresAt, agentId, 'reconnect-verified-authority-unverified');
+    report('private-runtime-harness-finished', {
       agentId,
-      disposableUsers: 2,
+      csrfVerified: authVerified,
+      authVerified,
+      ownershipIsolationVerified: true,
+      generationStreamEnded,
+      generationCompleted: false,
+      reconnectVerified,
+      authoritativeFilesVerified: false,
+      previewVerified: false,
+      immutableDeploymentVerified: false,
+      task6Accepted: false,
+      disposableUsersCreatedThisRun: 2,
       thinkAgentsCreated: 1,
       generationSuggestionsSent: 1,
       deploysSent: 0,
-      credentialsOrCookiesPersisted: false,
+      ownerCookieCheckpointSaved: true,
+      checkpointPermissions: '0600',
+      passwordsPersisted: false,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected acceptance failure.';
-    fail('acceptance-harness-aborted', message, userAId ? { userAId } : {});
+    fail('acceptance-harness-aborted', message, {
+      ...(userAId ? { userAId } : {}),
+      ...(agentId ? { agentId } : {}),
+      authVerified,
+      generationStreamEnded,
+      reconnectVerified,
+      deploysSent: 0,
+    });
+  } finally {
+    await releaseCheckpointLock?.();
   }
 }
 
