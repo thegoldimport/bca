@@ -45,3 +45,4 @@
 - [Stock runtime logout revocation](stock-logout-revocation.md) — a successful logout is not proof that the old session is revoked; test the pre-logout credential.
 - [Registration bypass boundary](registration-bypass-boundary.md) — a closed product signup can still be bypassed through the separately exposed stock runtime registration route.
 - [Local remote D1 bootstrap](local-remote-d1-bootstrap.md) — local Wrangler remote D1 bindings can fail even while remote D1 CLI reads succeed; prove the private path before registration.
+- [Single-use browser acceptance](single-use-browser-acceptance.md) — controlled inputs can show the right DOM value while React state remains stale; reconcile before one-time clicks.
