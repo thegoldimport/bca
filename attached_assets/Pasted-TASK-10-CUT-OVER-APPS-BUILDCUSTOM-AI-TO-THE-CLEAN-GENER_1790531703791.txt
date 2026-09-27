@@ -1,0 +1,1144 @@
+TASK 10 — CUT OVER *.APPS.BUILDCUSTOM.AI TO THE CLEAN GENERATED-APP STACK
+
+Task 9A is ACCEPTED.
+
+The clean BuildCustom product application is now publicly live at:
+
+https://app.buildcustom.ai
+
+Current accepted association:
+
+app.buildcustom.ai
+→ buildcustom-control-plane-launch
+
+DO NOT MODIFY THAT ASSOCIATION.
+
+We are now authorizing the NEXT SINGLE PRODUCTION CUTOVER:
+
+*.apps.buildcustom.ai
+
+This task is ONLY about moving PUBLIC GENERATED-APP DELIVERY from the legacy
+gateway resources to the already-proven clean launch resources.
+
+Signup must remain CLOSED throughout this task.
+
+PUBLIC_GENERATED_APPS_ENABLED must remain FALSE throughout this task until
+explicitly instructed otherwise in a later task.
+
+Do NOT open BuildCustom to new customers yet.
+
+==================================================
+CURRENT FROZEN PRODUCT STACK
+==================================================
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+version:
+
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+PRODUCT D1:
+
+buildcustom-product-launch-db
+
+ID:
+
+ca820baf-6973-4318-ac52-529d56293bb6
+
+CLEAN ROUTE KV:
+
+buildcustom-app-routes-launch
+
+ID:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+CLEAN DISPATCH NAMESPACE:
+
+buildcustom-vibesdk-launch-dispatch
+
+==================================================
+CURRENT PUBLIC GENERATED-APP GATEWAY
+==================================================
+
+Existing public gateway Worker:
+
+buildcustom-apps-gateway
+
+Previously observed version:
+
+a7b8128e-356f-4354-8ae3-1dbe2ed9ed0e
+
+DO NOT assume that version is still current.
+
+Read it again before mutation.
+
+Current legacy ROUTES binding previously observed:
+
+d6e19823343e46d3965ad167775afb30
+
+Current legacy DISPATCHER binding previously observed:
+
+buildcustom-vibesdk-staging
+
+Current public wildcard:
+
+*.apps.buildcustom.ai
+
+already routes through the existing public gateway.
+
+The gateway also participates in broader zone routing/pass-through behavior.
+
+Task 5 established that non-apps hosts pass through to origin without touching
+ROUTES/DISPATCHER.
+
+Task 9A confirmed the wildcard route, gateway version/bindings, and unrelated
+DNS remained unchanged during the app hostname cutover.
+
+==================================================
+TARGET GENERATED-APP ARCHITECTURE
+==================================================
+
+Keep the SAME public gateway architecture.
+
+We are NOT creating another public gateway unless an unexpected hard blocker
+proves that absolutely necessary.
+
+Target public gateway bindings:
+
+ROUTES
+→ buildcustom-app-routes-launch
+→ 248ac5b6821a475794a7fe3d2b0c3718
+
+DISPATCHER
+→ buildcustom-vibesdk-launch-dispatch
+
+Conceptually:
+
+<slug>.apps.buildcustom.ai
+
+→ existing public buildcustom-apps-gateway
+
+→ clean ROUTES KV lookup
+
+→ immutable scriptName
+
+→ clean launch dispatch namespace
+
+→ generated application
+
+Do NOT introduce:
+
+another gateway layer
+
+per-app Worker routes
+
+per-app custom domains
+
+a second route database
+
+a new deployment broker
+
+a second generated-app architecture
+
+==================================================
+IMPORTANT CLEAN-LAUNCH RULE
+==================================================
+
+Legacy generated applications DO NOT require migration.
+
+Legacy route mappings are disposable.
+
+BuyerMagnets is disposable.
+
+Old staging generated applications are disposable.
+
+We do NOT need dual dispatch.
+
+We do NOT need compatibility with old generated-app mappings.
+
+We do NOT need to copy legacy ROUTES KV records into the clean KV.
+
+This is a CLEAN CUTOVER.
+
+The old resources should remain temporarily untouched for rollback/reference,
+but public generated-app traffic should ultimately use only the clean launch
+resources.
+
+==================================================
+STEP 1 — COMPLETE PRE-CUTOVER INVENTORY
+==================================================
+
+Before mutation, read the LIVE Cloudflare state.
+
+Record:
+
+1. public gateway Worker name
+
+2. current public gateway version
+
+3. traffic percentage/version deployment state
+
+4. current ROUTES binding name and resource ID
+
+5. current DISPATCHER binding name and namespace
+
+6. all other gateway bindings
+
+7. Worker routes attached to the gateway
+
+8. wildcard route for *.apps.buildcustom.ai
+
+9. zone-wide route/pass-through configuration
+
+10. DNS relevant to *.apps.buildcustom.ai
+
+11. TLS/certificate state for generated-app wildcard
+
+12. buildcustom.ai current behavior
+
+13. www behavior if applicable
+
+14. app.buildcustom.ai current association
+
+15. marketing Pages/current origin behavior
+
+16. public Replit deployment status
+
+Do not mutate anything yet.
+
+==================================================
+STEP 2 — VERIFY CLEAN TARGET RESOURCES
+==================================================
+
+Verify the target resources exist and are the intended clean launch resources.
+
+ROUTES:
+
+buildcustom-app-routes-launch
+
+ID:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+DISPATCHER:
+
+buildcustom-vibesdk-launch-dispatch
+
+Inspect the clean route KV.
+
+We expect only clean launch/test state.
+
+Do NOT copy legacy KV into it.
+
+Inspect the clean dispatch namespace.
+
+Verify the accepted immutable tester release from the clean stack still exists
+if it remains available.
+
+From Task 7, the accepted private generated-app test used:
+
+slug:
+
+task7privateui01
+
+immutable script:
+
+bc-r-d7a7a09b10539a4a23ae3601f2900863b1b7be623d8bcb929449490d
+
+release ID:
+
+1
+
+Do NOT assume these still exist.
+
+Read the clean resources.
+
+If they exist and are internally consistent, they may be used as the public
+generated-app acceptance fixture.
+
+If they do NOT exist:
+
+do not recreate legacy state.
+
+Use the smallest controlled clean fixture described later in this task.
+
+==================================================
+STEP 3 — VERIFY GATEWAY SOURCE SEMANTICS
+==================================================
+
+Before changing bindings, inspect the EXACT currently deployed public gateway
+source/version.
+
+Verify:
+
+A. requests for generated-app hosts under:
+
+*.apps.buildcustom.ai
+
+perform the intended ROUTES lookup and dispatch.
+
+B. requests for non-generated-app hosts do NOT require ROUTES or DISPATCHER
+for normal pass-through behavior.
+
+Specifically verify behavior for:
+
+buildcustom.ai
+
+www.buildcustom.ai if used
+
+app.buildcustom.ai
+
+other non-apps hosts reached by the broader gateway route
+
+We previously proved this locally.
+
+Confirm the deployed gateway still matches those semantics.
+
+Do not modify gateway application logic merely to perform the binding cutover.
+
+==================================================
+STEP 4 — VERIFY APP.BUILDCUSTOM.AI IS PROTECTED
+==================================================
+
+Because app.buildcustom.ai is now live on the clean control plane, verify the
+gateway binding change cannot steal or interfere with its accepted Custom
+Domain association.
+
+Require before proceeding:
+
+app.buildcustom.ai
+→ buildcustom-control-plane-launch
+
+HTTPS:
+healthy
+
+login page:
+healthy
+
+Do not change its DNS, Custom Domain, route, or Worker association.
+
+==================================================
+STEP 5 — BUILD ROLLBACK PLAN
+==================================================
+
+Before the forward mutation, establish the exact rollback.
+
+Current public gateway:
+
+ROUTES
+→ legacy KV
+
+DISPATCHER
+→ legacy staging dispatch
+
+Forward:
+
+ROUTES
+→ clean launch KV
+
+DISPATCHER
+→ clean launch dispatch
+
+Rollback:
+
+ROUTES
+→ exact pre-cutover legacy KV
+
+DISPATCHER
+→ exact pre-cutover legacy dispatch namespace
+
+Record the exact legacy resource IDs/names from LIVE state.
+
+Do not rely solely on historical values.
+
+Also establish how to restore the exact pre-cutover gateway Worker version if
+changing bindings necessarily creates a new Worker version.
+
+Do NOT execute rollback.
+
+==================================================
+STEP 6 — PRE-CUTOVER PASS-THROUGH BASELINE
+==================================================
+
+Before changing gateway bindings, capture current responses for:
+
+https://buildcustom.ai
+
+https://app.buildcustom.ai
+
+www if applicable
+
+one arbitrary non-apps hostname only if it is legitimately covered by the
+gateway and safe to test
+
+Record enough information to compare after cutover:
+
+status
+
+redirect behavior
+
+selected response headers
+
+HTML/content fingerprint where useful
+
+Do not record secrets.
+
+==================================================
+STEP 7 — GENERATED-APP FIXTURE DECISION
+==================================================
+
+We need ONE clean generated application to prove the public wildcard after
+cutover.
+
+Preferred:
+
+reuse an already-existing clean immutable release if its route mapping and
+script still exist and are internally consistent.
+
+If the Task 7 fixture still exists:
+
+task7privateui01
+
+→ clean route KV
+
+→
+bc-r-d7a7a09b10539a4a23ae3601f2900863b1b7be623d8bcb929449490d
+
+and that immutable script exists in the CLEAN dispatch namespace:
+
+use it.
+
+Do not generate anything new.
+
+If that fixture is no longer available or is inconsistent:
+
+use the current tester project to create the SMALLEST controlled immutable
+generated-app fixture through the already accepted native Publish path.
+
+BUT:
+
+PUBLIC_GENERATED_APPS_ENABLED must remain false.
+
+The capability flag controls customer-facing public availability/UI.
+
+It does not need to be enabled merely to perform an internal controlled
+production acceptance fixture.
+
+If the current code prevents creating a controlled internal fixture while the
+public capability is disabled:
+
+STOP.
+
+Do not change application code or enable public generated apps just for the
+test.
+
+==================================================
+STEP 8 — IF A NEW FIXTURE IS REQUIRED
+==================================================
+
+ONLY if no valid clean existing fixture exists:
+
+Use tester:
+
+product user:
+3f730b86-bc16-4954-b3fd-db22aea136b7
+
+project:
+2
+
+agent:
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+revision:
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+Do NOT generate or edit.
+
+Use the already committed revision.
+
+Perform exactly ONE controlled internal Publish if the accepted architecture
+allows it while public generated apps remain disabled.
+
+Require Task 4B behavior:
+
+candidate-first
+
+immutable script identity
+
+clean dispatch namespace
+
+clean route KV
+
+stable slug
+
+candidate verification before route activation
+
+No legacy dispatch.
+
+No legacy route KV.
+
+No second release if the exact revision was already published.
+
+Record:
+
+release ID
+
+slug
+
+scriptName
+
+revision
+
+route record
+
+Do not expose a customer-facing public URL in the BuildCustom UI yet.
+
+==================================================
+STEP 9 — FREEZE BEFORE GATEWAY MUTATION
+==================================================
+
+Immediately before changing gateway bindings verify:
+
+app.buildcustom.ai:
+healthy
+
+registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+control plane:
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+clean fixture:
+valid
+
+clean route record:
+valid
+
+clean immutable script:
+exists
+
+marketing:
+healthy
+
+public Replit:
+healthy
+
+If any state drifted:
+
+STOP.
+
+==================================================
+STEP 10 — SWITCH ONLY PUBLIC GATEWAY BINDINGS
+==================================================
+
+Update the EXISTING:
+
+buildcustom-apps-gateway
+
+so that:
+
+ROUTES
+
+changes from the LIVE legacy KV
+
+to:
+
+buildcustom-app-routes-launch
+
+ID:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+AND:
+
+DISPATCHER
+
+changes from the LIVE legacy namespace
+
+to:
+
+buildcustom-vibesdk-launch-dispatch
+
+Preserve ALL OTHER bindings/configuration.
+
+Preserve ALL routes.
+
+Preserve compatibility flags/settings unless the binding update inherently
+requires a new deployment version.
+
+Do NOT modify gateway application logic.
+
+Do NOT change wildcard DNS.
+
+Do NOT change gateway routes.
+
+Do NOT change app.buildcustom.ai.
+
+Do NOT change buildcustom.ai.
+
+Do NOT change marketing.
+
+This should be a binding-only gateway deployment.
+
+==================================================
+STEP 11 — VERIFY CLOUDFLARE STATE IMMEDIATELY
+==================================================
+
+After deployment verify:
+
+public gateway:
+buildcustom-apps-gateway
+
+ROUTES:
+248ac5b6821a475794a7fe3d2b0c3718
+
+DISPATCHER:
+buildcustom-vibesdk-launch-dispatch
+
+All other bindings:
+unchanged
+
+Wildcard Worker route:
+unchanged
+
+Zone-wide/pass-through route:
+unchanged
+
+DNS:
+unchanged
+
+app.buildcustom.ai Custom Domain:
+unchanged
+
+If anything unrelated changed:
+
+ROLL BACK.
+
+==================================================
+STEP 12 — PUBLIC GENERATED-APP ACCEPTANCE
+==================================================
+
+Using the controlled clean fixture, request:
+
+https://<fixture-slug>.apps.buildcustom.ai/
+
+Require:
+
+valid TLS
+
+HTTP 200
+
+correct generated application HTML
+
+expected fixture marker/content
+
+CSS/assets load
+
+nested application route works if the fixture has one
+
+NO legacy generated application content
+
+NO staging dispatch
+
+NO private gateway URL redirect
+
+NO workers.dev redirect
+
+NO Replit dependency
+
+Confirm the request resolved through:
+
+public gateway
+→ clean ROUTES KV
+→ clean immutable script
+→ clean launch dispatch namespace
+
+==================================================
+STEP 13 — UNKNOWN SLUG BEHAVIOR
+==================================================
+
+Request one safely random/nonexistent slug under:
+
+*.apps.buildcustom.ai
+
+Verify the gateway returns the intended not-found behavior.
+
+It must NOT:
+
+fall through to a legacy app
+
+dispatch arbitrary script
+
+expose internal errors/secrets
+
+route to staging
+
+Do not create a mapping for the test slug.
+
+==================================================
+STEP 14 — ROUTE ISOLATION
+==================================================
+
+Verify the public gateway cannot be manipulated to dispatch an arbitrary
+script via:
+
+query parameters
+
+headers
+
+path traversal
+
+forged slug metadata
+
+The route KV mapping must remain authoritative.
+
+Use existing tests/read-only safe requests.
+
+Do not perform destructive security testing.
+
+==================================================
+STEP 15 — MARKETING PASS-THROUGH
+==================================================
+
+Immediately verify:
+
+https://buildcustom.ai
+
+against the pre-cutover baseline.
+
+Require:
+
+HTTP behavior unchanged
+
+marketing HTML/content fingerprint unchanged where expected
+
+JS/CSS load
+
+waitlist remains current behavior
+
+no generated-app lookup affects marketing
+
+no dispatch namespace is invoked for the apex path if gateway semantics say it
+should pass through
+
+==================================================
+STEP 16 — APP.BUILDCUSTOM.AI REGRESSION
+==================================================
+
+Verify:
+
+https://app.buildcustom.ai
+
+still targets:
+
+buildcustom-control-plane-launch
+
+Require:
+
+TLS valid
+
+login page loads
+
+registration remains closed
+
+fresh tester login works
+
+dashboard works
+
+project 2 opens
+
+Files work
+
+preview works
+
+idle WebSocket works
+
+NO inference
+
+Do not rerun every Task 9A test unless evidence suggests a regression.
+
+This is a targeted route-isolation check.
+
+==================================================
+STEP 17 — AUTHENTICATED NETWORK AUDIT
+==================================================
+
+For app.buildcustom.ai after the gateway switch, verify browser traffic still
+contains ZERO unexpected requests to:
+
+Replit development
+
+legacy Worker
+
+staging runtime
+
+lab runtime
+
+old control plane
+
+legacy generated-app gateway destination
+
+The existing public gateway itself is expected for generated-app hosts.
+
+==================================================
+STEP 18 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish the public Replit autoscale deployment because marketing
+waitlist still depends on it.
+
+While development is stopped verify:
+
+A. app.buildcustom.ai
+
+fresh tester login
+
+dashboard
+
+project reopen
+
+Files
+
+preview
+
+idle WebSocket
+
+B. controlled public generated app
+
+https://<fixture-slug>.apps.buildcustom.ai/
+
+HTTP success
+
+assets load
+
+expected content
+
+C. buildcustom.ai
+
+marketing remains healthy
+
+Then restore the development workflow if needed.
+
+==================================================
+STEP 19 — PUBLIC GENERATED APPS MUST REMAIN PRODUCT-DISABLED
+==================================================
+
+Even though the wildcard infrastructure is now functional, BuildCustom product
+capability must remain:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+Verify:
+
+Publish UI does not advertise generated apps as publicly live
+
+no public Open Site action appears
+
+signup remains closed
+
+We are proving infrastructure before exposing it to customers.
+
+Do NOT flip the flag in this task.
+
+==================================================
+STEP 20 — VERIFY REGISTRATION
+==================================================
+
+Require:
+
+control-plane registration:
+CLOSED
+
+runtime registration:
+CLOSED
+
+signup UI:
+CLOSED
+
+existing tester login:
+WORKS
+
+The generated-app gateway cutover must not affect auth.
+
+==================================================
+STEP 21 — VERIFY LEGACY RESOURCES STILL EXIST
+==================================================
+
+Do NOT delete old resources.
+
+Read-only verify the pre-cutover:
+
+legacy ROUTES KV
+
+legacy staging dispatch namespace
+
+still exist sufficiently for rollback/reference.
+
+They no longer need to receive public generated-app traffic.
+
+Do not migrate them.
+
+Do not clean them up.
+
+==================================================
+ROLLBACK TRIGGERS
+==================================================
+
+ROLL BACK the public gateway bindings if:
+
+generated fixture fails
+
+wrong app is served
+
+TLS fails
+
+assets fail
+
+clean route lookup fails
+
+clean dispatch fails
+
+unknown slug routes incorrectly
+
+marketing changes unexpectedly
+
+app.buildcustom.ai regresses
+
+gateway begins depending on Replit
+
+gateway begins using staging/legacy resources unexpectedly
+
+unrelated routes/DNS change
+
+auth/registration state changes
+
+Do not patch architecture while public gateway is switched.
+
+Rollback first.
+
+Diagnose afterward.
+
+==================================================
+ROLLBACK PROCEDURE
+==================================================
+
+Restore ONLY:
+
+buildcustom-apps-gateway
+
+ROUTES
+→ exact LIVE pre-cutover legacy KV
+
+DISPATCHER
+→ exact LIVE pre-cutover legacy dispatch namespace
+
+Preserve all other bindings/routes.
+
+If necessary restore the exact previous gateway Worker version identified in
+preflight.
+
+Then verify:
+
+*.apps behavior returns to previous state
+
+buildcustom.ai unchanged
+
+app.buildcustom.ai unchanged
+
+TLS valid
+
+marketing healthy
+
+STOP.
+
+Do not attempt a second forward cutover in the same task after rollback.
+
+==================================================
+SUCCESS STATE
+==================================================
+
+If every required check passes:
+
+LEAVE:
+
+app.buildcustom.ai
+→ buildcustom-control-plane-launch
+
+LEAVE public gateway:
+
+buildcustom-apps-gateway
+
+with:
+
+ROUTES
+→ buildcustom-app-routes-launch
+→ 248ac5b6821a475794a7fe3d2b0c3718
+
+DISPATCHER
+→ buildcustom-vibesdk-launch-dispatch
+
+LEAVE:
+
+runtime registration:
+CLOSED
+
+control-plane registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+Do NOT open signup yet.
+
+Do NOT delete legacy resources.
+
+==================================================
+TASK 10 ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. exact pre-cutover gateway state recorded
+
+2. rollback path established
+
+3. clean route KV verified
+
+4. clean dispatch namespace verified
+
+5. controlled clean fixture established
+
+6. existing gateway application logic preserved
+
+7. ROUTES switched to clean launch KV
+
+8. DISPATCHER switched to clean launch dispatch
+
+9. all other gateway bindings unchanged
+
+10. wildcard route unchanged
+
+11. DNS unchanged
+
+12. public generated fixture returns valid TLS/HTTP
+
+13. correct generated app served
+
+14. assets work
+
+15. no legacy/staging dispatch
+
+16. unknown slug behavior correct
+
+17. route mapping remains authoritative
+
+18. buildcustom.ai unchanged
+
+19. marketing waitlist unchanged
+
+20. app.buildcustom.ai unchanged and healthy
+
+21. tester login/reopen still works
+
+22. Replit-development-off app flow works
+
+23. Replit-development-off generated app works
+
+24. Replit-development-off marketing works
+
+25. registration remains closed
+
+26. PUBLIC_GENERATED_APPS_ENABLED remains false
+
+27. legacy resources remain available for rollback
+
+28. no architecture/code changes were required
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-cutover public gateway version
+
+2. pre-cutover ROUTES binding
+
+3. pre-cutover DISPATCHER binding
+
+4. clean fixture slug
+
+5. fixture release/revision/scriptName
+
+6. forward gateway deployment result
+
+7. post-cutover public gateway version
+
+8. post-cutover ROUTES binding
+
+9. post-cutover DISPATCHER binding
+
+10. wildcard route/DNS result
+
+11. public generated-app result
+
+12. assets/nested-route result
+
+13. unknown-slug result
+
+14. route-isolation result
+
+15. marketing result
+
+16. app.buildcustom.ai regression result
+
+17. Replit-development-off result
+
+18. registration state
+
+19. PUBLIC_GENERATED_APPS_ENABLED state
+
+20. legacy-resource state
+
+21. whether rollback occurred
+
+22. remaining HIGH risks
+
+23. remaining MEDIUM risks
+
+24. whether TASK 10 is ACCEPTED
+
+25. whether the CLEAN PUBLIC GENERATED-APP INFRASTRUCTURE is now LIVE
+
+26. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT OPEN REGISTRATION.
+
+DO NOT SET PUBLIC_GENERATED_APPS_ENABLED=true.
+
+DO NOT DELETE LEGACY RESOURCES.
+
+DO NOT MODIFY app.buildcustom.ai ROUTING.
+
+DO NOT MODIFY THE FROZEN CONTROL-PLANE OR RUNTIME APPLICATION CODE.
