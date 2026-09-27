@@ -1,0 +1,1251 @@
+TASK 11B — ENABLE PUBLIC PUBLISHING ON THE FIXED CONTROL PLANE + FINAL CUSTOMER ACCEPTANCE
+
+Task 11A is ACCEPTED.
+
+The same-revision customer Publish defect is fixed.
+
+We are now explicitly authorizing the FINAL customer-facing public-publishing
+enablement for EXISTING authenticated users.
+
+Signup MUST remain closed.
+
+This task should NOT create another application revision.
+
+This task should NOT create another release.
+
+We already have the real production release needed for acceptance.
+
+==================================================
+ACCEPTED CURRENT PRODUCTION STATE
+==================================================
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+current accepted version:
+
+0f193a56-e9e1-44e3-abb9-bdb166d459bb
+
+serving:
+
+100%
+
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+PUBLIC GATEWAY:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+
+CLEAN ROUTES KV:
+
+buildcustom-app-routes-launch
+
+ID:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+
+CLEAN DISPATCH:
+
+buildcustom-vibesdk-launch-dispatch
+
+
+CURRENT PRODUCT GATES:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+control-plane registration=CLOSED
+
+runtime registration=CLOSED
+
+
+==================================================
+EXISTING REAL CUSTOMER RELEASE
+==================================================
+
+Tester product user:
+
+3f730b86-bc16-4954-b3fd-db22aea136b7
+
+Project:
+
+2
+
+Agent:
+
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+Revision:
+
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+
+Existing production release:
+
+release ID:
+2
+
+stable slug:
+
+create-a-minimal-public-app-by-creating-public-index-html-and-p
+
+immutable script:
+
+bc-r-c59c890f14f0fd9fef34193ab2c3a310bae00d5b728de54aba0380df
+
+
+Public URL:
+
+https://create-a-minimal-public-app-by-creating-public-index-html-and-p.apps.buildcustom.ai
+
+
+This release is already valid.
+
+It has already been proven to use:
+
+clean product D1
+
+clean route KV
+
+clean immutable deployment
+
+clean launch dispatch namespace
+
+clean public gateway
+
+
+DO NOT delete it.
+
+DO NOT recreate it.
+
+DO NOT generate another revision.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Change:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+to:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+on the FIXED Task 11A control-plane code.
+
+Then prove that an authenticated existing BuildCustom user can:
+
+login
+
+→ open their project
+
+→ see the correct public publishing state
+
+→ see/open the stable public URL
+
+→ click Publish updates on the same revision
+
+→ receive bounded HTTP 200 alreadyPublished=true
+
+→ retain the same release/script/slug/route
+
+→ publicly access the generated app
+
+
+If every acceptance check passes:
+
+LEAVE PUBLIC_GENERATED_APPS_ENABLED=true.
+
+Signup remains CLOSED.
+
+==================================================
+IMPORTANT ACTIVE-VERSION RULE
+==================================================
+
+Task 11 exposed that script-level Worker settings can reflect an inactive
+version.
+
+Therefore:
+
+production truth must come from the ACTUALLY SERVING Worker version and the
+live capability endpoint.
+
+Before and after deployment record:
+
+1. Worker version
+
+2. deployment percentage
+
+3. serving version configuration/bindings
+
+4. live capability response
+
+5. script-level settings separately if useful
+
+Do not declare the capability enabled merely because script-level settings say
+true.
+
+The serving version and live application behavior must prove it.
+
+==================================================
+STEP 1 — PRE-ENABLEMENT FREEZE
+==================================================
+
+Before changing anything verify:
+
+control plane:
+0f193a56-e9e1-44e3-abb9-bdb166d459bb
+serving 100%
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+ROUTES:
+248ac5b6821a475794a7fe3d2b0c3718
+
+DISPATCHER:
+buildcustom-vibesdk-launch-dispatch
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+control registration:
+closed
+
+runtime registration:
+closed
+
+app.buildcustom.ai:
+healthy
+
+tester login:
+healthy
+
+project 2:
+healthy
+
+release count:
+1 for project 2
+
+release ID:
+2
+
+route:
+existing and correct
+
+script:
+existing and correct
+
+public generated app:
+HTTP 200
+
+unknown slug:
+404
+
+claims:
+zero
+
+
+If anything material drifted:
+
+STOP.
+
+==================================================
+STEP 2 — SNAPSHOT RELEASE STATE
+==================================================
+
+Immediately before enablement snapshot:
+
+release count
+
+release ID
+
+revision
+
+slug
+
+scriptName
+
+route KV value
+
+dispatch script count
+
+publish claim count
+
+
+Expected:
+
+one project release
+
+release 2
+
+same accepted revision
+
+same stable slug
+
+same immutable script
+
+same route
+
+three clean-dispatch scripts
+
+zero active claims
+
+
+This snapshot must remain unchanged unless an acceptance test explicitly
+requires otherwise.
+
+==================================================
+STEP 3 — DEFINE ROLLBACK
+==================================================
+
+Before enabling the capability, define exact rollback.
+
+Rollback:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+→ false
+
+using the FIXED Task 11A application code.
+
+IMPORTANT:
+
+Do NOT roll back to the pre-11A application code.
+
+If rollback is required, we want:
+
+Task 11A FIX RETAINED
+
+public capability disabled
+
+registration closed
+
+
+Do not restore:
+
+a10d2711...
+
+because that predates the Task 11A UI fix.
+
+Prepare the exact fixed-code/flag-false rollback version or deployment method
+before forward enablement.
+
+==================================================
+STEP 4 — ENABLE ONLY THE PUBLIC CAPABILITY
+==================================================
+
+Using the exact accepted Task 11A source/code, change ONLY:
+
+PUBLIC_GENERATED_APPS_ENABLED
+
+false
+→ true
+
+
+No application logic changes.
+
+No runtime changes.
+
+No gateway changes.
+
+No D1 schema changes.
+
+No DNS changes.
+
+No route changes.
+
+No registration changes.
+
+Deploy the new control-plane version.
+
+Record:
+
+new version ID
+
+serving percentage
+
+binding/configuration diff
+
+
+The intended configuration difference from Task 11A should be ONLY the public
+generated-app capability.
+
+==================================================
+STEP 5 — VERIFY ACTIVE CAPABILITY
+==================================================
+
+After deployment verify from the ACTUAL public product:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+using the live capabilities response.
+
+Also verify:
+
+control registration=false
+
+runtime registration=false
+
+existing-user login works
+
+
+If registration becomes enabled:
+
+ROLL BACK IMMEDIATELY.
+
+==================================================
+STEP 6 — PUBLIC PRODUCT UI
+==================================================
+
+Fresh browser context.
+
+Go to:
+
+https://app.buildcustom.ai
+
+Login using the retained tester credentials.
+
+Open:
+
+project 2
+
+
+Require:
+
+correct project
+
+correct agent
+
+correct revision
+
+conversation loads
+
+Files load
+
+preview loads
+
+idle WebSocket works
+
+no inference
+
+no generation
+
+no edit
+
+
+==================================================
+STEP 7 — EXISTING RELEASE UI
+==================================================
+
+Because release 2 already exists, the UI should recognize the project as
+published.
+
+Require customer-facing UI to expose the correct stable public address:
+
+https://create-a-minimal-public-app-by-creating-public-index-html-and-p.apps.buildcustom.ai
+
+
+Require:
+
+public URL visible where intended
+
+Open Site available where intended
+
+no private gateway URL
+
+no workers.dev URL
+
+no staging URL
+
+no legacy URL
+
+no claim that a different release is current
+
+
+Do NOT click Publish yet.
+
+==================================================
+STEP 8 — OPEN SITE
+==================================================
+
+Use the actual customer-facing Open Site action if available.
+
+Require:
+
+correct hostname
+
+valid TLS
+
+HTTP 200
+
+expected generated application
+
+expected marker
+
+CSS 200
+
+expected styling
+
+no authentication required
+
+no private redirect
+
+no workers.dev redirect
+
+no Replit dependency
+
+
+==================================================
+STEP 9 — SAME-REVISION CUSTOMER PUBLISH
+==================================================
+
+Return to project 2.
+
+Using the NORMAL customer-facing UI, click:
+
+Publish updates
+
+ONCE.
+
+
+This is the exact path fixed in Task 11A.
+
+Require:
+
+settings PUT is NOT incorrectly attempted
+
+Publish POST IS sent
+
+HTTP:
+200
+
+alreadyPublished:
+true
+
+release:
+2
+
+same revision
+
+same slug
+
+same scriptName
+
+
+Measure:
+
+browser click-to-settled-UI time
+
+Worker request wall time
+
+
+Use a bounded acceptance timeout.
+
+Do NOT require <=10.000 seconds.
+
+Task 11A measured approximately 10 seconds and established that as current
+behavior.
+
+For this acceptance:
+
+request must settle within 35 seconds.
+
+Report actual timing.
+
+==================================================
+STEP 10 — VERIFY ZERO MUTATION
+==================================================
+
+After the customer retry compare against the pre-enable snapshot.
+
+Require:
+
+release count:
+unchanged
+
+release ID:
+2
+
+revision:
+unchanged
+
+slug:
+unchanged
+
+script:
+unchanged
+
+dispatch script count:
+unchanged
+
+route KV:
+byte-identical
+
+publish claims:
+zero
+
+no candidate deployment
+
+no route write
+
+no release write requiring a new release
+
+no inference
+
+
+==================================================
+STEP 11 — SECOND CUSTOMER RETRY
+==================================================
+
+Perform ONE more normal customer Publish updates click.
+
+Require again:
+
+HTTP 200
+
+alreadyPublished=true
+
+release 2
+
+bounded response <=35 seconds
+
+same slug
+
+same script
+
+no deployment
+
+no release
+
+no route mutation
+
+claims return/remain zero
+
+
+This closes the exact customer-facing defect with the capability actually
+enabled.
+
+==================================================
+STEP 12 — DIRECT LOAD + HARD REFRESH
+==================================================
+
+In a fresh unauthenticated browser:
+
+directly load the public generated app.
+
+Then perform a hard refresh/reload.
+
+Require both:
+
+valid TLS
+
+HTTP 200
+
+same application
+
+same marker/content
+
+CSS loads
+
+expected styling
+
+no BuildCustom authentication required
+
+
+==================================================
+STEP 13 — UNKNOWN SLUG
+==================================================
+
+Request a new random nonexistent:
+
+<random>.apps.buildcustom.ai
+
+Require:
+
+404
+
+no legacy content
+
+no staging content
+
+no internal secrets/errors
+
+no redirect to another app
+
+
+==================================================
+STEP 14 — LIVE CROSS-USER ISOLATION
+==================================================
+
+Task 11 did not complete the live second-user isolation check while public
+publishing was enabled.
+
+Close that now if an existing accepted second-user account/session is
+available.
+
+Do NOT open registration or create a new public user.
+
+Using an existing non-owner authenticated user, verify they cannot:
+
+view project 2
+
+read release 2 metadata
+
+obtain the tester agent ticket
+
+preview project 2
+
+Publish project 2
+
+change its publishing settings
+
+change its slug/route
+
+
+Require owner-scoped denial.
+
+If only one direction of a two-user live test is available, combine:
+
+live non-owner denial
+
++
+
+existing two-user automated authorization tests
+
+and report the limitation.
+
+Do not block solely because a disposable second live credential no longer
+exists if the authorization tests and at least one live non-owner direction
+prove the boundary.
+
+==================================================
+STEP 15 — FORGERY REGRESSION
+==================================================
+
+Verify forged:
+
+owner
+
+project
+
+agent
+
+release
+
+slug/deployment inputs
+
+cannot bypass ownership or select another publication.
+
+Use existing safe tests/requests.
+
+Do not perform destructive testing.
+
+==================================================
+STEP 16 — REGISTRATION MUST REMAIN CLOSED
+==================================================
+
+With public publishing ENABLED verify:
+
+signup UI:
+closed
+
+control-plane registration:
+403/rejected
+
+runtime registration:
+403/rejected
+
+existing-user login:
+works
+
+
+Public publishing and signup are separate capabilities.
+
+If signup opens:
+
+ROLL BACK.
+
+==================================================
+STEP 17 — CUSTOMER NETWORK AUDIT
+==================================================
+
+Capture the real browser flow:
+
+login
+
+dashboard
+
+project reopen
+
+Open Site
+
+first Publish updates
+
+second Publish updates
+
+logout/fresh login if useful
+
+
+Forbidden runtime dependencies remain:
+
+Replit development
+
+legacy Worker
+
+staging runtime
+
+lab runtime
+
+old control plane
+
+private generated-app gateway customer URL
+
+workers.dev customer URL
+
+
+IMPORTANT:
+
+Do NOT classify normal third-party frontend assets/telemetry as forbidden
+runtime dependencies merely because they are different hosts.
+
+For example, normal Google Fonts or Cloudflare analytics requests are not by
+themselves an acceptance failure.
+
+Report them separately if present.
+
+==================================================
+STEP 18 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish the public Replit deployment because marketing waitlist still
+depends on it.
+
+While development is stopped verify:
+
+A. app.buildcustom.ai
+
+fresh tester login
+
+dashboard
+
+project 2 reopen
+
+conversation
+
+Files
+
+preview HTML/CSS
+
+idle WebSocket
+
+
+B. public generated app
+
+direct load
+
+hard refresh
+
+CSS/assets
+
+
+C. marketing
+
+buildcustom.ai healthy
+
+
+D. public capability
+
+still reports enabled
+
+
+Do NOT Publish again during this Replit-off test.
+
+Restore development workflow afterward if desired.
+
+==================================================
+STEP 19 — LOGOUT REVOCATION REGRESSION
+==================================================
+
+Because this becomes the accepted public product state, run the existing
+logout regression once more.
+
+Require:
+
+normal logout
+
+browser session cleared
+
+exact old session rejected by product
+
+exact old session rejected by runtime
+
+fresh login succeeds
+
+
+==================================================
+STEP 20 — FINAL INFRASTRUCTURE FREEZE
+==================================================
+
+Verify:
+
+app.buildcustom.ai
+→ buildcustom-control-plane-launch
+
+control plane:
+new Task 11B version
+serving 100%
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+ROUTES:
+248ac5b6821a475794a7fe3d2b0c3718
+
+DISPATCHER:
+buildcustom-vibesdk-launch-dispatch
+
+wildcard DNS:
+unchanged
+
+app Custom Domain:
+unchanged
+
+marketing:
+unchanged
+
+public Replit deployment:
+unchanged
+
+registration:
+closed
+
+PUBLIC_GENERATED_APPS_ENABLED:
+true
+
+
+==================================================
+ROLLBACK TRIGGERS
+==================================================
+
+ROLL BACK the public capability if:
+
+existing release UI is incorrect
+
+private/internal URL is exposed
+
+Open Site fails
+
+same-revision customer click does not send Publish POST
+
+same-revision Publish does not settle within 35 seconds
+
+duplicate release appears
+
+duplicate script appears
+
+route changes unexpectedly
+
+publish claim remains stale
+
+ownership isolation fails
+
+registration opens
+
+app.buildcustom.ai regresses
+
+generated app regresses
+
+Replit development is required
+
+clean gateway/runtime state changes unexpectedly
+
+
+==================================================
+ROLLBACK PROCEDURE
+==================================================
+
+If rollback is required:
+
+deploy the FIXED Task 11A code with:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+
+IMPORTANT:
+
+retain the Task 11A fix.
+
+Do NOT roll back to pre-fix code.
+
+
+Do NOT delete:
+
+release 2
+
+route
+
+immutable script
+
+gateway infrastructure
+
+
+After rollback verify:
+
+capability=false
+
+registration closed
+
+tester login works
+
+project works
+
+existing direct public generated URL still works
+
+gateway unchanged
+
+Then STOP.
+
+==================================================
+SUCCESS STATE
+==================================================
+
+If all required checks pass:
+
+LEAVE:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+LEAVE:
+
+control registration=CLOSED
+
+runtime registration=CLOSED
+
+
+At this point the production product supports:
+
+existing user login
+
+project reopen
+
+native agent
+
+Files
+
+preview
+
+public Publish
+
+stable public generated-app URL
+
+same-revision Publish updates
+
+public generated-app delivery
+
+
+New-user signup remains intentionally closed.
+
+==================================================
+TASK 11B ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. accepted Task 11A version verified before enablement
+
+2. release-2 snapshot verified
+
+3. fixed-code rollback prepared
+
+4. only public capability changed
+
+5. serving version reports capability=true
+
+6. signup remains closed
+
+7. existing-user login works
+
+8. project reopen works
+
+9. existing release recognized correctly
+
+10. correct public URL shown
+
+11. no private/internal URL exposed
+
+12. Open Site works
+
+13. generated app TLS/HTML/CSS works
+
+14. first customer retry sends Publish POST
+
+15. first retry HTTP 200 alreadyPublished=true
+
+16. first retry settles <=35 seconds
+
+17. second customer retry HTTP 200 alreadyPublished=true
+
+18. second retry settles <=35 seconds
+
+19. release remains ID 2
+
+20. release count unchanged
+
+21. script unchanged
+
+22. dispatch script count unchanged
+
+23. route byte-identical
+
+24. claims zero
+
+25. direct public load works
+
+26. hard refresh works
+
+27. unknown slug returns 404
+
+28. ownership isolation remains intact
+
+29. forgery protections remain intact
+
+30. control registration remains closed
+
+31. runtime registration remains closed
+
+32. browser network audit has no forbidden runtime dependency
+
+33. Replit-development-off product works
+
+34. Replit-development-off generated app works
+
+35. Replit-development-off marketing works
+
+36. logout revocation works
+
+37. runtime unchanged
+
+38. gateway unchanged
+
+39. marketing unchanged
+
+40. PUBLIC_GENERATED_APPS_ENABLED remains true at success
+
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-enable control-plane version
+
+2. release-2 pre-enable snapshot
+
+3. rollback version/config prepared
+
+4. new control-plane version
+
+5. active deployment percentage
+
+6. live capability result
+
+7. registration result
+
+8. existing-user login/project result
+
+9. existing release UI result
+
+10. customer-facing public URL
+
+11. Open Site result
+
+12. TLS/HTML/CSS result
+
+13. first Publish-updates status/result/time
+
+14. second Publish-updates status/result/time
+
+15. release count/ID
+
+16. immutable script/script count
+
+17. route KV comparison
+
+18. claim state
+
+19. direct-load result
+
+20. hard-refresh result
+
+21. unknown-slug result
+
+22. live cross-user isolation result
+
+23. forgery result
+
+24. network-audit result
+
+25. Replit-development-off result
+
+26. logout-revocation result
+
+27. final runtime version
+
+28. final gateway version/bindings
+
+29. marketing/public-Replit state
+
+30. final PUBLIC_GENERATED_APPS_ENABLED state
+
+31. final registration state
+
+32. whether rollback occurred
+
+33. remaining HIGH risks
+
+34. remaining MEDIUM risks
+
+35. whether TASK 11B is ACCEPTED
+
+36. whether EXISTING AUTHENTICATED USERS CAN NOW PUBLICLY PUBLISH END-TO-END
+
+37. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE ANOTHER RELEASE.
+
+DO NOT GENERATE OR EDIT THE TESTER PROJECT.
+
+DO NOT DELETE LEGACY RESOURCES.
+
+DO NOT MOVE THE MARKETING WAITLIST YET.
+
+DO NOT SHUT DOWN THE PUBLIC REPLIT DEPLOYMENT YET.
