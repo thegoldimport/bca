@@ -914,6 +914,7 @@ function EditorPage() {
   const [runtimeCapabilityError, setRuntimeCapabilityError] = useState("");
   const currentRuntimeCapability = runtimeCapability?.projectId === projectId ? runtimeCapability : null;
   const nativeThink = currentRuntimeCapability?.nativeThink === true;
+  const nativeRuntimeReady = nativeThink && currentRuntimeCapability?.status?.runtimeStatus === "ready";
   const canPublishNative = Boolean(currentRuntimeCapability && nativeThink);
   const runtimeGenerationStatus = String(currentRuntimeCapability?.status?.state?.generation?.status || "").toLowerCase();
   const nativeRuntimeAlreadyWorking = nativeThink && (
@@ -977,6 +978,8 @@ function EditorPage() {
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const requestController = useRef<AbortController | null>(null);
   const nativeSocketRef = useRef<WebSocket | null>(null);
+  const nativeIdleSocketRef = useRef<WebSocket | null>(null);
+  const nativeIdleStopRef = useRef<() => void>(() => undefined);
   const nativeOperationControllerRef = useRef<AbortController | null>(null);
   const nativeCancelRef = useRef<() => void>(() => undefined);
   const nativeLifecycleRef = useRef(0);
@@ -1219,10 +1222,138 @@ function EditorPage() {
       nativeOperationControllerRef.current?.abort();
       nativeOperationControllerRef.current = null;
       nativeCancelRef.current();
+      nativeIdleStopRef.current();
       nativeSocketRef.current?.close(1000, "Project view closed");
       nativeSocketRef.current = null;
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || !nativeRuntimeReady || sending) return;
+    const idleProjectId = projectId;
+    let active = true;
+    let retryCount = 0;
+    let retryTimer: number | null = null;
+    let connectionTimer: number | null = null;
+    let stabilityTimer: number | null = null;
+    let socket: WebSocket | null = null;
+
+    const stop = () => {
+      if (!active) return;
+      active = false;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      if (connectionTimer !== null) window.clearTimeout(connectionTimer);
+      if (stabilityTimer !== null) window.clearTimeout(stabilityTimer);
+      retryTimer = null;
+      connectionTimer = null;
+      stabilityTimer = null;
+      socket?.close(1000, "Idle native connection stopped");
+      if (nativeIdleSocketRef.current === socket) nativeIdleSocketRef.current = null;
+      socket = null;
+      if (nativeIdleStopRef.current === stop) nativeIdleStopRef.current = () => undefined;
+      if (activeProjectIdRef.current === idleProjectId) setNativeConnected(false);
+    };
+    nativeIdleStopRef.current = stop;
+
+    const scheduleRetry = () => {
+      if (!active || retryTimer !== null || retryCount >= 5) return;
+      retryCount += 1;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        connect();
+      }, Math.min(2 ** retryCount * 1000, 30_000));
+    };
+    const connect = () => {
+      if (!active || activeProjectIdRef.current !== idleProjectId) return;
+      const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const socketUrl = `${websocketProtocol}//${window.location.host}/api/projects/${idleProjectId}/runtime/ws`;
+      try {
+        const nextSocket = new WebSocket(socketUrl);
+        socket = nextSocket;
+        nativeIdleSocketRef.current = nextSocket;
+        connectionTimer = window.setTimeout(() => {
+          if (active && socket === nextSocket && nextSocket.readyState === WebSocket.CONNECTING) {
+            nextSocket.close();
+          }
+        }, 30_000);
+        nextSocket.onopen = () => {
+          if (!active || activeProjectIdRef.current !== idleProjectId || socket !== nextSocket) {
+            nextSocket.close(1000, "Stale native project connection");
+            return;
+          }
+          if (connectionTimer !== null) window.clearTimeout(connectionTimer);
+          connectionTimer = null;
+          stabilityTimer = window.setTimeout(() => {
+            stabilityTimer = null;
+            if (active && socket === nextSocket && nextSocket.readyState === WebSocket.OPEN) retryCount = 0;
+          }, 30_000);
+          setNativeConnected(true);
+          try {
+            nextSocket.send(JSON.stringify({ type: "get_conversation_state" }));
+          } catch {
+            nextSocket.close();
+          }
+        };
+        nextSocket.onclose = () => {
+          if (connectionTimer !== null) window.clearTimeout(connectionTimer);
+          if (stabilityTimer !== null) window.clearTimeout(stabilityTimer);
+          connectionTimer = null;
+          stabilityTimer = null;
+          if (!active || socket !== nextSocket) return;
+          if (nativeIdleSocketRef.current === nextSocket) nativeIdleSocketRef.current = null;
+          socket = null;
+          if (activeProjectIdRef.current === idleProjectId) setNativeConnected(false);
+          scheduleRetry();
+        };
+        nextSocket.onerror = () => nextSocket.close();
+      } catch {
+        scheduleRetry();
+      }
+    };
+    connect();
+    return stop;
+  }, [projectId, nativeRuntimeReady, sending]);
+
+  useEffect(() => {
+    if (!projectId || !nativeThink || nativeRuntimeReady) return;
+    let cancelled = false;
+    let requestInFlight = false;
+    let requestController: AbortController | null = null;
+    const pollReadiness = async () => {
+      if (cancelled || requestInFlight) return;
+      requestInFlight = true;
+      const controller = new AbortController();
+      requestController = controller;
+      try {
+        const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
+          headers: authHeaders(),
+          signal: controller.signal,
+        });
+        const status = await response.json().catch(() => ({}));
+        if (!cancelled && response.ok && status.nativeThink === true
+          && activeProjectIdRef.current === projectId) {
+          setRuntimeCapability({ projectId, nativeThink: true, status });
+          if (status.runtimeStatus === "ready") {
+            const nativePreviewUrl = status.previewUrl || status.previewURL
+              || status.state?.previewUrl || status.state?.previewURL;
+            if (typeof nativePreviewUrl === "string") setPreviewUrl(nativePreviewUrl);
+            setPreviewEnvironment("development");
+          }
+        }
+      } catch {
+        // Keep waiting for the native runtime to report readiness.
+      } finally {
+        if (requestController === controller) requestController = null;
+        requestInFlight = false;
+      }
+    };
+    const poll = window.setInterval(() => { void pollReadiness(); }, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      requestController?.abort();
+    };
+  }, [projectId, nativeThink, nativeRuntimeReady]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -1549,6 +1680,7 @@ function EditorPage() {
   };
 
   const streamNativeTurn = async (agentPrompt: string, images: ComposerImage[], lifecycle: number) => {
+    nativeIdleStopRef.current();
     const operationController = new AbortController();
     nativeOperationControllerRef.current = operationController;
     const isOperationActive = () => nativeMountedRef.current

@@ -542,6 +542,11 @@ test("two runtime users have one verified session each and isolated BuildCustom 
       headers: { Cookie: cookie, Origin: requestOrigin, Upgrade: "websocket" },
     });
     const ticketsBefore = stock.ticketScopes.length;
+    const foreignCookie = [...b.jar].map(([key, value]) => `${key}=${value}`).join("; ");
+    assert.equal((await worker.fetch(new Request(`${origin}${wsPath}`, {
+      headers: { Cookie: foreignCookie, Origin: origin, Upgrade: "websocket" },
+    }), env)).status, 404);
+    assert.equal(stock.ticketScopes.length, ticketsBefore, "A different authenticated user must not obtain the owner's agent ticket.");
     assert.equal((await worker.fetch(request(wsPath, `${origin}.attacker.test`), env)).status, 403);
     assert.equal((await worker.fetch(request(`${wsPath}?agentId=${projectB.agentId}`), env)).status, 400);
     assert.equal((await worker.fetch(request(`/api/projects/${projectB.id}/runtime/ws`), env)).status, 404);

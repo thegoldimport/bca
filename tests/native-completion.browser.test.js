@@ -55,10 +55,22 @@ const FOREIGN_TURN = {
   createdAt: "2026-09-25T21:20:00.000Z",
 };
 
-function fixture({ active = false, changed = false, savedOperation = false } = {}) {
+function fixture({
+  active = false,
+  changed = false,
+  savedOperation = false,
+  runtimeStatus = "ready",
+  rejectHandshakes = 0,
+  closeAcceptedSockets = 0,
+  accelerateSocketRetries = false,
+} = {}) {
   return {
     projectId: PROJECT_ID,
     runtimeProvider: "stock-think",
+    runtimeStatus,
+    rejectHandshakes,
+    closeAcceptedSockets,
+    accelerateSocketRetries,
     currentRevision: changed ? EDITED : BASELINE,
     shouldBeGenerating: active,
     generationStatus: active ? "running" : "idle",
@@ -77,8 +89,12 @@ function fixture({ active = false, changed = false, savedOperation = false } = {
     filePaths: ["public/index.html", "public/styles.css", "package.json", "index.js", "README.md"],
     stats: {
       sockets: 0,
+      openSockets: 0,
+      maxOpenSockets: 0,
+      readinessStatusAborts: 0,
       userSuggestions: 0,
       conversationStateRequests: 0,
+      unexpectedSocketFrames: 0,
       frameworkEnvelopesFiltered: 0,
       previewPosts: 0,
       publishRequests: 0,
@@ -97,7 +113,22 @@ function installBrowserHarness(initialFixture) {
   let turnsResponseSkip = null;
   let releaseDelayedTurnsResponse = null;
   let delayedTurnsResponsePending = false;
+  let holdRuntimeStatus = Boolean(initialFixture.holdRuntimeStatus);
+  let releaseRuntimeStatus = null;
+  let delayNextStatus = false;
+  let statusRequestDelayed = false;
+  let delayNextRevision = false;
+  let revisionRequestDelayed = false;
+  let releaseRevisionResponse = null;
   const nativeDateNow = Date.now.bind(Date);
+  const nativeSetTimeout = window.setTimeout.bind(window);
+  if (initialFixture.accelerateSocketRetries) {
+    window.setTimeout = (callback, delay = 0, ...args) => nativeSetTimeout(
+      callback,
+      delay >= 2000 && delay <= 30_000 ? 10 : delay,
+      ...args,
+    );
+  }
   Date.now = () => nativeDateNow() + clockOffset;
   localStorage.removeItem("bc_new_user");
 
@@ -109,19 +140,22 @@ function installBrowserHarness(initialFixture) {
     sessionStorage.setItem("buildcustom:native-operation:10", JSON.stringify(initialFixture.operationBaseline));
   }
   const previewUrl = () => `${location.origin}/__native_completion_preview/?revision=${state.currentRevision}`;
-  const status = () => ({
-    nativeThink: true,
-    connected: true,
-    runtimeStatus: "ready",
-    previewUrl: previewUrl(),
-    deploymentUrl: null,
-    state: {
-      shouldBeGenerating: state.shouldBeGenerating,
-      generation: { status: state.generationStatus },
-      lastDeployedCommit: state.deployedRevision,
-      previewUrl: previewUrl(),
-    },
-  });
+  const status = () => {
+    const availablePreviewUrl = state.runtimeStatus === "ready" ? previewUrl() : "";
+    return {
+      nativeThink: true,
+      connected: true,
+      runtimeStatus: state.runtimeStatus,
+      previewUrl: availablePreviewUrl,
+      deploymentUrl: null,
+      state: {
+        shouldBeGenerating: state.shouldBeGenerating,
+        generation: { status: state.generationStatus },
+        lastDeployedCommit: state.deployedRevision,
+        previewUrl: availablePreviewUrl,
+      },
+    };
+  };
   const json = (value, statusCode = 200) => new Response(JSON.stringify(value), {
     status: statusCode,
     headers: { "Content-Type": "application/json" },
@@ -138,8 +172,39 @@ function installBrowserHarness(initialFixture) {
       return json({ id: "task3-disposable-owner", username: "T3", email: "task3@example.test", plan: "free", role: "user" });
     }
     if (url.pathname === "/api/auth/csrf-token") return json({ token: "browser-test-csrf" });
-    if (url.pathname.endsWith("/runtime/status")) return json(status());
-    if (url.pathname.endsWith("/runtime/revision")) return json({ branch: "main", commitHash: state.currentRevision });
+    if (url.pathname.endsWith("/runtime/status")) {
+      if (holdRuntimeStatus || delayNextStatus) {
+        delayNextStatus = false;
+        statusRequestDelayed = true;
+        await new Promise((resolve, reject) => {
+          const signal = init.signal;
+          const onAbort = () => {
+            state.stats.readinessStatusAborts += 1;
+            persist();
+            if (releaseRuntimeStatus === release) releaseRuntimeStatus = null;
+            reject(new DOMException("Status request aborted", "AbortError"));
+          };
+          const release = () => {
+            signal?.removeEventListener("abort", onAbort);
+            if (releaseRuntimeStatus === release) releaseRuntimeStatus = null;
+            resolve();
+          };
+          releaseRuntimeStatus = release;
+          signal?.addEventListener("abort", onAbort, { once: true });
+        }).finally(() => { statusRequestDelayed = false; });
+      }
+      return json(status());
+    }
+    if (url.pathname.endsWith("/runtime/revision")) {
+      if (delayNextRevision) {
+        delayNextRevision = false;
+        revisionRequestDelayed = true;
+        await new Promise((resolve) => { releaseRevisionResponse = resolve; });
+        revisionRequestDelayed = false;
+        releaseRevisionResponse = null;
+      }
+      return json({ branch: "main", commitHash: state.currentRevision });
+    }
     if (url.pathname.endsWith("/runtime/files")) {
       return json({ files: state.filePaths.map((filePath) => ({ path: filePath })) });
     }
@@ -193,14 +258,30 @@ function installBrowserHarness(initialFixture) {
       this.onerror = null;
       this.onclose = null;
       state.stats.sockets += 1;
+      state.stats.openSockets += 1;
+      state.stats.maxOpenSockets = Math.max(state.stats.maxOpenSockets, state.stats.openSockets);
+      state.stats.lastSocketUrl = this.url;
+      const rejectHandshake = state.rejectHandshakes > 0;
+      if (rejectHandshake) state.rejectHandshakes -= 1;
+      const closeAfterOpen = !rejectHandshake && state.closeAcceptedSockets > 0;
+      if (closeAfterOpen) state.closeAcceptedSockets -= 1;
       state.socketConstructed = true;
       state.activeSocket = this;
       persist();
       setTimeout(() => {
         if (this.readyState !== FakeWebSocket.CONNECTING) return;
+        if (rejectHandshake) {
+          this.readyState = FakeWebSocket.CLOSED;
+          state.stats.openSockets -= 1;
+          this.onerror?.({ target: this });
+          this.onclose?.({ code: 1006, reason: "Rejected handshake", wasClean: false, target: this });
+          persist();
+          return;
+        }
         this.readyState = FakeWebSocket.OPEN;
         this.onopen?.({ target: this });
         this.emit({ type: "agent_connected", state: { shouldBeGenerating: false } });
+        if (closeAfterOpen) setTimeout(() => this.close(1011, "Immediate socket flap"), 0);
       }, 0);
     }
 
@@ -210,12 +291,14 @@ function installBrowserHarness(initialFixture) {
       this.sent.push(frame);
       if (frame.type === "user_suggestion") state.stats.userSuggestions += 1;
       if (frame.type === "get_conversation_state") state.stats.conversationStateRequests += 1;
+      if (!["user_suggestion", "get_conversation_state"].includes(frame.type)) state.stats.unexpectedSocketFrames += 1;
       persist();
     }
 
     close(code = 1000, reason = "") {
       if (this.readyState === FakeWebSocket.CLOSED) return;
       this.readyState = FakeWebSocket.CLOSED;
+      state.stats.openSockets -= 1;
       this.onclose?.({ code, reason, wasClean: code === 1000, target: this });
     }
 
@@ -232,7 +315,7 @@ function installBrowserHarness(initialFixture) {
   window.WebSocket = new Proxy(realWebSocket, {
     construct(Target, args, NewTarget) {
       const url = String(args[0]);
-      if (url.includes("/api/projects/10/runtime/ws")) return new FakeWebSocket(url);
+      if (/\/api\/projects\/\d+\/runtime\/ws/.test(url)) return new FakeWebSocket(url);
       return Reflect.construct(Target, args, NewTarget);
     },
   });
@@ -280,6 +363,36 @@ function installBrowserHarness(initialFixture) {
       if (!releaseDelayedTurnsResponse) throw new Error("No delayed runtime turns response is pending");
       const release = releaseDelayedTurnsResponse;
       releaseDelayedTurnsResponse = null;
+      release();
+    },
+    releaseRuntimeStatus() {
+      holdRuntimeStatus = false;
+      if (releaseRuntimeStatus) {
+        const release = releaseRuntimeStatus;
+        releaseRuntimeStatus = null;
+        release();
+      }
+    },
+    delayNextStatusResponse() {
+      delayNextStatus = true;
+    },
+    statusRequestDelayed() {
+      return statusRequestDelayed;
+    },
+    setRuntimeStatus(runtimeStatus) {
+      state.runtimeStatus = runtimeStatus;
+      persist();
+    },
+    delayNextRevision() {
+      delayNextRevision = true;
+    },
+    revisionRequestDelayed() {
+      return revisionRequestDelayed;
+    },
+    releaseDelayedRevisionRequest() {
+      if (!releaseRevisionResponse) throw new Error("No delayed runtime revision response is pending");
+      const release = releaseRevisionResponse;
+      releaseRevisionResponse = null;
       release();
     },
     snapshot() {
@@ -362,6 +475,9 @@ async function sendOnePrompt(page) {
     throw error;
   });
   await waitForState(page, "running");
+  const stats = await statsOf(page);
+  assert.equal(stats.openSockets, 1, "generation replaces the idle socket instead of opening a duplicate");
+  assert.equal(stats.conversationStateRequests, stats.sockets, "every connection requests state without extra idle frames");
 }
 
 async function emitObservedProgress(page, { includeFilteredEnvelope = false } = {}) {
@@ -560,7 +676,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await new Promise((resolve) => setTimeout(resolve, 1_350));
         const afterLateFrame = await statsOf(page);
         assert.equal(afterLateFrame.userSuggestions, 1);
-        assert.equal(afterLateFrame.sockets, 1);
+        assert.equal(afterLateFrame.sockets, afterUnmount.sockets);
         assert.equal(
           afterLateFrame.api.filter((entry) => entry.path.endsWith("/runtime/status")).length,
           afterUnmount.api.filter((entry) => entry.path.endsWith("/runtime/status")).length,
@@ -776,13 +892,13 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
     });
 
-    await t.test("reopen after runtime completion shows persisted turns and does not open a generation socket", async () => {
+    await t.test("reopen after runtime completion shows persisted turns over a no-inference idle socket", async () => {
       const page = await startEditor(serverUrl, browser, fixture({ active: true, savedOperation: true }));
       try {
         await waitForState(page, "recovering");
         const beforeRefresh = await statsOf(page);
         assert.equal(beforeRefresh.userSuggestions, 0);
-        assert.equal(beforeRefresh.sockets, 0);
+        assert.ok(beforeRefresh.sockets >= 1);
 
         // The same tab is refreshed after stock finished while the editor was
         // away. sessionStorage retains only the operation baseline, not files
@@ -809,8 +925,10 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.match(text, new RegExp(ASSISTANT));
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true);
         const stats = await statsOf(page);
-        assert.equal(stats.sockets, 0, "reopen must not create a new native generation socket");
+        assert.ok(stats.sockets >= 1, "reopen keeps its native idle socket while mounted");
+        assert.equal(stats.conversationStateRequests, stats.sockets, "each native connection requests only conversation state");
         assert.equal(stats.userSuggestions, 0, "reopen must not resend either persisted prompt");
+        assert.equal(stats.unexpectedSocketFrames, 0);
         assert.equal(stats.agentCreationRequests, 0);
         assert.equal(stats.publishRequests, 0);
       } finally {
@@ -824,7 +942,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await waitForState(page, "recovering");
         const before = await statsOf(page);
         assert.equal(before.userSuggestions, 0);
-        assert.equal(before.sockets, 0);
+        assert.ok(before.sockets >= 1);
         await page.evaluate(({ revision, turn }) => {
           window.__nativeCompletionHarness.setRuntime({
             active: false,
@@ -843,7 +961,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           const node = document.querySelector('[data-testid="native-completion-state"]');
           const state = node?.getAttribute("data-state") || node?.getAttribute("data-phase");
           const stats = window.__nativeCompletionHarness.snapshot().stats;
-          return state === "success" && stats.userSuggestions === 0 && stats.sockets === 0;
+          return state === "success" && stats.userSuggestions === 0 && stats.sockets >= 1;
         }, { timeout: 25_000 });
         const text = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
         assert.match(text, new RegExp(PROMPT));
@@ -851,9 +969,217 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true);
         const stats = await statsOf(page);
         assert.equal(stats.userSuggestions, 0);
-        assert.equal(stats.sockets, 0);
+        assert.ok(stats.sockets >= 1);
+        assert.equal(stats.conversationStateRequests, stats.sockets);
+        assert.equal(stats.unexpectedSocketFrames, 0);
         assert.equal(stats.agentCreationRequests, 0);
         assert.equal(stats.publishRequests, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("native idle socket waits for runtime capability, requests state only, and stops retries on unmount", async () => {
+      const page = await startEditor(serverUrl, browser, { ...fixture(), holdRuntimeStatus: true });
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const beforeCapability = await statsOf(page);
+        assert.equal(beforeCapability.sockets, 0, "no websocket or bridge ticket is opened before native capability is ready");
+        assert.equal(beforeCapability.api.filter((entry) => /ticket/i.test(entry.path)).length, 0);
+
+        await page.evaluate(() => window.__nativeCompletionHarness.releaseRuntimeStatus());
+        await page.waitForFunction(() => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          return stats.sockets === 1 && stats.conversationStateRequests === 1;
+        }, { timeout: 10_000 });
+        const connected = await statsOf(page);
+        assert.equal(connected.userSuggestions, 0, "idle reconnect must never send a prompt");
+        assert.equal(connected.unexpectedSocketFrames, 0, "the idle socket sends only get_conversation_state");
+
+        await page.evaluate(() => window.__nativeCompletionHarness.closeUnexpectedly());
+        await navigateWithinApp(page, "/app/templates");
+        await page.waitForFunction(() => !document.querySelector('[data-testid="builder-chat-scroll"]'));
+        await new Promise((resolve) => setTimeout(resolve, 2_200));
+        const afterUnmount = await statsOf(page);
+        assert.equal(afterUnmount.openSockets, 0, "unmount closes the idle socket");
+        assert.equal(afterUnmount.sockets, connected.sockets, "unmount suppresses the pending reconnect retry");
+        assert.equal(afterUnmount.userSuggestions, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("idle socket hands off before delayed authoritative baseline reads", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await page.waitForFunction(() => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          return stats.sockets === 1 && stats.openSockets === 1
+            && stats.conversationStateRequests === 1;
+        }, { timeout: 10_000 });
+        await page.evaluate(() => window.__nativeCompletionHarness.delayNextRevision());
+        await page.type('[data-testid="input-editor-chat"]', PROMPT);
+        await page.click('[data-testid="button-send-chat"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.revisionRequestDelayed(), { timeout: 10_000 });
+
+        const whileBaselineIsDelayed = await statsOf(page);
+        assert.equal(whileBaselineIsDelayed.openSockets, 0, "idle socket closes before revision/turn reads finish");
+        assert.equal(whileBaselineIsDelayed.sockets, 1, "no generation socket opens before the delayed baseline resolves");
+        assert.equal(whileBaselineIsDelayed.userSuggestions, 0, "no prompt is sent before baseline verification");
+        assert.equal(whileBaselineIsDelayed.maxOpenSockets, 1, "the idle-to-generation handoff never overlaps sockets");
+
+        await page.evaluate(() => window.__nativeCompletionHarness.releaseDelayedRevisionRequest());
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        const afterBaseline = await statsOf(page);
+        assert.equal(afterBaseline.sockets, 2);
+        assert.equal(afterBaseline.openSockets, 1);
+        assert.equal(afterBaseline.maxOpenSockets, 1, "there was never more than one live native socket");
+        assert.equal(afterBaseline.conversationStateRequests, 2);
+        assert.equal(afterBaseline.unexpectedSocketFrames, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("initializing native runtime waits for ready status before opening idle socket", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({ runtimeStatus: "initializing" }));
+      try {
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .some((entry) => entry.path.endsWith("/runtime/status")), { timeout: 10_000 });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert.equal((await statsOf(page)).sockets, 0, "initializing capability must not open a websocket");
+        assert.equal(await page.$eval("iframe", (frame) => frame.getAttribute("src")).catch(() => null), null);
+
+        await page.evaluate(() => window.__nativeCompletionHarness.setRuntimeStatus("ready"));
+        await page.waitForFunction(() => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          return stats.sockets === 1 && stats.conversationStateRequests === 1
+            && document.querySelector("iframe")?.getAttribute("src")?.includes("__native_completion_preview/");
+        }, { timeout: 10_000 });
+        const ready = await statsOf(page);
+        assert.ok(ready.api.filter((entry) => entry.path.endsWith("/runtime/status")).length >= 2);
+        assert.match(await page.$eval("iframe", (frame) => frame.getAttribute("src")), /__native_completion_preview/);
+        assert.equal(ready.userSuggestions, 0);
+        assert.equal(ready.unexpectedSocketFrames, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("readiness status polling coalesces delayed requests and aborts on project cleanup", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({ runtimeStatus: "initializing" }));
+      try {
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .some((entry) => entry.path.endsWith("/runtime/status")), { timeout: 10_000 });
+        await page.evaluate(() => window.__nativeCompletionHarness.delayNextStatusResponse());
+        await page.waitForFunction(() => window.__nativeCompletionHarness.statusRequestDelayed(), { timeout: 5_000 });
+        await new Promise((resolve) => setTimeout(resolve, 2_200));
+        const delayed = await statsOf(page);
+        assert.equal(
+          delayed.api.filter((entry) => entry.path.endsWith("/runtime/status")).length,
+          2,
+          "a slow readiness request prevents interval polls from overlapping",
+        );
+
+        await navigateWithinApp(page, "/app/templates");
+        await page.waitForFunction(() => !document.querySelector('[data-testid="builder-chat-scroll"]'));
+        const afterCleanup = await statsOf(page);
+        assert.equal(afterCleanup.readinessStatusAborts, 1, "cleanup aborts the pending readiness request");
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("rejected idle handshakes have bounded retries and unmount cancels a pending retry", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({
+        rejectHandshakes: 1,
+      }));
+      try {
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.sockets === 1, { timeout: 10_000 });
+        await navigateWithinApp(page, "/app/templates");
+        await page.waitForFunction(() => !document.querySelector('[data-testid="builder-chat-scroll"]'));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const afterUnmount = await statsOf(page);
+        assert.equal(afterUnmount.sockets, 1, "unmount cancels the retry after a rejected handshake");
+        assert.equal(afterUnmount.userSuggestions, 0);
+      } finally {
+        await page.close();
+      }
+
+      const exhaustedPage = await startEditor(serverUrl, browser, fixture({
+        rejectHandshakes: 6,
+        accelerateSocketRetries: true,
+      }));
+      try {
+        await exhaustedPage.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.sockets === 6, { timeout: 10_000 });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const exhausted = await statsOf(exhaustedPage);
+        assert.equal(exhausted.sockets, 6, "one initial attempt plus five retries is the maximum");
+        assert.equal(exhausted.openSockets, 0);
+        assert.equal(exhausted.conversationStateRequests, 0);
+        assert.equal(exhausted.userSuggestions, 0);
+      } finally {
+        await exhaustedPage.close();
+      }
+    });
+
+    await t.test("immediate accepted-socket flaps are bounded while stable normal closes reconnect", async () => {
+      const flappingPage = await startEditor(serverUrl, browser, fixture({
+        closeAcceptedSockets: 10,
+        accelerateSocketRetries: true,
+      }));
+      try {
+        await flappingPage.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.sockets === 6, { timeout: 10_000 });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const flapping = await statsOf(flappingPage);
+        assert.equal(flapping.sockets, 6, "short-lived accepted sockets are capped at five retries");
+        assert.equal(flapping.conversationStateRequests, 6);
+        assert.equal(flapping.openSockets, 0);
+        assert.equal(flapping.userSuggestions, 0);
+      } finally {
+        await flappingPage.close();
+      }
+
+      const stablePage = await startEditor(serverUrl, browser, fixture({ accelerateSocketRetries: true }));
+      try {
+        await stablePage.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.conversationStateRequests === 1, { timeout: 10_000 });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await stablePage.evaluate(() => window.__nativeCompletionHarness.closeUnexpectedly());
+        await stablePage.waitForFunction(() => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          return stats.sockets === 2 && stats.conversationStateRequests === 2;
+        }, { timeout: 10_000 });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const stable = await statsOf(stablePage);
+        assert.equal(stable.sockets, 2, "a connection stable for 30 seconds retains stock-style close reconnect");
+        assert.equal(stable.openSockets, 1);
+        assert.equal(stable.userSuggestions, 0);
+      } finally {
+        await stablePage.close();
+      }
+    });
+
+    await t.test("project change closes the old idle socket and suppresses its retry", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await page.waitForFunction(() => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          return stats.sockets === 1 && stats.conversationStateRequests === 1;
+        }, { timeout: 10_000 });
+        await page.evaluate(() => window.__nativeCompletionHarness.closeUnexpectedly());
+        await navigateWithinApp(page, "/app/editor/11");
+        await page.waitForFunction(() => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          return stats.lastSocketUrl?.includes("/api/projects/11/runtime/ws")
+            && stats.openSockets === 1;
+        }, { timeout: 10_000 });
+        await new Promise((resolve) => setTimeout(resolve, 2_200));
+        const changedProject = await statsOf(page);
+        assert.equal(changedProject.sockets, 2, "the previous project's queued retry is canceled");
+        assert.equal(changedProject.openSockets, 1, "only the current project's idle socket remains open");
+        assert.equal(changedProject.conversationStateRequests, 2);
+        assert.equal(changedProject.userSuggestions, 0);
+        assert.equal(changedProject.unexpectedSocketFrames, 0);
       } finally {
         await page.close();
       }

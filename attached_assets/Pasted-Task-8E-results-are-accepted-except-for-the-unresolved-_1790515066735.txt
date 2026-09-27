@@ -1,0 +1,617 @@
+Task 8E results are accepted except for the unresolved interpretation of the
+idle WebSocket acceptance gate.
+
+Do NOT modify the builder yet.
+
+Before changing working product behavior merely to satisfy a test criterion,
+determine whether an idle/no-prompt WebSocket is actually part of the intended
+native VibeSDK / ThinkAgent lifecycle.
+
+Proceed with ONLY:
+
+TASK 8F — RESOLVE WEBSOCKET ACCEPTANCE SEMANTICS + FREEZE CUTOVER CANDIDATES
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine whether this observed behavior:
+
+existing project reopen
+→ conversation loads
+→ files load
+→ preview works
+→ ZERO WebSocket connections until a prompt is sent
+
+is:
+
+A. the correct intentional native VibeSDK behavior
+
+or
+
+B. a BuildCustom integration defect.
+
+Do NOT assume B.
+
+We must not introduce a persistent/idle WebSocket solely because our earlier
+acceptance prompt happened to require one.
+
+If native architecture intentionally connects lazily when an operation needs
+streaming, preserve that architecture and replace the incorrect acceptance
+criterion with the correct native lifecycle test.
+
+==================================================
+CURRENT ACCEPTED EVIDENCE
+==================================================
+
+The tester now exists and is valid.
+
+Product user:
+3f730b86-bc16-4954-b3fd-db22aea136b7
+
+Project:
+2
+
+Runtime agent:
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+Committed revision:
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+Current runtime candidate:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+Current control-plane candidate:
+
+buildcustom-control-plane-launch
+
+version:
+
+82515081-9c15-4669-9e59-8ffa916331ec
+
+Runtime registration:
+CLOSED
+
+Control-plane registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+Task 8E bootstrap:
+ABSENT
+
+Do not recreate the bootstrap.
+
+==================================================
+STEP 1 — INSPECT STOCK NATIVE LIFECYCLE
+==================================================
+
+Inspect the EXACT pinned stock VibeSDK source:
+
+commit:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Trace the frontend/runtime lifecycle for:
+
+project reopen
+conversation hydration
+ticket acquisition
+WebSocket creation
+prompt submission
+streaming
+reconnection
+disconnect
+idle state
+
+Answer precisely:
+
+1. Does stock VibeSDK open a ThinkAgent WebSocket immediately when an
+   existing project is opened?
+
+2. Or does it load existing state through HTTP/storage and acquire/open the
+   WebSocket only when a streaming operation is initiated?
+
+3. What exact function/event causes ticket acquisition?
+
+4. What exact function/event creates the WebSocket?
+
+5. Is there intentionally no socket while the builder is merely idle?
+
+6. Does stock VibeSDK keep an already-open socket alive after a generation
+   finishes?
+
+7. When/why is that socket closed?
+
+8. What does stock VibeSDK do on project reopen after a browser refresh?
+
+Do not infer this from our BuildCustom code alone.
+
+Compare directly with the pinned stock implementation.
+
+==================================================
+STEP 2 — INSPECT BUILDCUSTOM LIFECYCLE
+==================================================
+
+Trace the corresponding BuildCustom behavior.
+
+For the existing tester project determine:
+
+reopen
+→ how conversation loads
+
+reopen
+→ how revision loads
+
+reopen
+→ how files load
+
+reopen
+→ how preview initializes
+
+prompt send
+→ how ticket is obtained
+
+prompt send
+→ how WebSocket is opened
+
+stream
+→ how native frames are relayed
+
+completion
+→ how authoritative revision is reconciled
+
+Compare this behavior directly to stock VibeSDK.
+
+==================================================
+STEP 3 — CLASSIFY THE RESULT
+==================================================
+
+Choose exactly one:
+
+CLASSIFICATION A:
+
+LAZY WEBSOCKET IS INTENTIONAL NATIVE BEHAVIOR
+
+or
+
+CLASSIFICATION B:
+
+BUILDCUSTOM FAILED TO OPEN A WEBSOCKET THAT STOCK VIBESDK WOULD OPEN
+
+Support the classification with exact source/functions/tests.
+
+==================================================
+IF CLASSIFICATION A
+==================================================
+
+Do NOT change application code.
+
+The previous acceptance requirement:
+
+"idle reopen must open a WebSocket"
+
+was incorrect.
+
+Replace it with the native lifecycle requirement:
+
+EXISTING PROJECT REOPEN:
+
+- authenticates correctly
+- same owner/project/agent resolved
+- conversation hydrates
+- authoritative revision hydrates
+- authoritative files hydrate
+- preview works
+- NO inference occurs
+- NO duplicate agent is created
+- WebSocket is not required merely for idle state if stock behavior is lazy
+
+STREAMING PATH:
+
+- when an operation requires native streaming, an owner-authorized ticket can
+  be issued
+- the WebSocket can be established
+- native ThinkAgent frames can flow
+- unauthorized users cannot obtain/use the ticket
+
+We already proved actual generation streaming in Task 7.
+
+However, perform ONE NON-INFERENCE live connectivity proof if the runtime
+protocol supports it safely.
+
+Preferred:
+
+request a normal owner-authorized ticket
+→ establish the same WebSocket transport used for generation
+→ complete handshake/connect
+→ do NOT send a suggestion/prompt
+→ verify connection is accepted for the correct agent
+→ close it
+
+This is a transport test, not a requirement that the UI maintain an idle
+socket.
+
+It must trigger:
+
+ZERO inference requests.
+
+If the native protocol itself does not permit a useful no-prompt connection,
+do not invent one.
+
+In that case use:
+
+source proof
++
+existing Task 7 generation-stream proof
++
+owner ticket/isolation proof
+
+as the acceptance evidence.
+
+==================================================
+IF CLASSIFICATION B
+==================================================
+
+Only then make the smallest possible control-plane/client correction necessary
+to restore stock VibeSDK behavior.
+
+Do NOT introduce a custom connection lifecycle.
+
+Do NOT create a permanent socket simply because we requested one.
+
+Match stock behavior.
+
+Then:
+
+- deploy a new PRIVATE control-plane version
+- do not touch public hostnames
+- rerun affected authenticated tests
+- record the new exact Worker version
+
+==================================================
+STEP 4 — TICKET SECURITY
+==================================================
+
+Regardless of classification, verify using the existing tester:
+
+owner:
+can obtain appropriate agent ticket
+
+other authenticated user:
+cannot obtain tester agent ticket
+
+forged owner/project/agent identifiers:
+cannot bypass ownership
+
+expired/used ticket behavior:
+matches accepted runtime semantics
+
+Do not weaken ticket lifetime or ownership.
+
+==================================================
+STEP 5 — ZERO-INFERENCE REOPEN PROOF
+==================================================
+
+Perform another normal authenticated reopen of tester project 2.
+
+Verify:
+
+same product project
+
+same runtime agent:
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+same committed revision:
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+conversation loads
+
+files load
+
+preview loads
+
+NO new prompt
+
+NO inference request
+
+NO new runtime agent
+
+NO new committed revision
+
+NO new release
+
+==================================================
+STEP 6 — REPLIT-OFF REOPEN
+==================================================
+
+Temporarily stop only the Replit development workflow.
+
+With it unavailable verify again:
+
+fresh tester login
+
+dashboard
+
+project reopen
+
+conversation
+
+files
+
+preview
+
+ticket authorization if the accepted native lifecycle makes that meaningful
+
+NO inference
+
+Restore the development workflow afterward if needed.
+
+Do NOT unpublish the public Replit autoscale deployment.
+
+==================================================
+STEP 7 — CONFIRM ALL PREVIOUS SECURITY GATES
+==================================================
+
+Read-only/focused verification:
+
+runtime registration:
+CLOSED
+
+direct runtime registration:
+403
+
+control-plane registration:
+CLOSED
+
+signup UI:
+CLOSED
+
+existing tester login:
+WORKS
+
+Task 8E bootstrap:
+ABSENT
+
+Task 8E bootstrap secret:
+not bound to final runtime
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+private generated-app URL:
+not exposed as public customer URL
+
+Task 6A logout behavior:
+still accepted
+
+Task 4B immutable identity:
+still accepted
+
+==================================================
+STEP 8 — AUTHENTICATED NETWORK AUDIT
+==================================================
+
+Repeat only if application code changed.
+
+If no application code changed, the accepted Task 8E authenticated audit:
+
+56 requests
+0 forbidden destinations
+
+may be carried forward.
+
+If repeated, require zero browser traffic to:
+
+Replit
+legacy vibesdk Worker
+staging runtime
+lab runtime
+old BuildCustom control plane/API
+
+==================================================
+STEP 9 — FREEZE DECISION
+==================================================
+
+If CLASSIFICATION A and all targeted proofs pass:
+
+freeze the existing exact versions:
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+CONTROL PLANE:
+
+82515081-9c15-4669-9e59-8ffa916331ec
+
+Do NOT create another deployment merely to change an acceptance test.
+
+If CLASSIFICATION B:
+
+freeze only the newly tested corrected control-plane version after all
+affected acceptance checks pass.
+
+==================================================
+STEP 10 — CUTOVER READINESS
+==================================================
+
+At this point determine whether ANY actual product/security blocker remains
+before reassignment of:
+
+app.buildcustom.ai
+
+Do not count as blockers:
+
+- no live OAuth new-user test if source/tests prove the disabled creation path
+  and OAuth is not required for launch
+
+- inability to measure provider inference cost
+
+- absence of an idle WebSocket if stock/native architecture intentionally uses
+  lazy connection
+
+- inert Replit secret that is not bound to any Worker and cannot be read by
+  the application
+
+Do report real blockers.
+
+==================================================
+FAIL-CLOSED RULES
+==================================================
+
+Do NOT modify application code unless stock source proves BuildCustom differs
+incorrectly.
+
+Do NOT send a generation prompt merely to make a WebSocket appear.
+
+Do NOT create another agent.
+
+Do NOT create another user.
+
+Do NOT publish.
+
+Do NOT enable registration.
+
+Do NOT enable public generated apps.
+
+Do NOT recreate Task 8E bootstrap.
+
+Do NOT change public routing.
+
+If source evidence is ambiguous:
+
+STOP and report the ambiguity.
+
+==================================================
+ABSOLUTE DO-NOT-TOUCH LIST
+==================================================
+
+Do NOT modify:
+
+app.buildcustom.ai
+
+app.buildcustom.ai DNS
+
+*.apps.buildcustom.ai
+
+public buildcustom-apps-gateway
+
+public gateway bindings
+
+buildcustom.ai
+
+marketing Pages
+
+marketing waitlist
+
+public Replit autoscale deployment
+
+old production D1
+
+legacy vibesdk Worker
+
+BuyerMagnets
+
+production dispatch architecture
+
+==================================================
+TASK 8F ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. stock WebSocket lifecycle established from pinned source
+
+2. BuildCustom behavior compared against stock
+
+3. behavior classified A or B
+
+4. no unnecessary architecture introduced
+
+5. owner ticket authorization passes
+
+6. cross-user ticket denial passes
+
+7. forged ownership denial passes
+
+8. existing project reopen passes
+
+9. conversation/files/revision/preview pass
+
+10. reopen triggers zero inference
+
+11. reopen creates no duplicate agent
+
+12. Replit-development-off reopen passes
+
+13. runtime registration remains closed
+
+14. control-plane registration remains closed
+
+15. tester login remains functional
+
+16. bootstrap remains absent
+
+17. public generated apps remain disabled
+
+18. no public hostname/route changed
+
+19. exact runtime candidate frozen
+
+20. exact control-plane candidate frozen
+
+==================================================
+FINAL REPORT
+==================================================
+
+Keep this report concise.
+
+Return:
+
+1. Classification A or B
+
+2. Stock VibeSDK WebSocket lifecycle and exact source/functions
+
+3. BuildCustom lifecycle comparison
+
+4. Whether application code changed
+
+5. Owner ticket result
+
+6. Cross-user/forged-ticket result
+
+7. Zero-inference reopen result
+
+8. Replit-development-off result
+
+9. Final registration states
+
+10. Bootstrap absent confirmation
+
+11. PUBLIC_GENERATED_APPS_ENABLED state
+
+12. Frozen runtime Worker version
+
+13. Frozen control-plane Worker version
+
+14. Remaining HIGH risks, if any
+
+15. Remaining MEDIUM risks, if any
+
+16. Whether Tasks 8C/8D/8E/8F are now ACCEPTED
+
+17. Whether we are READY to reassign app.buildcustom.ai
+
+18. Exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CUT OVER app.buildcustom.ai.
+DO NOT SWITCH *.apps.buildcustom.ai.

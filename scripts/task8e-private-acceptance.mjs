@@ -184,6 +184,9 @@ async function getFileContent(page, projectId, filePath) {
 function attachEvidence(page) {
   const evidence = {
     websocketConnections: 0,
+    websocketHandshakes: 0,
+    agentConnectedFrames: 0,
+    conversationStateFrames: 0,
     sentSuggestions: 0,
     markerSuggestions: 0,
     streamingFrames: 0,
@@ -192,13 +195,22 @@ function attachEvidence(page) {
   };
   const cdpPromise = page.target().createCDPSession();
   const ready = cdpPromise.then(async (client) => {
+    const runtimeSocketRequests = new Set();
     const parse = (payload) => {
       if (typeof payload !== "string") return null;
       try { return JSON.parse(payload); } catch { return null; }
     };
     await client.send("Network.enable");
-    client.on("Network.webSocketCreated", ({ url }) => {
-      try { if (new URL(url).pathname.includes("/runtime/ws")) evidence.websocketConnections += 1; } catch { /* Ignore malformed URL. */ }
+    client.on("Network.webSocketCreated", ({ requestId, url }) => {
+      try {
+        if (new URL(url).pathname.includes("/runtime/ws")) {
+          evidence.websocketConnections += 1;
+          runtimeSocketRequests.add(requestId);
+        }
+      } catch { /* Ignore malformed URL. */ }
+    });
+    client.on("Network.webSocketHandshakeResponseReceived", ({ requestId, response }) => {
+      if (runtimeSocketRequests.has(requestId) && response?.status === 101) evidence.websocketHandshakes += 1;
     });
     client.on("Network.webSocketFrameSent", ({ response }) => {
       const frame = parse(response?.payloadData);
@@ -210,7 +222,11 @@ function attachEvidence(page) {
     client.on("Network.webSocketFrameReceived", ({ response }) => {
       const frame = parse(response?.payloadData);
       if (!frame) return;
-      if (frame.type === "agent_connected" && typeof frame.agentId === "string") evidence.agentIds.push(frame.agentId);
+      if (frame.type === "agent_connected") {
+        evidence.agentConnectedFrames += 1;
+        if (typeof frame.agentId === "string") evidence.agentIds.push(frame.agentId);
+      }
+      if (frame.type === "conversation_state") evidence.conversationStateFrames += 1;
       if (frame.type === "conversation_response" && frame.isStreaming === true) evidence.streamingFrames += 1;
       if (frame.type === "generation_complete") evidence.completionFrames += 1;
     });
@@ -251,6 +267,10 @@ async function waitForPreview(page, status) {
   }
   assert(frame, "Project preview iframe did not load.");
   await frame.waitForFunction(() => document.readyState === "interactive" || document.readyState === "complete");
+  await frame.waitForFunction(() => (document.body?.innerText || "").includes("BUILDCUSTOM_CUTOVER_TESTER_OK")
+    && [...document.querySelectorAll('link[rel="stylesheet"]')]
+      .some((link) => new URL(link.href).pathname.endsWith("/styles.css") && Boolean(link.sheet)),
+  { timeout: 45_000 });
   const preview = await frame.evaluate(() => ({
     text: document.body?.innerText || "",
     stylesheets: [...document.querySelectorAll('link[rel="stylesheet"]')].map((link) => ({
@@ -542,6 +562,7 @@ async function inspectMode() {
     assert(files.some((file) => file.path === "public/styles.css"));
     const html = await getFileContent(page, checkpoint.projectId, "public/index.html");
     const css = await getFileContent(page, checkpoint.projectId, "public/styles.css");
+    const releasesBefore = await getRuntime(page, checkpoint.projectId, "releases");
     assert(html.includes(MARKER), "Reopened authoritative HTML omitted the marker.");
     assert.match(html, /href=["'][^"']*styles\.css/i);
     assert(css.length > 0);
@@ -552,6 +573,17 @@ async function inspectMode() {
     const turns = await getRuntime(page, checkpoint.projectId, "turns");
     assert(JSON.stringify(turns).includes(MARKER), "Owner conversation does not retain the generation prompt/marker.");
     const previewEvidence = await waitForPreview(page, status);
+    const socketDeadline = Date.now() + 20_000;
+    while ((wire.evidence.agentConnectedFrames === 0 || wire.evidence.conversationStateFrames === 0)
+      && Date.now() < socketDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    const reopenedRevision = await getRevision(page, checkpoint.projectId);
+    const reopenedStatus = await getRuntime(page, checkpoint.projectId, "status");
+    const releasesAfter = await getRuntime(page, checkpoint.projectId, "releases");
+    assert.equal(reopenedRevision, checkpoint.revision, "Idle reopen changed the authoritative revision.");
+    assert.equal(reopenedStatus?.state?.shouldBeGenerating, false, "Idle reopen triggered runtime inference.");
+    assert.deepEqual(releasesAfter, releasesBefore, "Idle reopen created a release.");
     assert.equal(wire.evidence.sentSuggestions, sentBeforeOpen, "Reopening project sent an unexpected conversation prompt.");
     assert.equal(wire.evidence.sentSuggestions, 0, "Inspect mode must not send any generation prompt.");
     const liveStatus = await page.evaluate(() => ({
@@ -595,7 +627,10 @@ async function inspectMode() {
     assert.equal(audit.audit.forbiddenRequests, 0,
       `Forbidden legacy/Replit/staging/lab/old-control-plane hosts were contacted (${audit.audit.forbiddenRequests}).`);
 
-    const idleWebSocketConnected = wire.evidence.websocketConnections > 0;
+    const idleWebSocketConnected = wire.evidence.websocketConnections > 0
+      && wire.evidence.websocketHandshakes > 0
+      && wire.evidence.agentConnectedFrames > 0
+      && wire.evidence.conversationStateFrames > 0;
     report("task8e-inspect-evidence", {
       userId,
       projectId: checkpoint.projectId,
@@ -607,7 +642,14 @@ async function inspectMode() {
       previewMarkerVisible: previewEvidence.markerVisible,
       previewStylesheetLoaded: previewEvidence.stylesheetLoaded,
       websocketConnections: wire.evidence.websocketConnections,
+      websocketHandshakes: wire.evidence.websocketHandshakes,
+      agentConnectedFrames: wire.evidence.agentConnectedFrames,
+      conversationStateFrames: wire.evidence.conversationStateFrames,
+      ownerLinkedAgentMatched: true,
       idleWebSocketConnected,
+      runtimeStayedIdle: true,
+      revisionUnchanged: true,
+      releasesUnchanged: true,
       sentSuggestionsDuringInspect: wire.evidence.sentSuggestions,
       streamingFramesDuringInspect: wire.evidence.streamingFrames,
       conversationContainsMarker: true,
