@@ -18,3 +18,9 @@ For a public binding-only cutover, prefer an explicitly inactive version upload 
 **Why:** Cloudflare documents version upload as non-deploying, but the settings PATCH does not promise the same behavior. A local gateway source file can also differ from the serving bundle. Capturing the live multipart module only when the latest uploaded version is the active one and its download ETag matches the active script fingerprint gives a defensible code-identity check.
 
 **How to apply:** Snapshot the active version and all bindings, verify that source identity, stage the byte-identical module with changed bindings, then compare the new version's script/runtime resources and confirm the old deployment still serves 100% before deploying the new one. Keep the old version intact for a single exact-version rollback deployment.
+
+For an asset-backed Worker, a full-binding-list script-settings PATCH was observed to create and immediately deploy a new version at 100%. Treat this endpoint as a live cutover rather than an inactive staging operation.
+
+**Why:** An upload-only version attempt with inherited bindings returned an internal Cloudflare error without creating a version. The subsequent settings PATCH preserved the source bytes and asset runtime but activated the new flag immediately. After the previous version was redeployed for rollback, script-level settings still reported the flag from the latest inactive version, while the serving version and public capability correctly reported the old value.
+
+**How to apply:** Prepare an exact old-version deployment rollback before a settings PATCH; send the complete binding inventory, inspect the active deployment and effective version resources immediately, and verify source bytes plus assets. After rollback, read the active version and public behavior for the effective flag, not script-level settings alone. Account for the newer inactive version before future deployments or binding inheritance.
