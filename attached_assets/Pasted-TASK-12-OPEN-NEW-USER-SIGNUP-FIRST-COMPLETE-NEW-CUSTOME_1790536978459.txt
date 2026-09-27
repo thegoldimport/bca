@@ -1,0 +1,1641 @@
+TASK 12 — OPEN NEW-USER SIGNUP + FIRST COMPLETE NEW-CUSTOMER JOURNEY
+
+Tasks 9A, 10, 11A, and 11B are ACCEPTED.
+
+BuildCustom's core production product is now live for existing authenticated
+users.
+
+We are now authorizing the NEXT SINGLE LAUNCH STEP:
+
+ENABLE NEW-USER SIGNUP.
+
+This task should use the registration/authentication architecture we already
+built and accepted.
+
+Do NOT redesign authentication.
+
+Do NOT add another user database.
+
+Do NOT add another session system.
+
+Do NOT add invitations, billing, plans, credits, email verification, onboarding
+funnels, or other launch features unless the current registration architecture
+strictly requires something already designed.
+
+The goal is simple:
+
+A completely new person should be able to visit BuildCustom, create an account,
+create their first project, use the native BuildCustom agent, preview the app,
+publish it, and receive a working public URL.
+
+If that complete journey passes, leave signup OPEN.
+
+==================================================
+CURRENT ACCEPTED PRODUCTION STATE
+==================================================
+
+PUBLIC PRODUCT:
+
+https://app.buildcustom.ai
+
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+current accepted version:
+
+c0d47add-0ef7-431c-af87-84f7f9ba56c2
+
+serving:
+
+100%
+
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+PUBLIC GATEWAY:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+
+PRODUCT D1:
+
+buildcustom-product-launch-db
+
+ID:
+
+ca820baf-6973-4318-ac52-529d56293bb6
+
+
+ROUTES KV:
+
+buildcustom-app-routes-launch
+
+ID:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+
+DISPATCH:
+
+buildcustom-vibesdk-launch-dispatch
+
+
+PUBLIC GENERATED APPS:
+
+ENABLED
+
+
+CURRENT REGISTRATION:
+
+control plane:
+CLOSED
+
+runtime:
+CLOSED
+
+
+EXISTING USER LOGIN:
+
+WORKING
+
+
+==================================================
+IMPORTANT AUTH ARCHITECTURE
+==================================================
+
+BuildCustom must continue using stock VibeSDK authentication through the
+existing service-binding architecture.
+
+The runtime remains the customer authentication/session authority.
+
+BuildCustom product D1 stores:
+
+runtime identity
+
+product identity metadata
+
+project ownership
+
+product-specific records
+
+
+It must NOT become a second password authority.
+
+For newly registered users require:
+
+legacy_password_hash=NULL
+
+No local BuildCustom password authority.
+
+No duplicate customer session system.
+
+No BuildCustom-local password storage.
+
+No shared API-key customer authentication.
+
+==================================================
+TASK 8D REGISTRATION GATE
+==================================================
+
+Task 8D intentionally introduced:
+
+REGISTRATION_ENABLED=false
+
+independently from:
+
+ENABLE_EMAIL_AUTH
+
+
+That gate exists so:
+
+existing login remains available
+
+while:
+
+new registration is disabled
+
+
+We are now authorizing that existing gate to change:
+
+REGISTRATION_ENABLED=false
+→ true
+
+
+Do not remove the gate.
+
+Do not redesign it.
+
+We want registration to remain independently controllable so we can close
+signup again without disabling existing-user login.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Prove the real new-customer journey:
+
+anonymous visitor
+
+→ app.buildcustom.ai
+
+→ signup
+
+→ normal runtime-backed account creation
+
+→ authenticated BuildCustom session
+
+→ empty personal dashboard
+
+→ create first project
+
+→ native BuildCustom agent
+
+→ generation
+
+→ conversation
+
+→ Files
+
+→ preview
+
+→ reopen
+
+→ Publish
+
+→ immutable release
+
+→ clean route KV
+
+→ clean dispatch namespace
+
+→ public *.apps.buildcustom.ai URL
+
+→ public generated app
+
+
+Then verify isolation from existing users.
+
+If all acceptance passes:
+
+LEAVE SIGNUP OPEN.
+
+==================================================
+STEP 1 — PRE-ENABLEMENT FREEZE
+==================================================
+
+Before changing anything verify:
+
+control plane:
+
+c0d47add-0ef7-431c-af87-84f7f9ba56c2
+
+serving 100%
+
+
+runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+gateway:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+control-plane registration:
+
+false
+
+
+runtime registration:
+
+false
+
+
+existing tester login:
+
+works
+
+
+existing tester project 2:
+
+works
+
+
+existing release 2:
+
+works
+
+
+existing generated app:
+
+works
+
+
+marketing:
+
+works
+
+
+claims:
+
+zero
+
+
+If accepted production state drifted:
+
+STOP.
+
+==================================================
+STEP 2 — TRACE CURRENT REGISTRATION FLOW
+==================================================
+
+Before changing configuration, trace the exact existing signup architecture.
+
+Document:
+
+1. public signup UI
+
+2. control-plane registration route
+
+3. runtime registration route
+
+4. AuthService.register path
+
+5. session issuance
+
+6. BuildCustom product-user creation
+
+7. runtime identity → product identity mapping
+
+8. post-signup redirect
+
+9. dashboard behavior for a user with zero projects
+
+
+Confirm the intended architecture remains:
+
+browser
+→ BuildCustom control plane
+→ stock runtime auth
+→ runtime identity
+→ BuildCustom product-user record
+→ authenticated BuildCustom session
+
+
+Do not introduce a second auth flow.
+
+==================================================
+STEP 3 — VERIFY REGISTRATION SECURITY
+==================================================
+
+Before opening registration, verify the existing path enforces appropriate
+basic registration protections already present in the architecture.
+
+At minimum inspect:
+
+email normalization
+
+duplicate-email handling
+
+password requirements already imposed by stock auth
+
+malformed request handling
+
+CSRF protection where applicable
+
+Origin validation
+
+session cookie properties
+
+runtime/product identity consistency
+
+
+Do not invent a large new security system.
+
+If a serious defect exists that would make public signup unsafe:
+
+STOP and report the exact defect.
+
+Otherwise continue.
+
+==================================================
+STEP 4 — DEFINE ROLLBACK
+==================================================
+
+Before enabling signup establish exact rollback.
+
+Rollback must restore:
+
+control-plane registration:
+CLOSED
+
+runtime registration:
+CLOSED
+
+
+while preserving:
+
+existing-user login
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+Task 11A publish fix
+
+existing users
+
+existing projects
+
+existing releases
+
+generated apps
+
+
+Prepare the exact flag/config rollback before proceeding.
+
+Do NOT use rollback versions that would disable public generated apps or remove
+the Task 11A fix.
+
+==================================================
+STEP 5 — ENABLE RUNTIME REGISTRATION
+==================================================
+
+Using the accepted runtime code, change ONLY the existing registration gate:
+
+REGISTRATION_ENABLED=false
+→ true
+
+
+Do not change:
+
+authentication implementation
+
+session implementation
+
+logout implementation
+
+AI/runtime behavior
+
+dispatch namespace
+
+provider configuration
+
+inference configuration
+
+
+Deploy the new runtime version.
+
+Record:
+
+new version ID
+
+serving percentage
+
+configuration diff
+
+
+Expected meaningful change:
+
+registration gate only.
+
+==================================================
+STEP 6 — ENABLE CONTROL-PLANE REGISTRATION
+==================================================
+
+Using the accepted Task 11B control-plane code, enable its existing
+registration capability.
+
+Do not change:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+publish behavior
+
+project ownership
+
+session bridge
+
+preview
+
+Files
+
+WebSocket
+
+gateway
+
+routing
+
+
+Deploy the new control-plane version.
+
+Record:
+
+new version ID
+
+serving percentage
+
+configuration diff
+
+
+Expected meaningful change:
+
+registration capability only.
+
+==================================================
+STEP 7 — VERIFY SIGNUP IS ACTUALLY OPEN
+==================================================
+
+From a fresh anonymous browser:
+
+https://app.buildcustom.ai
+
+
+Require:
+
+signup action visible
+
+signup page/form available
+
+login still available
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+Verify the live capability response reports:
+
+registration enabled
+
+public generated apps enabled
+
+
+Do not infer this from script-level settings alone.
+
+Use the actual serving versions and live product behavior.
+
+==================================================
+STEP 8 — CREATE ONE REAL NEW TEST CUSTOMER
+==================================================
+
+Create exactly ONE new disposable launch-acceptance user through the NORMAL
+public signup UI.
+
+Do NOT:
+
+insert the user directly into D1
+
+use the old bootstrap
+
+call AuthService.register manually
+
+use an internal admin endpoint
+
+bypass the UI
+
+
+This must exercise the real customer signup experience.
+
+Use a fresh unique acceptance-test email/address under a domain/account
+available for controlled testing.
+
+Use a securely retained temporary credential for the duration of this task.
+
+Do not expose the password in the report.
+
+==================================================
+STEP 9 — VERIFY NEW IDENTITY
+==================================================
+
+After signup verify:
+
+runtime user exists
+
+BuildCustom product user exists
+
+runtime identity mapping correct
+
+legacy_password_hash=NULL
+
+no BuildCustom-local password authority
+
+no local duplicate session authority
+
+normal authenticated session established
+
+role:
+normal user
+
+not admin
+
+not super_admin
+
+
+Verify exactly one expected product user was created for this signup.
+
+==================================================
+STEP 10 — EMPTY ACCOUNT EXPERIENCE
+==================================================
+
+The newly created user should NOT inherit test state.
+
+Require:
+
+dashboard loads
+
+zero existing projects before creation
+
+zero ownership of tester project 2
+
+zero ownership of tester release 2
+
+no other user's conversation
+
+no other user's Files
+
+no other user's preview
+
+no other user's deployment metadata
+
+
+The account should feel like a clean new BuildCustom account.
+
+==================================================
+STEP 11 — CREATE FIRST PROJECT THROUGH REAL UI
+==================================================
+
+Using only the normal public BuildCustom UI:
+
+create the new user's first project.
+
+Do not manually insert a project.
+
+Record:
+
+new product project ID
+
+new runtime agent ID
+
+
+Require ownership links point only to the newly created user.
+
+==================================================
+STEP 12 — FIRST REAL NEW-USER GENERATION
+==================================================
+
+This task is explicitly authorized to perform ONE new generation because we
+must prove the actual new-customer experience.
+
+Use a tiny, deterministic prompt to minimize inference cost and complexity.
+
+For example:
+
+"Create a tiny single-page website with a heading that says
+BUILDCUSTOM_NEW_USER_OK and a short paragraph underneath. Keep it simple."
+
+
+Do not add unnecessary features.
+
+Do not request external APIs.
+
+Do not request a database.
+
+Do not request authentication inside the generated app.
+
+We are testing the BuildCustom platform, not the complexity of the generated
+application.
+
+==================================================
+STEP 13 — VERIFY AGENT FLOW
+==================================================
+
+Require the normal BuildCustom native agent path:
+
+POST /api/agent
+
+behaviorType:
+think
+
+projectType:
+app
+
+
+Require:
+
+normal authenticated runtime identity
+
+owner-scoped agent
+
+native ThinkAgent
+
+normal streaming
+
+generation completes successfully
+
+
+Record:
+
+agent ID
+
+resulting revision
+
+
+Do not use a shared API key.
+
+Do not create a second agent architecture.
+
+==================================================
+STEP 14 — VERIFY CONVERSATION
+==================================================
+
+Require:
+
+user prompt appears
+
+agent response appears
+
+generation completes
+
+conversation state can be reloaded
+
+no duplicate initial agent
+
+no duplicate project
+
+
+==================================================
+STEP 15 — VERIFY FILES
+==================================================
+
+Require authoritative Files load for the new project.
+
+Verify generated content includes:
+
+BUILDCUSTOM_NEW_USER_OK
+
+
+Files must come from the accepted runtime/Git authority.
+
+No duplicate BuildCustom file store.
+
+==================================================
+STEP 16 — VERIFY PREVIEW
+==================================================
+
+Require:
+
+preview loads
+
+HTTP success
+
+generated marker renders
+
+CSS/assets load if created
+
+preview sandbox remains correct
+
+generated app cannot access authenticated parent product APIs
+
+
+==================================================
+STEP 17 — REOPEN NEW PROJECT
+==================================================
+
+Navigate away from the project.
+
+Then reopen it through the normal dashboard.
+
+Require:
+
+same project
+
+same agent
+
+same revision
+
+conversation reloads
+
+Files reload
+
+preview reloads
+
+idle WebSocket reconnects
+
+no inference merely from reopen
+
+
+==================================================
+STEP 18 — PUBLISH NEW USER PROJECT
+==================================================
+
+Using the NORMAL customer-facing Publish UI:
+
+click Publish ONCE.
+
+
+Require:
+
+successful first publication
+
+expected first-publish HTTP contract
+
+HTTP 201 if unchanged from accepted behavior
+
+immutable release created
+
+candidate verified
+
+stable slug created
+
+route activated only after verification
+
+clean route KV used
+
+clean launch dispatch namespace used
+
+
+Record:
+
+release ID
+
+slug
+
+scriptName
+
+public URL
+
+
+==================================================
+STEP 19 — VERIFY CUSTOMER PUBLISH UI
+==================================================
+
+Require the new user sees:
+
+correct public *.apps.buildcustom.ai URL
+
+Open Site action
+
+no workers.dev URL
+
+no private gateway URL
+
+no staging URL
+
+no legacy URL
+
+
+==================================================
+STEP 20 — VERIFY NEW PUBLIC APP
+==================================================
+
+Open the new customer's public URL.
+
+Require:
+
+valid TLS
+
+HTTP 200
+
+BUILDCUSTOM_NEW_USER_OK visible
+
+CSS/assets load
+
+no authentication required
+
+no Replit dependency
+
+no staging dependency
+
+no private redirect
+
+
+Trace delivery:
+
+public hostname
+
+→ buildcustom-apps-gateway
+
+→ clean ROUTES KV
+
+→ immutable script
+
+→ buildcustom-vibesdk-launch-dispatch
+
+
+==================================================
+STEP 21 — SAME-REVISION PUBLISH UPDATES
+==================================================
+
+Without editing or generating again:
+
+click Publish updates ONCE.
+
+
+Require:
+
+no settings PUT bug
+
+one Publish POST
+
+HTTP 200
+
+alreadyPublished=true
+
+same release
+
+same revision
+
+same slug
+
+same script
+
+no deployment
+
+no duplicate release
+
+no route mutation
+
+claims return/remain zero
+
+
+Use the accepted bounded timeout:
+
+<=35 seconds
+
+
+Report actual timing.
+
+==================================================
+STEP 22 — NEW USER OWNERSHIP ISOLATION
+==================================================
+
+Now we have two live real users.
+
+Use them to prove BOTH directions.
+
+NEW USER must NOT be able to access existing tester:
+
+project 2
+
+agent
+
+conversation
+
+Files
+
+preview
+
+release 2
+
+publish settings
+
+agent ticket
+
+
+EXISTING TESTER must NOT be able to access NEW USER:
+
+project
+
+agent
+
+conversation
+
+Files
+
+preview
+
+release
+
+publish settings
+
+agent ticket
+
+
+Require owner-scoped denial in both directions.
+
+This closes the remaining Task 11B live-isolation limitation.
+
+==================================================
+STEP 23 — DASHBOARD ISOLATION
+==================================================
+
+Verify:
+
+new user's dashboard shows only their own project
+
+existing tester dashboard shows only tester-owned projects
+
+no cross-user project leakage
+
+no cross-user release leakage
+
+no cross-user generated-app management leakage
+
+
+Public generated applications themselves are intentionally public.
+
+Their BuildCustom management metadata is not.
+
+==================================================
+STEP 24 — DUPLICATE REGISTRATION
+==================================================
+
+Using the normal signup route, attempt registration with the same normalized
+email as the new acceptance user.
+
+Do NOT create another account.
+
+Require a bounded, appropriate duplicate-account response.
+
+No duplicate runtime identity.
+
+No duplicate product identity.
+
+Do not expose sensitive account details beyond the normal expected error.
+
+==================================================
+STEP 25 — MALFORMED / INVALID REGISTRATION
+==================================================
+
+Use safe requests to verify obviously malformed registration input is rejected.
+
+Do not perform abuse/load testing.
+
+Verify the public endpoint does not accept structurally invalid registration
+requests.
+
+==================================================
+STEP 26 — LOGOUT / LOGIN NEW USER
+==================================================
+
+Logout the newly created user normally.
+
+Require:
+
+browser auth cookie cleared
+
+exact old session rejected by product
+
+exact old session rejected by runtime
+
+
+Then login through the normal public login UI using the new user's credentials.
+
+Require:
+
+login succeeds
+
+same product identity
+
+same project
+
+same agent
+
+same revision
+
+same release
+
+same public URL
+
+
+==================================================
+STEP 27 — EXISTING USER REGRESSION
+==================================================
+
+Verify the original tester still works after signup was opened.
+
+Require:
+
+login
+
+dashboard
+
+project 2
+
+conversation
+
+Files
+
+preview
+
+idle WebSocket
+
+release 2
+
+public app
+
+Publish updates idempotency
+
+
+Do not generate or edit tester project.
+
+==================================================
+STEP 28 — PUBLIC GENERATED APPS REGRESSION
+==================================================
+
+Verify BOTH:
+
+existing tester public app
+
+new user public app
+
+
+Require:
+
+valid TLS
+
+HTTP 200
+
+correct independent content
+
+correct independent routes
+
+
+Ensure one slug cannot resolve to the other's script.
+
+==================================================
+STEP 29 — UNKNOWN SLUG
+==================================================
+
+Request a random nonexistent:
+
+<random>.apps.buildcustom.ai
+
+
+Require:
+
+404
+
+no legacy content
+
+no staging content
+
+no internal information leak
+
+
+==================================================
+STEP 30 — NETWORK AUDIT
+==================================================
+
+Capture the new-user browser journey:
+
+anonymous app load
+
+signup
+
+dashboard
+
+project creation
+
+generation
+
+Files
+
+preview
+
+reopen
+
+Publish
+
+Open Site
+
+Publish updates
+
+logout
+
+login
+
+
+Require no forbidden runtime dependencies on:
+
+Replit development
+
+legacy Worker
+
+staging runtime
+
+lab runtime
+
+old control plane
+
+private gateway
+
+workers.dev customer URL
+
+
+Normal third-party frontend resources such as fonts/analytics are not forbidden
+runtime dependencies.
+
+==================================================
+STEP 31 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish the public Replit deployment because marketing waitlist still
+depends on it.
+
+While development is stopped verify:
+
+NEW USER:
+
+fresh login
+
+dashboard
+
+new project reopen
+
+conversation
+
+Files
+
+preview
+
+idle WebSocket
+
+
+EXISTING USER:
+
+fresh login
+
+project 2 reopen
+
+
+PUBLIC APPS:
+
+both generated apps load
+
+
+MARKETING:
+
+buildcustom.ai healthy
+
+
+SIGNUP:
+
+public signup page remains available
+
+
+Do NOT create another account during this check.
+
+Restore development workflow afterward if desired.
+
+==================================================
+STEP 32 — FINAL PRODUCTION STATE
+==================================================
+
+Verify serving versions and configuration from actual active deployments.
+
+Require:
+
+app.buildcustom.ai:
+healthy
+
+PUBLIC_GENERATED_APPS_ENABLED:
+true
+
+control registration:
+true
+
+runtime registration:
+true
+
+existing-user login:
+works
+
+new-user login:
+works
+
+runtime:
+clean production runtime
+
+gateway:
+clean production gateway
+
+ROUTES:
+clean KV
+
+DISPATCHER:
+clean launch dispatch
+
+wildcard:
+unchanged
+
+marketing:
+unchanged
+
+public Replit deployment:
+unchanged
+
+
+==================================================
+ROLLBACK TRIGGERS
+==================================================
+
+ROLL BACK signup if:
+
+registration creates inconsistent identities
+
+BuildCustom becomes a password authority
+
+session handling regresses
+
+duplicate registration creates duplicate identities
+
+new user inherits another user's data
+
+ownership isolation fails
+
+new user cannot create project
+
+new user cannot use native agent
+
+new user cannot preview
+
+new user cannot publish
+
+new user public app fails
+
+existing-user login regresses
+
+existing-user publishing regresses
+
+public generated apps regress
+
+Replit development is required for product operation
+
+
+==================================================
+ROLLBACK PROCEDURE
+==================================================
+
+If rollback is required:
+
+set:
+
+control registration=false
+
+runtime registration=false
+
+
+Retain:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+Task 11A fix
+
+Task 11B public publishing
+
+existing users
+
+new acceptance user
+
+new project
+
+new release
+
+generated apps
+
+
+Do NOT delete the new user merely because signup is closed again.
+
+Do NOT delete their generated project/release.
+
+Do NOT roll back the runtime or control plane to versions that remove accepted
+fixes.
+
+After rollback verify:
+
+existing-user login works
+
+new acceptance-user login works
+
+signup is closed
+
+public publishing remains enabled
+
+both generated apps remain healthy
+
+
+Then STOP.
+
+==================================================
+SUCCESS STATE
+==================================================
+
+If all required checks pass:
+
+LEAVE:
+
+control registration=true
+
+runtime registration=true
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+At that point BuildCustom supports the complete public customer journey:
+
+visit
+
+→ signup
+
+→ login/session
+
+→ create project
+
+→ native agent
+
+→ generation
+
+→ conversation
+
+→ Files
+
+→ preview
+
+→ reopen
+
+→ Publish
+
+→ public generated app
+
+→ Publish updates
+
+→ logout
+
+→ login again
+
+
+That is the core public BuildCustom product.
+
+==================================================
+TASK 12 ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. accepted pre-state verified
+
+2. existing registration architecture traced
+
+3. no second password/session authority introduced
+
+4. rollback prepared
+
+5. runtime registration enabled
+
+6. control registration enabled
+
+7. signup UI publicly available
+
+8. exactly one real new user created through public UI
+
+9. runtime identity created correctly
+
+10. product identity created correctly
+
+11. legacy_password_hash remains NULL
+
+12. new account begins isolated/empty
+
+13. first project created through public UI
+
+14. native agent created correctly
+
+15. generation succeeds
+
+16. conversation works
+
+17. Files work
+
+18. preview works
+
+19. reopen works
+
+20. idle WebSocket works
+
+21. first Publish succeeds
+
+22. immutable release created
+
+23. clean route KV used
+
+24. clean dispatch used
+
+25. correct public URL shown
+
+26. Open Site works
+
+27. new public app works
+
+28. Publish updates is idempotent
+
+29. bidirectional live user isolation passes
+
+30. dashboards isolated
+
+31. duplicate registration handled correctly
+
+32. malformed registration rejected
+
+33. new-user logout revokes old session
+
+34. new-user login works afterward
+
+35. existing-user flow remains healthy
+
+36. both public apps remain independent/healthy
+
+37. unknown slug returns 404
+
+38. network audit clean
+
+39. Replit-development-off new-user flow works
+
+40. Replit-development-off existing-user flow works
+
+41. Replit-development-off generated apps work
+
+42. marketing remains healthy
+
+43. public generated apps remain enabled
+
+44. registration remains enabled at success
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-task control-plane version
+
+2. pre-task runtime version
+
+3. registration architecture summary
+
+4. rollback configuration prepared
+
+5. new runtime version
+
+6. new control-plane version
+
+7. active registration capability results
+
+8. public signup UI result
+
+9. new product user ID
+
+10. new runtime identity ID
+
+11. legacy_password_hash result
+
+12. initial dashboard state
+
+13. new project ID
+
+14. new agent ID
+
+15. generation result
+
+16. resulting revision
+
+17. conversation result
+
+18. Files result
+
+19. preview result
+
+20. reopen/WebSocket result
+
+21. first Publish status
+
+22. new release ID
+
+23. stable slug
+
+24. immutable scriptName
+
+25. public URL
+
+26. public app result
+
+27. Publish-updates idempotency result/time
+
+28. bidirectional isolation result
+
+29. dashboard isolation result
+
+30. duplicate-registration result
+
+31. malformed-registration result
+
+32. logout/revocation result
+
+33. fresh-login result
+
+34. existing-user regression result
+
+35. both-public-apps result
+
+36. unknown-slug result
+
+37. network-audit result
+
+38. Replit-development-off result
+
+39. final control-plane version
+
+40. final runtime version
+
+41. final gateway version/bindings
+
+42. final PUBLIC_GENERATED_APPS_ENABLED state
+
+43. final registration state
+
+44. marketing/public-Replit state
+
+45. whether rollback occurred
+
+46. remaining HIGH risks
+
+47. remaining MEDIUM risks
+
+48. whether TASK 12 is ACCEPTED
+
+49. whether BUILDCUSTOM IS NOW OPEN FOR PUBLIC NEW-USER SIGNUP AND END-TO-END
+USE
+
+50. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ADD BILLING.
+
+DO NOT ADD PLANS OR CREDITS.
+
+DO NOT MOVE THE MARKETING WAITLIST YET.
+
+DO NOT DELETE LEGACY RESOURCES.
+
+DO NOT SHUT DOWN THE PUBLIC REPLIT DEPLOYMENT YET.
+
+DO NOT REDESIGN AUTHENTICATION.
