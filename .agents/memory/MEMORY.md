@@ -47,3 +47,4 @@
 - [Local remote D1 bootstrap](local-remote-d1-bootstrap.md) — local Wrangler remote D1 bindings can fail even while remote D1 CLI reads succeed; prove the private path before registration.
 - [Single-use browser acceptance](single-use-browser-acceptance.md) — controlled inputs can show the right DOM value while React state remains stale; reconcile before one-time clicks.
 - [Stock Think reopen socket](stock-think-reopen-socket.md) — existing-agent reopen uses a no-generation WebSocket; an idle connection is native behavior, not a test-only requirement.
+- [Publish request trace interpretation](publish-request-trace-interpretation.md) — a checker waiting for a Publish POST can time out when the UI failed earlier and never sent that POST.

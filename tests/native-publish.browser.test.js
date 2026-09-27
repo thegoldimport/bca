@@ -45,6 +45,9 @@ function installPublishMocks(options) {
     }
     if (url.pathname.endsWith("/runtime/publishing-settings") && method === "PUT") {
       requests.push({ path: url.pathname, method, headers, body });
+      if (options.existingUrl) {
+        return json({ message: "The published address cannot be changed while this project is live." }, 409);
+      }
       return json({ subdomainSlug: JSON.parse(body).subdomainSlug, hostingProvider: "buildcustom" });
     }
     if (url.pathname.endsWith("/runtime/publish-immutable-v2") && method === "POST") {
@@ -54,9 +57,10 @@ function installPublishMocks(options) {
         : json({
           deploymentUrl: options.publicAppsEnabled === false ? null : "https://native-publish-test.apps.buildcustom.ai",
           publicAvailable: options.publicAppsEnabled !== false,
-          release: { id: 1, publicAvailable: options.publicAppsEnabled !== false },
-          alreadyPublished: false,
-        });
+          release: { id: 1, commitHash: "release", subdomainSlug: "native-publish-test", scriptName: "existing-immutable-script",
+            publicAvailable: options.publicAppsEnabled !== false },
+          alreadyPublished: Boolean(options.existingUrl),
+        }, options.existingUrl ? 200 : 201);
     }
     if (url.pathname === "/api/auth/me") return json({ id: "owner-a", username: "Owner A", email: "owner@example.test", plan: "free", role: "user" });
     if (url.pathname === "/api/auth/csrf-token") return json({ token: "browser-test-csrf" });
@@ -66,9 +70,9 @@ function installPublishMocks(options) {
         connected: true,
         runtimeStatus: "ready",
         previewUrl: `${location.origin}/preview`,
-        deploymentUrl: options.existingUrl || null,
+        deploymentUrl: options.publicAppsEnabled === false ? null : options.existingUrl || null,
         publicAvailable: Boolean(options.existingUrl) && options.publicAppsEnabled !== false,
-        deploymentComplete: Boolean(options.existingUrl),
+        deploymentComplete: Boolean(options.existingUrl) && options.publicAppsEnabled !== false,
         state: { shouldBeGenerating: false, generation: { status: "idle" }, previewUrl: `${location.origin}/preview` },
       });
     }
@@ -218,6 +222,39 @@ test("native Publish sends one CSRF-protected project deployment and renders pub
       }
     });
 
+    await t.test("published same-revision retry skips locked settings and returns twice with public capability off", async () => {
+      const page = await openEditor(serverUrl, browser, {
+        existingUrl: "https://native-publish-test.apps.buildcustom.ai",
+        publicAppsEnabled: false,
+      });
+      try {
+        await page.waitForFunction(() =>
+          document.querySelector('[data-testid="button-publish-native"]')?.textContent?.includes("Publish updates"));
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          await page.click('[data-testid="button-publish-native"]');
+          await page.waitForFunction((count) =>
+            window.__nativePublishHarness.requests.filter((request) => request.method === "POST").length === count,
+          { timeout: 10_000 }, attempt);
+          await page.waitForFunction(() =>
+            document.querySelector('[data-testid="button-publish-native"]')?.textContent?.includes("Publish updates"));
+        }
+        const result = await page.evaluate(() => ({
+          requests: window.__nativePublishHarness.requests,
+          status: document.querySelector('[data-testid="native-publish-status"]')?.textContent,
+          publicLink: document.querySelector('[data-testid="link-native-public-url"]')?.getAttribute("href"),
+          alert: document.querySelector('[data-testid="native-publish-status"] [role="alert"]')?.textContent,
+        }));
+        assert.equal(result.requests.filter((request) => request.method === "PUT").length, 0);
+        assert.equal(result.requests.filter((request) => request.method === "POST").length, 2);
+        assert.ok(result.requests.every((request) => request.headers["x-publish-protocol"] === "immutable-v2"));
+        assert.match(result.status, /Published internally/);
+        assert.equal(result.publicLink, undefined);
+        assert.equal(result.alert, undefined);
+      } finally {
+        await page.close();
+      }
+    });
+
     await t.test("shows a rejected publish error with the stable-slug public address", async () => {
       const existingUrl = "https://already-live.apps.buildcustom.ai";
       const page = await openEditor(serverUrl, browser, { rejectDeployment: true, existingUrl });
@@ -230,7 +267,7 @@ test("native Publish sends one CSRF-protected project deployment and renders pub
           error: document.querySelector('[role="alert"]')?.textContent,
           url: document.querySelector('[data-testid="link-native-public-url"]')?.getAttribute("href"),
         }));
-        assert.equal(result.requests.filter((request) => request.method === "PUT").length, 1);
+        assert.equal(result.requests.filter((request) => request.method === "PUT").length, 0);
         assert.equal(result.requests.filter((request) => request.method === "POST").length, 1);
         assert.match(result.status, /Publish failed/);
         assert.equal(result.error, "The publish service rejected this request.");

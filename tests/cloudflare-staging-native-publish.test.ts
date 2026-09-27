@@ -550,6 +550,31 @@ test("same-revision retry returns existing immutable release without opening ano
   assert.ok(f.browserVisits.length >= visitsBeforeRetry + 2);
 });
 
+test("concurrent already-published retries return the same release without a claim or route mutation", { timeout: 10_000 }, async () => {
+  const f = fixture({ launch: true, legacy: false });
+  const initial = await publish(f);
+  assert.equal(initial?.status, 201);
+  const published = (await initial!.json() as any).release;
+  const route = f.routes.get(slug);
+  const routeWrites = f.events.filter((event) => event.startsWith("kv:")).length;
+  const [first, second] = await Promise.all([publish(f), publish(f)]);
+  for (const response of [first, second]) {
+    assert.equal(response?.status, 200);
+    const body = await response!.json() as any;
+    assert.equal(body.alreadyPublished, true);
+    assert.equal(body.release.id, published.id);
+    assert.equal(body.release.commitHash, published.commitHash);
+    assert.equal(body.release.subdomainSlug, published.subdomainSlug);
+    assert.equal(body.release.scriptName, published.scriptName);
+  }
+  assert.equal(f.state.releases.length, 1);
+  assert.equal(f.deploys, 1);
+  assert.equal(f.routes.get(slug), route);
+  assert.equal(f.events.filter((event) => event.startsWith("kv:")).length, routeWrites);
+  assert.equal(f.state.claimToken, null);
+  assert.equal((await publish(f, project, wrongOwner))?.status, 404);
+});
+
 test("same-revision retry refuses stale link or route metadata instead of claiming the old release is active", async () => {
   const f = fixture();
   assert.equal((await publish(f))?.status, 201);
@@ -565,6 +590,11 @@ test("same-revision retry requires a healthy direct and stable route", async () 
   const options: FixtureOptions = {};
   const f = fixture(options);
   assert.equal((await publish(f))?.status, 201);
+  options.failCandidateAsset = true;
+  const missingAsset = await publish(f);
+  assert.equal(missingAsset?.status, 409);
+  assert.notEqual((await missingAsset!.json() as any).alreadyPublished, true);
+  options.failCandidateAsset = false;
   options.failStableAfterSwitch = true;
   const retry = await publish(f);
   assert.equal(retry?.status, 409);

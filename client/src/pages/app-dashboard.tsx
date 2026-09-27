@@ -2738,7 +2738,7 @@ function EditorPage() {
         throw new Error("This staging server is not ready for immutable publishing. Refresh and try again.");
       }
       const publishHeaders = { ...headers, "X-Publish-Protocol": capability.publishProtocol };
-      if (safeSlug && !productionUrl) {
+      if (safeSlug && !nativeDeploymentComplete) {
         const settingsResponse = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, {
           method: "PUT",
           headers: publishHeaders,

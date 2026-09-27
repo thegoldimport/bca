@@ -1,0 +1,1143 @@
+TASK 11A — FIX SAME-REVISION PUBLISH RESPONSE HANG WHILE PUBLIC PUBLISHING REMAINS DISABLED
+
+Task 11 is NOT accepted.
+
+The rollback was correct.
+
+DO NOT re-enable public generated apps yet.
+
+We have already proven that the FIRST real customer Publish works end-to-end.
+
+The ONLY HIGH-severity functional defect discovered in Task 11 is:
+
+A second customer Publish on the EXACT SAME committed revision did not return
+within 240 seconds.
+
+Importantly:
+
+- no duplicate release was created
+- no duplicate immutable script was created
+- no route churn occurred
+- the existing release remained correct
+- the existing public generated app remained healthy
+
+Therefore this task is NOT about rebuilding publishing.
+
+This task is about finding why the same-revision idempotent customer request
+does not return a bounded response even though the underlying state is already
+correct.
+
+==================================================
+CURRENT ACCEPTED PRODUCTION STATE
+==================================================
+
+ACTIVE CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+accepted serving version:
+
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+serving:
+100%
+
+
+IMPORTANT:
+
+The newer inactive version:
+
+dbc4ceed-d73d-41e7-aace-4f5cf2469239
+
+was used during Task 11 with public generated apps enabled.
+
+It is NOT the accepted serving version.
+
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+PUBLIC GATEWAY:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+
+CLEAN ROUTES KV:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+
+CLEAN DISPATCH:
+
+buildcustom-vibesdk-launch-dispatch
+
+
+REGISTRATION:
+
+control plane:
+CLOSED
+
+runtime:
+CLOSED
+
+
+PUBLIC GENERATED APPS:
+
+MUST REMAIN DISABLED DURING THIS TASK.
+
+
+==================================================
+IMPORTANT CLOUDFLARE CONFIGURATION RULE
+==================================================
+
+Task 11 exposed an important operational distinction.
+
+Script-level settings may show configuration associated with a newer inactive
+version even while an older accepted Worker version is serving 100%.
+
+Therefore:
+
+DO NOT infer production behavior solely from script-level settings.
+
+For all production acceptance and rollback decisions, establish configuration
+from the ACTUALLY SERVING DEPLOYED VERSION and its active resources/bindings.
+
+Document:
+
+1. active Worker version
+
+2. active deployment percentage
+
+3. active version environment/bindings/configuration where Cloudflare exposes
+   them
+
+4. script-level settings separately
+
+5. any discrepancy between active-version state and script-level state
+
+Do not "fix" the inactive version merely because its settings differ.
+
+==================================================
+KNOWN SUCCESSFUL RELEASE
+==================================================
+
+Tester:
+
+product user:
+3f730b86-bc16-4954-b3fd-db22aea136b7
+
+project:
+2
+
+agent:
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+revision:
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+
+Successful Task 11 release:
+
+release ID:
+2
+
+stable slug:
+
+create-a-minimal-public-app-by-creating-public-index-html-and-p
+
+immutable script:
+
+bc-r-c59c890f14f0fd9fef34193ab2c3a310bae00d5b728de54aba0380df
+
+
+Public URL:
+
+https://create-a-minimal-public-app-by-creating-public-index-html-and-p.apps.buildcustom.ai
+
+
+The route record and immutable script MUST remain intact.
+
+Do NOT delete or recreate this release.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine exactly why:
+
+same project
++
+same agent
++
+same committed revision
++
+already-published release
+
+causes the customer Publish request to hang rather than promptly return the
+existing idempotent result.
+
+Then make the SMALLEST correction necessary so the accepted behavior is:
+
+same revision already published
+→ detect existing successful release
+→ return bounded success response
+→ same release
+→ same slug
+→ same script
+→ same route
+→ ZERO deployment work
+
+==================================================
+NON-NEGOTIABLE ARCHITECTURE
+==================================================
+
+Task 4B remains accepted.
+
+Do NOT redesign publishing.
+
+Do NOT add:
+
+queues
+
+Workflows
+
+new Durable Objects
+
+new publish broker
+
+new deployment state machine
+
+polling infrastructure
+
+duplicate release store
+
+duplicate route store
+
+new generated-app architecture
+
+new agent behavior
+
+This should be a narrow correctness fix.
+
+==================================================
+STEP 1 — REPRODUCE WITHOUT PUBLIC CAPABILITY
+==================================================
+
+PUBLIC_GENERATED_APPS_ENABLED must remain effectively FALSE on the active
+production control plane.
+
+Do NOT enable customer-facing public publishing.
+
+We already have an existing release.
+
+Use a controlled authenticated request against the same normal Publish path
+for:
+
+project 2
+
+same revision:
+
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+
+The public capability flag must not need to be true merely to diagnose the
+server-side native Publish operation.
+
+If the product intentionally prevents the normal Publish request while the
+public capability is disabled:
+
+do NOT turn the capability on.
+
+Instead reproduce the server-side same-revision path using the narrowest
+private/control-plane acceptance mechanism already used for publishing tests.
+
+Do not create another release.
+
+==================================================
+STEP 2 — TRACE THE REQUEST END TO END
+==================================================
+
+Instrument/trace the same-revision request through the existing code.
+
+Identify:
+
+1. HTTP route receiving Publish
+
+2. owner authorization
+
+3. project lookup
+
+4. runtime link lookup
+
+5. revision resolution
+
+6. release lookup
+
+7. same-revision detection
+
+8. immutable script identity calculation
+
+9. publish claim/lock acquisition
+
+10. existing route lookup
+
+11. existing script/existence check
+
+12. candidate verification logic
+
+13. release status logic
+
+14. response construction
+
+15. response return
+
+We need the exact point where the request stops making forward progress.
+
+Do not guess from the 240-second browser timeout.
+
+==================================================
+STEP 3 — DETERMINE WHETHER SERVER OR CLIENT HANGS
+==================================================
+
+Separate:
+
+A. server request never returns
+
+from:
+
+B. server returns but browser/client never resolves
+
+from:
+
+C. server response is delayed by an unnecessary downstream operation
+
+from:
+
+D. browser is waiting for an incorrect response/status contract
+
+Capture:
+
+request start
+
+server route entry
+
+major publish state transitions
+
+response creation
+
+response status
+
+response completion
+
+browser receipt
+
+UI promise resolution
+
+Do not log secrets.
+
+==================================================
+STEP 4 — INSPECT SAME-REVISION FAST PATH
+==================================================
+
+Task 4B requires same-revision idempotency.
+
+Trace the exact intended fast path.
+
+For an already successfully published revision, determine whether the request
+should immediately return something conceptually equivalent to:
+
+alreadyPublished: true
+
+release ID: 2
+
+same slug
+
+same scriptName
+
+same public release metadata
+
+without:
+
+deploying
+
+uploading
+
+waiting on candidate verification again
+
+mutating route KV
+
+creating another release
+
+acquiring a long-lived publish operation
+
+==================================================
+STEP 5 — INSPECT LOCK / CLAIM BEHAVIOR
+==================================================
+
+Task 4B uses per-agent serialization/locking.
+
+Determine whether the second request is:
+
+waiting on a stale lock
+
+waiting on an active publish claim
+
+creating a claim unnecessarily
+
+failing to release a claim
+
+waiting for itself
+
+waiting on an operation that already completed
+
+or otherwise entering the mutation path before same-revision idempotency is
+resolved.
+
+Inspect the actual product D1 state.
+
+Report:
+
+active publish claim count
+
+claim owner/state if one exists
+
+release state
+
+release revision
+
+published revision
+
+route mapping
+
+Do not manually delete state merely to make the test pass.
+
+==================================================
+STEP 6 — INSPECT RELEASE LOOKUP ORDER
+==================================================
+
+Determine whether the idempotency check occurs early enough.
+
+Preferred conceptual ordering:
+
+authenticate owner
+
+→ resolve project/agent/current revision
+
+→ find already-successful release for exact revision
+
+→ verify its stable publication metadata is internally consistent
+
+→ return idempotent success
+
+Only revisions requiring actual publication should enter:
+
+claim/lock
+
+candidate deployment
+
+candidate verification
+
+route activation
+
+release mutation
+
+Do NOT change ordering unless source tracing proves the current ordering causes
+the defect.
+
+==================================================
+STEP 7 — INSPECT EXISTING RELEASE CONSISTENCY
+==================================================
+
+For release 2 verify:
+
+status:
+published/successful as intended
+
+revision:
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+slug:
+create-a-minimal-public-app-by-creating-public-index-html-and-p
+
+script:
+bc-r-c59c890f14f0fd9fef34193ab2c3a310bae00d5b728de54aba0380df
+
+route KV:
+points to same script
+
+immutable script:
+exists in clean dispatch
+
+public URL:
+HTTP 200
+
+If release metadata is inconsistent, identify WHY.
+
+Do not silently repair it.
+
+==================================================
+STEP 8 — INSPECT STATUS CODE CONTRACT
+==================================================
+
+Task 11 also exposed that the FIRST successful customer Publish correctly
+returned:
+
+HTTP 201
+
+while the initial checker incorrectly expected 200.
+
+Establish the intended API contract.
+
+Document expected statuses for:
+
+first successful Publish
+
+same-revision already-published retry
+
+actual failure
+
+conflict/in-progress if applicable
+
+Do not change correct HTTP semantics just to satisfy an incorrect test.
+
+Update tests/harness expectations if the application behavior is already
+correct.
+
+==================================================
+STEP 9 — ROOT CAUSE BEFORE CODE CHANGE
+==================================================
+
+Before modifying code, report internally:
+
+ROOT CAUSE:
+
+exact function/file
+
+exact branch
+
+exact awaited operation or missing return
+
+why first Publish succeeds
+
+why second same-revision Publish hangs
+
+why no duplicate release/script/route is created despite the hang
+
+Only after root cause is established may you modify code.
+
+==================================================
+STEP 10 — SMALLEST FIX
+==================================================
+
+Make the smallest correction that restores the intended idempotent contract.
+
+Ideal behavior:
+
+same exact successful revision
+→ bounded response
+→ alreadyPublished=true
+→ existing release metadata
+→ no mutation
+
+Do NOT change Task 4B immutable identity.
+
+Do NOT change slug.
+
+Do NOT change release 2.
+
+Do NOT change route KV.
+
+Do NOT change dispatch script.
+
+Do NOT modify runtime unless evidence proves the runtime is actually the
+source of the hang.
+
+Prefer control-plane-only correction if that is where the defect exists.
+
+==================================================
+STEP 11 — ADD REGRESSION TEST
+==================================================
+
+Add a focused regression test reproducing the exact defect.
+
+Test:
+
+first publish revision R
+→ successful release
+
+second publish revision R
+→ returns bounded idempotent success
+
+Require:
+
+same release ID
+
+same revision
+
+same slug
+
+same scriptName
+
+same route
+
+release count unchanged
+
+script deployment count unchanged
+
+route mutation count unchanged
+
+no candidate deployment
+
+no recovery operation
+
+no stale claim
+
+The test must fail on the pre-fix behavior and pass after the correction.
+
+==================================================
+STEP 12 — FIRST PRIVATE LIVE VERIFICATION
+==================================================
+
+Deploy the corrected control plane PRIVATELY / safely without enabling public
+generated-app capability.
+
+PUBLIC_GENERATED_APPS_ENABLED must remain FALSE.
+
+Using existing release 2, perform ONE controlled same-revision request.
+
+Set a reasonable bounded acceptance timeout substantially below four minutes.
+
+Target:
+
+<= 10 seconds under normal conditions
+
+but report actual timing rather than manufacturing a pass.
+
+Require:
+
+response received
+
+correct status
+
+alreadyPublished=true or equivalent
+
+release ID 2
+
+same slug
+
+same script
+
+same revision
+
+no new release
+
+no new script
+
+no route mutation
+
+no inference
+
+==================================================
+STEP 13 — REPEAT IDEMPOTENCY
+==================================================
+
+After the first fixed retry passes, perform a SECOND controlled same-revision
+request.
+
+Require the same bounded response.
+
+This proves the fix did not merely clear a one-time stale condition.
+
+Again require:
+
+release count unchanged
+
+script count unchanged
+
+route unchanged
+
+claim count returns to zero
+
+==================================================
+STEP 14 — CONCURRENT SAME-REVISION SAFETY
+==================================================
+
+Use focused automated tests to verify two same-revision requests arriving
+concurrently cannot create duplicate state.
+
+Do NOT perform unnecessary live production concurrency if automated tests can
+prove the locking/idempotency contract.
+
+Require:
+
+one logical release
+
+one immutable script
+
+one route
+
+both callers receive a bounded valid result
+
+no deadlock
+
+no stale claim
+
+==================================================
+STEP 15 — DIFFERENT-REVISION BEHAVIOR MUST REMAIN UNCHANGED
+==================================================
+
+Do NOT generate a new live revision for this task.
+
+Use existing automated Task 4B tests to prove:
+
+changed revision
+
+→ new immutable identity
+
+→ candidate-first verification
+
+→ last-known-good preserved until candidate success
+
+→ route activation after verification
+
+We are fixing same-revision response behavior only.
+
+==================================================
+STEP 16 — OWNERSHIP REGRESSION
+==================================================
+
+Run focused tests proving:
+
+non-owner cannot Publish project 2
+
+forged owner cannot Publish
+
+forged project/agent cannot Publish
+
+same-revision fast path does NOT bypass authorization
+
+IMPORTANT:
+
+authorization must happen BEFORE returning existing release metadata.
+
+Do not introduce an information leak through the idempotent fast path.
+
+==================================================
+STEP 17 — FAILURE CONTRACT
+==================================================
+
+Verify a true Publish failure still returns an appropriate bounded failure.
+
+The fix must not turn:
+
+failed release
+
+candidate verification failure
+
+missing script
+
+inconsistent route
+
+into:
+
+alreadyPublished=true
+
+Only a verified successful existing publication for the exact revision may
+take the idempotent success path.
+
+==================================================
+STEP 18 — ACTIVE VERSION CONFIGURATION
+==================================================
+
+When deploying the fixed private/control-plane candidate, explicitly verify
+the ACTUAL serving version configuration.
+
+Do not rely only on script-level settings.
+
+PUBLIC_GENERATED_APPS_ENABLED must remain FALSE.
+
+Registration must remain CLOSED.
+
+Record:
+
+candidate version
+
+active deployment version
+
+deployment percentage
+
+active public-app capability result
+
+active registration result
+
+==================================================
+STEP 19 — PRODUCT REGRESSION
+==================================================
+
+With public publishing still disabled verify:
+
+fresh tester login
+
+dashboard
+
+project 2 reopen
+
+conversation
+
+Files
+
+preview
+
+idle WebSocket
+
+registration closed
+
+Publish UI still does NOT advertise a live public generated app capability
+
+The existing direct generated-app URL may remain reachable.
+
+That is expected because rollback intentionally did not delete release 2 or
+its route.
+
+==================================================
+STEP 20 — PUBLIC GENERATED APP REGRESSION
+==================================================
+
+Read-only verify the existing Task 11 release still works:
+
+https://create-a-minimal-public-app-by-creating-public-index-html-and-p.apps.buildcustom.ai
+
+Require:
+
+valid TLS
+
+HTTP 200
+
+expected HTML
+
+CSS/assets work
+
+No republish.
+
+No route mutation.
+
+==================================================
+STEP 21 — UNKNOWN SLUG
+==================================================
+
+Close one incomplete Task 11 check while we are here.
+
+Request one new random nonexistent:
+
+<random>.apps.buildcustom.ai
+
+Require:
+
+404
+
+no legacy content
+
+no staging content
+
+no internal information leak
+
+This is read-only.
+
+==================================================
+STEP 22 — HARD REFRESH
+==================================================
+
+Close the other incomplete read-only Task 11 check.
+
+Using the existing generated app:
+
+direct load
+
+hard refresh
+
+Require:
+
+HTTP success
+
+same app
+
+CSS/assets load
+
+No authentication required.
+
+==================================================
+STEP 23 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Once the fix passes privately:
+
+temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish the public Replit deployment.
+
+Verify:
+
+app.buildcustom.ai:
+fresh login
+dashboard
+project reopen
+Files
+preview
+idle WebSocket
+
+existing generated app:
+direct load
+hard refresh
+CSS
+
+marketing:
+healthy
+
+Then restore the development workflow if needed.
+
+Do NOT enable public generated apps during this test.
+
+==================================================
+STEP 24 — NETWORK AUDIT
+==================================================
+
+Audit the fixed same-revision request and normal product flow.
+
+Require no unexpected browser dependency on:
+
+Replit development
+
+legacy Worker
+
+staging
+
+lab
+
+old control plane
+
+private gateway
+
+workers.dev customer URL
+
+==================================================
+STEP 25 — FREEZE FIXED CANDIDATE
+==================================================
+
+If all tests pass, freeze the new corrected control-plane candidate.
+
+DO NOT set:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+yet.
+
+Final Task 11A state must remain:
+
+public capability:
+FALSE
+
+registration:
+CLOSED
+
+existing release:
+intact
+
+existing public URL:
+directly reachable
+
+clean gateway:
+unchanged
+
+clean runtime:
+unchanged
+
+==================================================
+DO NOT REPEAT FULL TASK 11
+==================================================
+
+Task 11A is a defect-resolution task.
+
+Do NOT re-enable customer-facing public publishing in this task.
+
+Do NOT perform another first Publish.
+
+Do NOT generate/edit the tester app.
+
+Do NOT create another release.
+
+Do NOT modify gateway bindings.
+
+Do NOT modify DNS.
+
+Do NOT open signup.
+
+Once Task 11A is accepted, STOP.
+
+We will separately repeat the remaining Task 11 customer-facing acceptance
+with the corrected control plane.
+
+==================================================
+TASK 11A ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. exact hang root cause identified
+
+2. server-vs-client location established
+
+3. release 2 consistency verified
+
+4. correct HTTP status contract documented
+
+5. smallest fix implemented
+
+6. regression test fails before / passes after fix or equivalent proof
+
+7. same-revision request returns bounded response
+
+8. repeated same-revision request returns bounded response
+
+9. release ID remains 2
+
+10. release count remains unchanged
+
+11. immutable script remains unchanged
+
+12. dispatch script count remains unchanged
+
+13. route KV remains unchanged
+
+14. no route mutation on retry
+
+15. no candidate deployment on retry
+
+16. no stale publish claim
+
+17. concurrent same-revision automated test passes
+
+18. different-revision Task 4B behavior remains intact
+
+19. ownership authorization occurs before idempotent return
+
+20. true failures are not misclassified as already published
+
+21. PUBLIC_GENERATED_APPS_ENABLED remains false
+
+22. registration remains closed
+
+23. tester product regression passes
+
+24. existing generated app remains healthy
+
+25. unknown slug returns 404
+
+26. hard refresh works
+
+27. Replit-development-off regression passes
+
+28. network audit clean
+
+29. runtime unchanged unless proven necessary
+
+30. gateway unchanged
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact root cause
+
+2. server-side or client-side?
+
+3. file/function/branch responsible
+
+4. why first Publish succeeded
+
+5. why same-revision retry hung
+
+6. why duplicate state was not created
+
+7. intended HTTP status contract
+
+8. exact code change
+
+9. files changed
+
+10. tests added/updated
+
+11. fixed control-plane candidate version
+
+12. active PUBLIC_GENERATED_APPS_ENABLED state
+
+13. registration state
+
+14. first fixed same-revision response/status/time
+
+15. second fixed same-revision response/status/time
+
+16. release ID/count
+
+17. scriptName/script count
+
+18. route KV state/mutation count
+
+19. publish claim state
+
+20. concurrent same-revision test result
+
+21. different-revision regression result
+
+22. ownership/isolation result
+
+23. true-failure result
+
+24. product regression result
+
+25. existing public generated-app result
+
+26. hard-refresh result
+
+27. unknown-slug result
+
+28. Replit-development-off result
+
+29. network-audit result
+
+30. runtime/gateway state
+
+31. remaining HIGH risks
+
+32. remaining MEDIUM risks
+
+33. whether TASK 11A is ACCEPTED
+
+34. whether we are ready to repeat Task 11 customer-facing enablement
+
+35. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ENABLE PUBLIC GENERATED APPS.
+
+DO NOT OPEN REGISTRATION.
+
+DO NOT CREATE ANOTHER RELEASE.
+
+DO NOT DELETE RELEASE 2.
+
+DO NOT MODIFY THE PUBLIC GATEWAY.
+
+DO NOT MODIFY DNS.
