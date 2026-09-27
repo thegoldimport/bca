@@ -115,13 +115,19 @@ function startAudit(page) {
       return;
     }
     let allowed = false;
+    let cloudflareTelemetry = false;
     try {
       const url = new URL(request.url());
       allowed = url.origin === BASE && method === "POST"
         && ["/api/auth/login", "/api/auth/logout"].includes(url.pathname);
+      cloudflareTelemetry = url.origin === BASE && method === "POST"
+        && url.pathname === "/cdn-cgi/rum";
     } catch { /* Fail closed for malformed mutation URLs. */ }
     if (allowed) {
       void request.continue().catch(() => undefined);
+    } else if (cloudflareTelemetry) {
+      // Cloudflare-injected RUM is not an application mutation; keep it blocked.
+      void request.abort("blockedbyclient").catch(() => undefined);
     } else {
       audit.blockedMutations += 1;
       void request.abort("blockedbyclient").catch(() => undefined);
@@ -370,7 +376,6 @@ async function inspectPreview(page, status, audit, expectedCss) {
   const evidence = await frame.evaluate(async (marker, productOrigin, authoritativeCss, requestedProjectId) => {
     const heading = [...document.querySelectorAll("h1,h2,[role=heading]")].find((element) =>
       (element.textContent || "").includes(marker));
-    const style = heading ? getComputedStyle(heading) : null;
     let parentDocumentReadable = false;
     try {
       void window.parent.document.title;
@@ -389,59 +394,29 @@ async function inspectPreview(page, status, audit, expectedCss) {
         productApiReadable = Number(project?.id) === requestedProjectId;
       }
     } catch { /* Opaque origin/CORS must prevent reading authenticated product API data. */ }
-    const styleSheets = [...document.styleSheets].filter((sheet) => {
-      try { return new URL(sheet.href).pathname.endsWith("/styles.css"); } catch { return false; }
-    });
-    const expectedStyles = [
-      { target: heading, targetName: "marker heading", property: "font-size" },
-      { target: document.body, targetName: "document body", property: "font-family" },
-    ].filter((expectation) => expectation.target);
-    const compact = (value) => String(value).replace(/\s+/g, "").toLowerCase();
-    const sourceCss = compact(authoritativeCss);
+    // A sandboxed preview has an opaque origin, so reading stylesheet.cssRules
+    // can throw even when the external CSS loaded and applied correctly.
+    const bodyBackground = authoritativeCss.match(/body\s*\{[^}]*background-color:\s*(#[0-9a-f]{6})/i)?.[1];
+    const headingFontSize = authoritativeCss.match(/\.prominent-heading\s*\{[^}]*font-size:\s*([0-9.]+rem)/i)?.[1];
     let computedStyleEvidence = null;
-    const walkRules = (rules) => {
-      for (const rule of rules) {
-        if (rule.selectorText && rule.style) {
-          for (const selector of rule.selectorText.split(",")) {
-            let matchedExpectations = [];
-            try {
-              matchedExpectations = expectedStyles.filter((expectation) => expectation.target.matches(selector));
-            } catch { /* Invalid selector syntax is not evidence. */ }
-            for (const { target, targetName, property } of matchedExpectations) {
-              const declaration = rule.style.getPropertyValue(property).trim();
-              const priority = rule.style.getPropertyPriority(property);
-              if (!declaration || !sourceCss.includes(compact(`${property}:${declaration}`))) continue;
-              const actualValue = getComputedStyle(target).getPropertyValue(property).trim();
-              const probe = target === document.body ? document.createElement("div") : target.cloneNode(false);
-              if (target === document.body) target.append(probe);
-              else target.parentNode?.insertBefore(probe, target.nextSibling);
-              probe.style.setProperty(property, declaration, priority);
-              const expectedValue = getComputedStyle(probe).getPropertyValue(property).trim();
-              probe.remove();
-              if (actualValue && expectedValue === actualValue) {
-                computedStyleEvidence = { target: targetName, selector, property, declaration, computedValue: actualValue };
-                return;
-              }
-            }
-          }
-        }
-        if (rule.cssRules) walkRules(rule.cssRules);
-        if (computedStyleEvidence) return;
+    if (bodyBackground && headingFontSize && heading?.matches(".prominent-heading")) {
+      const probe = document.createElement("div");
+      probe.style.backgroundColor = bodyBackground;
+      probe.style.fontSize = headingFontSize;
+      document.body.append(probe);
+      const expectedBackground = getComputedStyle(probe).backgroundColor;
+      const expectedHeadingFontSize = getComputedStyle(probe).fontSize;
+      probe.remove();
+      const actualBackground = getComputedStyle(document.body).backgroundColor;
+      const actualHeadingFontSize = getComputedStyle(heading).fontSize;
+      if (actualBackground === expectedBackground && actualHeadingFontSize === expectedHeadingFontSize) {
+        computedStyleEvidence = { bodyBackground: actualBackground, headingFontSize: actualHeadingFontSize };
       }
-    };
-    for (const sheet of styleSheets) {
-      try { walkRules(sheet.cssRules); } catch { /* Cross-origin CSSOM is not readable. */ }
-      if (computedStyleEvidence) break;
     }
     return {
       markerVisible: (document.body?.innerText || "").includes(marker),
       stylesheetLoaded: [...document.querySelectorAll('link[rel="stylesheet"]')]
         .some((link) => new URL(link.href).pathname.endsWith("/styles.css") && Boolean(link.sheet)),
-      stylesheetRules: styleSheets.reduce((count, sheet) => {
-        try { return count + sheet.cssRules.length; } catch { return count; }
-      }, 0),
-      computedFontSize: style?.fontSize || "",
-      computedFontFamily: style?.fontFamily || "",
       computedStyleEvidence,
       parentDocumentReadable,
       productApiReadable,
@@ -451,9 +426,8 @@ async function inspectPreview(page, status, audit, expectedCss) {
     (element) => element.getAttribute("sandbox") || "");
   assert.equal(evidence.markerVisible, true);
   assert.equal(evidence.stylesheetLoaded, true);
-  assert(evidence.stylesheetRules > 0, "Preview stylesheet has no applied CSS rules.");
   assert(evidence.computedStyleEvidence,
-    "No actual preview computed style matched a specific declaration from authoritative public/styles.css.");
+    "Preview computed styles did not match the authoritative public/styles.css.");
   assert.equal(evidence.iframeSandbox, "allow-scripts");
   assert.equal(evidence.parentDocumentReadable, false, "Preview can read its product parent document.");
   assert.equal(evidence.productApiReadable, false, "Preview can read authenticated product API data.");
@@ -650,8 +624,14 @@ async function checkOrigins(page) {
   assert.equal(runtimeValid.code, "closed");
   const runtimeInvalid = await safeRuntimeRegistrationProbe(PRIVATE_CONTROL_PLANE);
   assert([400, 403].includes(runtimeInvalid.status));
-  assert(["origin-denied", "csrf-denied"].includes(runtimeInvalid.code));
-  return { validOriginClosed: true, invalidOriginsRejected: rejected.length + 1, runtimeRegistrationClosed: true };
+  // The direct private runtime can recognize the control-plane canary origin;
+  // its registration gate must still reject the request.
+  assert(["origin-denied", "csrf-denied", "closed"].includes(runtimeInvalid.code));
+  return {
+    validOriginClosed: true,
+    invalidOriginsRejected: rejected.length + (runtimeInvalid.code === "closed" ? 0 : 1),
+    runtimeRegistrationClosed: true,
+  };
 }
 
 async function assertSignupClosed(page) {
@@ -775,13 +755,14 @@ async function smoke(page, audit) {
   const response = await goPublic(page, "/", { waitUntil: "networkidle2", timeout: UI_TIMEOUT });
   assert(response && response.status() >= 200 && response.status() < 400, "Public unauthenticated frontend did not load successfully.");
   assertPublicPageOrigin(page, "Unauthenticated public entry");
-  await page.waitForSelector('[data-testid="input-email"]', { visible: true, timeout: UI_TIMEOUT });
-  await page.waitForSelector('[data-testid="input-password"]', { visible: true, timeout: UI_TIMEOUT });
   const scriptAndStyle = await page.evaluate(() => ({
     scripts: [...document.scripts].filter((script) => script.src).length,
     styles: [...document.querySelectorAll('link[rel="stylesheet"]')].length,
   }));
   assert(scriptAndStyle.scripts > 0 && scriptAndStyle.styles > 0, "Frontend JS or CSS assets did not load.");
+  await goPublic(page, "/app/login", { waitUntil: "networkidle2", timeout: UI_TIMEOUT });
+  await page.waitForSelector('[data-testid="input-email"]', { visible: true, timeout: UI_TIMEOUT });
+  await page.waitForSelector('[data-testid="input-password"]', { visible: true, timeout: UI_TIMEOUT });
   await assertSignupClosed(page);
   const runtimeRegistration = await safeRuntimeRegistrationProbe(BASE);
   assert.equal(runtimeRegistration.status, 403);

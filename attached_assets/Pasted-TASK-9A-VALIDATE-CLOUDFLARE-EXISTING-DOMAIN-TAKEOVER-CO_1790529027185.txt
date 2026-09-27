@@ -1,0 +1,1542 @@
+TASK 9A — VALIDATE CLOUDFLARE EXISTING-DOMAIN TAKEOVER + COMPLETE APP.BUILDCUSTOM.AI CUTOVER
+
+Task 9's stop on HTTP 409 was correct.
+
+The first forward request made ZERO changes.
+
+Current state remains:
+
+app.buildcustom.ai
+→ legacy vibesdk Worker
+
+HTTP:
+500
+
+We are now explicitly authorizing you to determine the correct Cloudflare
+mechanism for moving app.buildcustom.ai to the frozen clean BuildCustom
+control plane and, if the migration path is conclusively established as safe,
+COMPLETE THE CUTOVER in this task.
+
+IMPORTANT OWNER CLARIFICATION:
+
+Manual DNS changes for app.buildcustom.ai ARE authorized if genuinely required.
+
+However:
+
+- prefer Cloudflare's supported Worker Custom Domain takeover/reassignment
+- do not make speculative DNS changes
+- do not delete/change things until the complete forward and rollback path is
+  known
+- do not touch *.apps.buildcustom.ai
+- do not touch buildcustom.ai marketing
+- do not touch the public generated-app gateway
+- do not open registration
+- do not enable public generated apps
+
+==================================================
+FROZEN ACCEPTED COMPONENTS
+==================================================
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+version:
+
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+PRODUCT D1:
+
+buildcustom-product-launch-db
+
+ID:
+
+ca820baf-6973-4318-ac52-529d56293bb6
+
+ROUTE KV:
+
+buildcustom-app-routes-launch
+
+ID:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+Required configuration:
+
+runtime registration:
+CLOSED
+
+control-plane registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+Task 8E bootstrap:
+ABSENT
+
+These application versions are frozen.
+
+Do not modify their application code during this cutover.
+
+==================================================
+KNOWN TASK 9 RESULT
+==================================================
+
+One request was attempted:
+
+PUT /accounts/{account_id}/workers/domains
+
+for:
+
+app.buildcustom.ai
+
+target:
+
+buildcustom-control-plane-launch
+
+Cloudflare returned:
+
+HTTP 409
+
+error:
+100116
+
+hostname already in use
+
+The response suggested an override option.
+
+No retry occurred.
+
+No delete occurred.
+
+No DNS change occurred.
+
+No certificate change occurred.
+
+No Worker association change occurred.
+
+Current association remains:
+
+app.buildcustom.ai
+→ vibesdk
+
+==================================================
+OVERALL STRATEGY
+==================================================
+
+Use this order of preference:
+
+PATH A — PREFERRED
+
+Use Cloudflare's supported in-place Worker Custom Domain
+takeover/reassignment/override mechanism.
+
+PATH B — FALLBACK
+
+If an in-place reassignment genuinely cannot be used, establish a controlled
+manual migration involving the old Custom Domain association, new Worker
+routing/domain configuration, DNS if necessary, and TLS.
+
+Manual DNS changes ARE authorized under Path B once the complete safe migration
+and rollback sequence has been established.
+
+Do NOT use Path B merely because it is easier.
+
+Do NOT improvise.
+
+==================================================
+PHASE A — UNDERSTAND THE 409 AND OVERRIDE
+==================================================
+
+Before ANY new mutation, inspect the complete structured Cloudflare response
+from Task 9 if retained.
+
+Record:
+
+- HTTP status
+- Cloudflare error code
+- exact message
+- documentation URL if supplied
+- source/pointer if supplied
+- exact suggested override field/name/value
+- any other relevant metadata
+
+If reproducing the same 409 is necessary to obtain the exact response, do so
+ONLY if you can establish that the request will remain non-mutating on
+conflict.
+
+Do not expose credentials.
+
+==================================================
+STEP 1 — VERIFY CURRENT CLOUDFLARE DOCUMENTATION
+==================================================
+
+Use current PRIMARY Cloudflare sources.
+
+Inspect as needed:
+
+- Workers Custom Domains documentation
+- Workers Domains API
+- current Cloudflare API/OpenAPI schema
+- current Cloudflare SDK types
+- current Wrangler implementation/types
+- Cloudflare error 100116 documentation
+- official Cloudflare source/tooling
+
+Do NOT base the migration on:
+
+- Reddit
+- Stack Overflow
+- random blog posts
+- old unofficial examples
+- guessing from a parameter name
+
+Determine whether Cloudflare officially supports an override such as:
+
+override_existing_origin
+
+or another exact field.
+
+==================================================
+STEP 2 — ESTABLISH EXACT OVERRIDE SEMANTICS
+==================================================
+
+If an override exists, determine:
+
+1. exact field name
+
+2. exact request location:
+   - JSON body
+   - query parameter
+   - other
+
+3. expected value/type
+
+4. exact meaning
+
+5. whether it is specifically intended for taking over an existing Worker
+   Custom Domain hostname
+
+6. whether it replaces the current Worker association
+
+7. whether it requires deletion of the old Custom Domain first
+
+8. whether DNS is preserved/recreated automatically
+
+9. whether certificate state is preserved or reprovisioned
+
+10. whether Custom Domain ID may change
+
+11. whether certificate ID may change
+
+12. whether the operation affects only the specified hostname
+
+==================================================
+STEP 3 — DEFINE "EXISTING ORIGIN"
+==================================================
+
+Determine exactly what Cloudflare means by the existing origin conflict in:
+
+error 100116
+
+Distinguish between:
+
+A. existing Worker Custom Domain
+
+B. existing DNS origin
+
+C. Worker route
+
+D. Pages/custom hostname
+
+E. another Cloudflare product
+
+F. something else
+
+Confirm the suggested override is applicable to our exact current state:
+
+app.buildcustom.ai
+→ Worker Custom Domain
+→ vibesdk
+
+Do not assume.
+
+==================================================
+STEP 4 — BLAST RADIUS
+==================================================
+
+Before using the override, establish that it applies ONLY to:
+
+app.buildcustom.ai
+
+It must not intentionally modify:
+
+buildcustom.ai
+
+www.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+zone-wide Worker route
+
+public generated-app gateway
+
+marketing Pages
+
+other Worker Custom Domains
+
+unrelated DNS records
+
+If blast radius cannot be established:
+
+DO NOT EXECUTE PATH A.
+
+Proceed only to planning Path B.
+
+==================================================
+STEP 5 — DNS AND CERTIFICATE EXPECTATIONS
+==================================================
+
+Current Task 9 snapshot showed:
+
+managed DNS:
+AAAA 100::
+
+DNS ID:
+c2b16ea05b19ace1d200b82ea7352685
+
+old Custom Domain ID:
+cbe52cb7de7fb2b1c7d4207c5b4763fe4f973b8d
+
+Worker:
+vibesdk
+
+TLS:
+valid
+
+Read all of this again.
+
+Determine expected behavior during takeover.
+
+It is acceptable if Cloudflare legitimately changes:
+
+- Custom Domain ID
+- certificate ID
+- managed DNS metadata
+
+We do NOT require those identifiers to remain identical.
+
+We require:
+
+- hostname remains app.buildcustom.ai
+- DNS resolves correctly
+- proxying remains correct
+- TLS remains valid or converges normally
+- no unrelated hostname changes
+
+==================================================
+STEP 6 — DEFINE PATH A ROLLBACK
+==================================================
+
+Before executing Path A, define the exact reverse operation.
+
+Forward:
+
+app.buildcustom.ai
+vibesdk
+→
+buildcustom-control-plane-launch
+
+Rollback:
+
+app.buildcustom.ai
+buildcustom-control-plane-launch
+→
+vibesdk
+
+If forward requires an override flag, determine whether reverse also requires
+the same override.
+
+Write the exact request semantics before executing forward.
+
+==================================================
+PATH A DECISION GATE
+==================================================
+
+Use Path A ONLY if ALL are true:
+
+1. Cloudflare itself establishes the override mechanism.
+
+2. Exact request shape is known.
+
+3. It applies to this Worker Custom Domain conflict.
+
+4. It does not require an unsafe delete-first guess.
+
+5. Blast radius is app.buildcustom.ai only.
+
+6. DNS behavior is understood.
+
+7. certificate behavior is sufficiently understood.
+
+8. exact rollback operation is known.
+
+If all eight pass:
+
+PROCEED TO CUTOVER PREFLIGHT.
+
+If any fail:
+
+DO NOT attempt the override.
+
+Proceed to PHASE B FALLBACK PLANNING.
+
+==================================================
+PHASE B — MANUAL DNS / CUSTOM DOMAIN FALLBACK
+==================================================
+
+Manual DNS changes ARE authorized if required.
+
+However, before making ANY fallback mutation, establish the complete supported
+target architecture.
+
+Determine whether the correct fallback should use:
+
+A. Worker Custom Domain
+
+B. Worker Route
+
+C. another documented Cloudflare Workers routing mechanism
+
+Do NOT automatically assume DNS CNAME.
+
+Do NOT create a workaround architecture simply to escape the Custom Domain
+conflict.
+
+==================================================
+STEP 7 — DOCUMENT CURRENT FALLBACK SOURCE STATE
+==================================================
+
+Record:
+
+1. exact app.buildcustom.ai DNS record
+
+2. record ID
+
+3. record type
+
+4. content
+
+5. proxy state
+
+6. TTL behavior
+
+7. current Worker Custom Domain association
+
+8. current Worker Custom Domain ID
+
+9. current certificate ID/status
+
+10. current Worker routes affecting the hostname
+
+11. zone-wide gateway route interaction
+
+12. current HTTP/TLS behavior
+
+==================================================
+STEP 8 — DESIGN THE SUPPORTED TARGET
+==================================================
+
+For the fallback, determine exactly how:
+
+app.buildcustom.ai
+
+should reach:
+
+buildcustom-control-plane-launch
+
+using Cloudflare-supported production routing.
+
+Document:
+
+1. whether the old Custom Domain must be removed
+
+2. whether a new Custom Domain must be created
+
+3. whether a Worker route should instead be created
+
+4. whether DNS must be manually created/changed
+
+5. exact required DNS record
+
+6. whether AAAA 100:: should remain
+
+7. whether Cloudflare will automatically create a managed record
+
+8. whether a CNAME is appropriate
+
+9. certificate provisioning behavior
+
+10. whether temporary TLS interruption is possible
+
+11. exact expected final Cloudflare state
+
+IMPORTANT:
+
+Do NOT point app.buildcustom.ai at a workers.dev hostname using a normal CNAME
+unless current official Cloudflare documentation explicitly establishes that
+as the correct supported architecture.
+
+We do not want a DNS hack.
+
+==================================================
+STEP 9 — FALLBACK FORWARD ORDER
+==================================================
+
+Establish the exact minimum-mutation forward sequence.
+
+For example, if Cloudflare requires:
+
+remove old Worker Custom Domain
+→ establish new Worker Custom Domain
+→ allow Cloudflare to recreate managed DNS/certificate
+
+then document that exact sequence.
+
+If instead the correct supported architecture is:
+
+remove old Custom Domain
+→ create specific Worker route
+→ configure specific proxied DNS record
+
+document that.
+
+Do not execute yet.
+
+==================================================
+STEP 10 — FALLBACK ROLLBACK ORDER
+==================================================
+
+Before fallback execution, establish exact rollback:
+
+new configuration
+→ old configuration
+
+Rollback must restore:
+
+app.buildcustom.ai
+→ vibesdk
+
+with:
+
+valid DNS
+
+valid proxying
+
+valid TLS
+
+and the previous legacy behavior.
+
+Record every required operation in order.
+
+==================================================
+STEP 11 — FALLBACK BLAST RADIUS
+==================================================
+
+Prove the fallback affects ONLY:
+
+app.buildcustom.ai
+
+It must not alter:
+
+buildcustom.ai
+
+www.buildcustom.ai
+
+*.apps.buildcustom.ai
+
+marketing Pages
+
+public generated-app gateway
+
+gateway ROUTES
+
+gateway DISPATCHER
+
+unrelated Worker Custom Domains
+
+unrelated DNS records
+
+==================================================
+PATH B DECISION GATE
+==================================================
+
+You are authorized to execute Path B ONLY if:
+
+1. Path A cannot safely be used.
+
+2. Path B uses documented Cloudflare behavior.
+
+3. exact target architecture is established.
+
+4. exact DNS state is established.
+
+5. TLS behavior is understood.
+
+6. exact forward sequence is established.
+
+7. exact rollback sequence is established.
+
+8. blast radius is limited to app.buildcustom.ai.
+
+If these are not all true:
+
+STOP AND REPORT.
+
+Do not experiment live.
+
+==================================================
+CUTOVER PREFLIGHT
+==================================================
+
+Before executing EITHER Path A or approved Path B, repeat the complete
+immediate preflight.
+
+Verify:
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+version:
+
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+serving 100%
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+serving 100%
+
+Verify:
+
+runtime registration:
+CLOSED
+
+control-plane registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+Task 8E bootstrap:
+ABSENT
+
+Task 8E bootstrap secret:
+not bound to final runtime
+
+tester login:
+works privately
+
+tester project:
+2
+
+tester product user:
+3f730b86-bc16-4954-b3fd-db22aea136b7
+
+tester agent:
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+tester revision:
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+Private reopen:
+
+conversation:
+works
+
+Files:
+works
+
+preview:
+works
+
+idle WebSocket:
+101 + native state frames
+
+inference:
+zero on reopen
+
+Also verify immediately before mutation:
+
+app.buildcustom.ai
+→ vibesdk
+
+*.apps.buildcustom.ai:
+unchanged
+
+buildcustom.ai:
+unchanged
+
+public gateway:
+unchanged
+
+marketing:
+unchanged
+
+If any accepted state drifted:
+
+STOP.
+
+==================================================
+FINAL PRE-CUTOVER SNAPSHOT
+==================================================
+
+Immediately before mutation record:
+
+app hostname
+
+Worker association
+
+Custom Domain ID
+
+DNS record ID/type/content/proxy
+
+certificate ID/status
+
+TLS response
+
+HTTP response
+
+public gateway Worker version
+
+public gateway ROUTES binding
+
+public gateway DISPATCHER binding
+
+*.apps Worker route
+
+marketing status
+
+This becomes the rollback source of truth.
+
+==================================================
+EXECUTE ONE CUTOVER PATH
+==================================================
+
+Use ONLY ONE of:
+
+PATH A:
+validated in-place override
+
+OR
+
+PATH B:
+validated manual migration
+
+Do not mix approaches unless the approved Path B sequence explicitly requires
+multiple Cloudflare operations.
+
+Do not improvise after the first mutation.
+
+==================================================
+PATH A EXECUTION
+==================================================
+
+If Path A was validated:
+
+perform exactly ONE supported override/reassignment:
+
+app.buildcustom.ai
+→ buildcustom-control-plane-launch
+
+Do NOT:
+
+delete first
+
+manually change DNS
+
+manually delete certificate
+
+touch Worker routes
+
+touch *.apps
+
+If the validated override fails unexpectedly:
+
+STOP.
+
+Do not switch to Path B in the same live attempt unless ZERO state changed.
+
+If state changed partially:
+
+inspect and either complete the already validated operation or ROLLBACK.
+
+Do not improvise.
+
+==================================================
+PATH B EXECUTION
+==================================================
+
+If Path B was validated and Path A cannot safely work:
+
+execute ONLY the previously documented forward sequence.
+
+Manual DNS changes for:
+
+app.buildcustom.ai
+
+ARE authorized.
+
+Do not touch unrelated DNS.
+
+Do not change *.apps.
+
+Do not change apex marketing DNS.
+
+Do not change www.
+
+Do not change public gateway routing.
+
+==================================================
+IMMEDIATE POST-MUTATION VERIFICATION
+==================================================
+
+Before browser acceptance tests verify Cloudflare control-plane state.
+
+Require:
+
+app.buildcustom.ai
+→ buildcustom-control-plane-launch
+
+Record:
+
+new/current Custom Domain ID if applicable
+
+DNS record
+
+proxy state
+
+certificate ID/status
+
+Worker routes affecting app hostname
+
+If app.buildcustom.ai does NOT resolve to the intended clean Worker:
+
+ROLL BACK.
+
+If unrelated Cloudflare state changed:
+
+ROLL BACK.
+
+==================================================
+TLS + FRONTEND
+==================================================
+
+Verify:
+
+https://app.buildcustom.ai
+
+valid TLS
+
+HTTP success
+
+BuildCustom frontend renders
+
+JS loads
+
+CSS loads
+
+no legacy HTTP 500
+
+no redirect to Replit
+
+no redirect to workers.dev
+
+no staging/lab dependency
+
+If Cloudflare documents a normal bounded certificate provisioning period,
+observe it for a bounded period.
+
+Do not start making DNS changes merely because certificate issuance takes a
+short documented period.
+
+If TLS does not converge:
+
+ROLL BACK.
+
+==================================================
+PUBLIC ORIGIN SECURITY
+==================================================
+
+Against the REAL public hostname verify:
+
+https://app.buildcustom.ai
+
+is accepted as the exact application Origin.
+
+Verify invalid mutation Origins remain rejected:
+
+https://buildcustom.ai
+
+https://random.example
+
+https://anything.apps.buildcustom.ai
+
+private workers.dev origin where not explicitly authorized
+
+Do NOT loosen security during cutover.
+
+==================================================
+PUBLIC REGISTRATION
+==================================================
+
+Verify:
+
+BuildCustom signup UI:
+CLOSED
+
+BuildCustom registration API:
+REJECTED
+
+direct runtime registration:
+REJECTED
+
+existing-user login:
+ALLOWED
+
+If either runtime or control-plane registration becomes publicly available:
+
+ROLL BACK.
+
+==================================================
+FRESH PUBLIC TESTER LOGIN
+==================================================
+
+Use a completely fresh browser context.
+
+Log in through:
+
+https://app.buildcustom.ai
+
+using the securely retained tester credentials.
+
+Require:
+
+login succeeds
+
+auth/check succeeds
+
+correct product user:
+
+3f730b86-bc16-4954-b3fd-db22aea136b7
+
+role=user
+
+dashboard loads
+
+project 2 appears
+
+Do not reuse private-canary browser state.
+
+==================================================
+PUBLIC PROJECT REOPEN
+==================================================
+
+Open project:
+
+2
+
+Require:
+
+same project
+
+same agent:
+
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+same revision:
+
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+conversation loads
+
+authoritative Files load
+
+preview loads
+
+NO prompt
+
+NO inference
+
+NO duplicate agent
+
+NO revision change
+
+NO new release
+
+==================================================
+PUBLIC WEBSOCKET
+==================================================
+
+Verify stock-compatible existing-project reconnect:
+
+WebSocket:
+101
+
+native connection frame:
+received
+
+conversation-state frame:
+received
+
+suggestion/prompt frame:
+NONE
+
+inference:
+NONE
+
+agent/revision:
+unchanged
+
+If this fails specifically because of the public hostname:
+
+ROLL BACK.
+
+Do not patch application code during the live cutover.
+
+==================================================
+PUBLIC FILES
+==================================================
+
+Verify authoritative runtime/Git state.
+
+Require marker:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+in the committed application.
+
+==================================================
+PUBLIC PREVIEW
+==================================================
+
+Verify:
+
+preview HTTP success
+
+marker rendered
+
+stylesheet loads
+
+expected styling applies
+
+iframe sandbox remains:
+
+sandbox="allow-scripts"
+
+preview remains isolated from parent product document/API
+
+No edit.
+
+No generation.
+
+==================================================
+REAL LEGACY COOKIE TEST
+==================================================
+
+This is now the REAL app.buildcustom.ai hostname previously used by the legacy
+application.
+
+Use a controlled browser context with stale legacy cookie names:
+
+accessToken
+
+csrf-token
+
+Require:
+
+no false authentication
+
+no ownership bypass
+
+login remains available
+
+normal tester login establishes valid new auth
+
+dashboard works
+
+project reopen works
+
+==================================================
+PUBLIC LOGOUT REVOCATION
+==================================================
+
+Using a valid public tester session:
+
+capture session internally
+
+logout normally
+
+verify browser cookie clears
+
+reuse EXACT pre-logout session
+
+Require rejection by:
+
+runtime auth/check
+
+AND
+
+product API
+
+Then perform a fresh normal login.
+
+Require success.
+
+Do not expose session values.
+
+==================================================
+AUTHENTICATED PUBLIC NETWORK AUDIT
+==================================================
+
+Capture browser traffic across:
+
+initial load
+
+login
+
+dashboard
+
+project reopen
+
+Files
+
+preview
+
+idle WebSocket
+
+logout
+
+fresh login
+
+Require ZERO browser requests to:
+
+replit.com
+
+replit.dev
+
+replit.app
+
+legacy Worker hostname
+
+staging runtime
+
+lab runtime
+
+old BuildCustom control plane
+
+private control-plane workers.dev URL
+
+private generated-app gateway as a customer-facing destination
+
+Internal Cloudflare service bindings are expected.
+
+Do not expose credentials.
+
+==================================================
+PUBLISH UI SAFETY
+==================================================
+
+Do NOT click Publish.
+
+Verify:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+private generated-app URL hidden
+
+reserved:
+
+<slug>.apps.buildcustom.ai
+
+is NOT represented as currently live
+
+no public Open Site action
+
+no misleading claim that public generated apps are enabled
+
+Do not create another release.
+
+==================================================
+REPLIT DEVELOPMENT OFF — REAL PUBLIC TEST
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish:
+
+ai-build-studio.replit.app
+
+because marketing waitlist still depends on it.
+
+While development workflow is unavailable, through REAL:
+
+https://app.buildcustom.ai
+
+verify:
+
+fresh tester login
+
+dashboard
+
+project reopen
+
+conversation
+
+Files
+
+preview
+
+idle WebSocket
+
+No generation.
+
+No publish.
+
+Then restore the development workflow if needed.
+
+==================================================
+VERIFY OTHER PUBLIC SURFACES
+==================================================
+
+Read-only verify:
+
+buildcustom.ai:
+healthy and unchanged
+
+marketing waitlist:
+unchanged
+
+public Replit deployment:
+healthy and unchanged
+
+*.apps.buildcustom.ai:
+unchanged
+
+public generated-app gateway:
+unchanged
+
+gateway Worker version:
+unchanged
+
+gateway ROUTES:
+unchanged
+
+gateway DISPATCHER:
+unchanged
+
+zone-wide gateway behavior:
+unchanged
+
+==================================================
+ROLLBACK TRIGGERS
+==================================================
+
+ROLL BACK app.buildcustom.ai if any of the following occur and cannot be
+immediately established as a harmless expected transition:
+
+- TLS failure
+
+- frontend failure
+
+- JS/CSS failure
+
+- public Origin rejected
+
+- tester login failure
+
+- dashboard failure
+
+- ownership failure
+
+- project reopen failure
+
+- Files failure
+
+- preview failure
+
+- WebSocket failure
+
+- registration unexpectedly opens
+
+- auth/session security failure
+
+- logged-out session remains valid
+
+- browser requires Replit development
+
+- browser requires staging/lab/legacy services
+
+- unexpected DNS state
+
+- unexpected route state
+
+- unrelated hostname affected
+
+Do NOT patch production while the hostname is attached.
+
+Rollback first.
+
+Diagnose afterward.
+
+==================================================
+ROLLBACK — PATH A
+==================================================
+
+If Path A was used:
+
+perform exactly ONE validated reverse override:
+
+app.buildcustom.ai
+→ vibesdk
+
+Then verify:
+
+Worker association restored
+
+DNS valid
+
+TLS valid
+
+previous legacy behavior restored
+
+STOP.
+
+Do not attempt another forward cutover.
+
+==================================================
+ROLLBACK — PATH B
+==================================================
+
+If Path B was used:
+
+execute ONLY the prevalidated reverse sequence.
+
+Restore:
+
+app.buildcustom.ai
+→ vibesdk
+
+including the required:
+
+Custom Domain
+
+Worker route
+
+DNS
+
+certificate/TLS state
+
+as applicable to the chosen supported architecture.
+
+Verify previous legacy behavior.
+
+STOP.
+
+Do not attempt another forward cutover.
+
+==================================================
+SUCCESS STATE
+==================================================
+
+If every required acceptance check passes:
+
+LEAVE:
+
+app.buildcustom.ai
+→ buildcustom-control-plane-launch
+
+Freeze:
+
+CONTROL PLANE:
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+RUNTIME:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+Keep:
+
+runtime registration:
+CLOSED
+
+control-plane registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+Do NOT switch *.apps.buildcustom.ai yet.
+
+==================================================
+TASK 9A ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. migration mechanism conclusively established
+
+2. forward operation completed successfully
+
+3. app.buildcustom.ai now targets clean control plane
+
+4. DNS valid
+
+5. TLS valid
+
+6. frontend/assets load
+
+7. exact public Origin works
+
+8. invalid Origins rejected
+
+9. runtime registration remains closed
+
+10. control-plane registration remains closed
+
+11. tester fresh public login works
+
+12. correct dashboard/project works
+
+13. project reopen retains same agent/revision
+
+14. conversation works
+
+15. Files work
+
+16. preview works
+
+17. idle WebSocket gets 101/native state frames
+
+18. zero inference during reopen
+
+19. real legacy-cookie test passes
+
+20. logout revocation works
+
+21. exact old session rejected
+
+22. fresh login works
+
+23. authenticated public network audit clean
+
+24. Publish UI does not expose private generated-app URL
+
+25. Replit-development-off PUBLIC flow works
+
+26. marketing remains unchanged
+
+27. public Replit deployment remains unchanged
+
+28. *.apps.buildcustom.ai remains unchanged
+
+29. public generated-app gateway remains unchanged
+
+30. no application architecture/code changes made during cutover
+
+==================================================
+FINAL REPORT
+==================================================
+
+Keep the final report concise but complete.
+
+Return:
+
+1. Migration path used:
+   PATH A or PATH B
+
+2. Exact Cloudflare mechanism and primary evidence
+
+3. Why the selected mechanism was chosen
+
+4. Forward operation sequence/result
+
+5. Reverse/rollback mechanism established
+
+6. Pre-cutover Worker association
+
+7. Post-cutover Worker association
+
+8. Custom Domain result
+
+9. DNS result
+
+10. certificate/TLS result
+
+11. frontend/assets result
+
+12. Origin-security result
+
+13. registration result
+
+14. tester login/dashboard result
+
+15. project/agent/revision result
+
+16. WebSocket result
+
+17. Files/preview result
+
+18. legacy-cookie result
+
+19. logout/old-session result
+
+20. authenticated network-audit result
+
+21. Publish UI result
+
+22. Replit-development-off result
+
+23. marketing/public-Replit result
+
+24. *.apps/public-gateway result
+
+25. whether rollback occurred
+
+26. final app.buildcustom.ai association
+
+27. remaining HIGH risks
+
+28. remaining MEDIUM risks
+
+29. whether TASK 9A is ACCEPTED
+
+30. whether app.buildcustom.ai is now LIVE on the clean production stack
+
+31. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT SWITCH *.apps.buildcustom.ai.
+
+DO NOT OPEN REGISTRATION.
+
+DO NOT ENABLE PUBLIC GENERATED APPS.
+
+DO NOT MODIFY THE FROZEN CONTROL-PLANE OR RUNTIME APPLICATION CODE DURING
+CUTOVER.
