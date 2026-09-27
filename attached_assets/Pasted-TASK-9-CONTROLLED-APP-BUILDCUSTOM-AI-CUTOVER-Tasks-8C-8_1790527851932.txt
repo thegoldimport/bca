@@ -1,0 +1,959 @@
+TASK 9 — CONTROLLED APP.BUILDCUSTOM.AI CUTOVER
+
+Tasks 8C/8D/8E/8F are ACCEPTED.
+
+We are now explicitly authorizing the controlled reassignment of:
+
+https://app.buildcustom.ai
+
+from the legacy:
+
+vibesdk
+
+Worker to the frozen clean BuildCustom control plane:
+
+buildcustom-control-plane-launch
+
+This is the FIRST PUBLIC CUTOVER.
+
+==================================================
+FROZEN ACCEPTED COMPONENTS
+==================================================
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+version:
+
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+PRODUCT D1:
+
+buildcustom-product-launch-db
+
+ID:
+
+ca820baf-6973-4318-ac52-529d56293bb6
+
+ROUTE KV:
+
+buildcustom-app-routes-launch
+
+ID:
+
+248ac5b6821a475794a7fe3d2b0c3718
+
+Required current configuration:
+
+runtime registration:
+CLOSED
+
+control-plane registration:
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+false
+
+Task 8E bootstrap:
+ABSENT
+
+==================================================
+VERY IMPORTANT SCOPE
+==================================================
+
+This task changes ONLY:
+
+app.buildcustom.ai
+
+Do NOT switch:
+
+*.apps.buildcustom.ai
+
+Do NOT modify:
+
+buildcustom.ai
+
+marketing Pages
+
+marketing waitlist
+
+public generated-app gateway
+
+public gateway ROUTES binding
+
+public gateway DISPATCHER binding
+
+public Replit deployment
+
+runtime architecture
+
+product D1 schema
+
+generated-app routing
+
+Do NOT open registration.
+
+Do NOT enable public generated apps.
+
+==================================================
+STEP 1 — PRE-CUTOVER FREEZE CHECK
+==================================================
+
+Immediately before touching the hostname, verify:
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+version a10d2711-46ee-45d7-81b7-53b17083ca44
+serving 100%
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+version 8e28025f-e415-4405-9b1f-67d93eff7fd8
+serving 100%
+
+Verify:
+
+runtime registration = CLOSED
+
+control-plane registration = CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED = false
+
+Task 8E bootstrap route absent
+
+Task 8E bootstrap secret not bound to final runtime
+
+tester login works privately
+
+tester project 2 still exists
+
+tester agent remains:
+
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+tester revision remains:
+
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+No unexpected deployment/version/configuration drift is allowed.
+
+If anything differs:
+
+STOP.
+
+==================================================
+STEP 2 — SNAPSHOT CURRENT PUBLIC HOST
+==================================================
+
+Before mutation record the current:
+
+hostname:
+app.buildcustom.ai
+
+custom-domain association
+
+custom-domain ID
+
+Worker/service
+
+DNS record
+
+DNS record ID
+
+proxy state
+
+certificate status
+
+certificate identifiers where available
+
+TLS state
+
+HTTP response
+
+Current expected state from Task 8:
+
+Worker:
+vibesdk
+
+managed DNS:
+AAAA 100::
+
+DNS ID:
+c2b16ea05b19ace1d200b82ea7352685
+
+old custom-domain ID:
+cbe52cb7de7fb2b1c7d4207c5b4763fe4f973b8d
+
+HTTP:
+500
+
+Do not assume these remain correct.
+
+Read them again immediately before cutover.
+
+This snapshot is the rollback source of truth.
+
+==================================================
+STEP 3 — VERIFY ROLLBACK COMMAND FIRST
+==================================================
+
+Before performing the forward operation, construct and validate the exact
+rollback operation that would reattach:
+
+app.buildcustom.ai
+
+to:
+
+vibesdk
+
+using the current account/zone/domain state.
+
+Do NOT execute rollback.
+
+We must know the exact reverse operation before executing the forward
+operation.
+
+==================================================
+STEP 4 — REASSIGN CUSTOM DOMAIN
+==================================================
+
+Perform the previously rehearsed Cloudflare custom-domain reassignment for:
+
+app.buildcustom.ai
+
+to:
+
+buildcustom-control-plane-launch
+
+Use the narrowest documented Cloudflare operation established in Task 8.
+
+Expected conceptual operation:
+
+PUT /accounts/03ef1e6e42498920987f07059e107538/workers/domains
+
+hostname:
+app.buildcustom.ai
+
+service:
+buildcustom-control-plane-launch
+
+zone:
+56e85999af2d246ac01bfa9ccac5d805
+
+Use the exact currently verified API shape.
+
+Do NOT delete the existing custom domain first.
+
+Do NOT manually edit the managed DNS record.
+
+Do NOT touch the zone-wide gateway route.
+
+If Cloudflare returns a conflict requiring deletion of the existing domain:
+
+STOP.
+
+Do NOT delete it.
+
+Report the conflict.
+
+==================================================
+STEP 5 — VERIFY CLOUDFLARE CONTROL PLANE
+==================================================
+
+Immediately after successful reassignment verify:
+
+app.buildcustom.ai
+
+is associated with:
+
+buildcustom-control-plane-launch
+
+Verify:
+
+DNS still valid
+
+proxy still active
+
+TLS/certificate valid
+
+no unexpected DNS replacement
+
+no unexpected route ownership change
+
+*.apps.buildcustom.ai unchanged
+
+buildcustom.ai unchanged
+
+If association is ambiguous:
+
+STOP and inspect.
+
+Do not stack additional mutations.
+
+==================================================
+STEP 6 — BASIC PUBLIC HTTP SMOKE
+==================================================
+
+From a fresh unauthenticated client/browser test:
+
+https://app.buildcustom.ai
+
+Require:
+
+valid TLS
+
+HTTP success
+
+BuildCustom frontend renders
+
+JS loads
+
+CSS loads
+
+no legacy 500
+
+no redirect to Replit
+
+no redirect to workers.dev
+
+no staging/lab hostname
+
+no certificate warning
+
+==================================================
+STEP 7 — PUBLIC ORIGIN SECURITY
+==================================================
+
+Against the REAL public hostname verify:
+
+Origin:
+
+https://app.buildcustom.ai
+
+is accepted where required.
+
+Verify invalid mutation Origins remain rejected:
+
+https://buildcustom.ai
+
+https://random.example
+
+https://anything.apps.buildcustom.ai
+
+private workers.dev origin where not explicitly allowed by the production
+path
+
+Do NOT loosen origin validation during this test.
+
+==================================================
+STEP 8 — REGISTRATION MUST REMAIN CLOSED
+==================================================
+
+Publicly verify:
+
+https://app.buildcustom.ai/app/signup
+
+does NOT offer normal signup.
+
+Direct BuildCustom registration attempt:
+
+REJECTED
+
+Direct runtime registration attempt:
+
+REJECTED
+
+Existing-user login:
+
+ALLOWED
+
+If public signup becomes available at either layer:
+
+ROLL BACK.
+
+==================================================
+STEP 9 — FRESH TESTER LOGIN
+==================================================
+
+Using the securely retained tester credentials, perform a completely fresh
+browser login through:
+
+https://app.buildcustom.ai
+
+Do not reuse the private-canary browser session.
+
+Require:
+
+normal login succeeds
+
+auth/check succeeds
+
+correct product user:
+
+3f730b86-bc16-4954-b3fd-db22aea136b7
+
+role=user
+
+dashboard loads
+
+exactly intended tester project appears
+
+==================================================
+STEP 10 — PUBLIC PROJECT REOPEN
+==================================================
+
+Open project:
+
+2
+
+through the REAL:
+
+app.buildcustom.ai
+
+hostname.
+
+Require:
+
+same project
+
+same runtime agent:
+
+098c1d12-5689-4bcf-bb12-2b2d60b10a10
+
+same committed revision:
+
+e4dce7b936ff4c85a381c4282ece2224b5c0e957
+
+existing conversation loads
+
+authoritative files load
+
+preview loads
+
+NO new prompt
+
+NO inference
+
+NO duplicate agent
+
+NO new revision
+
+NO new release
+
+==================================================
+STEP 11 — PUBLIC IDLE WEBSOCKET
+==================================================
+
+On normal project reopen through:
+
+app.buildcustom.ai
+
+verify the corrected stock-compatible lifecycle:
+
+owner-authorized ticket obtained server-side
+
+browser WebSocket handshake:
+101
+
+native connection frame received
+
+conversation-state frame received
+
+NO suggestion/prompt frame sent
+
+NO inference initiated
+
+same agent/revision retained
+
+If the socket cannot connect through the public hostname:
+
+ROLL BACK unless the cause is clearly transient and can be proven without
+changing architecture.
+
+Do not patch production during the cutover.
+
+==================================================
+STEP 12 — PUBLIC PREVIEW
+==================================================
+
+Verify the existing project preview through the real public product hostname.
+
+Require:
+
+preview HTTP success
+
+BUILDCUSTOM_CUTOVER_TESTER_OK visible
+
+stylesheet loads
+
+expected styling applies
+
+iframe sandbox remains:
+
+sandbox="allow-scripts"
+
+preview cannot read parent product document/API
+
+No edit.
+
+No generation.
+
+==================================================
+STEP 13 — PUBLIC FILES
+==================================================
+
+Verify Files through app.buildcustom.ai.
+
+Require authoritative runtime/Git state.
+
+Confirm:
+
+BUILDCUSTOM_CUTOVER_TESTER_OK
+
+exists in the committed application.
+
+==================================================
+STEP 14 — PUBLIC LOGOUT REVOCATION
+==================================================
+
+Using the public app hostname:
+
+capture the valid session internally
+
+logout normally
+
+verify browser cookie clears
+
+reuse exact pre-logout session
+
+require rejection by:
+
+runtime auth/check
+
+and
+
+product API
+
+Then perform fresh login again.
+
+Require success.
+
+Do not expose session values.
+
+==================================================
+STEP 15 — LEGACY COOKIE BEHAVIOR
+==================================================
+
+Because this is now the REAL same hostname previously used by the legacy app,
+perform the real cookie-collision acceptance test.
+
+Using a controlled fresh browser context, present stale legacy:
+
+accessToken
+
+csrf-token
+
+values for app.buildcustom.ai.
+
+Require:
+
+no false authentication
+
+no ownership bypass
+
+login remains available
+
+normal tester login establishes valid new auth state
+
+dashboard works
+
+project reopen works
+
+This closes the remaining synthetic/private legacy-cookie uncertainty.
+
+==================================================
+STEP 16 — AUTHENTICATED PUBLIC NETWORK AUDIT
+==================================================
+
+Capture browser traffic across:
+
+initial load
+
+login
+
+dashboard
+
+project reopen
+
+Files
+
+preview
+
+idle WebSocket
+
+logout
+
+fresh login
+
+Require ZERO browser requests to:
+
+replit.com
+
+replit.dev
+
+replit.app
+
+legacy vibesdk Worker hostname
+
+staging runtime
+
+lab runtime
+
+old BuildCustom control plane
+
+private workers.dev control-plane URL
+
+private generated-app gateway URL as a customer public destination
+
+Internal Cloudflare service bindings are fine.
+
+Do not expose secrets in logs.
+
+==================================================
+STEP 17 — PUBLISH UI SAFETY
+==================================================
+
+Do NOT click Publish.
+
+Inspect the existing project UI.
+
+Because:
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+require:
+
+no private generated-app URL presented as publicly live
+
+reserved:
+
+<slug>.apps.buildcustom.ai
+
+may be displayed only as NOT LIVE / unavailable if that is the accepted UI
+
+no public Open Site action
+
+no claim that generated apps are publicly available
+
+Do not create another release.
+
+==================================================
+STEP 18 — REPLIT DEVELOPMENT OFF PUBLIC TEST
+==================================================
+
+Temporarily stop ONLY the Replit development workflow.
+
+Do NOT unpublish:
+
+ai-build-studio.replit.app
+
+because marketing waitlist still depends on it.
+
+While the development workflow is unavailable, through the REAL:
+
+app.buildcustom.ai
+
+verify:
+
+fresh tester login
+
+dashboard
+
+project reopen
+
+Files
+
+preview
+
+idle WebSocket
+
+No generation.
+
+No publish.
+
+Restore the development workflow afterward if needed.
+
+==================================================
+STEP 19 — VERIFY OTHER PUBLIC SURFACES UNCHANGED
+==================================================
+
+Read-only verify:
+
+buildcustom.ai
+→ still marketing site
+
+marketing waitlist
+→ still current behavior
+
+*.apps.buildcustom.ai
+→ still existing public gateway
+
+public gateway Worker
+→ unchanged
+
+public gateway ROUTES
+→ unchanged
+
+public gateway DISPATCHER
+→ unchanged
+
+public Replit autoscale deployment
+→ unchanged
+
+Do not mutate any of them.
+
+==================================================
+STEP 20 — ROLLBACK TRIGGERS
+==================================================
+
+ROLL BACK app.buildcustom.ai to legacy:
+
+vibesdk
+
+if any of these occur and cannot be immediately explained as a harmless
+observation:
+
+- TLS failure
+
+- frontend fails to load
+
+- required assets fail
+
+- public Origin rejected
+
+- existing tester cannot login
+
+- authenticated dashboard fails
+
+- project ownership fails
+
+- project reopen fails
+
+- files fail
+
+- preview fails
+
+- corrected WebSocket cannot connect
+
+- registration unexpectedly opens
+
+- auth/session security fails
+
+- old logged-out session remains valid
+
+- browser requires Replit/staging/lab/legacy service
+
+- unexpected Cloudflare domain/DNS state appears
+
+Do NOT attempt architecture changes while the public hostname is cut over.
+
+Rollback first.
+
+Diagnose afterward.
+
+==================================================
+STEP 21 — ROLLBACK PROCEDURE
+==================================================
+
+If rollback is required:
+
+reattach:
+
+app.buildcustom.ai
+
+to:
+
+vibesdk
+
+using the exact prevalidated reverse custom-domain operation.
+
+Then verify:
+
+Worker association restored
+
+managed DNS valid
+
+TLS valid
+
+previous public behavior restored
+
+Record the failure.
+
+STOP.
+
+Do not attempt a second forward cutover in the same task.
+
+==================================================
+STEP 22 — SUCCESS FREEZE
+==================================================
+
+If every required check passes:
+
+leave:
+
+app.buildcustom.ai
+
+attached to:
+
+buildcustom-control-plane-launch
+
+Freeze:
+
+CONTROL PLANE:
+a10d2711-46ee-45d7-81b7-53b17083ca44
+
+RUNTIME:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+Keep:
+
+registration CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED=false
+
+Do NOT switch *.apps.buildcustom.ai yet.
+
+==================================================
+TASK 9 ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. app.buildcustom.ai reassigned successfully
+
+2. TLS valid
+
+3. frontend/assets load
+
+4. exact public Origin works
+
+5. invalid Origins rejected
+
+6. runtime registration remains closed
+
+7. control-plane registration remains closed
+
+8. tester fresh public login works
+
+9. correct dashboard/project works
+
+10. project reopen retains same agent/revision
+
+11. files work
+
+12. preview works
+
+13. idle WebSocket gets 101/native state frames
+
+14. zero inference during reopen
+
+15. logout revocation works publicly
+
+16. exact old session rejected
+
+17. fresh login works
+
+18. real legacy-cookie collision test passes
+
+19. authenticated network audit clean
+
+20. Publish UI does not expose private generated-app URL
+
+21. Replit-development-off public flow works
+
+22. marketing unchanged
+
+23. public Replit deployment unchanged
+
+24. *.apps.buildcustom.ai unchanged
+
+25. public generated-app gateway unchanged
+
+26. no architecture/code changes made during cutover
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-cutover Worker association
+
+2. forward Cloudflare operation result
+
+3. post-cutover Worker association
+
+4. DNS/TLS result
+
+5. frontend/assets result
+
+6. Origin-security result
+
+7. registration result
+
+8. tester login result
+
+9. dashboard/project result
+
+10. reopen/agent/revision result
+
+11. WebSocket result
+
+12. Files result
+
+13. preview result
+
+14. logout/old-session result
+
+15. legacy-cookie result
+
+16. authenticated network-audit result
+
+17. Publish UI result
+
+18. Replit-development-off result
+
+19. marketing/public-Replit result
+
+20. *.apps/public-gateway result
+
+21. whether rollback occurred
+
+22. final app.buildcustom.ai association
+
+23. remaining HIGH risks
+
+24. remaining MEDIUM risks
+
+25. whether TASK 9 is ACCEPTED
+
+26. whether app.buildcustom.ai is now LIVE on the clean production stack
+
+27. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT SWITCH *.apps.buildcustom.ai.
+DO NOT OPEN REGISTRATION.
+DO NOT ENABLE PUBLIC GENERATED APPS.
