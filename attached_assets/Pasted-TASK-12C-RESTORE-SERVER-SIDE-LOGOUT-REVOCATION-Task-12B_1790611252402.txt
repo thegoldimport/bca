@@ -1,0 +1,1042 @@
+TASK 12C — RESTORE SERVER-SIDE LOGOUT REVOCATION
+
+Task 12B is NOT accepted.
+
+Registration has correctly been rolled back CLOSED at both gates.
+
+PUBLIC_GENERATED_APPS_ENABLED remains TRUE.
+
+Do NOT reopen signup.
+
+We have one isolated HIGH-risk defect:
+
+A normal logout returned HTTP 204 and cleared the browser cookies, but the
+EXACT pre-logout credential continued authenticating successfully against BOTH:
+
+1. BuildCustom product
+2. stock runtime
+
+This violates the previously accepted logout-revocation contract.
+
+==================================================
+IMPORTANT HISTORICAL CONTEXT
+==================================================
+
+We ALREADY fixed logout revocation in Task 6A.
+
+Do NOT assume we need a new logout architecture.
+
+Task 6A identified that stock auth logout cleared the cookie but did not revoke
+the server session.
+
+The accepted narrow correction bound the signed credential to the stored
+session owner and confirmed server-side revocation before clearing the cookie.
+
+Task 6A proved:
+
+- exact old cookie rejected after logout
+- fresh login worked
+- independent same-user session remained valid
+- another user's session remained valid
+
+That behavior must remain true.
+
+Therefore the first question is:
+
+WHY DOES THE CURRENT PUBLIC AUTH PATH NO LONGER PROVIDE THAT GUARANTEE?
+
+Possibilities must be proven, not guessed.
+
+==================================================
+CURRENT ACCEPTED PRODUCTION STATE
+==================================================
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+version:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+serving:
+100%
+
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+serving:
+100%
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+Existing users/projects/releases must remain untouched.
+
+==================================================
+KNOWN FAILURE
+==================================================
+
+Task 12B performed a normal logout for the Task 12 user.
+
+Observed:
+
+logout:
+HTTP 204
+
+browser auth cookie:
+cleared
+
+exact saved pre-logout credential against product:
+HTTP 200 / still authenticated
+
+exact saved pre-logout credential against runtime:
+HTTP 200 / still authenticated
+
+fresh login after rollback:
+works
+
+
+This is NOT merely a browser-cookie-clearing issue.
+
+The server continued accepting the old credential.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine exactly why the current production auth path accepts an old
+credential after logout.
+
+Restore the previously accepted invariant:
+
+LOGOUT OF SESSION A
+
+→ SESSION A IS REVOKED SERVER-SIDE
+
+→ EXACT OLD CREDENTIAL A IS REJECTED BY RUNTIME
+
+→ EXACT OLD CREDENTIAL A IS REJECTED BY BUILDCUSTOM
+
+while:
+
+SESSION B for the same user remains valid
+
+OTHER USER session remains valid
+
+fresh login creates a new valid session
+
+
+Make the SMALLEST evidence-based correction.
+
+Do NOT redesign authentication.
+
+==================================================
+STEP 1 — FREEZE CURRENT STATE
+==================================================
+
+Before changing anything verify:
+
+control version:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+runtime version:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+registration:
+closed both layers
+
+public apps:
+enabled
+
+claims:
+zero
+
+user 1 login:
+works
+
+user 2 login:
+works
+
+project 2:
+healthy
+
+project 3:
+healthy
+
+both public apps:
+healthy
+
+
+Do not modify product state.
+
+==================================================
+STEP 2 — RECONSTRUCT TASK 6A
+==================================================
+
+Inspect the accepted Task 6A logout patch.
+
+Identify exactly:
+
+files changed
+
+functions changed
+
+session representation
+
+credential/token representation
+
+server-side session record
+
+session-owner binding
+
+revocation operation
+
+logout endpoint
+
+authentication/check endpoint
+
+failure behavior
+
+
+Then compare that implementation byte/code-path-wise with the CURRENT runtime.
+
+Answer:
+
+Is the Task 6A revocation patch still present?
+
+YES or NO.
+
+
+If NO:
+
+identify exactly when/how it disappeared.
+
+Do not immediately restore it until the regression path is understood.
+
+
+If YES:
+
+determine why the current logout flow bypasses or fails it.
+
+==================================================
+STEP 3 — TRACE CURRENT PUBLIC LOGOUT END-TO-END
+==================================================
+
+Trace the actual normal browser logout from:
+
+app.buildcustom.ai
+
+Document:
+
+browser action
+
+control-plane endpoint
+
+control-plane auth/session handling
+
+runtime service-binding request
+
+runtime logout endpoint
+
+credential forwarded
+
+session identifier resolved
+
+revocation operation attempted
+
+revocation result
+
+cookie clearing
+
+HTTP response
+
+
+We need the actual currently executed path.
+
+Do not infer it solely from source.
+
+==================================================
+STEP 4 — IDENTIFY THE EXACT SAVED CREDENTIAL
+==================================================
+
+Clarify exactly what Task 12B preserved and replayed as the:
+
+"exact pre-logout credential"
+
+
+Document:
+
+cookie/header name
+
+credential type
+
+signed token/session token/etc.
+
+whether BuildCustom transforms it before runtime verification
+
+whether runtime resolves it to a stored session
+
+whether it contains a session identifier
+
+whether it is independently valid without stored session state
+
+
+Do NOT print secret credential contents in the final report.
+
+==================================================
+STEP 5 — TRACE PRODUCT AUTHENTICATION
+==================================================
+
+For a normal authenticated request to BuildCustom:
+
+trace:
+
+incoming credential
+
+control-plane validation
+
+runtime `/api/auth/check` or equivalent
+
+runtime session lookup
+
+runtime identity returned
+
+product identity mapping
+
+
+Determine why the exact old credential still received authenticated HTTP 200
+after logout.
+
+==================================================
+STEP 6 — TRACE RUNTIME AUTHENTICATION
+==================================================
+
+Replay the exact saved credential directly through the SAME runtime auth
+verification path used by the product.
+
+Trace:
+
+signature validation
+
+session lookup
+
+session-owner validation
+
+revocation-state validation
+
+expiration validation
+
+
+Identify which check allows the supposedly revoked credential.
+
+==================================================
+STEP 7 — TRACE LOGOUT REVOCATION
+==================================================
+
+For the failed Task 12B semantics determine:
+
+Did logout actually attempt server-side revocation?
+
+If yes:
+
+what session identifier did it revoke?
+
+Did the operation succeed?
+
+Did it revoke the SAME session represented by the saved credential?
+
+Did it affect zero rows/state?
+
+Did it target a different session?
+
+Did it encounter missing session state?
+
+Did it treat a no-op as success?
+
+Did the endpoint return 204 before confirming revocation?
+
+
+Establish the exact answer.
+
+==================================================
+STEP 8 — INSPECT SERVER-SIDE SESSION STATE
+==================================================
+
+Without exposing secrets, inspect the runtime session authority.
+
+For controlled test sessions determine:
+
+before logout:
+
+session exists?
+owner?
+revocation state?
+
+after logout:
+
+session exists?
+revoked/deleted?
+owner?
+authentication still accepted?
+
+
+We need direct state evidence, not just HTTP behavior.
+
+==================================================
+STEP 9 — TEST MISSING / MISMATCHED SESSION CASES
+==================================================
+
+Task 12B specifically exposed the possibility that logout can appear successful
+without revoking the credential.
+
+Inspect and test:
+
+A. valid credential + matching stored session
+
+B. valid credential + missing stored session
+
+C. valid credential + mismatched session owner
+
+D. already-revoked session
+
+E. logout revocation operation affects nothing
+
+F. malformed credential
+
+
+A successful 204 must not falsely imply successful server-side revocation when
+the authenticated credential remains usable.
+
+Define correct behavior for each based on the accepted architecture.
+
+==================================================
+STEP 10 — CHECK FOR CREDENTIAL-ONLY AUTH FALLBACK
+==================================================
+
+This is critical.
+
+Determine whether any current runtime or control-plane auth path accepts a
+cryptographically valid signed credential WITHOUT requiring its corresponding
+server-side session to remain valid.
+
+If such a fallback exists:
+
+identify exact file/function/branch.
+
+Do NOT leave a path where logout deletes/revokes session state but the signed
+credential remains independently sufficient for authentication.
+
+==================================================
+STEP 11 — CHECK SESSION IDENTITY CONSISTENCY
+==================================================
+
+Verify the session identifier used by:
+
+login
+
+auth check
+
+product session bridge
+
+logout
+
+revocation
+
+is the SAME logical session identity.
+
+Look for:
+
+token ID mismatch
+
+hashed vs raw identifier mismatch
+
+session-owner key mismatch
+
+cookie parsing mismatch
+
+new vs legacy token format
+
+multiple cookie names
+
+fallback credential path
+
+service-binding header transformation
+
+
+Do not speculate.
+
+Trace actual values safely by fingerprints/IDs rather than printing secrets.
+
+==================================================
+STEP 12 — ROOT CAUSE BEFORE CODE
+==================================================
+
+Before modifying code report internally:
+
+exact root cause
+
+exact component
+
+exact file/function
+
+why logout returned 204
+
+why browser cookie cleared
+
+why old credential remained valid
+
+why BOTH runtime and product accepted it
+
+why Task 6A previously passed
+
+what changed or what test/path difference exposed the issue now
+
+
+Only then change code.
+
+==================================================
+STEP 13 — SMALLEST FIX
+==================================================
+
+Implement the smallest correction restoring the Task 6A invariant.
+
+Do NOT:
+
+create a second session database
+
+create BuildCustom-local auth
+
+create a token blacklist in the control plane
+
+rotate global JWT secrets
+
+invalidate every user
+
+redesign stock VibeSDK auth
+
+add another cookie
+
+change project ownership architecture
+
+
+The runtime remains authentication/session authority.
+
+==================================================
+STEP 14 — LOGOUT MUST CONFIRM REVOCATION
+==================================================
+
+After the fix, normal logout must not merely:
+
+clear cookie
+→ return 204
+
+
+It must guarantee that the session represented by the authenticated credential
+can no longer authenticate.
+
+Use the architecture's correct server-side revocation mechanism.
+
+Do not fake this with browser state.
+
+==================================================
+STEP 15 — FOCUSED AUTOMATED REGRESSION
+==================================================
+
+Add tests proving:
+
+SESSION A login
+→ valid
+
+logout SESSION A
+→ server revocation succeeds
+
+exact credential A
+→ runtime rejects
+
+exact credential A
+→ product rejects
+
+
+Also prove:
+
+fresh SESSION B for same user
+→ valid
+
+logout A
+→ B remains valid
+
+
+And:
+
+OTHER USER session C
+→ remains valid
+
+
+Also cover:
+
+missing stored session
+
+mismatched owner
+
+already-revoked session
+
+no-op revocation
+
+malformed credential
+
+
+The exact Task 12B regression should fail against pre-fix behavior and pass
+after the fix if practical.
+
+==================================================
+STEP 16 — CONTROLLED LIVE TEST: USER 2
+==================================================
+
+Signup remains CLOSED.
+
+Use existing Task 12 user.
+
+Perform:
+
+fresh normal login
+
+capture credential A privately
+
+verify A authenticates product
+
+verify A authenticates runtime
+
+normal logout
+
+verify browser cookie cleared
+
+replay exact credential A against product
+
+replay exact credential A against runtime
+
+
+Require:
+
+OLD A PRODUCT:
+rejected
+
+OLD A RUNTIME:
+rejected
+
+
+Then fresh login.
+
+Require:
+
+new credential B valid
+
+same user
+
+same project 3
+
+same agent
+
+same revision
+
+same release 3
+
+
+Do not generate/edit/Publish.
+
+==================================================
+STEP 17 — INDEPENDENT SAME-USER SESSION TEST
+==================================================
+
+Create two legitimate simultaneous login sessions for the SAME existing user:
+
+SESSION A
+
+SESSION B
+
+
+Logout A.
+
+Require:
+
+A rejected
+
+B still valid
+
+
+Then clean up/logout B normally if desired.
+
+Do not globally revoke the user.
+
+==================================================
+STEP 18 — OTHER-USER SESSION TEST
+==================================================
+
+Maintain a valid session for user 1.
+
+Logout user 2 session A.
+
+Require:
+
+user 1 session remains valid.
+
+
+Then reverse safely if useful:
+
+logout a user 1 session
+
+require user 2's independent valid session remains valid.
+
+
+This proves revocation is session-scoped.
+
+==================================================
+STEP 19 — PRODUCT REGRESSION
+==================================================
+
+Verify after fix:
+
+user 1:
+login/dashboard/project 2/Files/preview
+
+user 2:
+login/dashboard/project 3/Files/preview
+
+idle WebSockets work
+
+ownership isolation unchanged
+
+public apps unchanged
+
+
+No generation.
+
+No Publish.
+
+==================================================
+STEP 20 — REGISTRATION REMAINS CLOSED
+==================================================
+
+Throughout Task 12C require:
+
+control registration=false
+
+runtime registration=false
+
+
+Public generated apps remain:
+
+true
+
+
+Do NOT reopen signup.
+
+==================================================
+STEP 21 — REPLIT DEVELOPMENT OFF
+==================================================
+
+After live revocation passes:
+
+temporarily stop ONLY Replit development workflow.
+
+Verify:
+
+fresh user 1 login
+
+fresh user 2 login
+
+projects reopen
+
+Files
+
+preview
+
+idle WebSockets
+
+both public apps
+
+marketing
+
+
+Then run ONE logout/replay test while Replit development remains off.
+
+Require old credential rejected.
+
+Restore development workflow afterward if desired.
+
+==================================================
+STEP 22 — NETWORK AUDIT
+==================================================
+
+Verify login/logout/replay/product flows do not depend on:
+
+Replit development
+
+legacy runtime
+
+staging runtime
+
+lab runtime
+
+old control plane
+
+private generated gateway
+
+workers.dev customer URL
+
+
+==================================================
+ROLLBACK
+==================================================
+
+If the correction causes regression restore:
+
+CONTROL:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+RUNTIME:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Keep:
+
+registration closed
+
+public apps enabled
+
+both users
+
+both projects
+
+both releases
+
+
+Then STOP.
+
+==================================================
+SUCCESS STATE
+==================================================
+
+If Task 12C passes:
+
+registration remains CLOSED
+
+public apps remain ENABLED
+
+logout once again has genuine server-side session revocation
+
+old credentials cannot authenticate after logout
+
+independent sessions remain valid
+
+other users remain unaffected
+
+
+Then STOP.
+
+Do NOT rerun Task 12B in this task.
+
+==================================================
+TASK 12C ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. accepted production state frozen
+
+2. Task 6A patch reconstructed
+
+3. current public logout traced end-to-end
+
+4. exact credential type identified
+
+5. product auth path traced
+
+6. runtime auth path traced
+
+7. server revocation operation traced
+
+8. session state inspected before/after logout
+
+9. missing-session behavior tested
+
+10. mismatched-owner behavior tested
+
+11. no-op revocation behavior tested
+
+12. credential-only fallback investigated
+
+13. session identity consistency verified
+
+14. exact root cause established before fix
+
+15. smallest evidence-based fix implemented
+
+16. runtime remains session authority
+
+17. focused regression tests pass
+
+18. exact old credential rejected by runtime after logout
+
+19. exact old credential rejected by product after logout
+
+20. fresh login succeeds
+
+21. same-user independent session survives other-session logout
+
+22. other-user session survives logout
+
+23. product regressions pass
+
+24. ownership isolation remains intact
+
+25. registration remains closed
+
+26. public generated apps remain enabled
+
+27. Replit-development-off logout revocation passes
+
+28. network audit clean
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-task control version
+
+2. pre-task runtime version
+
+3. Task 6A implementation summary
+
+4. whether Task 6A patch was still present
+
+5. current logout request path
+
+6. saved credential type
+
+7. product authentication path
+
+8. runtime authentication path
+
+9. server-side session authority/storage
+
+10. pre-logout session state
+
+11. logout revocation operation
+
+12. post-logout session state
+
+13. why logout returned 204
+
+14. why old credential remained valid
+
+15. credential-only fallback finding
+
+16. session-ID consistency finding
+
+17. exact root cause
+
+18. component changed
+
+19. exact fix
+
+20. files changed
+
+21. automated regression tests/result
+
+22. missing-session result
+
+23. mismatched-owner result
+
+24. no-op-revocation result
+
+25. live user-2 logout result
+
+26. exact old credential runtime replay result
+
+27. exact old credential product replay result
+
+28. fresh-login result
+
+29. same-user two-session result
+
+30. other-user session-isolation result
+
+31. product regression result
+
+32. ownership-isolation result
+
+33. Replit-development-off result
+
+34. network-audit result
+
+35. new control version if changed
+
+36. new runtime version if changed
+
+37. final gateway version
+
+38. final public-generated-app state
+
+39. final registration state
+
+40. rollback status
+
+41. remaining HIGH risks
+
+42. remaining MEDIUM risks
+
+43. whether TASK 12C is ACCEPTED
+
+44. whether logout now genuinely revokes the exact authenticated session
+
+45. whether we are ready to rerun Task 12B
+
+46. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MODIFY GATEWAY OR DNS.
+
+DO NOT ADD ANOTHER AUTH SYSTEM.

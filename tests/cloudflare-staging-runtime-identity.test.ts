@@ -704,11 +704,30 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   // A new page request with the same cookie restores the same identity.
   assert.equal((await (await a.send("/api/auth/me")).json() as { id: string }).id, aMe.id);
   const oldCookie = [...a.jar].map(([key, value]) => `${key}=${value}`).join("; ");
+  const oldRuntimeCheck = () => stock.fetcher.fetch(new Request(`${env.AUTH_RUNTIME_URL}/api/auth/check`, {
+    headers: { Cookie: oldCookie },
+  }));
+  assert.equal(((await (await oldRuntimeCheck()).json()) as any).data.authenticated, true);
   assert.equal((await a.auth("/api/auth/logout", {})).status, 204);
   assert.ok(stock.calls.some((path) => /^\/api\/auth\/sessions\/runtime-session-\d+$/.test(path)));
   assert.equal(await (await a.send("/api/auth/me")).json(), null);
   assert.equal((await a.send("/api/projects")).status, 401);
   assert.equal((await worker.fetch(new Request(`${origin}/api/projects`, { headers: { Cookie: oldCookie } }), env)).status, 401);
+  // /api/auth/me returns HTTP 200 even for an anonymous user. Check the
+  // identity and stock session authority, not just the status code.
+  const oldProductMe = await worker.fetch(new Request(`${origin}/api/auth/me`, { headers: { Cookie: oldCookie } }), env);
+  assert.equal(oldProductMe.status, 200);
+  assert.equal(await oldProductMe.json(), null);
+  assert.equal(((await (await oldRuntimeCheck()).json()) as any).data.authenticated, false);
+  const malformedCookie = "accessToken=not-a-valid-session";
+  const malformedMe = await worker.fetch(new Request(`${origin}/api/auth/me`, {
+    headers: { Cookie: malformedCookie },
+  }), env);
+  assert.equal(malformedMe.status, 200);
+  assert.equal(await malformedMe.json(), null);
+  assert.equal(((await (await stock.fetcher.fetch(new Request(`${env.AUTH_RUNTIME_URL}/api/auth/check`, {
+    headers: { Cookie: malformedCookie },
+  }))).json()) as any).data.authenticated, false);
   assert.equal((await b.send("/api/projects")).status, 200);
 
   assert.equal((await a.auth("/api/auth/login", { email: "a@example.test", password: "Str0ng!PasswordA" })).status, 200);
