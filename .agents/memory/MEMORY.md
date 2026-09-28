@@ -48,3 +48,4 @@
 - [Single-use browser acceptance](single-use-browser-acceptance.md) — controlled inputs can show the right DOM value while React state remains stale; reconcile before one-time clicks.
 - [Stock Think reopen socket](stock-think-reopen-socket.md) — existing-agent reopen uses a no-generation WebSocket; an idle connection is native behavior, not a test-only requirement.
 - [Publish request trace interpretation](publish-request-trace-interpretation.md) — a checker waiting for a Publish POST can time out when the UI failed earlier and never sent that POST.
+- [Git-derived publish assets](git-derived-publish-assets.md) — don't treat a known-good project's stylesheet layout as a required first-publish template; derive checks from the committed tree.

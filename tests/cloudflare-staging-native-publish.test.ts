@@ -44,6 +44,8 @@ class MockSocket extends EventTarget {
 type FixtureOptions = {
   legacy?: boolean;
   revision?: string;
+  inlineStylesOnly?: boolean;
+  missingStylesheet?: boolean;
   failCandidateAsset?: boolean;
   failCandidateRender?: boolean;
   failStableAfterSwitch?: boolean;
@@ -96,9 +98,11 @@ function fixture(options: FixtureOptions = {}) {
     failRoutePutOnce: options.failRoutePutOnce ?? false,
     route: defaultLegacy ? oldRoute : null as string | null,
   };
-  const authoritativeHtml = options.launchSourceHtml
-    ? indexHtml.replace('href="/styles.css"', `href="/p/${slug}/styles.css"`)
-    : indexHtml;
+  const authoritativeHtml = options.inlineStylesOnly
+    ? '<!doctype html><html><head><style>body{color:#123}</style></head><body><h1>BUILDCUSTOM_NEW_USER_OK</h1></body></html>'
+    : options.launchSourceHtml
+      ? indexHtml.replace('href="/styles.css"', `href="/p/${slug}/styles.css"`)
+      : indexHtml;
   if (options.preexistingExpiredClaim) {
     state.claimToken = "expired-old-claim";
     state.claimExpired = true;
@@ -238,6 +242,10 @@ function fixture(options: FixtureOptions = {}) {
   const gateway = {
     async fetch(request: Request) {
       const url = new URL(request.url);
+      if (options.inlineStylesOnly && url.pathname.endsWith("/styles.css")) {
+        events.push("unexpected-stylesheet-request");
+        return new Response("Not found", { status: 404 });
+      }
       if (options.launch && url.hostname !== "buildcustom-apps-gateway-launch.thegoldimport.workers.dev") {
         events.push(`unexpected-host:${url.hostname}`);
         return new Response("Direct runtime-host access is not permitted.", { status: 404 });
@@ -311,7 +319,7 @@ function fixture(options: FixtureOptions = {}) {
         }
         return new Response("Switched candidate render failed", { status: 502 });
       }
-      return new Response(JSON.stringify({ result: indexHtml }), {
+      return new Response(JSON.stringify({ result: authoritativeHtml }), {
         headers: { "content-type": "application/json" },
       });
     },
@@ -337,9 +345,13 @@ function fixture(options: FixtureOptions = {}) {
         revisionReads++;
         return { commitHash: currentRevision };
       }
-      if (operation === "files") return [{ path: "public/index.html" }, { path: "public/styles.css" }];
+      if (operation === "files") return options.inlineStylesOnly
+        ? [{ path: ".think/space.json" }, { path: "public/index.html" }, { path: "src/index.ts" }, { path: "wrangler.json" }]
+        : options.missingStylesheet ? [{ path: "public/index.html" }]
+          : [{ path: "public/index.html" }, { path: "public/styles.css" }];
       if (operation === "files/content" && path === "public/index.html") return { path, content: authoritativeHtml };
-      if (operation === "files/content" && path === "public/styles.css") return { path, content: stylesCss };
+      if (operation === "files/content" && path === "public/styles.css"
+        && !options.inlineStylesOnly && !options.missingStylesheet) return { path, content: stylesCss };
       return null;
     },
     async openSocket(_env: any, _request: Request, linkedAgentId: string) {
@@ -702,6 +714,31 @@ test("a missing route starts an immutable release without depending on a stylesh
   assert.equal(response?.status, 201, await response?.clone().text());
   assert.deepEqual(JSON.parse(f.routes.get(slug)!), { scriptName: validScript(), metadata: {} });
   assert.equal(f.events.some((event) => event.includes("/style.css")), false);
+});
+
+test("a first-generation Git tree with inline CSS and no stylesheet publishes its exact revision", async () => {
+  const revision = "e0730b8e778f421c0c351990c193ffc7f6a1ff6c";
+  const f = fixture({ launch: true, legacy: false, inlineStylesOnly: true, revision });
+  const response = await publish(f);
+  assert.equal(response?.status, 201, await response?.clone().text());
+  assert.equal(f.deploys, 1);
+  assert.equal(f.state.releases.length, 1);
+  assert.equal(f.state.releases[0].revision, revision);
+  assert.equal(f.state.releases[0].script_name, validScript(revision));
+  assert.deepEqual(JSON.parse(f.routes.get(slug)!), { scriptName: validScript(revision), metadata: {} });
+  assert.ok(f.events.includes(`stock:${revision}`));
+  assert.ok(f.events.some((event) => event.includes(`/c/${validScript(revision)}/`)));
+  assert.ok(!f.events.includes("unexpected-stylesheet-request"));
+});
+
+test("an HTML stylesheet reference absent from the Git tree still blocks publication", async () => {
+  const f = fixture({ legacy: false, missingStylesheet: true });
+  const response = await publish(f);
+  assert.equal(response?.status, 502);
+  assert.match((await response!.json() as any).message, /missing public\/styles\.css/);
+  assert.equal(f.deploys, 0);
+  assert.equal(f.state.releases.length, 0);
+  assert.equal(f.routes.get(slug), undefined);
 });
 
 test("publishing refuses a foreign script collision before the stock socket opens", async () => {

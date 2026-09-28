@@ -279,13 +279,11 @@ async function readAuthoritativeSources(
   request: Request,
   project: NativeProject,
   readRuntime: NonNullable<NativePublishDependencies["readRuntime"]>,
-): Promise<{ indexHtml: string; stylesCss: string }> {
+): Promise<{ indexHtml: string; stylesCss: string | null }> {
   const files = await readRuntime(env, request, project, "files");
   if (!Array.isArray(files)) throw new Error("The authoritative Think file list could not be verified.");
   const paths = new Set(files.map((file: any) => file?.path).filter((path: unknown): path is string => typeof path === "string"));
-  if (!paths.has("public/index.html") || !paths.has("public/styles.css")) {
-    throw new Error("The authoritative Think public files are missing.");
-  }
+  if (!paths.has("public/index.html")) throw new Error("The authoritative Think public files are missing.");
   const readFile = async (path: string): Promise<string> => {
     const content = await readRuntime(env, request, project, "files/content", path);
     if (!content || content.path !== path || typeof content.content !== "string"
@@ -294,23 +292,20 @@ async function readAuthoritativeSources(
     }
     return content.content;
   };
-  const [indexHtml, stylesCss] = await Promise.all([
-    readFile("public/index.html"),
-    readFile("public/styles.css"),
-  ]);
+  const indexHtml = await readFile("public/index.html");
+  const stylesCss = paths.has("public/styles.css") ? await readFile("public/styles.css") : null;
   return { indexHtml, stylesCss };
 }
 
 async function verifyDispatchedSources(
   gateway: Fetcher,
   directUrl: string,
-  source: { indexHtml: string; stylesCss: string },
+  source: { indexHtml: string; stylesCss: string | null },
   launch = false,
 ): Promise<void> {
-  for (const [path, expected, mediaType] of [
-    ["/", source.indexHtml, "text/html"],
-    ["/styles.css", source.stylesCss, "text/css"],
-  ] as const) {
+  const sources: Array<readonly [string, string, string]> = [["/", source.indexHtml, "text/html"]];
+  if (source.stylesCss !== null) sources.push(["/styles.css", source.stylesCss, "text/css"]);
+  for (const [path, expected, mediaType] of sources) {
     const url = path === "/" ? new URL(directUrl) : launch
       ? new URL(path.slice(1), directUrl)
       : new URL(path, directUrl);
@@ -590,11 +585,11 @@ async function publishImmutable(
     const authoritativeSources = await readAuthoritativeSources(env, request, project, readRuntime);
     const referencedCss = requiredAssets(authoritativeSources.indexHtml, stableUrl)
       .filter((asset) => asset.kind === "css");
-    if (!referencedCss.some((asset) => {
+    if (authoritativeSources.stylesCss === null && referencedCss.some((asset) => {
       const path = new URL(asset.path, stableUrl).pathname;
       return path === "/styles.css" || (launch && path === `/p/${slug}/styles.css`);
     })) {
-      throw new Error("The authoritative project HTML must reference its existing public/styles.css asset.");
+      throw new Error("The authoritative project HTML references a missing public/styles.css asset.");
     }
     const candidateFetch = fetchPublicTarget;
     const checkReady = dependencies.verifyReady || verifyReady;

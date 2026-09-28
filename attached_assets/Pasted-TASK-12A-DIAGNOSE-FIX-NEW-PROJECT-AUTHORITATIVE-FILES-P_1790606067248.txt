@@ -1,0 +1,1268 @@
+TASK 12A — DIAGNOSE + FIX NEW-PROJECT AUTHORITATIVE FILES PUBLISH FAILURE
+
+Task 12 is NOT accepted.
+
+Signup has correctly been rolled back CLOSED at both gates.
+
+PUBLIC_GENERATED_APPS_ENABLED remains TRUE for existing authenticated users.
+
+Do NOT reopen signup in this task.
+
+We now have an excellent preserved reproduction fixture:
+
+NEW USER:
+
+product/runtime identity:
+e85ee1f5-e30c-4d86-84b8-4b4af6688de7
+
+PROJECT:
+
+3
+
+AGENT:
+
+5e9f11b5-dc97-43fb-bae2-1615d1669a91
+
+REVISION:
+
+e0730b8e778f421c0c351990c193ffc7f6a1ff6c
+
+
+AUTHORITATIVE FILES ENDPOINT:
+
+returned four paths
+
+including:
+
+public/index.html
+
+which contains:
+
+BUILDCUSTOM_NEW_USER_OK
+
+
+PREVIEW:
+
+HTTP 200
+
+renders:
+
+BUILDCUSTOM_NEW_USER_OK
+
+
+CONVERSATION:
+
+generation completed and survives reopen
+
+
+BUT:
+
+FIRST NORMAL CUSTOMER PUBLISH
+
+returned:
+
+HTTP 502
+
+"The authoritative Think public files are missing."
+
+
+NO release was created.
+
+NO stable slug was created.
+
+NO immutable script was created.
+
+NO public route was created.
+
+
+One additional observation:
+
+the completed generation checkpoint displayed:
+
+"0 changed files"
+
+
+Do NOT assume that is the cause.
+
+Investigate it.
+
+
+==================================================
+CURRENT ACCEPTED PRODUCTION STATE
+==================================================
+
+CONTROL PLANE:
+
+buildcustom-control-plane-launch
+
+version:
+
+c0d47add-0ef7-431c-af87-84f7f9ba56c2
+
+serving:
+100%
+
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+serving:
+100%
+
+
+PUBLIC GATEWAY:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+
+PUBLIC GENERATED APPS:
+
+ENABLED
+
+
+CONTROL REGISTRATION:
+
+CLOSED
+
+
+RUNTIME REGISTRATION:
+
+CLOSED
+
+
+EXISTING TESTER:
+
+project 2
+
+release 2
+
+must remain untouched and working.
+
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine exactly why project 3 can:
+
+show authoritative Files
+
+render the correct preview
+
+retain the correct revision
+
+BUT cannot:
+
+resolve authoritative Think public files for immutable Publish.
+
+
+Then make the SMALLEST correction necessary.
+
+After the fix, use THE EXISTING PROJECT 3 AND EXISTING REVISION to perform
+exactly ONE controlled first Publish.
+
+Do NOT regenerate project 3.
+
+Do NOT edit project 3.
+
+Do NOT submit another agent prompt.
+
+Do NOT create a replacement project.
+
+We specifically want to prove the preserved failed fixture becomes publishable
+without changing its generated application state.
+
+
+==================================================
+IMPORTANT ARCHITECTURAL RULE
+==================================================
+
+Task 3 established:
+
+Files are authoritative from private Git/current branch.
+
+There is NO duplicate BuildCustom file store.
+
+
+Task 4B established:
+
+immutable candidate-first Publish.
+
+Do NOT weaken either architecture to make this test pass.
+
+
+Specifically DO NOT:
+
+publish from preview HTML
+
+publish from browser state
+
+publish from cached Files API output
+
+create a duplicate BuildCustom file database
+
+copy preview files into a new publishing store
+
+special-case project 3
+
+special-case the acceptance user
+
+fall back to stale workspace state
+
+invent missing files during Publish
+
+
+Publish must resolve the SAME legitimate authoritative Think/Git state that
+the architecture says is authoritative.
+
+
+==================================================
+STEP 1 — FREEZE THE FAILURE FIXTURE
+==================================================
+
+Before doing anything verify project 3 remains:
+
+project:
+3
+
+agent:
+5e9f11b5-dc97-43fb-bae2-1615d1669a91
+
+revision:
+e0730b8e778f421c0c351990c193ffc7f6a1ff6c
+
+
+Verify:
+
+conversation exists
+
+Files endpoint returns the same four paths
+
+public/index.html contains BUILDCUSTOM_NEW_USER_OK
+
+preview returns 200
+
+preview renders BUILDCUSTOM_NEW_USER_OK
+
+release count:
+0
+
+publish claims:
+0
+
+no stable slug
+
+no immutable deployment
+
+no route record for project 3
+
+
+Record the four authoritative file paths exactly.
+
+
+==================================================
+STEP 2 — DO NOT CLICK PUBLISH YET
+==================================================
+
+Do NOT reproduce by repeatedly clicking Publish.
+
+We already have the failure.
+
+First trace the code and data.
+
+There is no reason to create repeated production failures while the preserved
+state exists.
+
+
+==================================================
+STEP 3 — TRACE FILES ENDPOINT SOURCE
+==================================================
+
+Trace exactly how the BuildCustom Files UI/API obtains project 3's files.
+
+Document:
+
+control-plane route
+
+runtime route
+
+agent lookup
+
+branch lookup
+
+Git repository/workspace lookup
+
+revision used
+
+file listing source
+
+file-content source
+
+
+For:
+
+public/index.html
+
+record:
+
+agent
+
+branch
+
+revision/commit
+
+path
+
+whether the content comes from Git, workspace, checkpoint, cache, or another
+stock VibeSDK primitive.
+
+
+We need to know what "authoritative Files" actually means for this project.
+
+
+==================================================
+STEP 4 — TRACE PREVIEW SOURCE
+==================================================
+
+Trace exactly how preview for project 3 resolves files.
+
+Document:
+
+agent
+
+branch
+
+revision
+
+workspace/repository source
+
+preview source
+
+whether preview is rendering committed Git state, live workspace state, or a
+different source
+
+
+Compare this with the Files endpoint.
+
+Do not assume Files and preview are identical merely because both show the
+marker.
+
+
+==================================================
+STEP 5 — TRACE PUBLISH SOURCE
+==================================================
+
+Trace the exact server path that produced:
+
+HTTP 502
+
+"The authoritative Think public files are missing."
+
+
+Find:
+
+exact file
+
+exact function
+
+exact branch
+
+exact condition producing this error
+
+
+Then trace backwards.
+
+Document what Publish expects to resolve:
+
+agent
+
+branch
+
+revision
+
+repository
+
+tree/files
+
+public directory
+
+entry point
+
+Git state
+
+
+Identify the precise lookup or invariant that fails for project 3.
+
+
+==================================================
+STEP 6 — COMPARE PROJECT 3 WITH KNOWN-GOOD PROJECT 2
+==================================================
+
+Project 2 is a known-good native Think publication.
+
+Use READ-ONLY comparison.
+
+Compare project 2 versus project 3 for:
+
+project runtime link
+
+agent metadata
+
+current branch
+
+Git repository existence
+
+branch existence
+
+HEAD
+
+current revision
+
+revision format
+
+commit existence
+
+tree existence
+
+public directory
+
+public/index.html
+
+workspace state
+
+checkpoint state
+
+conversation state
+
+generation-complete state
+
+file-change metadata
+
+any stock VibeSDK Git/revision metadata used by Publish
+
+
+Do NOT change project 2.
+
+The goal is to find the smallest meaningful difference between:
+
+KNOWN GOOD PUBLISHABLE THINK PROJECT
+
+and:
+
+NEW PROJECT THAT FILES/PREVIEW CAN READ BUT PUBLISH CANNOT.
+
+
+==================================================
+STEP 7 — INVESTIGATE "0 CHANGED FILES"
+==================================================
+
+Task 12 observed that the successful generation UI/checkpoint displayed:
+
+"0 changed files"
+
+
+Investigate exactly what that number represents.
+
+Determine whether:
+
+A. it is merely UI/reporting metadata
+
+B. generation actually committed files but change-count metadata is wrong
+
+C. files exist only in workspace state but not in the expected Git commit
+
+D. initial scaffold files and generated files are treated differently
+
+E. the revision points to a commit/tree that does not contain public files
+
+F. another state mismatch exists
+
+
+Do NOT fix the counter merely because it looks suspicious.
+
+Only change behavior supported by the root cause.
+
+
+==================================================
+STEP 8 — VERIFY REVISION e073... DIRECTLY
+==================================================
+
+Inspect revision:
+
+e0730b8e778f421c0c351990c193ffc7f6a1ff6c
+
+
+Using the accepted stock VibeSDK/Git authority, determine:
+
+Does this revision exist?
+
+What branch contains it?
+
+What tree does it reference?
+
+What files are in that tree?
+
+Does that exact tree contain:
+
+public/index.html
+
+?
+
+Does that exact file contain:
+
+BUILDCUSTOM_NEW_USER_OK
+
+?
+
+
+This is critical.
+
+Do not infer this from preview.
+
+Inspect the authoritative revision itself.
+
+
+==================================================
+STEP 9 — DETERMINE WHETHER THIS IS INITIAL-PROJECT SPECIFIC
+==================================================
+
+Inspect the accepted code/tests for the lifecycle:
+
+new user
+
+→ new project
+
+→ new Think agent
+
+→ first generation
+
+→ first stable revision
+
+→ first Publish
+
+
+Compare against:
+
+existing project
+
+→ edit
+
+→ later revision
+
+→ Publish
+
+
+Determine whether first-generation projects can enter a state that older/edit
+projects do not.
+
+Look specifically for:
+
+initial branch creation
+
+initial Git commit
+
+scaffold commit
+
+first generated commit
+
+revision promotion
+
+workspace → Git synchronization
+
+generation_complete verification
+
+current-revision assignment
+
+
+==================================================
+STEP 10 — VERIFY TASK 3 GENERATION CONTRACT
+==================================================
+
+Task 3 accepted generation only after:
+
+runtime idle
+
+changed stable revision
+
+matching turn/files/preview
+
+
+Check whether project 3 actually satisfied the intended contract.
+
+If the revision changed but its Git tree does not contain the Files/preview
+state, determine why Task 3 completion accepted it.
+
+If Task 3 completion semantics have a hole for first-generation projects, that
+may be the actual root cause.
+
+Do not redesign Task 3 unless evidence proves this.
+
+
+==================================================
+STEP 11 — ROOT CAUSE BEFORE CODE CHANGE
+==================================================
+
+Before modifying anything, establish:
+
+ROOT CAUSE
+
+exact component
+
+exact file/function
+
+exact state mismatch
+
+why Files succeeds
+
+why preview succeeds
+
+why Publish fails
+
+why project 2 succeeds
+
+whether "0 changed files" is causal or incidental
+
+
+Do not make speculative fixes before this is known.
+
+
+==================================================
+STEP 12 — DETERMINE CORRECT AUTHORITY
+==================================================
+
+The correction must preserve this architectural rule:
+
+PRIVATE GIT / CURRENT AUTHORITATIVE REVISION IS THE FILE AUTHORITY.
+
+
+If Files or preview are currently reading non-authoritative workspace state,
+do NOT make Publish use that weaker state.
+
+Instead fix the lifecycle so the accepted revision genuinely represents the
+files.
+
+If Publish is incorrectly resolving the authoritative Git state while Files
+is correct, fix Publish.
+
+If the runtime is incorrectly producing/promoting the revision, fix the
+runtime/lifecycle.
+
+Follow the evidence.
+
+
+==================================================
+STEP 13 — SMALLEST FIX
+==================================================
+
+Implement only the smallest fix supported by the root cause.
+
+Potential component could be:
+
+control plane
+
+runtime integration
+
+revision reconciliation
+
+branch resolution
+
+Git tree resolution
+
+first-generation lifecycle
+
+
+But do not choose in advance.
+
+Do NOT modify:
+
+gateway architecture
+
+route architecture
+
+immutable script identity
+
+release model
+
+authentication architecture
+
+registration architecture
+
+public URL architecture
+
+
+==================================================
+STEP 14 — REGRESSION TEST
+==================================================
+
+Add a focused test reproducing the actual lifecycle:
+
+new project
+
+→ first generation
+
+→ authoritative revision
+
+→ Files contains public/index.html
+
+→ preview contains marker
+
+→ first immutable Publish resolves the same authoritative public files
+
+
+The test must protect against the exact mismatch discovered.
+
+If practical, demonstrate that the test fails against pre-fix behavior and
+passes after the correction.
+
+
+==================================================
+STEP 15 — VERIFY EXISTING PROJECT 3 WITHOUT REGENERATION
+==================================================
+
+After deploying the fix privately/safely, inspect project 3 again.
+
+Do NOT generate.
+
+Do NOT edit.
+
+Do NOT submit another prompt.
+
+
+Require:
+
+same project
+
+same agent
+
+same revision
+
+same conversation
+
+same authoritative Files
+
+same marker
+
+same preview
+
+
+The fix must either make the existing legitimate state publishable or correctly
+reconcile it using existing authoritative data without inventing new generated
+content.
+
+
+If fixing the architecture requires a NEW revision/commit for project 3:
+
+STOP BEFORE CREATING IT.
+
+Explain exactly why the preserved revision cannot legitimately be published.
+
+Do not silently manufacture a revision just to pass acceptance.
+
+
+==================================================
+STEP 16 — CONTROLLED FIRST PUBLISH
+==================================================
+
+ONLY if project 3's existing revision is now legitimately publishable:
+
+use the NORMAL customer-facing Publish action exactly ONCE.
+
+
+Signup remains CLOSED.
+
+The existing new user can still log in.
+
+Require:
+
+one Publish POST
+
+successful first-publication status
+
+expected HTTP 201 unless the established contract proves otherwise
+
+release created
+
+exact existing revision published
+
+immutable script created
+
+candidate verification passes
+
+route activated after verification
+
+clean route KV
+
+clean dispatch
+
+
+No inference.
+
+No generation.
+
+No edit.
+
+
+==================================================
+STEP 17 — VERIFY PUBLIC APP
+==================================================
+
+If Publish succeeds:
+
+record:
+
+release ID
+
+stable slug
+
+immutable scriptName
+
+public URL
+
+
+Open public URL.
+
+Require:
+
+valid TLS
+
+HTTP 200
+
+BUILDCUSTOM_NEW_USER_OK
+
+CSS/assets work
+
+no authentication required
+
+no staging
+
+no private gateway
+
+no Replit dependency
+
+
+==================================================
+STEP 18 — SAME-REVISION RETRY
+==================================================
+
+Perform ONE normal:
+
+Publish updates
+
+
+Require:
+
+HTTP 200
+
+alreadyPublished=true
+
+same release
+
+same revision
+
+same slug
+
+same script
+
+no settings PUT bug
+
+no new deployment
+
+no new release
+
+no route mutation
+
+claims zero
+
+bounded response <=35 seconds
+
+
+==================================================
+STEP 19 — KNOWN-GOOD PROJECT 2 REGRESSION
+==================================================
+
+Verify project 2 remains healthy:
+
+existing tester login
+
+project reopen
+
+Files
+
+preview
+
+release 2
+
+public app
+
+same-revision Publish updates
+
+
+Do not generate/edit project 2.
+
+
+==================================================
+STEP 20 — OWNERSHIP REGRESSION
+==================================================
+
+We now retain both users.
+
+Use them to verify both directions:
+
+user for project 3 cannot manage project 2
+
+user for project 2 cannot manage project 3
+
+
+Check:
+
+project
+
+agent ticket
+
+Files
+
+preview
+
+release metadata
+
+publish settings
+
+Publish action
+
+
+Public generated URLs remain intentionally public.
+
+Management APIs remain private to owners.
+
+
+==================================================
+STEP 21 — PUBLIC CAPABILITY / REGISTRATION STATE
+==================================================
+
+Throughout Task 12A require:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+and:
+
+control registration=false
+
+runtime registration=false
+
+
+Do NOT reopen signup.
+
+
+Existing users, including the newly created Task 12 user, must remain able to
+login.
+
+
+==================================================
+STEP 22 — REPLIT DEVELOPMENT OFF
+==================================================
+
+If the fix and Publish pass:
+
+temporarily stop ONLY the Replit development workflow.
+
+
+Verify:
+
+existing tester product flow
+
+new user product flow
+
+project 3 reopen
+
+Files
+
+preview
+
+idle WebSocket
+
+project 2 public app
+
+project 3 public app
+
+marketing
+
+
+Then restore development workflow if desired.
+
+
+==================================================
+STEP 23 — NETWORK AUDIT
+==================================================
+
+Verify the repaired project-3 Publish flow has no forbidden browser/runtime
+dependency on:
+
+Replit development
+
+legacy Worker
+
+staging runtime
+
+lab runtime
+
+old control plane
+
+private generated gateway
+
+workers.dev customer URL
+
+
+==================================================
+ROLLBACK
+==================================================
+
+If the fix causes regression:
+
+restore the current accepted production versions:
+
+CONTROL:
+
+c0d47add-0ef7-431c-af87-84f7f9ba56c2
+
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Keep:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+registration CLOSED
+
+project 3
+
+new Task 12 user
+
+existing project 2/release 2
+
+
+Do NOT delete the failure fixture.
+
+
+==================================================
+SUCCESS STATE
+==================================================
+
+If Task 12A passes:
+
+signup remains CLOSED
+
+public publishing remains ENABLED
+
+project 3's preserved first-generation state is legitimately publishable
+
+project 3 has its first immutable release
+
+both users remain isolated
+
+both public apps work
+
+
+Then STOP.
+
+
+Do NOT reopen signup yet.
+
+We will rerun the remaining Task 12 signup acceptance separately.
+
+
+==================================================
+TASK 12A ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. project 3 failure fixture preserved before diagnosis
+
+2. Files source traced
+
+3. preview source traced
+
+4. Publish source traced
+
+5. exact 502 branch identified
+
+6. project 2 vs project 3 compared
+
+7. "0 changed files" meaning established
+
+8. exact revision e073... inspected directly
+
+9. first-generation lifecycle inspected
+
+10. Task 3 completion contract checked
+
+11. exact root cause established before fix
+
+12. authority remains private Git/current revision
+
+13. smallest evidence-based fix implemented
+
+14. focused regression test added
+
+15. no generation/edit of project 3
+
+16. same project 3 agent retained
+
+17. same revision retained OR task stops before manufacturing a replacement
+
+18. Files remain correct
+
+19. preview remains correct
+
+20. first Publish succeeds on legitimate authoritative state
+
+21. release uses exact accepted revision
+
+22. immutable deployment succeeds
+
+23. clean route KV used
+
+24. clean dispatch used
+
+25. public app works
+
+26. marker visible publicly
+
+27. same-revision Publish updates is idempotent
+
+28. project 2 regression passes
+
+29. bidirectional ownership isolation passes
+
+30. public generated apps remain enabled
+
+31. registration remains closed
+
+32. Replit-development-off passes if Publish succeeds
+
+33. network audit clean
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. preserved project-3 state before diagnosis
+
+2. exact four Files paths
+
+3. Files authority/source
+
+4. preview authority/source
+
+5. Publish authority/source
+
+6. exact 502 file/function/branch
+
+7. project-2 vs project-3 meaningful difference
+
+8. meaning of "0 changed files"
+
+9. direct inspection result for revision e073...
+
+10. whether public/index.html exists in that exact revision tree
+
+11. first-generation lifecycle finding
+
+12. Task-3 completion-contract finding
+
+13. exact root cause
+
+14. why Files worked
+
+15. why preview worked
+
+16. why Publish failed
+
+17. component changed
+
+18. exact fix
+
+19. files changed
+
+20. regression tests/result
+
+21. new control-plane version if changed
+
+22. new runtime version if changed
+
+23. project-3 project/agent/revision after fix
+
+24. whether regeneration/edit occurred
+
+25. first Publish status/result
+
+26. release ID
+
+27. stable slug
+
+28. immutable scriptName
+
+29. public URL
+
+30. public app result
+
+31. Publish-updates result/time
+
+32. release/script/route/claim state after retry
+
+33. project-2 regression result
+
+34. bidirectional isolation result
+
+35. Replit-development-off result
+
+36. network-audit result
+
+37. final PUBLIC_GENERATED_APPS_ENABLED state
+
+38. final registration state
+
+39. rollback status
+
+40. remaining HIGH risks
+
+41. remaining MEDIUM risks
+
+42. whether TASK 12A is ACCEPTED
+
+43. whether the original Task 12 new-user project is now proven publishable
+
+44. whether we are ready to rerun the remaining Task 12 signup acceptance
+
+45. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT REGENERATE PROJECT 3.
+
+DO NOT EDIT PROJECT 3.
+
+DO NOT CREATE A REPLACEMENT PROJECT.
+
+DO NOT MODIFY THE GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT DELETE PROJECT 3 OR ITS USER.
