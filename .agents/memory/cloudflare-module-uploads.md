@@ -30,3 +30,9 @@ For an asset-backed Worker, inheriting its `ASSETS` binding in a raw multipart v
 **Why:** A binding-only candidate inherited `ASSETS` but omitted the accepted asset-serving settings. Repacking the accepted module bytes through Wrangler preserved assets; its version metadata also made the existing container application's name explicit, so a different script fingerprint by itself did not establish a source-code change.
 
 **How to apply:** Keep a known serving version available for rollback, stage candidates inactive, compare module names and hashes as well as binding and runtime-resource parity, and verify static assets were not reuploaded unexpectedly. Treat a container-name metadata difference separately from a real container configuration change.
+
+Do not trust an inactive version's “registration gate only” annotation as proof of code identity. A launch runtime candidate had the expected registration binding and matching auxiliary modules, but its main JavaScript bytes differed from the accepted serving version; it was not safe to deploy for a binding-only public signup cutover.
+
+**Why:** Comparing only version resources and ancillary module hashes would have hidden a changed executable module. The approved operation required byte-identical accepted code.
+
+**How to apply:** Before activating any pre-existing binding-only candidate, compare *every* module's decoded-byte hash against the actual serving version, including the main module, plus bindings and runtime resources. If the main module differs, keep the accepted version serving and stop rather than relying on the candidate's annotation.

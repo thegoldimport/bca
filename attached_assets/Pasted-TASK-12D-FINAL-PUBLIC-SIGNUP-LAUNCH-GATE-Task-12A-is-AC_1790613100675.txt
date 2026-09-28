@@ -1,0 +1,1049 @@
+TASK 12D — FINAL PUBLIC SIGNUP LAUNCH GATE
+
+Task 12A is ACCEPTED.
+Task 12C is ACCEPTED.
+
+Task 12B was NOT accepted because its logout acceptance probe incorrectly
+treated HTTP 200 as proof of authentication.
+
+Task 12C established that there was NO reproduced production logout defect.
+
+The accepted logout architecture works:
+
+- runtime D1 session exists before logout
+- logout owner-checks and revokes that session
+- exact old credential resolves to no product identity afterward
+- runtime /api/auth/check returns authenticated:false afterward
+- independent same-user sessions remain valid
+- other-user sessions remain valid
+- this also works with Replit development stopped
+
+IMPORTANT:
+
+DO NOT use HTTP status alone to determine authentication state.
+
+For product auth:
+
+HTTP 200 + JSON null
+=
+UNAUTHENTICATED
+
+For runtime auth:
+
+HTTP 200 + authenticated:false
+=
+UNAUTHENTICATED
+
+
+This is the FINAL public-signup launch gate.
+
+If every required check passes:
+
+LEAVE SIGNUP OPEN.
+
+If any required check fails:
+
+CLOSE BOTH REGISTRATION GATES and STOP.
+
+==================================================
+CURRENT ACCEPTED PRODUCTION STATE
+==================================================
+
+CONTROL:
+
+buildcustom-control-plane-launch
+
+version:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+100%
+
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+100%
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+100%
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CLAIMS:
+
+zero
+
+
+==================================================
+ALREADY PROVEN — DO NOT REPEAT UNNECESSARILY
+==================================================
+
+We already have two real users.
+
+USER 1 owns:
+
+project 2
+release 2
+
+
+USER 2 owns:
+
+project 3
+release 3
+
+
+Project 3 proved the complete new-user path:
+
+public signup
+→ runtime-backed identity
+→ empty dashboard
+→ project creation
+→ native Think generation
+→ conversation
+→ authoritative Git Files
+→ preview
+→ reopen
+→ immutable Publish
+→ public *.apps.buildcustom.ai app
+→ same-revision Publish updates
+
+
+Task 12A also proved:
+
+bidirectional ownership isolation
+
+project 2 regression
+
+project 3 regression
+
+both public apps
+
+Replit-development-off product operation
+
+
+Task 12C proved:
+
+server-side logout revocation
+
+same-user session isolation
+
+other-user session isolation
+
+Replit-development-off logout revocation
+
+
+DO NOT:
+
+create another project
+
+generate another app
+
+edit project 2
+
+edit project 3
+
+create another release
+
+Publish another revision
+
+modify gateway
+
+modify DNS
+
+redesign authentication
+
+
+==================================================
+OBJECTIVE
+==================================================
+
+Open the existing registration gates.
+
+Complete the remaining PUBLIC REGISTRATION acceptance.
+
+Use identity-aware logout checks.
+
+Prove BuildCustom remains independent of Replit development.
+
+If all required checks pass:
+
+LEAVE REGISTRATION ENABLED.
+
+At that point BuildCustom is publicly open.
+
+==================================================
+STEP 1 — PRE-LAUNCH FREEZE
+==================================================
+
+Verify actual serving state:
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+public apps:
+enabled
+
+registration:
+closed both layers
+
+claims:
+zero
+
+
+Verify:
+
+user 1 login works
+
+user 2 login works
+
+project 2 healthy
+
+project 3 healthy
+
+release 2 public app healthy
+
+release 3 public app healthy
+
+
+If state drifted:
+
+STOP.
+
+==================================================
+STEP 2 — PREPARE ROLLBACK
+==================================================
+
+Before opening signup prepare exact rollback.
+
+Rollback must produce:
+
+control registration=false
+
+runtime registration=false
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+while preserving:
+
+Task 11A fix
+
+Task 12A Publish-validator fix
+
+Task 6A/12C logout behavior
+
+both users
+
+both projects
+
+both releases
+
+both public apps
+
+
+==================================================
+STEP 3 — ENABLE RUNTIME REGISTRATION
+==================================================
+
+Using the EXACT accepted runtime code, change only:
+
+REGISTRATION_ENABLED=false
+→ true
+
+
+Do not modify auth logic.
+
+Deploy.
+
+Verify:
+
+new runtime version
+
+100%
+
+module/code matches accepted runtime
+
+registration binding is the only meaningful difference
+
+
+If code differs unexpectedly:
+
+STOP.
+
+==================================================
+STEP 4 — ENABLE CONTROL REGISTRATION
+==================================================
+
+Using the EXACT accepted Task 12A control code, change only:
+
+registration=false
+→ true
+
+
+Keep:
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+Deploy.
+
+Verify:
+
+new control version
+
+100%
+
+module/code matches accepted Task 12A code
+
+registration binding is the only meaningful difference
+
+
+If code differs unexpectedly:
+
+STOP.
+
+==================================================
+STEP 5 — LIVE SIGNUP AVAILABILITY
+==================================================
+
+Fresh anonymous browser:
+
+https://app.buildcustom.ai
+
+
+Require:
+
+signup visible
+
+signup form usable
+
+login available
+
+live registration capability=true
+
+publicGeneratedAppsEnabled=true
+
+
+Use live serving behavior.
+
+Do not infer solely from configuration metadata.
+
+==================================================
+STEP 6 — DUPLICATE REGISTRATION
+==================================================
+
+Use the existing Task 12 user's email through the normal public signup flow.
+
+Require:
+
+duplicate registration rejected
+
+bounded/generic error
+
+no login side effect
+
+no duplicate product identity
+
+no duplicate runtime identity
+
+
+Explicitly verify BOTH product and runtime identity counts.
+
+==================================================
+STEP 7 — EMAIL NORMALIZATION
+==================================================
+
+Verify email normalization prevents case-based duplicate identities.
+
+Prefer focused automated/source-backed verification rather than creating
+another production user.
+
+If a safe live casing-variant duplicate request is needed, use the existing
+Task 12 identity and confirm it cannot create another account.
+
+Require:
+
+one runtime identity
+
+one product identity
+
+
+==================================================
+STEP 8 — MALFORMED REGISTRATION
+==================================================
+
+Perform a small bounded set of safe rejected requests:
+
+invalid email
+
+missing required credential
+
+invalid request shape
+
+
+Require rejection.
+
+No fuzzing.
+
+No load testing.
+
+==================================================
+STEP 9 — PASSWORD POLICY
+==================================================
+
+Verify stock runtime password validation remains enforced.
+
+Use source/tests plus at most one safe live rejected request if needed.
+
+Do not create a BuildCustom-specific password authority.
+
+==================================================
+STEP 10 — ORIGIN / CSRF
+==================================================
+
+Verify:
+
+legitimate app.buildcustom.ai registration flow works
+
+invalid Origin rejected
+
+missing/invalid CSRF rejected where required
+
+
+Do not weaken these protections.
+
+==================================================
+STEP 11 — AUTHORITY CHECK
+==================================================
+
+Reconfirm:
+
+runtime remains authentication/session authority
+
+product users map to runtime identities
+
+legacy_password_hash=NULL
+
+no BuildCustom-local password authority
+
+no BuildCustom-local session authority
+
+
+==================================================
+STEP 12 — IDENTITY-AWARE LOGOUT CHECK
+==================================================
+
+Use an existing user.
+
+Fresh login.
+
+Privately capture session A.
+
+Before logout verify:
+
+product /api/auth/me:
+returns the expected user identity
+
+runtime /api/auth/check:
+authenticated:true
+
+runtime D1 session:
+exists
+correct owner
+is_revoked=0
+
+
+Perform normal logout.
+
+Require:
+
+logout 204
+
+browser cookie cleared
+
+runtime D1 session:
+is_revoked=1
+
+
+Replay the EXACT old credential A.
+
+PRODUCT REQUIREMENT:
+
+/api/auth/me may return HTTP 200
+
+BUT body MUST be:
+
+null
+
+
+RUNTIME REQUIREMENT:
+
+/api/auth/check may return HTTP 200
+
+BUT:
+
+authenticated MUST equal false
+
+
+DO NOT FAIL OR PASS THIS TEST FROM STATUS CODE ALONE.
+
+
+Then fresh login.
+
+Require:
+
+new session valid
+
+same identity
+
+same owned project/release
+
+
+==================================================
+STEP 13 — DASHBOARD / OWNERSHIP REGRESSION
+==================================================
+
+Focused live check:
+
+user 1 sees only user-1-owned projects
+
+user 2 sees only user-2-owned projects
+
+
+Cross-owner management requests remain denied.
+
+No need to repeat every Task 12A endpoint if the focused authorization suite
+and representative live requests pass.
+
+==================================================
+STEP 14 — PRODUCT REGRESSION
+==================================================
+
+USER 1:
+
+fresh login
+dashboard
+project 2 reopen
+Files
+preview
+idle WebSocket
+release 2
+
+
+USER 2:
+
+fresh login
+dashboard
+project 3 reopen
+Files
+preview
+idle WebSocket
+release 3
+
+
+No generation.
+
+No editing.
+
+No Publish.
+
+==================================================
+STEP 15 — PUBLIC APP REGRESSION
+==================================================
+
+Unauthenticated:
+
+release-2 public app:
+HTTP 200
+correct content
+
+release-3 public app:
+HTTP 200
+correct content
+
+
+Fresh unknown *.apps.buildcustom.ai slug:
+
+404
+
+
+==================================================
+STEP 16 — SIGNUP UI REVIEW
+==================================================
+
+Inspect anonymous signup experience.
+
+Require:
+
+BuildCustom branding
+
+usable form
+
+errors understandable
+
+Sign in available
+
+no VibeSDK branding accidentally exposed
+
+no internal/private infrastructure URLs
+
+
+Do not redesign unless a genuine launch blocker exists.
+
+==================================================
+STEP 17 — NETWORK AUDIT
+==================================================
+
+Observe:
+
+anonymous product load
+
+signup page
+
+rejected registration
+
+login
+
+dashboard
+
+project reopen
+
+Files
+
+preview
+
+logout
+
+old-credential replay
+
+fresh login
+
+
+Require no customer dependency on:
+
+Replit development
+
+legacy runtime
+
+staging runtime
+
+lab runtime
+
+old control plane
+
+private generated gateway
+
+workers.dev customer URL
+
+
+Fonts and Cloudflare analytics are allowed.
+
+==================================================
+STEP 18 — REPLIT DEVELOPMENT OFF FINAL PROOF
+==================================================
+
+Temporarily stop ONLY:
+
+Replit development workflow
+
+
+Do NOT unpublish the public Replit deployment yet because marketing waitlist
+still depends on it.
+
+
+While development is stopped verify:
+
+ANONYMOUS:
+
+app.buildcustom.ai loads
+
+signup page available
+
+live registration capability=true
+
+
+USER 1:
+
+fresh login
+dashboard
+project 2
+Files
+preview
+idle WebSocket
+
+
+USER 2:
+
+fresh login
+dashboard
+project 3
+Files
+preview
+idle WebSocket
+
+
+PUBLIC:
+
+both generated apps load
+
+marketing loads
+
+
+Then perform ONE identity-aware logout test while development remains stopped.
+
+Require:
+
+D1 session revoked
+
+old product credential resolves to null
+
+old runtime credential returns authenticated:false
+
+
+Restore Replit development workflow afterward if desired.
+
+==================================================
+STEP 19 — FINAL SERVING STATE
+==================================================
+
+If EVERYTHING passed verify:
+
+control:
+registration-enabled version
+100%
+
+runtime:
+registration-enabled version
+100%
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+PUBLIC_GENERATED_APPS_ENABLED:
+true
+
+control registration:
+true
+
+runtime registration:
+true
+
+app.buildcustom.ai:
+healthy
+
+both existing public apps:
+healthy
+
+marketing:
+healthy
+
+claims:
+zero
+
+
+==================================================
+ROLLBACK TRIGGERS
+==================================================
+
+Immediately close signup if:
+
+duplicate identity created
+
+normalization allows duplicate identity
+
+malformed registration accepted
+
+password validation regresses
+
+Origin/CSRF protection regresses
+
+runtime ceases being session authority
+
+logout session is not revoked in D1
+
+old credential resolves an identity after logout
+
+ownership isolation fails
+
+existing projects regress
+
+public apps regress
+
+Replit development is required
+
+unexpected infrastructure drift appears
+
+
+==================================================
+ROLLBACK
+==================================================
+
+If any required check fails:
+
+control registration=false
+
+runtime registration=false
+
+
+Preserve:
+
+public apps=true
+
+all accepted fixes
+
+both users
+
+both projects
+
+both releases
+
+
+Verify closed state and STOP.
+
+==================================================
+SUCCESS
+==================================================
+
+If all required checks pass:
+
+DO NOT CLOSE REGISTRATION.
+
+Leave:
+
+control registration=true
+
+runtime registration=true
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+At that moment BuildCustom is OPEN FOR PUBLIC SIGNUP.
+
+==================================================
+TASK 12D ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. accepted pre-state verified
+
+2. rollback prepared
+
+3. runtime registration enabled from exact accepted code
+
+4. control registration enabled from exact accepted code
+
+5. live signup available
+
+6. duplicate registration safely rejected
+
+7. duplicate runtime identity not created
+
+8. duplicate product identity not created
+
+9. normalization duplicate prevented
+
+10. malformed registration rejected
+
+11. stock password policy enforced
+
+12. valid Origin/CSRF flow works
+
+13. invalid Origin/CSRF rejected
+
+14. runtime remains auth/session authority
+
+15. legacy_password_hash remains NULL
+
+16. identity-aware logout passes
+
+17. D1 session revoked
+
+18. old product credential resolves null
+
+19. old runtime credential authenticated:false
+
+20. fresh login works
+
+21. dashboard isolation passes
+
+22. ownership regression passes
+
+23. project 2 regression passes
+
+24. project 3 regression passes
+
+25. both public apps work
+
+26. unknown slug 404
+
+27. signup UI has no launch blocker
+
+28. network audit clean
+
+29. Replit-development-off signup works
+
+30. Replit-development-off both users work
+
+31. Replit-development-off both apps work
+
+32. Replit-development-off identity-aware logout works
+
+33. marketing remains healthy
+
+34. public generated apps remain enabled
+
+35. registration remains enabled on success
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-task control version
+
+2. pre-task runtime version
+
+3. rollback prepared
+
+4. registration-enabled runtime version
+
+5. registration-enabled control version
+
+6. live registration capability
+
+7. public-app capability
+
+8. signup UI result
+
+9. duplicate-registration result
+
+10. product identity count result
+
+11. runtime identity count result
+
+12. normalization result
+
+13. malformed-registration result
+
+14. password-policy result
+
+15. Origin/CSRF result
+
+16. auth/session-authority result
+
+17. legacy_password_hash result
+
+18. identity-aware logout result
+
+19. D1 pre/post logout state
+
+20. old product credential result/body
+
+21. old runtime credential result/body
+
+22. fresh-login result
+
+23. dashboard-isolation result
+
+24. ownership-regression result
+
+25. project-2 result
+
+26. project-3 result
+
+27. both-public-apps result
+
+28. unknown-slug result
+
+29. signup-UI review
+
+30. network-audit result
+
+31. Replit-development-off result
+
+32. development-off logout result
+
+33. marketing result
+
+34. final control version
+
+35. final runtime version
+
+36. final gateway version
+
+37. final PUBLIC_GENERATED_APPS_ENABLED
+
+38. final control registration
+
+39. final runtime registration
+
+40. claims state
+
+41. rollback status
+
+42. remaining HIGH risks
+
+43. remaining MEDIUM risks
+
+44. TASK 12D accepted?
+
+45. Is BuildCustom OPEN FOR PUBLIC SIGNUP?
+
+46. Can a stranger now go signup → create project → build → preview → Publish
+→ public app without manual intervention, based on the combined accepted
+Task 12/12A/12C/12D evidence?
+
+47. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT GENERATE ANOTHER APP.
+
+DO NOT CREATE ANOTHER PROJECT.
+
+DO NOT CREATE ANOTHER RELEASE.
+
+DO NOT ADD BILLING.
+
+DO NOT MODIFY GATEWAY OR DNS.
+
+DO NOT MOVE THE WAITLIST YET.
+
+DO NOT SHUT DOWN PUBLIC REPLIT YET.
