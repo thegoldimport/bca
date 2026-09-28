@@ -1,0 +1,304 @@
+{
+  "startedAt": "2026-09-28T19:05:45.541Z",
+  "precheckPath": "production/vibesdk-launch/task12j-observation-2026-09-28T19-04-08-093Z-4e6c5c3f.json",
+  "events": [
+    {
+      "at": "2026-09-28T19:05:45.797Z",
+      "stage": "closed-deployment-readback",
+      "evidence": {
+        "runtime": {
+          "id": "1bafefac-606d-454e-9b96-c7fd089605d7",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12K failed acceptance: restore closed signup",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T18:33:36.954879Z"
+        },
+        "control": {
+          "id": "5d935388-efd8-44d6-aad5-500c9a4ce229",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12K failed acceptance: restore closed signup",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T18:33:36.360552Z"
+        },
+        "gateway": {
+          "id": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-27T18:02:37.195852Z"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:46.372Z",
+      "stage": "control-parity",
+      "evidence": {
+        "differences": [],
+        "hashes": {
+          "accepted": [
+            {
+              "name": "worker.js",
+              "sha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891"
+            }
+          ],
+          "candidate": [
+            {
+              "name": "worker.js",
+              "sha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891"
+            }
+          ]
+        },
+        "required": {
+          "profile": "launch",
+          "environment": "production",
+          "publicApps": "true",
+          "authRuntime": "buildcustom-vibesdk-launch"
+        },
+        "assetConfiguration": {
+          "html_handling": "auto-trailing-slash",
+          "not_found_handling": "single-page-application",
+          "run_worker_first": true,
+          "base_path": "/"
+        },
+        "note": "Version-specific preview URLs and env registration flag intentionally excluded; every other binding and resource is compared."
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:46.373Z",
+      "stage": "request-runtime-candidate",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "input": {
+          "strategy": "percentage",
+          "versions": [
+            {
+              "version_id": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+              "percentage": 100
+            }
+          ],
+          "annotations": {
+            "workers/message": "Task 12M runtime-candidate"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:47.054Z",
+      "stage": "deployed-runtime-candidate",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "deployment": {
+          "id": "ea6079e0-4b1d-4d93-b8f5-edba76f86288"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:54.017Z",
+      "stage": "runtime-gate",
+      "evidence": {
+        "exitCode": 1,
+        "error": null,
+        "observations": [
+          {
+            "check": "A: expected runtime deployment",
+            "status": "PASS",
+            "observedVersionId": null
+          },
+          {
+            "check": "B: other runtime receives no traffic",
+            "status": "PASS",
+            "observedVersionId": null
+          },
+          {
+            "check": "C: configured version and supported targeted request",
+            "status": "FAIL",
+            "observedVersionId": null
+          },
+          {
+            "check": "D: ordinary live runtime registration capability",
+            "status": "FAIL",
+            "observedVersionId": null
+          },
+          {
+            "check": "E: existing-user product and runtime authentication",
+            "status": "PASS",
+            "observedVersionId": null
+          }
+        ],
+        "artifact": null
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:54.020Z",
+      "stage": "attempt-failed",
+      "evidence": {
+        "message": "Runtime A–E gate failed"
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:54.036Z",
+      "stage": "request-rollback-runtime",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "input": {
+          "strategy": "percentage",
+          "versions": [
+            {
+              "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+              "percentage": 100
+            }
+          ],
+          "annotations": {
+            "workers/message": "Task 12M rollback-runtime"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:54.701Z",
+      "stage": "deployed-rollback-runtime",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "deployment": {
+          "id": "217ff89f-7d07-463b-90a0-ad236cde95f3"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:05:54.702Z",
+      "stage": "rollback-runtime-result",
+      "evidence": {
+        "deploymentId": "217ff89f-7d07-463b-90a0-ad236cde95f3"
+      }
+    },
+    {
+      "at": "2026-09-28T19:06:03.184Z",
+      "stage": "rollback-closed-probe",
+      "evidence": {
+        "exitCode": 0,
+        "error": null,
+        "observations": [
+          {
+            "check": "A-control-deployment",
+            "status": "PASS",
+            "observedVersionId": null
+          },
+          {
+            "check": "B-accepted-candidate-percentages",
+            "status": "PASS",
+            "observedVersionId": null
+          },
+          {
+            "check": "C-candidate-configuration",
+            "status": "PASS",
+            "observedVersionId": null
+          },
+          {
+            "check": "D-live-capability",
+            "status": "PASS",
+            "observedVersionId": "8d07cbf8-c7ad-423e-b592-268e538e3410"
+          },
+          {
+            "check": "E-signup-ui",
+            "status": "PASS",
+            "observedVersionId": null
+          },
+          {
+            "check": "F-runtime-registration",
+            "status": "PASS",
+            "observedVersionId": null
+          },
+          {
+            "check": "G-existing-user-auth",
+            "status": "PASS",
+            "observedVersionId": null
+          }
+        ],
+        "artifact": "production/vibesdk-launch/task12j-observation-2026-09-28T19-05-54-839Z-902850ad.json"
+      }
+    },
+    {
+      "at": "2026-09-28T19:06:03.441Z",
+      "stage": "rollback-readback",
+      "evidence": {
+        "control": {
+          "id": "5d935388-efd8-44d6-aad5-500c9a4ce229",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12K failed acceptance: restore closed signup",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T18:33:36.360552Z"
+        },
+        "runtime": {
+          "id": "217ff89f-7d07-463b-90a0-ad236cde95f3",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12M rollback-runtime",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T19:05:54.317419Z"
+        },
+        "gateway": {
+          "id": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-27T18:02:37.195852Z"
+        },
+        "safe": true
+      }
+    }
+  ],
+  "rollbackStartedAt": "2026-09-28T19:05:54.036Z",
+  "status": "FAILED_NO_RETRY",
+  "completedAt": "2026-09-28T19:06:03.442Z"
+}

@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const precheckPath = process.argv[2];
+const task12m = process.env.TASK12M_RUNTIME_CANDIDATE === "95da88fe-fe8a-4ce3-9c62-4565d7f279c2";
 if (process.argv.length !== 4 || process.argv[3] !== "--execute"
   || !precheckPath?.startsWith("production/vibesdk-launch/task12j-observation-")) {
   throw new Error("Usage: node scripts/task12k-final-cutover.mjs <closed-precheck-artifact> --execute");
@@ -20,7 +21,7 @@ const versions = {
   runtime: {
     name: "buildcustom-vibesdk-launch",
     accepted: "8e28025f-e415-4405-9b1f-67d93eff7fd8",
-    candidate: "946f5b87-be42-45f1-adf6-67c67ced0dd6",
+    candidate: task12m ? process.env.TASK12M_RUNTIME_CANDIDATE : "946f5b87-be42-45f1-adf6-67c67ced0dd6",
   },
   control: {
     name: "buildcustom-control-plane-launch",
@@ -30,7 +31,7 @@ const versions = {
   gateway: { name: "buildcustom-apps-gateway", accepted: "9d80432b-4e53-4fe7-950a-2b53f0213eff" },
 };
 const journalPath = path.join(root, "production/vibesdk-launch",
-  `task12k-operation-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+  `${task12m ? "task12m" : "task12k"}-operation-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 const journal = { startedAt: new Date().toISOString(), precheckPath, events: [] };
 let runtimeTouched = false, controlTouched = false;
 
@@ -68,7 +69,7 @@ async function setVersion(part, version, label) {
   const input = {
     strategy: "percentage",
     versions: [{ version_id: version, percentage: 100 }],
-    annotations: { "workers/message": `Task 12K ${label}` },
+    annotations: { "workers/message": `Task ${task12m ? "12M" : "12K"} ${label}` },
   };
   await log(`request-${label}`, { worker: part.name, input });
   const result = await cf("POST", `/workers/scripts/${part.name}/deployments`, input);
@@ -166,6 +167,18 @@ async function rollback() {
 
 if (!process.env.CLOUDFLARE_API_TOKEN) throw new Error("Cloudflare credential unavailable");
 const precheck = JSON.parse(await readFile(path.join(root, precheckPath), "utf8"));
+if (task12m) {
+  const parityPath = process.env.TASK12M_PARITY_ARTIFACT;
+  if (!parityPath?.startsWith("production/vibesdk-launch/task12m-precheck-")) {
+    throw new Error("Task 12M fresh candidate parity artifact required");
+  }
+  const parity = JSON.parse(await readFile(path.join(root, parityPath), "utf8"));
+  if (parity.status !== "PASS" || Date.now() - Date.parse(parity.completedAt) > 15 * 60 * 1000
+    || parity.runtime?.version !== versions.runtime.candidate
+    || parity.control?.version !== versions.control.candidate) {
+    throw new Error("Task 12M candidate parity not fresh or not verified");
+  }
+}
 if (precheck.phase !== "closed" || precheck.status !== "PASS"
   || Object.keys(precheck.checks).length !== 7
   || Object.values(precheck.checks).some(row => row.status !== "PASS")

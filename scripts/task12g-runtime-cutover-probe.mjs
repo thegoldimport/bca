@@ -16,7 +16,7 @@ if (!["closed", "candidate"].includes(phase) || process.argv.length !== 3) {
 const account = "03ef1e6e42498920987f07059e107538";
 const worker = "buildcustom-vibesdk-launch";
 const accepted = "8e28025f-e415-4405-9b1f-67d93eff7fd8";
-const candidate = "946f5b87-be42-45f1-adf6-67c67ced0dd6";
+const candidate = process.env.TASK12M_RUNTIME_CANDIDATE || "946f5b87-be42-45f1-adf6-67c67ced0dd6";
 const base = `https://api.cloudflare.com/client/v4/accounts/${account}`;
 const runtime = `https://${worker}.thegoldimport.workers.dev`;
 const product = "https://app.buildcustom.ai";
