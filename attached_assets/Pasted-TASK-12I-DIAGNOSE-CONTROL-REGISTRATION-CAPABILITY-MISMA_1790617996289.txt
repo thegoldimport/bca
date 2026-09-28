@@ -1,0 +1,980 @@
+TASK 12I — DIAGNOSE CONTROL REGISTRATION CAPABILITY MISMATCH READ-ONLY
+
+Task 12H is NOT accepted.
+
+DO NOT retry the cutover.
+
+DO NOT move traffic.
+
+DO NOT create a Worker version.
+
+DO NOT activate either candidate.
+
+DO NOT modify production.
+
+==================================================
+WHAT TASK 12H PROVED
+==================================================
+
+The runtime side is now proven.
+
+Verified runtime candidate:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+On the single authorized Task 12H attempt:
+
+Cloudflare deployment:
+candidate 100%
+
+CHECK A:
+PASS
+
+CHECK B:
+PASS
+
+CHECK C:
+PASS
+candidate REGISTRATION_ENABLED=true
+targeted capability registrationEnabled=true
+
+CHECK D:
+PASS
+ordinary live runtime capability registrationEnabled=true
+
+CHECK E:
+PASS
+existing-user authentication remained valid
+
+
+Therefore:
+
+DO NOT investigate or change the runtime candidate in this task.
+
+The remaining blocker is CONTROL ONLY.
+
+==================================================
+CONTROL FAILURE
+==================================================
+
+Accepted closed control:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+
+Existing registration-enabled control candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+Task 12H reconfirmed candidate parity:
+
+modules:
+PASS
+
+assets:
+PASS
+
+exposed resources:
+PASS
+
+other bindings:
+PASS
+
+PUBLIC_GENERATED_APPS_ENABLED:
+true
+
+only expected configuration difference:
+
+STAGING_REGISTRATION_ENABLED:
+false → true
+
+
+Cloudflare then deployed:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+100%
+
+deployment ID:
+
+99a99587-24c0-404f-a691-b43aa90215a1
+
+
+BUT at:
+
+17:48:14.774 UTC
+
+live product capability reported:
+
+registrationEnabled:false
+
+
+At that time runtime registration was:
+
+true
+
+
+The control deployment readback showed the candidate:
+
+100%
+
+
+Task 12H correctly rolled everything back.
+
+==================================================
+CURRENT SAFE STATE
+==================================================
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+runtime registration=false
+
+
+CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+control registration=false
+
+
+RUNTIME CANDIDATE:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+0%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+GATEWAY:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+CLAIMS:
+
+zero
+
+
+Signup is CLOSED.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine exactly why:
+
+control candidate deployed at 100%
+
+with:
+
+STAGING_REGISTRATION_ENABLED=true
+
+still produced:
+
+registrationEnabled:false
+
+from the live BuildCustom capability.
+
+
+We need to establish whether:
+
+A. the control capability does not actually read
+   STAGING_REGISTRATION_ENABLED in launch mode
+
+B. another condition is ANDed with that flag
+
+C. the capability endpoint derives registration from the runtime
+
+D. a launch-specific flag overrides the staging flag
+
+E. the candidate has the right binding but the serving code reads another
+   binding
+
+F. the request reached a different Worker/version/path
+
+G. stale/cache behavior occurred
+
+H. another concrete cause exists
+
+
+DO NOT GUESS.
+
+==================================================
+STEP 1 — VERIFY CURRENT CLOSED STATE
+==================================================
+
+Read separately:
+
+control deployment/version
+
+control registration capability
+
+runtime deployment/version
+
+runtime registration capability
+
+public-generated-app capability
+
+gateway deployment
+
+claims
+
+
+Require:
+
+control accepted version 100%
+
+control registration=false
+
+runtime accepted version 100%
+
+runtime registration=false
+
+public apps=true
+
+claims=zero
+
+
+If state differs:
+
+STOP.
+
+==================================================
+STEP 2 — RECOVER EXACT TASK 12H CONTROL OBSERVATIONS
+==================================================
+
+Recover every retained observation from the Task 12H control cutover.
+
+Record separately:
+
+control deployment POST response
+
+deployment ID
+
+deployment GET/readback
+
+candidate percentage
+
+old control percentage
+
+live capability request URL
+
+request headers relevant to routing/origin
+
+raw capability response
+
+timestamp of each observation
+
+
+Do not expose credentials.
+
+Do not collapse observations into one boolean.
+
+==================================================
+STEP 3 — IDENTIFY THE EXACT CAPABILITY ENDPOINT
+==================================================
+
+Identify the exact public endpoint/request used when Task 12H observed:
+
+registrationEnabled:false
+
+
+Trace it from:
+
+request
+→ app.buildcustom.ai
+→ Cloudflare Worker
+→ router
+→ handler
+→ function
+→ response construction
+
+
+Give:
+
+route/path
+
+source file
+
+handler/function
+
+response field
+
+
+We need to know exactly where:
+
+registrationEnabled
+
+comes from.
+
+==================================================
+STEP 4 — TRACE REGISTRATIONENABLED SOURCE CODE
+==================================================
+
+Starting from that response field, trace the code all the way to its source.
+
+Determine whether it reads:
+
+STAGING_REGISTRATION_ENABLED
+
+REGISTRATION_ENABLED
+
+another environment variable
+
+launch profile configuration
+
+runtime `/api/auth/providers`
+
+AUTH_RUNTIME service binding
+
+a combination of multiple values
+
+or something else.
+
+
+Show the actual boolean expression or equivalent logic.
+
+Do not modify it.
+
+==================================================
+STEP 5 — TRACE THE SIGNUP API ITSELF
+==================================================
+
+Separately trace the actual public BuildCustom signup request path.
+
+Determine:
+
+public signup endpoint
+
+control handler
+
+control-side registration gate
+
+runtime endpoint it delegates to
+
+runtime-side registration gate
+
+
+Establish ALL conditions required for a stranger signup to succeed.
+
+We care about actual registration behavior, not merely a UI capability label.
+
+Produce the equivalent logical expression:
+
+PUBLIC_SIGNUP_ALLOWED =
+<control condition>
+AND/OR
+<runtime condition>
+AND/OR
+<any other required condition>
+
+
+Do not change anything.
+
+==================================================
+STEP 6 — COMPARE CAPABILITY VS ACTUAL SIGNUP GATE
+==================================================
+
+Determine whether the control capability field:
+
+registrationEnabled
+
+uses the SAME gate as the actual signup API.
+
+Classify:
+
+SAME LOGIC
+
+or
+
+DIFFERENT LOGIC
+
+
+If different:
+
+explain exactly how.
+
+This is important because Task 12H may have observed a capability-display
+problem rather than a registration-gate problem.
+
+Do NOT test signup live while registration is closed.
+
+==================================================
+STEP 7 — INSPECT ACCEPTED CONTROL VERSION
+==================================================
+
+Inspect:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+
+Record every exposed registration-related variable/binding.
+
+Search for:
+
+STAGING_REGISTRATION_ENABLED
+
+REGISTRATION_ENABLED
+
+ENABLE_EMAIL_AUTH
+
+PUBLIC_GENERATED_APPS_ENABLED
+
+launch
+
+registration
+
+signup
+
+auth providers
+
+capabilities
+
+
+Map each variable to the code that consumes it.
+
+==================================================
+STEP 8 — INSPECT CONTROL CANDIDATE
+==================================================
+
+Inspect inactive candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+Record every exposed registration-related binding.
+
+Compare with accepted control.
+
+Confirm exact candidate values.
+
+Then compare those values against the variables ACTUALLY consumed by:
+
+1. capability endpoint
+2. signup API
+3. signup UI
+
+
+Do not stop at metadata parity.
+
+We need semantic parity between the changed binding and the code path.
+
+==================================================
+STEP 9 — SEARCH FOR LAUNCH/STAGING MODE SPECIAL CASES
+==================================================
+
+The variable is named:
+
+STAGING_REGISTRATION_ENABLED
+
+
+But this Worker is:
+
+buildcustom-control-plane-launch
+
+
+Inspect whether launch mode contains special behavior such as:
+
+launch profile
+
+staging profile
+
+production profile
+
+isLaunch
+
+isStaging
+
+environment-name check
+
+hostname check
+
+Origin check
+
+registration override
+
+hardcoded closed-registration mode
+
+
+Determine whether STAGING_REGISTRATION_ENABLED is intentionally ignored or
+interpreted differently in launch mode.
+
+==================================================
+STEP 10 — CHECK RUNTIME-DERIVED CAPABILITY
+==================================================
+
+Determine whether the control capability endpoint calls:
+
+AUTH_RUNTIME
+
+or:
+
+runtime /api/auth/providers
+
+
+If control registration capability depends on runtime registration:
+
+show exactly how.
+
+Remember that during the Task 12H failed control check:
+
+runtime registration was already TRUE.
+
+
+Therefore if the capability is:
+
+controlFlag && runtimeFlag
+
+and runtimeFlag was true,
+
+the false result would point toward the control side.
+
+
+Establish this precisely.
+
+==================================================
+STEP 11 — CHECK HOST / ORIGIN LOGIC
+==================================================
+
+Determine whether:
+
+app.buildcustom.ai
+
+Origin or Host affects registration capability.
+
+Compare behavior expected for:
+
+app.buildcustom.ai
+
+workers.dev
+
+internal service binding
+
+
+Do not make live mutations.
+
+Identify whether the flag can be true for one request context and false for
+another.
+
+==================================================
+STEP 12 — CHECK CACHE BEHAVIOR
+==================================================
+
+Inspect the control capability endpoint for:
+
+Cache API
+
+cache headers
+
+CDN caching
+
+asset caching
+
+client caching
+
+service-worker caching
+
+browser caching
+
+
+Task 12H observation was from the live product capability.
+
+Determine whether a response generated under the old control version could
+reasonably have been returned after deployment readback showed candidate 100%.
+
+Use evidence.
+
+Do not invent propagation.
+
+==================================================
+STEP 13 — CHECK ROUTING / DESTINATION
+==================================================
+
+Verify the Task 12H capability request definitely addressed:
+
+app.buildcustom.ai
+
+
+Then verify current Custom Domain association still points to:
+
+buildcustom-control-plane-launch
+
+
+Rule out:
+
+legacy vibesdk Worker
+
+old control Worker
+
+staging
+
+lab
+
+Replit
+
+another route
+
+asset fallback
+
+frontend-only capability state
+
+
+==================================================
+STEP 14 — CHECK FRONTEND CAPABILITY CONSUMPTION
+==================================================
+
+Trace how the signup page decides whether to show:
+
+Create Account
+
+or:
+
+closed-registration state
+
+
+Determine whether it uses:
+
+server capability endpoint
+
+embedded build-time environment value
+
+client environment value
+
+hardcoded flag
+
+API response
+
+another mechanism
+
+
+This matters because BOTH must work:
+
+backend signup permission
+
+frontend signup availability.
+
+==================================================
+STEP 15 — DETERMINE ROOT CAUSE
+==================================================
+
+Classify the mismatch as ONE of:
+
+A. WRONG BINDING
+
+Candidate changed a binding not used by the live launch registration path.
+
+B. ADDITIONAL CONDITION
+
+STAGING_REGISTRATION_ENABLED is necessary but another required condition
+remained false.
+
+C. CAPABILITY BUG
+
+Actual signup gate would be open, but capability response/UI incorrectly
+reported closed.
+
+D. REQUEST DESTINATION
+
+Task 12H queried a different Worker/path/version than intended.
+
+E. CACHE / OBSERVATION
+
+Evidence demonstrates stale response behavior.
+
+F. OTHER
+
+A different concrete cause proven by source/configuration evidence.
+
+G. UNRESOLVED
+
+Evidence is insufficient.
+
+
+Do not select a category without evidence.
+
+==================================================
+STEP 16 — DETERMINE SMALLEST FIX
+==================================================
+
+ONLY DESIGN the fix.
+
+DO NOT IMPLEMENT IT.
+
+If code/config is actually wrong:
+
+identify the smallest exact change.
+
+Examples:
+
+change the correct existing binding
+
+change capability logic to use the actual launch registration gate
+
+remove an unintended launch-only override
+
+align UI capability with backend signup gate
+
+
+Do NOT redesign auth.
+
+Do NOT add another auth system.
+
+Do NOT add another registration layer.
+
+Do NOT modify runtime.
+
+==================================================
+STEP 17 — DETERMINE WHETHER EXISTING CONTROL CANDIDATE IS REUSABLE
+==================================================
+
+Based on the root cause classify:
+
+CONTROL CANDIDATE:
+
+SAFE TO REUSE
+
+or
+
+NOT SAFE / INSUFFICIENT
+
+
+If it merely changes the wrong flag:
+
+do not reuse it.
+
+If code is correct but another existing binding must also change:
+
+state exactly what would be required.
+
+If historical mismatch remains observationally unresolved:
+
+state that.
+
+==================================================
+STEP 18 — PREPARE NEXT CUTOVER OBSERVATIONS
+==================================================
+
+Design the next control-specific cutover probe.
+
+It must separately log:
+
+A.
+Cloudflare control candidate deployment %
+
+B.
+old control deployment %
+
+C.
+candidate registration-related configuration
+
+D.
+live control capability
+
+E.
+actual signup UI capability
+
+F.
+runtime registration capability
+
+G.
+existing-user login
+
+
+Each with:
+
+timestamp
+
+expected value
+
+observed value
+
+PASS/FAIL
+
+
+Do not combine them.
+
+==================================================
+STEP 19 — SAFE REGRESSION
+==================================================
+
+Without changing traffic:
+
+user 1 login
+
+user 2 login
+
+project ownership dashboard isolation
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+claims zero
+
+
+No signup.
+
+No generation.
+
+No edit.
+
+No Publish.
+
+==================================================
+SUCCESS
+==================================================
+
+Task 12I succeeds if we can explain the control mismatch well enough to know
+what exact configuration/code change is required before another cutover.
+
+NO production mutation is required.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current control version/traffic
+
+2. current runtime version/traffic
+
+3. current control registration
+
+4. current runtime registration
+
+5. Task 12H control deployment ID
+
+6. Task 12H deployment readback observation
+
+7. Task 12H capability request URL
+
+8. raw relevant capability response
+
+9. capability endpoint route
+
+10. capability source file/function
+
+11. exact capability boolean logic
+
+12. all variables involved
+
+13. actual signup endpoint
+
+14. signup source file/function
+
+15. exact signup-gate logic
+
+16. runtime delegation path
+
+17. runtime signup gate
+
+18. capability vs signup logic SAME/DIFFERENT
+
+19. accepted control registration-related bindings
+
+20. candidate registration-related bindings
+
+21. semantic binding/code-path comparison
+
+22. launch/staging special-case finding
+
+23. runtime-derived capability finding
+
+24. Host/Origin finding
+
+25. caching finding
+
+26. routing/destination finding
+
+27. frontend signup capability logic
+
+28. root-cause classification
+
+29. exact root cause
+
+30. smallest proposed fix
+
+31. files/configuration that would need to change
+
+32. whether runtime needs any change
+
+33. existing control candidate reusable?
+
+34. proposed next control candidate requirements
+
+35. CHECK A design
+
+36. CHECK B design
+
+37. CHECK C design
+
+38. CHECK D design
+
+39. CHECK E design
+
+40. CHECK F design
+
+41. CHECK G design
+
+42. existing-user regression
+
+43. project isolation regression
+
+44. public-app regression
+
+45. unknown-slug result
+
+46. marketing result
+
+47. claims
+
+48. production mutations made
+
+49. remaining HIGH risks
+
+50. remaining MEDIUM risks
+
+51. TASK 12I accepted?
+
+52. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT MOVE TRAFFIC.
+
+DO NOT CREATE A VERSION.
+
+DO NOT ACTIVATE CANDIDATES.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT MODIFY RUNTIME.
+
+DO NOT MODIFY CONTROL.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT GENERATE.
+
+DO NOT PUBLISH.
