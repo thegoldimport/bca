@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Read-only runtime observer. Never deploys, changes traffic, or registers users.
-import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createTailCorrelation, evaluateCapability } from "./lib/task12n-tail-correlation.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requireLab = createRequire(path.join(root, "lab/bc-vibesdk-lab-20260925/package.json"));
@@ -16,15 +16,18 @@ const url = `https://${worker}.thegoldimport.workers.dev`;
 const accepted = "8e28025f-e415-4405-9b1f-67d93eff7fd8";
 const candidate = "95da88fe-fe8a-4ce3-9c62-4565d7f279c2";
 const phase = process.argv[2] ?? "--expect=closed";
-if (!["--expect=closed", "--expect=candidate"].includes(phase) || process.argv.length > 3) {
-  throw new Error("Usage: node scripts/task12n-runtime-capability-probe.mjs --expect=closed|candidate");
+if (!["--expect=closed", "--expect=candidate", "--sample=closed"].includes(phase)
+  || process.argv.length > 3) {
+  throw new Error("Usage: node scripts/task12n-runtime-capability-probe.mjs --expect=closed|candidate|--sample=closed");
 }
-const expectedVersion = phase === "--expect=closed" ? accepted : candidate;
+const expectedVersion = phase === "--expect=candidate" ? candidate : accepted;
 const expectedRegistration = phase === "--expect=candidate";
-const id = `${Date.now()}-${randomUUID().slice(0, 7)}`;
+// UUID-like markers can be redacted in Wrangler tail URLs. Keep this run's
+// non-secret marker numeric, as in the accepted control-plane observer.
+const id = `${Date.now()}-${process.pid}`;
 const artifact = path.join(root, "production/vibesdk-launch",
   `task12n-runtime-observation-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-const report = { at: new Date().toISOString(), mode: `${phase.slice(9)}-read-only`,
+const report = { at: new Date().toISOString(), mode: `${phase.split("=")[1]}-read-only`,
   expectedVersion, status: "FAIL", checks: {} };
 if (!process.env.CLOUDFLARE_API_TOKEN) throw new Error("Cloudflare read credential unavailable");
 
@@ -47,8 +50,9 @@ function tail() {
   const child = spawn(process.execPath, [wrangler, "tail", worker, "--format=json",
     "--config", path.join(root, "wrangler.product-launch.jsonc")],
     { cwd: root, env: { ...process.env, NO_COLOR: "1" }, stdio: ["pipe", "pipe", "pipe"] });
-  const pending = new Map();
+  const correlation = createTailCorrelation({ markerPrefix: `${id}-` });
   let fragment = "", current = "", collecting = false;
+  let parseFailures = 0;
   child.stdout.on("data", data => {
     fragment += data.toString();
     const lines = fragment.split("\n");
@@ -59,27 +63,20 @@ function tail() {
       current += `\n${line}`;
       try {
         const event = JSON.parse(current);
-        const expected = pending.get(event.event?.request?.url);
-        if (expected && event.scriptName === worker) expected(event);
+        correlation.ingest(event);
         collecting = false;
         current = "";
       } catch {
-        if (current.length > 262144) { collecting = false; current = ""; }
+        if (current.length > 262144) { parseFailures++; collecting = false; current = ""; }
       }
     }
   });
   // Tail diagnostics could contain request data, so never print stderr.
   child.stderr.resume();
-  const watch = (requestUrl, ms = 8000) => new Promise(resolve => {
-    const timer = setTimeout(() => { pending.delete(requestUrl); resolve(null); }, ms);
-    pending.set(requestUrl, event => {
-      clearTimeout(timer);
-      pending.delete(requestUrl);
-      resolve(event);
-    });
-  });
+  const diagnostics = marker => ({ ...correlation.snapshot(marker), parseFailures,
+    tailExited: child.exitCode !== null });
   const close = () => { child.kill("SIGTERM"); child.stdin.end(); };
-  return { watch, close };
+  return { watch: correlation.watch, diagnostics, close };
 }
 function safeBody(raw) {
   if (raw.length > 16384) throw new Error("Oversized capability response");
@@ -96,20 +93,24 @@ function safeBody(raw) {
       requiresEmailAuth: parsed.data?.requiresEmailAuth } };
 }
 async function capability(observer, label, override) {
-  const requestUrl = `${url}/api/auth/providers?task12n_observation=${id}-${label}`;
+  const marker = `${id}-${label}`;
+  const requestUrl = `${url}/api/auth/providers?task12n_observation=${marker}`;
   const headers = { "Cache-Control": "no-store" };
   if (override) headers["Cloudflare-Workers-Version-Overrides"] = `${worker}="${override}"`;
-  const observed = observer.watch(requestUrl);
+  const observed = observer.watch(requestUrl, 12000);
   const requestedAt = new Date().toISOString();
   const response = await fetch(requestUrl, { headers, cache: "no-store" });
   const raw = await response.text();
+  const responseReceivedAt = new Date().toISOString();
   const event = await observed;
   return {
-    request: { url: requestUrl, method: "GET", requestedAt, override: override ?? null },
+    request: { url: requestUrl, marker, method: "GET", requestedAt, override: override ?? null },
     response: { status: response.status, headers: safeHeaders(response.headers),
-      ...safeBody(raw), note: "CSRF token redacted before persistence; body otherwise JSON-equivalent" },
+      ...safeBody(raw), receivedAt: responseReceivedAt,
+      note: "CSRF token redacted before persistence; body otherwise JSON-equivalent" },
     tail: event ? { scriptName: event.scriptName, versionId: event.scriptVersion?.id ?? null,
       eventTimestamp: event.eventTimestamp, requestUrl: event.event?.request?.url } : null,
+    correlation: { completedAt: new Date().toISOString(), ...observer.diagnostics(marker) },
   };
 }
 let observer;
@@ -138,13 +139,33 @@ try {
     const matched = observer.watch(calibrationUrl, 1500);
     await fetch(calibrationUrl, { cache: "no-store" }).catch(() => undefined);
     const event = await matched;
-    if (event?.scriptVersion?.id) { calibrated = true; break; }
+    if (event?.scriptName === worker && event?.scriptVersion?.id === expectedVersion) {
+      calibrated = true; break;
+    }
   }
   report.checks.tailCalibrated = calibrated;
+  if (phase === "--sample=closed") {
+    report.samples = { attempts: [], successful: 0 };
+    if (!calibrated) throw new Error("Tail not calibrated; no stability samples issued");
+    for (let n = 0; n < 5; n++) {
+      const row = await capability(observer, `ordinary-sample-${n}`);
+      row.evaluation = evaluateCapability(row, worker, accepted, false);
+      report.samples.attempts.push(row);
+      if (row.evaluation.http !== "PASS" || row.evaluation.version !== "PASS") break;
+      report.samples.successful++;
+    }
+    report.status = report.samples.successful === report.samples.attempts.length ? "PASS" : "FAIL";
+  } else {
   // A version override is supported only when the target is in the current
   // deployment. The exact 100% deployment above is required before this call.
   report.checks.C_targeted = await capability(observer, "targeted", expectedVersion);
   report.checks.D_ordinaryLive = await capability(observer, "ordinary");
+  report.checks.C_targeted.evaluation = evaluateCapability(
+    report.checks.C_targeted, worker, expectedVersion, expectedRegistration);
+  report.checks.D_ordinaryLive.evaluation = evaluateCapability(
+    report.checks.D_ordinaryLive, worker, expectedVersion, expectedRegistration);
+  report.checks.C_targeted.evidence = observer.diagnostics(`${id}-targeted`);
+  report.checks.D_ordinaryLive.evidence = observer.diagnostics(`${id}-ordinary`);
   observer.close();
   observer = null;
   const auth = spawnSync(process.execPath, [path.join(root, "scripts/task12g-runtime-cutover-probe.mjs"),
@@ -156,13 +177,46 @@ try {
     try { return JSON.parse(line); } catch { return null; }
   }).filter(Boolean) ?? [];
   report.checks.E_existingUserAuth = rows.find(row => row.check === "E: existing-user product and runtime authentication");
+  // Future guarded diagnostics consume these independent fields. A deployment
+  // readback never substitutes for HTTP behavior or per-request tail identity.
+  const field = (expected, observed, pass) => ({
+    expected, observed, status: observed === undefined || observed === null
+      ? "UNKNOWN" : pass ? "PASS" : "FAIL",
+  });
+  const c = report.checks.C_targeted, d = report.checks.D_ordinaryLive;
+  report.observations = {
+    candidatePercentage: field(expectedRegistration ? 100 : 0,
+      report.checks.A_deployment.candidatePercentage,
+      report.checks.A_deployment.candidatePercentage === (expectedRegistration ? 100 : 0)),
+    acceptedPercentage: field(expectedRegistration ? 0 : 100,
+      versions.find(v => v.version_id === accepted)?.percentage ?? 0,
+      (versions.find(v => v.version_id === accepted)?.percentage ?? 0) === (expectedRegistration ? 0 : 100)),
+    candidateRegistrationBinding: field("true", report.checks.B_candidateMetadata.registration,
+      report.checks.B_candidateMetadata.registration === "true"),
+    candidateEmailAuthBinding: field("not false", report.checks.B_candidateMetadata.emailAuth ?? "absent",
+      report.checks.B_candidateMetadata.emailAuth !== "false"),
+    targetedHttpStatus: field(200, c.response.status, c.response.status === 200),
+    targetedSafeBody: field("redacted JSON", c.response.redactedRawBody, !!c.response.redactedRawBody),
+    targetedRegistrationEnabled: field(expectedRegistration, c.response.parsed.registrationEnabled,
+      c.response.parsed.registrationEnabled === expectedRegistration),
+    targetedEmail: field(true, c.response.parsed.email, c.response.parsed.email === true),
+    targetedScriptName: field(worker, c.tail?.scriptName, c.tail?.scriptName === worker),
+    targetedVersionId: field(expectedVersion, c.tail?.versionId, c.tail?.versionId === expectedVersion),
+    ordinaryHttpStatus: field(200, d.response.status, d.response.status === 200),
+    ordinarySafeBody: field("redacted JSON", d.response.redactedRawBody, !!d.response.redactedRawBody),
+    ordinaryRegistrationEnabled: field(expectedRegistration, d.response.parsed.registrationEnabled,
+      d.response.parsed.registrationEnabled === expectedRegistration),
+    ordinaryEmail: field(true, d.response.parsed.email, d.response.parsed.email === true),
+    ordinaryScriptName: field(worker, d.tail?.scriptName, d.tail?.scriptName === worker),
+    ordinaryVersionId: field(expectedVersion, d.tail?.versionId, d.tail?.versionId === expectedVersion),
+    existingUserAuth: field("PASS", report.checks.E_existingUserAuth?.status,
+      report.checks.E_existingUserAuth?.status === "PASS"),
+  };
   const capabilityPass = [report.checks.C_targeted, report.checks.D_ordinaryLive]
-    .every(row => row.response.status === 200
-      && row.response.parsed.registrationEnabled === expectedRegistration
-      && row.response.parsed.email === true
-      && row.tail?.scriptName === worker && row.tail.versionId === expectedVersion);
+    .every(row => row.evaluation.http === "PASS" && row.evaluation.version === "PASS");
   report.status = calibrated && capabilityPass && auth.status === 0
     && report.checks.E_existingUserAuth?.status === "PASS" ? "PASS" : "FAIL";
+  }
 } catch (error) {
   report.error = error.message;
 } finally {

@@ -1,0 +1,798 @@
+TASK 12P — HARDEN RUNTIME VERSION-CORRELATION OBSERVER
+
+Task 12O is NOT accepted, but it stopped safely BEFORE any deployment.
+
+This task is LOCAL / READ-ONLY OBSERVABILITY WORK ONLY.
+
+DO NOT perform another runtime diagnostic deployment.
+
+DO NOT retry Task 12O.
+
+DO NOT move production traffic.
+
+DO NOT open signup.
+
+==================================================
+WHY THIS TASK EXISTS
+==================================================
+
+Task 12O never reached the runtime candidate.
+
+The final closed precheck failed only because:
+
+- targeted closed-runtime capability request:
+  HTTP 200
+  successfully correlated to accepted runtime version
+
+- ordinary closed-runtime capability request:
+  HTTP 200
+  correct registrationEnabled=false response
+  BUT no matching Cloudflare tail event was retained
+
+Task 12O correctly stopped before deployment.
+
+Therefore this task is NOT about:
+
+- runtime candidate code
+- registration logic
+- Task 12L validation
+- control Worker
+- signup
+- generated apps
+
+It is solely about making the LOCAL runtime observer reliable enough that
+a future authorized diagnostic cannot fail merely because one harmless
+tail event was missed.
+
+==================================================
+CURRENT SAFE PRODUCTION STATE
+==================================================
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+RUNTIME CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL:
+
+buildcustom-control-plane-launch
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+PRODUCTION GATEWAY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+PUBLIC SIGNUP:
+
+CLOSED
+
+
+CLAIMS:
+
+zero
+
+==================================================
+HARD RULES
+==================================================
+
+DO NOT:
+
+- create a Worker version
+- create a deployment
+- change deployment percentages
+- change Worker bindings
+- change Worker configuration
+- modify runtime Worker code
+- modify control Worker code
+- activate either candidate
+- modify gateway
+- modify DNS
+- open signup
+- create users
+- generate
+- edit projects
+- Publish
+- move waitlist
+- stop/unpublish public Replit
+
+You MAY modify LOCAL scripts/tests/artifacts only.
+
+==================================================
+STEP 1 — INSPECT EXISTING OBSERVER
+==================================================
+
+Locate the exact Task 12N runtime observer.
+
+Inspect:
+
+- how tailing starts
+- when the HTTP request is sent
+- how request markers are generated
+- how markers are encoded
+- how tail events are collected
+- how long collection remains open
+- how events are filtered
+- how the targeted request is distinguished
+- how the ordinary request is distinguished
+- how scriptName is extracted
+- how scriptVersion.id is extracted
+- how timeouts are handled
+- whether tail startup readiness is established
+- whether events arriving after the HTTP response are still collected
+- whether targeted and ordinary requests share one tail session
+- whether one event can accidentally consume/mask another
+- whether event ordering is assumed
+
+Do not change anything yet.
+
+==================================================
+STEP 2 — RECOVER TASK 12O PRECHECK DETAILS
+==================================================
+
+Inspect the Task 12O precheck artifact.
+
+For BOTH requests recover:
+
+TARGETED:
+
+- request marker
+- exact URL
+- timestamp
+- HTTP status
+- raw safe response
+- tail session timing
+- matching event
+- scriptName
+- scriptVersion.id
+
+ORDINARY:
+
+- request marker
+- exact URL
+- timestamp
+- HTTP status
+- raw safe response
+- tail session timing
+- events observed during its correlation window
+- reason no event matched
+
+Determine whether the ordinary event was:
+
+A. never received
+
+B. received but filtered out
+
+C. received but marker missing/redacted
+
+D. received outside correlation window
+
+E. received but parsing failed
+
+F. confused with targeted event
+
+G. impossible to determine
+
+Do not guess.
+
+==================================================
+STEP 3 — COMPARE TO TASK 12J CONTROL OBSERVER
+==================================================
+
+Task 12J solved the equivalent control-plane observability problem.
+
+Compare the runtime observer directly against the accepted Task 12J control
+observer.
+
+Look specifically for differences in:
+
+- tail startup
+- readiness delay/handshake
+- marker format
+- query-marker placement
+- UUID redaction handling
+- timestamp-shaped markers
+- tail filters
+- event parsing
+- correlation
+- timeout duration
+- post-response collection duration
+- retry behavior
+- sequential versus shared tail sessions
+
+Reuse the proven Task 12J observation pattern wherever technically
+applicable.
+
+Do NOT redesign this from scratch if Task 12J already solved it.
+
+==================================================
+STEP 4 — DETERMINE WHETHER THE ORDINARY REQUEST IS ACTUALLY DIFFERENT
+==================================================
+
+Determine exactly what "targeted" and "ordinary" mean in the runtime observer.
+
+For each, document:
+
+hostname
+
+path
+
+headers
+
+query parameters
+
+version-override header if any
+
+request marker
+
+tail filtering
+
+
+The ordinary request must still contain a harmless unique correlation marker
+if that does not change Worker routing or application semantics.
+
+"Ordinary" means it must not depend on a version override to select the
+candidate.
+
+It does NOT mean the request must be impossible to correlate.
+
+If the ordinary request currently lacks a reliable marker, fix that locally.
+
+==================================================
+STEP 5 — IDENTIFY ROOT CAUSE OF MISSED EVENT IF POSSIBLE
+==================================================
+
+Classify the Task 12O observer failure as:
+
+A. tail not ready before request
+
+B. insufficient tail collection window
+
+C. correlation-marker problem
+
+D. marker redaction
+
+E. filter problem
+
+F. parser problem
+
+G. shared-session/event-order problem
+
+H. Cloudflare tail event nondeterminism
+
+I. other — proven
+
+J. unresolved
+
+
+Evidence only.
+
+==================================================
+STEP 6 — HARDEN LOCAL OBSERVER
+==================================================
+
+Make the SMALLEST LOCAL changes necessary.
+
+Preferred properties:
+
+1. establish tail before issuing observed request
+
+2. use a non-secret timestamp-shaped unique marker compatible with the
+   successful Task 12J strategy
+
+3. retain the full harmless request URL
+
+4. collect events for a bounded period AFTER HTTP completion
+
+5. correlate by the unique marker, not event ordering
+
+6. parse scriptName independently
+
+7. parse scriptVersion.id independently
+
+8. preserve HTTP observation even if tail correlation fails
+
+9. preserve all safe candidate tail events needed to diagnose a miss
+
+10. report HTTP result and version result separately
+
+11. never collapse multiple observations into one opaque boolean
+
+12. UNKNOWN when version correlation genuinely cannot be established
+
+Do not weaken a missing version event into PASS.
+
+==================================================
+STEP 7 — ADD LOCAL TESTS
+==================================================
+
+Add focused tests for the observer.
+
+At minimum:
+
+A. targeted event correlates correctly
+
+B. ordinary event correlates correctly
+
+C. unrelated event ignored
+
+D. event arriving after HTTP response still correlates
+
+E. events arriving out of order correlate by marker
+
+F. missing version ID → UNKNOWN/FAIL
+
+G. missing event → UNKNOWN/FAIL
+
+H. marker redaction/mismatch does not falsely correlate
+
+I. targeted and ordinary observations remain independent
+
+J. raw HTTP body retained when tail correlation fails
+
+K. scriptName mismatch fails
+
+L. scriptVersion mismatch fails when an expected version is supplied
+
+No Worker deployment required.
+
+==================================================
+STEP 8 — CLOSED-RUNTIME CALIBRATION RUN 1
+==================================================
+
+Run the corrected observer against ONLY the currently serving accepted runtime.
+
+Expected Worker:
+
+buildcustom-vibesdk-launch
+
+
+Expected version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Run:
+
+TARGETED capability request
+
+and
+
+ORDINARY capability request
+
+
+Both must return:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+
+Both must independently correlate to:
+
+scriptName:
+buildcustom-vibesdk-launch
+
+
+scriptVersion.id:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Retain full safe evidence.
+
+==================================================
+STEP 9 — CLOSED-RUNTIME CALIBRATION RUN 2
+==================================================
+
+Run a completely fresh second calibration.
+
+Use new markers.
+
+Do not reuse tail events from Run 1.
+
+Require the exact same result:
+
+TARGETED:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+correct scriptName
+
+correct scriptVersion.id
+
+
+ORDINARY:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+correct scriptName
+
+correct scriptVersion.id
+
+==================================================
+STEP 10 — CLOSED-RUNTIME CALIBRATION RUN 3
+==================================================
+
+Because Task 12O failed intermittently, run a third fresh calibration.
+
+Again use fresh markers and fresh observation windows.
+
+Require BOTH requests to correlate independently.
+
+==================================================
+STEP 11 — OPTIONAL BOUNDED STABILITY SAMPLE
+==================================================
+
+If all three calibrations pass cleanly, run up to 5 additional READ-ONLY
+ordinary capability observations against the accepted closed runtime.
+
+No targeted version override is necessary for this stability sample.
+
+Each request must:
+
+- use a fresh marker
+- return HTTP 200
+- return registrationEnabled=false
+- return providers.email=true
+- correlate to the accepted runtime version
+
+Stop at the first failure.
+
+Do not endlessly repeat until it happens to pass.
+
+Report:
+
+successful observations / attempted observations
+
+==================================================
+STEP 12 — DEFINE FUTURE DIAGNOSTIC ACCEPTANCE
+==================================================
+
+Update the LOCAL guarded diagnostic operator so that a future separately
+authorized runtime diagnostic records these as INDEPENDENT fields:
+
+1. deployment percentages
+
+2. candidate metadata REGISTRATION_ENABLED
+
+3. candidate metadata ENABLE_EMAIL_AUTH state
+
+4. targeted HTTP status
+
+5. targeted raw safe body
+
+6. targeted registrationEnabled
+
+7. targeted providers.email
+
+8. targeted scriptName
+
+9. targeted scriptVersion.id
+
+10. ordinary HTTP status
+
+11. ordinary raw safe body
+
+12. ordinary registrationEnabled
+
+13. ordinary providers.email
+
+14. ordinary scriptName
+
+15. ordinary scriptVersion.id
+
+16. existing-user auth
+
+
+No combined "C" boolean.
+
+Do not perform the future deployment.
+
+==================================================
+STEP 13 — PROVE NO PRODUCTION MUTATION
+==================================================
+
+Verify after observer work:
+
+runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+control:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+control candidate:
+
+0%
+
+
+runtime registration:
+
+false
+
+
+control registration:
+
+false
+
+
+public apps:
+
+true
+
+
+gateway unchanged
+
+
+claims:
+
+zero
+
+==================================================
+STEP 14 — SAFE PRODUCTION REGRESSION
+==================================================
+
+Verify:
+
+user 1 login
+
+user 2 login
+
+user 1 only project 2
+
+user 2 only project 3
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+
+No generation.
+
+No edit.
+
+No Publish.
+
+==================================================
+TASK 12P ACCEPTANCE
+==================================================
+
+Task 12P passes only if:
+
+1. observer failure investigated
+
+2. Task 12O evidence recovered as far as possible
+
+3. runtime observer compared to Task 12J observer
+
+4. targeted vs ordinary request difference documented
+
+5. missed-event cause classified as far as evidence permits
+
+6. smallest local hardening implemented
+
+7. focused observer tests pass
+
+8. calibration Run 1 targeted passes
+
+9. calibration Run 1 ordinary passes
+
+10. calibration Run 2 targeted passes
+
+11. calibration Run 2 ordinary passes
+
+12. calibration Run 3 targeted passes
+
+13. calibration Run 3 ordinary passes
+
+14. every correlated request identifies the accepted runtime version
+
+15. no false correlation accepted
+
+16. stability sample reported if performed
+
+17. future diagnostic operator records independent observations
+
+18. no Worker version created
+
+19. no deployment created
+
+20. no traffic moved
+
+21. signup remains closed
+
+22. safe production regression passes
+
+23. claims remain zero
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. observer file path
+
+2. Task 12O targeted marker
+
+3. Task 12O ordinary marker
+
+4. Task 12O targeted correlation result
+
+5. Task 12O ordinary failure evidence
+
+6. missed-event classification
+
+7. comparison to Task 12J observer
+
+8. exact local observer changes
+
+9. focused test results
+
+10. calibration Run 1 targeted HTTP result
+
+11. Run 1 targeted version result
+
+12. Run 1 ordinary HTTP result
+
+13. Run 1 ordinary version result
+
+14. calibration Run 2 targeted HTTP result
+
+15. Run 2 targeted version result
+
+16. Run 2 ordinary HTTP result
+
+17. Run 2 ordinary version result
+
+18. calibration Run 3 targeted HTTP result
+
+19. Run 3 targeted version result
+
+20. Run 3 ordinary HTTP result
+
+21. Run 3 ordinary version result
+
+22. stability sample attempted?
+
+23. stability sample successes/attempts
+
+24. any missed events after hardening?
+
+25. accepted closed runtime version
+
+26. runtime candidate traffic
+
+27. control version/traffic
+
+28. registration states
+
+29. public-app flag
+
+30. production gateway Worker/version
+
+31. claims
+
+32. user-1 regression
+
+33. user-2 regression
+
+34. ownership isolation
+
+35. project-2 public app
+
+36. project-3 public app
+
+37. unknown slug
+
+38. marketing
+
+39. Worker code changed?
+
+40. Worker version created?
+
+41. deployment created?
+
+42. production traffic moved?
+
+43. local diagnostic operator ready?
+
+44. remaining HIGH risks
+
+45. remaining MEDIUM risks
+
+46. TASK 12P ACCEPTED?
+
+47. Is runtime observability now reliable enough for ONE separately
+    authorized candidate diagnostic deployment?
+
+48. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE THE RUNTIME CANDIDATE.
+
+DO NOT ACTIVATE CONTROL.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE A WORKER VERSION.
+
+DO NOT CREATE A DEPLOYMENT.
+
+DO NOT MODIFY WORKER CODE.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MOVE WAITLIST.
