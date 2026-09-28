@@ -36,3 +36,9 @@ Do not trust an inactive version's “registration gate only” annotation as pr
 **Why:** Comparing only version resources and ancillary module hashes would have hidden a changed executable module. The approved operation required byte-identical accepted code.
 
 **How to apply:** Before activating any pre-existing binding-only candidate, compare *every* module's decoded-byte hash against the actual serving version, including the main module, plus bindings and runtime resources. If the main module differs, keep the accepted version serving and stop rather than relying on the candidate's annotation.
+
+Raw multipart version upload with accepted module bytes, inherited bindings, and `keep_assets: true` can preserve code and asset routing but omit the accepted container attachment entirely in the resulting inactive version. Wrangler's no-bundle upload can instead add a container name absent from the accepted version. Neither outcome satisfies an exact-resource-parity gate merely because the executable code matches.
+
+**Why:** A registration-only staging attempt produced byte-identical modules and all 29 expected bindings but no `UserAppSandboxService` container resource, while the accepted serving version had that container. The inactive candidate remained at zero traffic.
+
+**How to apply:** Compare `script_runtime.containers` and version-level `containers` alongside modules, bindings, and assets *before* any deployment. For an exact clone, first establish a documented version-creation path that preserves both asset state and container metadata; do not deploy a candidate with missing or altered container resources.

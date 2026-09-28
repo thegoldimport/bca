@@ -1,0 +1,473 @@
+TASK 12E — BUILD CLEAN REGISTRATION-ENABLED RUNTIME CANDIDATE
+
+Task 12D correctly STOPPED before signup was opened.
+
+Do NOT open signup in this task.
+
+The blocker was:
+
+inactive runtime candidate
+
+ad874ec3-d98f-4c6c-99df-1011cb9c6c64
+
+did NOT have executable-code parity with the accepted serving runtime.
+
+Do NOT use that candidate.
+
+Do NOT repair or mutate that candidate.
+
+Create a NEW INACTIVE candidate from the EXACT accepted serving runtime.
+
+==================================================
+ACCEPTED RUNTIME
+==================================================
+
+Worker:
+
+buildcustom-vibesdk-launch
+
+accepted serving version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+serving:
+
+100%
+
+registration:
+
+false
+
+
+This accepted serving version is the source of truth.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Create ONE new INACTIVE runtime version whose:
+
+executable module bytes
+
+modules
+
+compatibility settings
+
+bindings
+
+resources
+
+Durable Object bindings
+
+D1 bindings
+
+KV bindings
+
+R2 bindings
+
+service bindings
+
+AI/Gateway configuration
+
+secrets/config references
+
+and every other runtime setting
+
+match the accepted serving version EXACTLY,
+
+EXCEPT:
+
+REGISTRATION_ENABLED
+
+must change from:
+
+false
+
+to:
+
+true
+
+
+DO NOT ACTIVATE IT.
+
+This task is preparation only.
+
+==================================================
+STEP 1 — INSPECT ACCEPTED SERVING VERSION
+==================================================
+
+Read the actual deployed accepted version:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Treat the deployed version itself as authoritative.
+
+Record fingerprints/hashes for:
+
+main JavaScript module
+
+all additional modules/assets if any
+
+compatibility date
+
+compatibility flags
+
+bindings
+
+resource IDs
+
+service bindings
+
+Durable Object namespaces
+
+D1
+
+KV
+
+R2
+
+dispatch-related resources
+
+AI/Gateway configuration
+
+plain-text vars
+
+
+Do not expose secret values.
+
+==================================================
+STEP 2 — DO NOT BUILD FROM CURRENT LOCAL SOURCE
+==================================================
+
+Do NOT assume the current Replit working tree reproduces the accepted runtime.
+
+Do NOT use:
+
+ad874ec3-d98f-4c6c-99df-1011cb9c6c64
+
+as the source.
+
+Do NOT use another historical inactive candidate as the source.
+
+The ACCEPTED DEPLOYED VERSION is the baseline.
+
+If Cloudflare provides a supported version-copy/version-upload path that can
+reuse the accepted deployed module bytes and resources while changing only
+the registration binding, prefer that.
+
+If exact reconstruction from the accepted deployed artifact is not possible:
+
+STOP.
+
+Do not approximate.
+
+==================================================
+STEP 3 — CREATE NEW INACTIVE VERSION
+==================================================
+
+Create exactly ONE new runtime version.
+
+Change only:
+
+REGISTRATION_ENABLED=false
+
+to:
+
+REGISTRATION_ENABLED=true
+
+
+Do NOT alter executable code.
+
+Do NOT alter auth logic.
+
+Do NOT alter session logic.
+
+Do NOT alter logout logic.
+
+Do NOT alter inference.
+
+Do NOT alter runtime routing.
+
+Do NOT alter storage.
+
+Do NOT alter service bindings.
+
+Do NOT alter compatibility settings.
+
+==================================================
+STEP 4 — BYTE PARITY
+==================================================
+
+After upload, compare NEW candidate against:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Require:
+
+main JavaScript module:
+BYTE IDENTICAL
+
+all additional executable modules:
+BYTE IDENTICAL
+
+assets:
+IDENTICAL
+
+compatibility settings:
+IDENTICAL
+
+resource bindings:
+IDENTICAL
+
+service bindings:
+IDENTICAL
+
+DO bindings:
+IDENTICAL
+
+D1:
+IDENTICAL
+
+KV:
+IDENTICAL
+
+R2:
+IDENTICAL
+
+AI/Gateway:
+IDENTICAL
+
+
+The ONLY intentional difference must be:
+
+REGISTRATION_ENABLED:
+false → true
+
+
+Produce a machine-readable or normalized diff if practical.
+
+==================================================
+STEP 5 — VERIFY TASK 6A / 12C CODE INCLUDED
+==================================================
+
+Because module bytes must match the accepted serving runtime, the accepted
+logout/session behavior should necessarily be present.
+
+Still confirm that the candidate contains the same accepted code implementing:
+
+session-backed token validation
+
+owner-bound session validation
+
+server-side logout revocation
+
+revocation confirmation
+
+no credential-only auth fallback
+
+
+Do NOT change this code.
+
+==================================================
+STEP 6 — DO NOT ACTIVATE
+==================================================
+
+The new candidate must remain:
+
+0% traffic
+
+inactive
+
+
+Serving production must remain:
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+Registration must remain:
+
+control=false
+
+runtime=false
+
+
+Public generated apps remain:
+
+true
+
+==================================================
+STEP 7 — SAFE PRODUCTION CHECK
+==================================================
+
+Because no traffic should move, perform only safe verification:
+
+existing user login works
+
+project 2 public app HTTP 200
+
+project 3 public app HTTP 200
+
+claims zero
+
+
+No generation.
+
+No Publish.
+
+No signup.
+
+==================================================
+SUCCESS
+==================================================
+
+PASS means:
+
+we possess a NEW inactive runtime candidate that is demonstrably identical to
+the accepted serving runtime except for:
+
+REGISTRATION_ENABLED=true
+
+
+Then STOP.
+
+Do NOT restart Task 12D in this task.
+
+==================================================
+TASK 12E ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. accepted serving runtime used as authoritative baseline
+
+2. old mismatched candidate not reused
+
+3. exactly one new candidate created
+
+4. main module byte-identical
+
+5. all executable modules byte-identical
+
+6. compatibility settings identical
+
+7. all runtime resources identical
+
+8. all service bindings identical
+
+9. storage bindings identical
+
+10. AI/Gateway configuration identical
+
+11. only meaningful diff is REGISTRATION_ENABLED false→true
+
+12. Task 6A/12C auth behavior remains present by code parity
+
+13. candidate remains inactive
+
+14. accepted runtime remains 100%
+
+15. accepted control remains 100%
+
+16. registration remains closed both layers
+
+17. public apps remain enabled
+
+18. existing production remains healthy
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. accepted baseline runtime version
+
+2. baseline main-module hash
+
+3. new candidate runtime version
+
+4. candidate main-module hash
+
+5. main-module byte parity result
+
+6. additional-module parity result
+
+7. compatibility-settings parity
+
+8. resource-binding parity
+
+9. service-binding parity
+
+10. Durable Object parity
+
+11. D1 parity
+
+12. KV parity
+
+13. R2 parity
+
+14. AI/Gateway parity
+
+15. normalized configuration diff
+
+16. REGISTRATION_ENABLED baseline value
+
+17. REGISTRATION_ENABLED candidate value
+
+18. confirmation Task 6A/12C code is unchanged
+
+19. candidate traffic percentage
+
+20. active runtime version/percentage
+
+21. active control version/percentage
+
+22. active control registration state
+
+23. active runtime registration state
+
+24. public-generated-app state
+
+25. existing-user login result
+
+26. project-2 public-app result
+
+27. project-3 public-app result
+
+28. claims state
+
+29. whether any production traffic/config changed
+
+30. remaining HIGH risks
+
+31. remaining MEDIUM risks
+
+32. whether TASK 12E is ACCEPTED
+
+33. whether this candidate is safe to use for the Task 12D registration gate
+
+34. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE THE CANDIDATE.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT MODIFY CONTROL PLANE.
+
+DO NOT GENERATE.
+
+DO NOT PUBLISH.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
