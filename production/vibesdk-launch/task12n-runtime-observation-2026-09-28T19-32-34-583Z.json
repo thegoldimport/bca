@@ -1,0 +1,158 @@
+{
+  "at": "2026-09-28T19:32:34.583Z",
+  "mode": "closed-read-only",
+  "expectedVersion": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+  "status": "FAIL",
+  "checks": {
+    "A_deployment": {
+      "id": "217ff89f-7d07-463b-90a0-ad236cde95f3",
+      "versions": [
+        {
+          "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+          "percentage": 100
+        }
+      ],
+      "expected": true,
+      "candidatePercentage": 0
+    },
+    "B_candidateMetadata": {
+      "id": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+      "hasPreview": false,
+      "registration": "true",
+      "emailAuth": null,
+      "acceptedRegistration": "false",
+      "container": [
+        {
+          "class_name": "UserAppSandboxService"
+        }
+      ]
+    },
+    "tailCalibrated": true,
+    "C_targeted": {
+      "request": {
+        "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790623954582-b62098d-targeted",
+        "method": "GET",
+        "requestedAt": "2026-09-28T19:32:41.045Z",
+        "override": "8e28025f-e415-4405-9b1f-67d93eff7fd8"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-credentials": "true",
+          "access-control-expose-headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-ray": "a4252cec9d75e1de-ATL",
+          "connection": "keep-alive",
+          "content-encoding": "br",
+          "content-security-policy": "default-src 'self'; script-src 'self' 'strict-dynamic'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://avatars.githubusercontent.com https://lh3.googleusercontent.com https://*.cloudflare.com; connect-src 'self' ws://localhost:* wss://localhost:* wss://buildcustom-vibesdk-launch.thegoldimport.workers.dev https://api.github.com https://api.cloudflare.com; frame-src 'none'; object-src 'none'; media-src 'self'; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests",
+          "content-type": "application/json",
+          "cross-origin-embedder-policy": "require-corp",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "date": "Mon, 28 Sep 2026 19:32:41 GMT",
+          "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+          "origin-agent-cluster": "?1",
+          "permissions-policy": "camera=(), microphone=(), geolocation=(), usb=(), payment=(), magnetometer=(), gyroscope=(), accelerometer=(), autoplay=(self), fullscreen=(self), clipboard=(self)",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "report-to": "[redacted]",
+          "server": "cloudflare",
+          "set-cookie": "[redacted]",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "transfer-encoding": "chunked",
+          "vary": "Origin",
+          "x-content-type-options": "nosniff",
+          "x-dns-prefetch-control": "off",
+          "x-download-options": "noopen",
+          "x-frame-options": "DENY",
+          "x-permitted-cross-domain-policies": "none",
+          "x-xss-protection": "1; mode=block"
+        },
+        "redactedRawBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":false,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+        "parsed": {
+          "success": true,
+          "registrationEnabled": false,
+          "email": true,
+          "hasOAuth": false,
+          "requiresEmailAuth": true
+        },
+        "note": "CSRF token redacted before persistence; body otherwise JSON-equivalent"
+      },
+      "tail": {
+        "scriptName": "buildcustom-vibesdk-launch",
+        "versionId": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+        "eventTimestamp": 1790623961055,
+        "requestUrl": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790623954582-b62098d-targeted"
+      }
+    },
+    "D_ordinaryLive": {
+      "request": {
+        "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790623954582-b62098d-ordinary",
+        "method": "GET",
+        "requestedAt": "2026-09-28T19:32:41.091Z",
+        "override": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-credentials": "true",
+          "access-control-expose-headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-ray": "a4252cecde65e1de-ATL",
+          "connection": "keep-alive",
+          "content-encoding": "br",
+          "content-security-policy": "default-src 'self'; script-src 'self' 'strict-dynamic'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://avatars.githubusercontent.com https://lh3.googleusercontent.com https://*.cloudflare.com; connect-src 'self' ws://localhost:* wss://localhost:* wss://buildcustom-vibesdk-launch.thegoldimport.workers.dev https://api.github.com https://api.cloudflare.com; frame-src 'none'; object-src 'none'; media-src 'self'; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests",
+          "content-type": "application/json",
+          "cross-origin-embedder-policy": "require-corp",
+          "cross-origin-opener-policy": "same-origin",
+          "cross-origin-resource-policy": "same-origin",
+          "date": "Mon, 28 Sep 2026 19:32:41 GMT",
+          "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+          "origin-agent-cluster": "?1",
+          "permissions-policy": "camera=(), microphone=(), geolocation=(), usb=(), payment=(), magnetometer=(), gyroscope=(), accelerometer=(), autoplay=(self), fullscreen=(self), clipboard=(self)",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "report-to": "[redacted]",
+          "server": "cloudflare",
+          "set-cookie": "[redacted]",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "transfer-encoding": "chunked",
+          "vary": "Origin",
+          "x-content-type-options": "nosniff",
+          "x-dns-prefetch-control": "off",
+          "x-download-options": "noopen",
+          "x-frame-options": "DENY",
+          "x-permitted-cross-domain-policies": "none",
+          "x-xss-protection": "1; mode=block"
+        },
+        "redactedRawBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":false,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+        "parsed": {
+          "success": true,
+          "registrationEnabled": false,
+          "email": true,
+          "hasOAuth": false,
+          "requiresEmailAuth": true
+        },
+        "note": "CSRF token redacted before persistence; body otherwise JSON-equivalent"
+      },
+      "tail": null
+    },
+    "E_existingUserAuth": {
+      "timestamp": "2026-09-28T19:32:54.299Z",
+      "phase": "closed",
+      "check": "E: existing-user product and runtime authentication",
+      "observed": {
+        "loginStatus": 200,
+        "productAuthenticated": true,
+        "runtimeStatus": 200,
+        "runtimeAuthenticated": true
+      },
+      "expected": {
+        "loginStatus": 200,
+        "productAuthenticated": true,
+        "runtimeStatus": 200,
+        "runtimeAuthenticated": true
+      },
+      "status": "PASS"
+    }
+  },
+  "completedAt": "2026-09-28T19:32:54.307Z"
+}
