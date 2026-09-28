@@ -1,0 +1,883 @@
+TASK 12J — BUILD CONTROL CUTOVER OBSERVATION TOOL
+
+Task 12I completed the read-only investigation but did NOT establish a root
+cause for the Task 12H control mismatch.
+
+DO NOT retry the cutover.
+
+DO NOT move traffic.
+
+DO NOT create a Worker version.
+
+DO NOT activate either candidate.
+
+DO NOT modify production configuration.
+
+==================================================
+WHAT IS NOW PROVEN
+==================================================
+
+CONTROL ACCEPTED VERSION:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+Accepted binding:
+
+STAGING_REGISTRATION_ENABLED=false
+
+
+Candidate binding:
+
+STAGING_REGISTRATION_ENABLED=true
+
+
+The deployed executable module in BOTH versions uses:
+
+env.STAGING_REGISTRATION_ENABLED === "true"
+
+for:
+
+1. GET /api/public/capabilities registrationEnabled
+
+AND
+
+2. the control-side POST /api/auth/register gate
+
+
+Therefore:
+
+there is NO demonstrated wrong-binding bug.
+
+There is NO demonstrated capability-vs-signup code mismatch.
+
+There is NO demonstrated launch-profile override.
+
+There is NO demonstrated additional control registration condition.
+
+There is NO demonstrated cache bug.
+
+There is NO demonstrated routing bug.
+
+==================================================
+TASK 12H CONTRADICTION
+==================================================
+
+During Task 12H:
+
+Cloudflare deployment readback showed:
+
+control candidate
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+100%
+
+
+Candidate configuration showed:
+
+STAGING_REGISTRATION_ENABLED=true
+
+
+But a subsequent live request to:
+
+https://app.buildcustom.ai/api/public/capabilities?gate=<timestamp>
+
+recorded:
+
+registrationEnabled:false
+
+publicGeneratedAppsEnabled:true
+
+
+Runtime registration independently returned:
+
+true
+
+
+The historical request did NOT retain:
+
+full raw JSON response
+
+response headers
+
+CF-Ray
+
+supported per-request Worker version identity
+
+
+Therefore its serving version cannot be proven retrospectively.
+
+ROOT CAUSE REMAINS:
+
+UNRESOLVED
+
+
+Do not invent one.
+
+==================================================
+CURRENT SAFE STATE
+==================================================
+
+CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+control registration=false
+
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+runtime registration=false
+
+
+RUNTIME CANDIDATE:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+0%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+GATEWAY:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+CLAIMS:
+
+zero
+
+
+Signup remains CLOSED.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Build and validate a READ-ONLY control cutover observation tool that will
+retain enough evidence during the NEXT separately authorized cutover to tell
+us exactly what happened.
+
+The tool must observe independently:
+
+A. control deployment state
+
+B. old control deployment state
+
+C. candidate configuration/module identity
+
+D. complete live capability response
+
+E. signup UI state
+
+F. runtime registration state
+
+G. existing-user authentication
+
+
+It must preserve raw evidence instead of reducing everything to one boolean.
+
+==================================================
+STEP 1 — DETERMINE BEST SUPPORTED PER-REQUEST VERSION EVIDENCE
+==================================================
+
+Before writing the probe, investigate Cloudflare-supported mechanisms for
+identifying which Worker version handled a particular request.
+
+Inspect:
+
+installed Wrangler 4.90.0
+
+Cloudflare API behavior available from existing tooling
+
+Workers Versions/Deployments APIs
+
+Workers observability/logging facilities already available
+
+response metadata
+
+CF-Ray correlation possibilities
+
+Tail/log APIs if available
+
+version metadata exposed in logs
+
+deployment-version overrides
+
+any supported request-version metadata
+
+
+Use official Cloudflare documentation if local tooling is insufficient.
+
+We need to know whether a request to:
+
+app.buildcustom.ai/api/public/capabilities
+
+can be correlated after the fact to:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+or:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+
+Do NOT add application code merely to expose the version.
+
+Do NOT add a debug endpoint.
+
+Do NOT alter production.
+
+==================================================
+STEP 2 — CLASSIFY VERSION EVIDENCE
+==================================================
+
+Classify the strongest available mechanism as:
+
+STRONG
+
+direct supported evidence identifies the Worker version handling that request
+
+CORRELATED
+
+supported logs/metadata strongly correlate the request with a version but do
+not provide direct version attestation
+
+UNAVAILABLE
+
+Cloudflare does not expose supported per-request version identity for this
+Worker/request path
+
+
+Explain exactly why.
+
+Do not overstate certainty.
+
+==================================================
+STEP 3 — BUILD READ-ONLY PROBE
+==================================================
+
+Create a reusable script, preferably:
+
+scripts/task12j-control-cutover-probe.mjs
+
+
+It must make NO production mutations.
+
+It must accept at least:
+
+--phase=closed
+
+and be designed so a future authorized task can use:
+
+--phase=open
+
+
+The script itself must NOT deploy anything.
+
+==================================================
+STEP 4 — CHECK A — DEPLOYMENT
+==================================================
+
+Read Cloudflare control deployment state.
+
+For CLOSED phase expect:
+
+accepted control:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+For OPEN phase expectations will reverse.
+
+
+Log:
+
+UTC timestamp
+
+deployment ID
+
+all version IDs
+
+traffic percentages
+
+raw relevant API response
+
+expected values
+
+PASS/FAIL
+
+==================================================
+STEP 5 — CHECK B — OLD/CANDIDATE TRAFFIC
+==================================================
+
+Do not hide this inside Check A.
+
+Print explicit separate observations for:
+
+accepted control percentage
+
+candidate percentage
+
+
+This must make partial/mixed deployments obvious.
+
+==================================================
+STEP 6 — CHECK C — CANDIDATE CONFIGURATION
+==================================================
+
+Read the candidate version metadata directly.
+
+Record:
+
+candidate version ID
+
+main module hash
+
+STAGING_REGISTRATION_ENABLED
+
+PUBLIC_GENERATED_APPS_ENABLED
+
+CONTROL_PLANE_PROFILE
+
+ENVIRONMENT
+
+AUTH_RUNTIME binding target
+
+asset configuration
+
+other registration-related exposed bindings
+
+
+Expected candidate:
+
+STAGING_REGISTRATION_ENABLED=true
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+CONTROL_PLANE_PROFILE=launch
+
+ENVIRONMENT=production
+
+
+Compare module hash against accepted control.
+
+Do not expose secrets.
+
+==================================================
+STEP 7 — CHECK D — COMPLETE LIVE CAPABILITY REQUEST
+==================================================
+
+Request:
+
+https://app.buildcustom.ai/api/public/capabilities
+
+
+Use:
+
+cache: no-store
+
+unique query parameter
+
+
+Retain:
+
+exact request URL
+
+request UTC timestamp
+
+HTTP status
+
+ALL response headers safe to record
+
+CF-Ray if present
+
+Content-Type
+
+Cache-Control
+
+Age if present
+
+CF-Cache-Status if present
+
+full raw response body
+
+parsed JSON
+
+
+Specifically extract:
+
+registrationEnabled
+
+publicGeneratedAppsEnabled
+
+
+For CLOSED phase expect:
+
+registrationEnabled=false
+
+publicGeneratedAppsEnabled=true
+
+
+For future OPEN phase expect:
+
+registrationEnabled=true
+
+publicGeneratedAppsEnabled=true
+
+
+Do NOT discard the raw response after extracting fields.
+
+==================================================
+STEP 8 — CORRELATE CHECK D TO SERVING VERSION
+==================================================
+
+Use the strongest supported mechanism found in Steps 1–2.
+
+If direct version evidence exists:
+
+record the version ID.
+
+
+If log correlation is available:
+
+correlate using:
+
+CF-Ray
+
+request timestamp
+
+request path
+
+or the strongest supported identifier.
+
+
+Record:
+
+versionEvidenceClassification
+
+observedVersionId if available
+
+correlation evidence
+
+limitations
+
+
+If unavailable:
+
+explicitly output:
+
+perRequestVersionIdentity: UNKNOWN
+
+
+Do NOT turn UNKNOWN into PASS.
+
+==================================================
+STEP 9 — CHECK E — SIGNUP UI
+==================================================
+
+Fetch/load the public anonymous signup experience.
+
+For CLOSED phase verify:
+
+Create Account unavailable/closed
+
+Sign in available
+
+
+For future OPEN phase verify:
+
+Create Account available
+
+signup form usable
+
+Sign in available
+
+
+Record enough HTML/client state to establish the result.
+
+Do not submit registration.
+
+==================================================
+STEP 10 — CHECK F — RUNTIME CAPABILITY
+==================================================
+
+Query the actual runtime registration capability separately.
+
+Record:
+
+UTC timestamp
+
+request destination
+
+HTTP status
+
+raw relevant body
+
+registrationEnabled
+
+
+CLOSED expectation:
+
+false
+
+
+OPEN expectation:
+
+true
+
+
+Do not infer runtime state from control capability.
+
+==================================================
+STEP 11 — CHECK G — EXISTING USER AUTH
+==================================================
+
+Using a normal existing test user session/login:
+
+verify product identity exists
+
+verify runtime authenticated=true
+
+
+Record independently:
+
+product result
+
+runtime result
+
+
+Do not create a user.
+
+Do not logout unless needed to clean up the ordinary test session.
+
+==================================================
+STEP 12 — STORE OBSERVATION ARTIFACT
+==================================================
+
+Write the complete observation output to a timestamped local artifact such as:
+
+production/vibesdk-launch/task12j-observation-<timestamp>.json
+
+
+Also write a concise human-readable summary if useful.
+
+The artifact should include:
+
+phase
+
+timestamps
+
+deployment observations
+
+candidate configuration
+
+full capability request evidence
+
+version-correlation evidence
+
+signup UI observation
+
+runtime capability
+
+existing-user auth
+
+PASS/FAIL per check
+
+
+Do not store:
+
+passwords
+
+auth tokens
+
+secret values
+
+private credentials
+
+==================================================
+STEP 13 — RUN CLOSED-STATE PROBE
+==================================================
+
+Run:
+
+--phase=closed
+
+
+Require:
+
+accepted control 100%
+
+candidate 0%
+
+candidate metadata still correct
+
+live control registration=false
+
+public apps=true
+
+signup UI closed
+
+runtime registration=false
+
+existing-user auth valid
+
+
+The fact that candidate metadata says registration=true while candidate is at
+0% is EXPECTED and must not cause closed-phase failure.
+
+==================================================
+STEP 14 — REPEATABILITY
+==================================================
+
+Run the CLOSED probe a second time.
+
+Do NOT add an arbitrary sleep requirement.
+
+We simply want to prove:
+
+the probe itself is stable
+
+the evidence artifact is complete
+
+results are independently logged
+
+
+Both runs should produce separate timestamped artifacts.
+
+==================================================
+STEP 15 — SAFE REGRESSION
+==================================================
+
+Without mutations verify:
+
+user 1 login
+
+user 2 login
+
+user 1 only project 2
+
+user 2 only project 3
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown generated-app slug 404
+
+marketing 200
+
+claims zero
+
+
+No signup.
+
+No generation.
+
+No editing.
+
+No Publish.
+
+==================================================
+STEP 16 — DO NOT FIX ANYTHING
+==================================================
+
+Even if the investigation suggests a possible explanation:
+
+DO NOT modify code.
+
+DO NOT modify bindings.
+
+DO NOT create a replacement candidate.
+
+DO NOT retry control deployment.
+
+
+This task is instrumentation only.
+
+==================================================
+TASK 12J ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. no production mutation
+
+2. supported per-request version evidence investigated
+
+3. evidence classified STRONG/CORRELATED/UNAVAILABLE
+
+4. reusable read-only probe created
+
+5. Check A independent
+
+6. Check B independent
+
+7. Check C independent
+
+8. Check D retains complete response evidence
+
+9. Check D retains CF-Ray/headers when available
+
+10. Check E independently observes signup UI
+
+11. Check F independently observes runtime capability
+
+12. Check G independently observes existing-user auth
+
+13. per-request version evidence recorded or explicitly UNKNOWN
+
+14. timestamped observation artifact written
+
+15. no secrets stored
+
+16. first CLOSED run passes
+
+17. second CLOSED run passes
+
+18. safe regression passes
+
+19. claims remain zero
+
+20. signup remains closed
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current control version/traffic
+
+2. current runtime version/traffic
+
+3. current control registration
+
+4. current runtime registration
+
+5. per-request Worker-version mechanisms investigated
+
+6. strongest mechanism found
+
+7. classification STRONG/CORRELATED/UNAVAILABLE
+
+8. exact limitations
+
+9. probe file path
+
+10. observation artifact 1 path
+
+11. observation artifact 2 path
+
+12. Check A run-1 result
+
+13. Check B run-1 result
+
+14. Check C run-1 result
+
+15. Check D run-1 HTTP status
+
+16. Check D run-1 headers
+
+17. Check D run-1 CF-Ray
+
+18. Check D run-1 raw body
+
+19. Check D run-1 parsed capability
+
+20. Check D version evidence
+
+21. Check E run-1 result
+
+22. Check F run-1 result
+
+23. Check G run-1 result
+
+24. run-2 result summary
+
+25. candidate main-module parity
+
+26. candidate STAGING_REGISTRATION_ENABLED
+
+27. candidate PUBLIC_GENERATED_APPS_ENABLED
+
+28. candidate CONTROL_PLANE_PROFILE
+
+29. candidate ENVIRONMENT
+
+30. candidate AUTH_RUNTIME binding
+
+31. user-1 regression
+
+32. user-2 regression
+
+33. ownership isolation
+
+34. project-2 public app
+
+35. project-3 public app
+
+36. unknown slug
+
+37. marketing
+
+38. claims
+
+39. production mutations
+
+40. remaining HIGH risks
+
+41. remaining MEDIUM risks
+
+42. TASK 12J accepted?
+
+43. is instrumentation sufficient for ONE separately authorized final cutover?
+
+44. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT DEPLOY.
+
+DO NOT MOVE TRAFFIC.
+
+DO NOT CREATE A VERSION.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT MODIFY CONTROL.
+
+DO NOT MODIFY RUNTIME.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT GENERATE.
+
+DO NOT PUBLISH.
