@@ -50,3 +50,4 @@
 - [Publish request trace interpretation](publish-request-trace-interpretation.md) — a checker waiting for a Publish POST can time out when the UI failed earlier and never sent that POST.
 - [Git-derived publish assets](git-derived-publish-assets.md) — don't treat a known-good project's stylesheet layout as a required first-publish template; derive checks from the committed tree.
 - [Cloudflare tail correlation](cloudflare-tail-correlation.md) — calibrate a live versioned tail event; UUID-shaped URL markers can be redacted and break exact matching.
+- [Public signup validation failures](public-signup-validation-failures.md) — invalid email and weak-password attempts returned 502 during live open-gate acceptance; do not assume these are bounded rejections.

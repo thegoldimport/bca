@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-09-28T18:33:35.941Z",
+  "deployments": [
+    {
+      "at": "2026-09-28T18:33:36.721Z",
+      "worker": "buildcustom-control-plane-launch",
+      "version": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+      "status": 200,
+      "success": true,
+      "deployment": {
+        "id": "5d935388-efd8-44d6-aad5-500c9a4ce229"
+      },
+      "errorCodes": []
+    },
+    {
+      "at": "2026-09-28T18:33:37.618Z",
+      "worker": "buildcustom-vibesdk-launch",
+      "version": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+      "status": 200,
+      "success": true,
+      "deployment": {
+        "id": "1bafefac-606d-454e-9b96-c7fd089605d7"
+      },
+      "errorCodes": []
+    }
+  ],
+  "status": "CLOSED",
+  "closedProbe": {
+    "exitCode": 0,
+    "artifact": "production/vibesdk-launch/task12j-observation-2026-09-28T18-33-37-773Z-b57a969a.json",
+    "status": "PASS",
+    "versionEvidence": "8d07cbf8-c7ad-423e-b592-268e538e3410"
+  },
+  "completedAt": "2026-09-28T18:33:48.238Z"
+}

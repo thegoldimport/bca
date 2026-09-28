@@ -1,0 +1,76 @@
+{
+  "startedAt": "2026-09-28T18:33:19.248Z",
+  "checks": {
+    "existing-identity-before": {
+      "at": "2026-09-28T18:33:20.109Z",
+      "status": "PASS",
+      "evidence": {
+        "product": {
+          "total": 1,
+          "nullLegacy": 1
+        },
+        "runtime": {
+          "total": 1
+        }
+      }
+    },
+    "duplicate-normal-signup": {
+      "at": "2026-09-28T18:33:24.703Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 400,
+        "message": "Could not create your account. Check your details.",
+        "productIdentityPresent": false,
+        "uiError": "Could not create your account. Check your details."
+      }
+    },
+    "email-case-variation": {
+      "at": "2026-09-28T18:33:25.500Z",
+      "status": "PASS",
+      "evidence": {
+        "kind": "email-case-variation",
+        "status": 400,
+        "message": "Could not create your account. Check your details."
+      }
+    },
+    "invalid-email": {
+      "at": "2026-09-28T18:33:25.500Z",
+      "status": "FAIL",
+      "evidence": {
+        "kind": "invalid-email",
+        "status": 502,
+        "message": "Could not create your account. Check your details."
+      }
+    },
+    "missing-password": {
+      "at": "2026-09-28T18:33:25.500Z",
+      "status": "PASS",
+      "evidence": {
+        "kind": "missing-password",
+        "status": 400,
+        "message": "Enter your name, email, and password."
+      }
+    },
+    "invalid-shape": {
+      "at": "2026-09-28T18:33:25.500Z",
+      "status": "PASS",
+      "evidence": {
+        "kind": "invalid-shape",
+        "status": 400,
+        "message": "Enter your name, email, and password."
+      }
+    },
+    "stock-password-policy": {
+      "at": "2026-09-28T18:33:25.500Z",
+      "status": "FAIL",
+      "evidence": {
+        "kind": "stock-password-policy",
+        "status": 502,
+        "message": "Could not create your account. Check your details."
+      }
+    }
+  },
+  "error": "Bounded rejection failed",
+  "completedAt": "2026-09-28T18:33:25.786Z",
+  "status": "FAIL"
+}
