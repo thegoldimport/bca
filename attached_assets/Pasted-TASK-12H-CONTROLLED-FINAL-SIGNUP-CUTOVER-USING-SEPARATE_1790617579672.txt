@@ -1,0 +1,1079 @@
+TASK 12H — CONTROLLED FINAL SIGNUP CUTOVER USING SEPARATED PROBE
+
+Task 12F is ACCEPTED.
+Task 12G is ACCEPTED.
+
+This is the separately authorized controlled retry.
+
+You ARE authorized in this task to:
+
+1. move runtime traffic to the already-verified candidate
+2. run the separated Task 12G observations
+3. activate the already-verified control registration candidate ONLY if the
+   runtime gate passes
+4. complete the remaining signup acceptance
+5. leave signup OPEN if every required acceptance check passes
+
+You are NOT authorized to create another runtime or control version.
+
+==================================================
+VERIFIED RUNTIME CANDIDATE
+==================================================
+
+Worker:
+
+buildcustom-vibesdk-launch
+
+accepted closed runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+verified registration-enabled candidate:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+
+Task 12F proved:
+
+- all six modules byte-identical
+- main SHA-256:
+  fe0a4f18d3747be1f37c15911a561077b8b4d3681553ee6f43bcb7740259ba02
+- UserAppSandboxService container preserved
+- exposed runtime resources match
+- 29 bindings match except registration
+- candidate REGISTRATION_ENABLED=true
+- accepted runtime REGISTRATION_ENABLED=false
+
+==================================================
+VERIFIED CONTROL CANDIDATE
+==================================================
+
+Accepted closed control:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+registration-enabled control candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+Task 12D preflight previously established:
+
+- executable module parity
+- matching assets/resources
+- only meaningful configuration change:
+
+STAGING_REGISTRATION_ENABLED:
+false → true
+
+- PUBLIC_GENERATED_APPS_ENABLED remains true
+
+
+Reconfirm this immediately before activation.
+
+==================================================
+GATEWAY
+==================================================
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Do not modify it.
+
+==================================================
+TASK 12G DIAGNOSTIC RESULT
+==================================================
+
+The previous Task 12D failure is historically UNKNOWN.
+
+Do NOT attempt to assign it a cause.
+
+The old probe combined:
+
+deployment readback
+
+AND
+
+live registration capability
+
+into one failure condition without retaining the individual observations.
+
+Task 12G replaced it with:
+
+scripts/task12g-runtime-cutover-probe.mjs
+
+
+The probe records independent timestamped checks.
+
+Use it.
+
+Do NOT recreate the old combined assertion.
+
+==================================================
+CRITICAL RULE
+==================================================
+
+ONE observation set.
+
+NO invented sleep.
+
+NO arbitrary retry.
+
+NO assumed propagation window.
+
+Task 12G found no evidence supporting a specific convergence delay.
+
+If a required immediate observation fails:
+
+record ALL observations first
+
+then rollback
+
+then run the closed-state probe
+
+then STOP.
+
+
+Do NOT retry the cutover in this task.
+
+==================================================
+STEP 1 — VERIFY CLOSED PRE-STATE
+==================================================
+
+Run the Task 12G probe:
+
+--phase=closed
+
+
+Require independently:
+
+A.
+accepted runtime
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+at 100%
+
+B.
+candidate
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+at 0%
+
+C.
+accepted runtime configured registration=false
+
+D.
+ordinary live runtime registration=false
+
+E.
+existing-user authentication succeeds
+
+
+Also verify separately:
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+control registration=false
+
+public generated apps=true
+
+gateway unchanged
+
+claims zero
+
+both existing public apps HTTP 200
+
+
+If any precondition fails:
+
+STOP WITHOUT CUTOVER.
+
+==================================================
+STEP 2 — PREPARE ROLLBACK
+==================================================
+
+Before moving traffic prepare exact rollback:
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 100%
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+→ 0%
+
+
+CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+→ 100%
+
+registration=false
+
+
+PUBLIC_GENERATED_APPS_ENABLED remains:
+
+true
+
+
+Do not execute rollback unless required.
+
+==================================================
+STEP 3 — RUNTIME CUTOVER
+==================================================
+
+Move runtime deployment to:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+100%
+
+
+Old accepted runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+0%
+
+
+Record the deployment API response.
+
+Do not perform another deployment.
+
+==================================================
+STEP 4 — RUN ONE SEPARATED OPEN OBSERVATION SET
+==================================================
+
+Immediately run the Task 12G probe in the appropriate OPEN/CANDIDATE phase.
+
+Record ALL A–E results before making the decision.
+
+CHECK A — DEPLOYMENT
+
+Expected:
+
+candidate
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+100%
+
+
+Record:
+
+timestamp
+observed deployment/version
+observed percentage
+PASS/FAIL
+
+
+CHECK B — OLD VERSION
+
+Expected:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+0%
+
+
+Record:
+
+timestamp
+observed percentage
+PASS/FAIL
+
+
+CHECK C — CANDIDATE CONFIGURATION / TARGETED CAPABILITY
+
+Expected:
+
+candidate REGISTRATION_ENABLED=true
+
+and the strongest supported version-targeted capability observation available
+from Task 12G.
+
+
+Record:
+
+timestamp
+configured value
+targeted response
+PASS/FAIL
+
+
+Remember:
+
+Task 12G established that this targeted request is NOT independent
+per-request version-ID attestation.
+
+Do not claim that it is.
+
+
+CHECK D — ORDINARY LIVE CAPABILITY
+
+Call the actual live runtime:
+
+GET /api/auth/providers
+
+
+Expected:
+
+registrationEnabled=true
+
+
+Record:
+
+timestamp
+raw relevant response field
+PASS/FAIL
+
+
+CHECK E — EXISTING USER AUTH
+
+Existing user runtime/product authentication must remain valid.
+
+Expected:
+
+runtime authenticated=true
+product identity present
+
+
+Record:
+
+timestamp
+PASS/FAIL
+
+
+==================================================
+STEP 5 — RUNTIME DECISION
+==================================================
+
+If A, B, C, D, and E ALL PASS:
+
+runtime gate is accepted.
+
+Proceed.
+
+
+If ANY fails:
+
+DO NOT activate control candidate.
+
+First preserve/log ALL A–E observations.
+
+Then immediately rollback runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+Then run:
+
+task12g-runtime-cutover-probe
+--phase=closed
+
+
+Require:
+
+accepted runtime 100%
+
+candidate 0%
+
+runtime registration=false
+
+existing-user auth valid
+
+
+Verify:
+
+both public apps 200
+
+claims zero
+
+
+Then STOP.
+
+Do not retry.
+
+==================================================
+STEP 6 — RECONFIRM CONTROL CANDIDATE
+==================================================
+
+Only after runtime A–E all pass:
+
+reconfirm control candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+against accepted control:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+
+Require:
+
+module parity
+
+asset/resource parity
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+only meaningful configuration difference:
+
+STAGING_REGISTRATION_ENABLED:
+false → true
+
+
+If parity fails:
+
+rollback runtime to accepted closed version
+
+verify closed state
+
+STOP.
+
+==================================================
+STEP 7 — ACTIVATE CONTROL CANDIDATE
+==================================================
+
+Move:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+→ 100%
+
+
+Accepted closed control:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+→ 0%
+
+
+Do not create another control version.
+
+==================================================
+STEP 8 — VERIFY BOTH GATES OPEN
+==================================================
+
+Separately verify LIVE serving behavior:
+
+runtime registration=true
+
+control registration=true
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+
+Anonymous:
+
+https://app.buildcustom.ai
+
+
+Require:
+
+signup visible
+
+signup form usable
+
+login available
+
+BuildCustom branding
+
+
+If either gate is not live:
+
+rollback BOTH runtime and control to accepted closed versions
+
+verify closed state
+
+STOP.
+
+==================================================
+STEP 9 — DUPLICATE REGISTRATION
+==================================================
+
+Use existing Task 12 user's email.
+
+Attempt normal public signup.
+
+Require:
+
+rejected
+
+bounded/generic error
+
+no automatic login
+
+no duplicate product identity
+
+no duplicate runtime identity
+
+
+Explicitly verify identity counts at both layers.
+
+==================================================
+STEP 10 — EMAIL NORMALIZATION
+==================================================
+
+Verify casing variation cannot create a duplicate.
+
+Prefer source/automated evidence.
+
+If live request is required, use a casing variation of the EXISTING email.
+
+Require:
+
+one product identity
+
+one runtime identity
+
+
+Do not create an unnecessary account.
+
+==================================================
+STEP 11 — MALFORMED REGISTRATION
+==================================================
+
+Run a small bounded rejected set:
+
+invalid email
+
+missing required credential
+
+invalid request shape
+
+
+Require rejection.
+
+No fuzzing.
+
+==================================================
+STEP 12 — PASSWORD POLICY
+==================================================
+
+Verify stock runtime password validation remains enforced.
+
+Do not add BuildCustom-specific password policy.
+
+==================================================
+STEP 13 — ORIGIN / CSRF
+==================================================
+
+Verify:
+
+valid app.buildcustom.ai signup request path accepted to the point expected
+
+invalid Origin rejected
+
+missing/invalid CSRF rejected where required
+
+
+Do not weaken protection.
+
+==================================================
+STEP 14 — AUTHORITY
+==================================================
+
+Reconfirm:
+
+runtime remains auth/session authority
+
+product maps runtime identity
+
+legacy_password_hash=NULL
+
+no local BuildCustom password authority
+
+no local BuildCustom session authority
+
+==================================================
+STEP 15 — IDENTITY-AWARE LOGOUT
+==================================================
+
+Use an existing user.
+
+Fresh login.
+
+Capture session A privately.
+
+Before logout:
+
+product /api/auth/me:
+identity present
+
+runtime /api/auth/check:
+authenticated:true
+
+D1 session:
+exists
+correct owner
+is_revoked=0
+
+
+Normal logout.
+
+Require:
+
+204
+
+browser cookie cleared
+
+same D1 session:
+is_revoked=1
+
+
+Replay exact old credential.
+
+PRODUCT:
+
+HTTP status alone DOES NOT determine auth.
+
+Require response body:
+
+null
+
+
+RUNTIME:
+
+HTTP status alone DOES NOT determine auth.
+
+Require:
+
+authenticated:false
+
+
+Then fresh login.
+
+Require:
+
+same user identity
+
+same owned project
+
+same release
+
+==================================================
+STEP 16 — OWNERSHIP + EXISTING PROJECT REGRESSION
+==================================================
+
+USER 1:
+
+login
+only own dashboard
+project 2 reopen
+conversation
+Files
+preview
+idle WebSocket
+release 2
+
+
+USER 2:
+
+login
+only own dashboard
+project 3 reopen
+conversation
+Files
+preview
+idle WebSocket
+release 3
+
+
+Representative cross-owner management requests:
+
+404/denied
+
+
+NO generation.
+
+NO edit.
+
+NO Publish.
+
+==================================================
+STEP 17 — PUBLIC APPS
+==================================================
+
+Unauthenticated:
+
+project 2 public app:
+200 + expected marker
+
+project 3 public app:
+200 + expected marker
+
+
+Fresh unknown generated-app slug:
+
+404
+
+==================================================
+STEP 18 — SIGNUP UI REVIEW
+==================================================
+
+Require:
+
+BuildCustom branding
+
+usable signup
+
+understandable errors
+
+Sign in available
+
+no accidental VibeSDK branding
+
+no private/internal infrastructure URL
+
+
+Do not redesign non-blocking UI.
+
+==================================================
+STEP 19 — NETWORK AUDIT
+==================================================
+
+Observe:
+
+anonymous app
+
+signup
+
+rejected registration
+
+login
+
+dashboard
+
+project reopen
+
+Files
+
+preview
+
+logout
+
+old credential replay
+
+fresh login
+
+
+No customer dependency on:
+
+Replit development
+
+legacy runtime
+
+staging runtime
+
+lab runtime
+
+old control
+
+private generated-app gateway
+
+workers.dev customer-facing URL
+
+
+Fonts and Cloudflare analytics allowed.
+
+==================================================
+STEP 20 — REPLIT DEVELOPMENT OFF
+==================================================
+
+Temporarily stop ONLY Replit development workflow.
+
+DO NOT unpublish public Replit deployment yet because the marketing waitlist
+still depends on it.
+
+
+While development is stopped verify:
+
+anonymous app loads
+
+signup remains available
+
+runtime registration=true
+
+control registration=true
+
+
+USER 1:
+
+fresh login
+dashboard
+project 2
+Files
+preview
+idle WebSocket
+
+
+USER 2:
+
+fresh login
+dashboard
+project 3
+Files
+preview
+idle WebSocket
+
+
+PUBLIC:
+
+both generated apps load
+
+marketing loads
+
+
+Perform ONE identity-aware logout test while development is off:
+
+D1 session revoked
+
+old product credential → null
+
+old runtime credential → authenticated:false
+
+
+Restore development workflow afterward if desired.
+
+==================================================
+STEP 21 — FINAL STATE
+==================================================
+
+If EVERYTHING passes:
+
+LEAVE SIGNUP OPEN.
+
+
+Final runtime:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+100%
+
+
+Final control:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+100%
+
+
+Gateway:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+Runtime registration:
+
+true
+
+
+Control registration:
+
+true
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+Claims:
+
+zero
+
+
+BuildCustom is then OPEN FOR PUBLIC SIGNUP.
+
+==================================================
+ROLLBACK TRIGGERS
+==================================================
+
+Rollback if:
+
+any runtime A–E observation fails
+
+control candidate parity fails
+
+both gates do not show live true
+
+duplicate identity created
+
+normalization permits duplicate identity
+
+malformed registration accepted
+
+Origin/CSRF protection regresses
+
+runtime ceases being session authority
+
+logout revocation fails
+
+old credential remains authenticated
+
+ownership isolation fails
+
+existing projects regress
+
+public apps regress
+
+Replit development is required
+
+unexpected infrastructure dependency appears
+
+==================================================
+ROLLBACK STATE
+==================================================
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+Runtime registration:
+
+false
+
+
+Control registration:
+
+false
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+Then verify closed state and STOP.
+
+NO RETRY IN THIS TASK.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-cutover closed-probe result
+
+2. runtime deployment API result
+
+3. CHECK A timestamp/value/result
+
+4. CHECK B timestamp/value/result
+
+5. CHECK C timestamp/value/result
+
+6. CHECK D timestamp/value/result
+
+7. CHECK E timestamp/value/result
+
+8. runtime gate accepted?
+
+9. control parity recheck
+
+10. control cutover result
+
+11. runtime registration live result
+
+12. control registration live result
+
+13. signup UI result
+
+14. duplicate registration
+
+15. product identity count
+
+16. runtime identity count
+
+17. normalization
+
+18. malformed registration
+
+19. password policy
+
+20. Origin/CSRF
+
+21. auth/session authority
+
+22. legacy_password_hash
+
+23. identity-aware logout
+
+24. D1 pre/post state
+
+25. old product credential body
+
+26. old runtime credential body
+
+27. fresh login
+
+28. user-1/project-2 regression
+
+29. user-2/project-3 regression
+
+30. ownership isolation
+
+31. public-app regression
+
+32. unknown slug
+
+33. signup UI review
+
+34. network audit
+
+35. Replit-development-off result
+
+36. development-off logout result
+
+37. marketing result
+
+38. final runtime version/traffic
+
+39. final control version/traffic
+
+40. final gateway version/traffic
+
+41. final runtime registration
+
+42. final control registration
+
+43. final PUBLIC_GENERATED_APPS_ENABLED
+
+44. claims
+
+45. rollback status
+
+46. remaining HIGH risks
+
+47. remaining MEDIUM risks
+
+48. TASK 12H ACCEPTED?
+
+49. BUILDCUSTOM OPEN FOR PUBLIC SIGNUP?
+
+50. Based on combined accepted evidence, can a stranger now complete:
+signup → project → build → Files → preview → Publish → public app
+without manual intervention?
+
+51. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CREATE A VERSION.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT MOVE WAITLIST.
+
+DO NOT UNPUBLISH PUBLIC REPLIT.

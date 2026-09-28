@@ -60,3 +60,9 @@ Cloudflare version overrides apply only to versions in the *current deployment*,
 **Why:** A registration-only candidate was structurally correct but an immediate post-deployment combined check lost its raw responses. Later deployment history showed a temporary 100% candidate deployment, not the value returned by the immediate live request. Neither an inactive override nor a Version URL can recover that missing observation.
 
 **How to apply:** Distinguish deployment history from immediate readback and from per-request runtime behavior. For future cutovers, record each observation separately; use a version override only after the version is in the deployment, and disclose that a targeted request is not independent per-request version-ID attestation unless the Worker or logs expose that ID.
+
+A control-plane candidate with byte-identical code, matching exposed assets/resources, and the intended registration binding can reach 100% in deployment readback while the product's public capability still reports registration closed. Do not equate candidate metadata plus deployment readback with the public gate's serving behavior.
+
+**Why:** A controlled retry passed every runtime observation, but the first live control capability check returned false after the control candidate deployment read back at 100%. Both Workers were rolled back under the predeclared stop rule; that observation alone does not distinguish wrong route, derived gate, stale response, or request convergence.
+
+**How to apply:** Keep the control-plane public capability as an independently logged, immediate acceptance gate. On mismatch, restore both closed versions and stop without a retry; investigate the control capability path read-only before any further authorized cutover.
