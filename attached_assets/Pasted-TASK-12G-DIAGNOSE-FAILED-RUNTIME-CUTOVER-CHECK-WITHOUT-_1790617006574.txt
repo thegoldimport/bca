@@ -1,0 +1,736 @@
+TASK 12G — DIAGNOSE FAILED RUNTIME CUTOVER CHECK WITHOUT MOVING TRAFFIC
+
+Task 12D final cutover is NOT accepted.
+
+The rollback was correct.
+
+DO NOT retry the cutover in this task.
+
+DO NOT move any production traffic.
+
+DO NOT activate the runtime candidate.
+
+DO NOT activate the control candidate.
+
+DO NOT create another runtime version.
+
+==================================================
+WHAT HAPPENED
+==================================================
+
+Pre-cutover checks passed.
+
+Verified runtime candidate:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+was briefly moved to 100%.
+
+Immediately afterward, one combined verification check attempted to establish:
+
+A. candidate was the serving runtime version
+
+AND
+
+B. live runtime registration was true
+
+
+That combined check failed.
+
+Unfortunately the probe did not record WHICH condition failed.
+
+The accepted runtime was immediately restored:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+Control candidate was NOT activated.
+
+Signup never opened.
+
+==================================================
+CURRENT SAFE STATE
+==================================================
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+registration=false
+
+
+RUNTIME CANDIDATE:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+0%
+
+registration configuration=true
+
+
+CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+registration=false
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+registration=true
+
+
+GATEWAY:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+CLAIMS:
+
+zero
+
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine exactly what the failed first runtime check measured.
+
+We need to distinguish:
+
+1. deployment/readback had not yet converged
+
+2. candidate actually was serving but registration capability check failed
+
+3. registration capability probe hit the wrong endpoint/version
+
+4. registration capability is derived from something other than the version
+   binding we changed
+
+5. stale/cached/propagating response
+
+6. deployment API reported success before serving-state observation converged
+
+7. another concrete cause
+
+
+Do not guess.
+
+Do not change traffic to diagnose it.
+
+==================================================
+STEP 1 — VERIFY CURRENT STATE
+==================================================
+
+Record separately:
+
+TIMESTAMP A:
+Cloudflare runtime deployment readback
+
+TIMESTAMP B:
+live runtime registration capability
+
+TIMESTAMP C:
+control registration capability
+
+
+Require current safe state:
+
+accepted runtime 100%
+
+candidate 0%
+
+runtime registration=false
+
+control registration=false
+
+public generated apps=true
+
+claims=zero
+
+
+If current state differs:
+
+STOP.
+
+==================================================
+STEP 2 — RECOVER THE EXACT FAILED PROBE
+==================================================
+
+Find the exact command/script/code used immediately after the candidate was
+moved to 100%.
+
+Show:
+
+what endpoint/API checked serving deployment
+
+what endpoint checked registration capability
+
+whether they were actually separate requests
+
+how their results were combined
+
+what condition caused the command to return failure
+
+what raw values were observed if logs/output retained
+
+
+Do not expose credentials/secrets.
+
+==================================================
+STEP 3 — DETERMINE WHICH ASSERTION FAILED
+==================================================
+
+Using retained logs/output if available, determine independently:
+
+ASSERTION A:
+
+Did Cloudflare deployment readback show:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+100%
+
+
+ASSERTION B:
+
+Did the live registration-capability endpoint show:
+
+true
+
+
+Classify each as:
+
+PASS
+
+FAIL
+
+UNKNOWN
+
+
+Do not turn UNKNOWN into FAIL.
+
+==================================================
+STEP 4 — TRACE THE REGISTRATION CAPABILITY
+==================================================
+
+Identify the exact live runtime endpoint used to determine whether registration
+is enabled.
+
+Trace:
+
+request URL/path
+
+Worker handling it
+
+code/function
+
+binding read
+
+response field
+
+
+Establish exactly which variable controls runtime registration.
+
+Confirm candidate:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+has that exact variable set to:
+
+true
+
+
+Confirm accepted serving runtime has it set to:
+
+false
+
+
+Do not infer this only from annotations.
+
+==================================================
+STEP 5 — CHECK FOR VARIABLE NAME / PATH MISMATCH
+==================================================
+
+Specifically verify whether runtime registration uses:
+
+REGISTRATION_ENABLED
+
+or:
+
+STAGING_REGISTRATION_ENABLED
+
+or another variable.
+
+
+We already know the control candidate uses:
+
+STAGING_REGISTRATION_ENABLED
+
+
+Do not assume runtime uses the same variable.
+
+Trace the actual runtime source.
+
+==================================================
+STEP 6 — CHECK CANDIDATE CONFIGURATION DIRECTLY
+==================================================
+
+Without activating candidate, inspect its Cloudflare version metadata.
+
+Record:
+
+candidate version ID
+
+REGISTRATION_ENABLED value
+
+any related registration variables
+
+container attachment
+
+main-module hash
+
+traffic percentage
+
+
+Require Task 12F parity still holds.
+
+==================================================
+STEP 7 — UNDERSTAND CLOUDFLARE DEPLOYMENT OBSERVABILITY
+==================================================
+
+Inspect the exact Cloudflare deployment operation used during Task 12D.
+
+Determine:
+
+what API response indicated deployment success
+
+whether it returned a deployment/version identifier
+
+whether Cloudflare documents or Wrangler implements any polling/wait behavior
+
+whether the command waits for deployment propagation
+
+whether a subsequent deployment readback can temporarily show previous state
+
+whether Worker requests can briefly observe previous deployment after the API
+operation succeeds
+
+
+Use installed Wrangler/API implementation first.
+
+Use official Cloudflare documentation if necessary.
+
+Do not rely on assumptions about propagation.
+
+==================================================
+STEP 8 — CHECK WHETHER CAPABILITY RESPONSE CAN BE CACHED
+==================================================
+
+Inspect the runtime registration-capability endpoint.
+
+Determine whether:
+
+Cache API
+
+HTTP cache headers
+
+browser cache
+
+CDN caching
+
+service-binding caching
+
+or another cache layer
+
+could return an old false response after a deployment change.
+
+
+If no caching exists, say so.
+
+==================================================
+STEP 9 — CHECK REQUEST DESTINATION
+==================================================
+
+Verify the failed live capability request was actually sent to the intended:
+
+buildcustom-vibesdk-launch
+
+runtime path.
+
+
+Rule out accidentally querying:
+
+old accepted runtime directly
+
+staging
+
+lab
+
+legacy runtime
+
+control plane capability instead of runtime capability
+
+workers.dev alias pointing elsewhere
+
+a stale service-binding target
+
+
+Again:
+
+do not change anything.
+
+==================================================
+STEP 10 — DETERMINE WHETHER CANDIDATE CAN BE TESTED WITHOUT TRAFFIC
+==================================================
+
+Investigate whether Cloudflare provides a supported way to invoke or test the
+specific inactive Worker version:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+without moving production traffic.
+
+
+Examples could include an official version-specific preview/test mechanism.
+
+Do NOT create a temporary public route.
+
+Do NOT alter production traffic.
+
+Do NOT use an unsupported workaround.
+
+
+If no supported mechanism exists:
+
+state that clearly.
+
+==================================================
+STEP 11 — BUILD A BETTER CUTOVER PROBE
+==================================================
+
+Create/update the acceptance probe for the NEXT authorized cutover.
+
+It must NOT combine conditions.
+
+It must record timestamped observations separately.
+
+After future deployment it should perform:
+
+CHECK A:
+deployment API/readback shows candidate 100%
+
+CHECK B:
+old runtime shows 0%
+
+CHECK C:
+candidate/version identity is confirmed through the strongest supported
+serving-state evidence
+
+CHECK D:
+live runtime registration capability=true
+
+CHECK E:
+existing-user runtime auth works
+
+
+Each check must independently print:
+
+timestamp
+
+observed value
+
+expected value
+
+PASS/FAIL
+
+
+Do not reduce these to one boolean.
+
+==================================================
+STEP 12 — BOUNDED PROPAGATION HANDLING
+==================================================
+
+If official tooling/docs establish that deployment/readback or request
+propagation can be asynchronous:
+
+design a BOUNDED polling strategy for the next cutover.
+
+Example shape only:
+
+poll every few seconds
+
+for a short fixed maximum window
+
+record every observation
+
+stop immediately on a genuine application/auth error
+
+distinguish:
+
+NOT YET CONVERGED
+
+from:
+
+CONFIRMED FAILURE
+
+
+Do not implement arbitrary waiting if Cloudflare evidence does not justify it.
+
+Do not move traffic in this task.
+
+==================================================
+STEP 13 — VERIFY ROLLBACK PROBE
+==================================================
+
+The next cutover must also have a separated rollback verification.
+
+After rollback it must independently prove:
+
+accepted runtime 100%
+
+candidate 0%
+
+runtime registration=false
+
+existing-user auth works
+
+
+No combined boolean.
+
+==================================================
+STEP 14 — SAFE REGRESSION
+==================================================
+
+Without moving traffic verify:
+
+user 1 login works
+
+user 2 login works
+
+each sees only own project
+
+project 2 public app HTTP 200
+
+project 3 public app HTTP 200
+
+unknown generated-app slug 404
+
+marketing HTTP 200
+
+claims zero
+
+
+No generation.
+
+No editing.
+
+No Publish.
+
+No signup.
+
+==================================================
+SUCCESS
+==================================================
+
+Task 12G succeeds when we understand enough to make the NEXT cutover
+deterministic.
+
+Best case:
+
+we recover which exact assertion failed and establish why.
+
+Acceptable case:
+
+historical result remains UNKNOWN, but we prove:
+
+- candidate configuration is correct
+- capability path is correct
+- destination is correct
+- no hidden variable mismatch exists
+- next cutover probe independently records every condition
+- any legitimate propagation behavior is handled with a bounded,
+  evidence-based convergence check
+
+
+Do NOT require certainty about an unrecoverable historical observation.
+
+==================================================
+TASK 12G ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. production remains untouched
+
+2. current safe state verified
+
+3. exact failed probe recovered
+
+4. deployment assertion classified PASS/FAIL/UNKNOWN
+
+5. registration assertion classified PASS/FAIL/UNKNOWN
+
+6. runtime registration endpoint traced
+
+7. exact registration variable established
+
+8. candidate variable value confirmed true
+
+9. accepted runtime variable value confirmed false
+
+10. variable-name mismatch ruled in/out
+
+11. candidate Task 12F parity remains intact
+
+12. deployment operation behavior investigated
+
+13. propagation semantics established as far as supported evidence allows
+
+14. caching investigated
+
+15. request destination verified
+
+16. inactive-version testing capability investigated
+
+17. new separated timestamped probe prepared
+
+18. bounded convergence logic justified if needed
+
+19. rollback probe separated
+
+20. safe production regression passes
+
+21. no traffic moved
+
+22. signup remains closed
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. active runtime version/traffic
+
+2. candidate version/traffic
+
+3. active control version/traffic
+
+4. current runtime registration
+
+5. current control registration
+
+6. public-app capability
+
+7. exact failed Task 12D probe
+
+8. deployment assertion historical classification
+
+9. registration assertion historical classification
+
+10. retained raw observation if available
+
+11. runtime registration endpoint
+
+12. runtime registration source/function
+
+13. exact runtime registration variable
+
+14. accepted runtime variable value
+
+15. candidate variable value
+
+16. related registration variables found
+
+17. candidate main-module hash
+
+18. candidate container attachment
+
+19. candidate parity still valid?
+
+20. exact Task 12D deployment API/tool
+
+21. what its success response guarantees
+
+22. whether deployment/readback convergence can lag
+
+23. whether live request convergence can lag
+
+24. capability caching finding
+
+25. failed request destination finding
+
+26. inactive-version test mechanism finding
+
+27. new CHECK A behavior
+
+28. new CHECK B behavior
+
+29. new CHECK C behavior
+
+30. new CHECK D behavior
+
+31. new CHECK E behavior
+
+32. polling/convergence strategy
+
+33. maximum convergence window
+
+34. conditions causing immediate rollback
+
+35. improved rollback verification
+
+36. existing-user regression
+
+37. project isolation regression
+
+38. public-app regression
+
+39. unknown-slug result
+
+40. marketing result
+
+41. claims state
+
+42. production changes made
+
+43. remaining HIGH risks
+
+44. remaining MEDIUM risks
+
+45. TASK 12G accepted?
+
+46. candidate still safe for a separately authorized Task 12D retry?
+
+47. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT MOVE TRAFFIC.
+
+DO NOT ACTIVATE CANDIDATE.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE ANOTHER VERSION.
+
+DO NOT MODIFY CONTROL.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT GENERATE.
+
+DO NOT PUBLISH.

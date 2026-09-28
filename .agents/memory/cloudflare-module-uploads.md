@@ -54,3 +54,9 @@ For a live version cutover, capture the deployment version and the live capabili
 **Why:** An immediate combined version-and-capability check failed after a registration candidate was deployed, and the exact failing condition was not logged. The accepted version was restored promptly; the historical deployment record proved a brief candidate deployment but could not reconstruct the capability response.
 
 **How to apply:** Keep rollback payloads ready, log non-sensitive versions and boolean capability fields individually, then apply the guard. A failed first live check is a stop condition for the authorized cutover, not permission to retry automatically.
+
+Cloudflare version overrides apply only to versions in the *current deployment*, while version URLs are unavailable for Workers implementing Durable Objects (including Containers/Sandbox). An inactive container-backed Worker version cannot be invoked through either mechanism without changing traffic.
+
+**Why:** A registration-only candidate was structurally correct but an immediate post-deployment combined check lost its raw responses. Later deployment history showed a temporary 100% candidate deployment, not the value returned by the immediate live request. Neither an inactive override nor a Version URL can recover that missing observation.
+
+**How to apply:** Distinguish deployment history from immediate readback and from per-request runtime behavior. For future cutovers, record each observation separately; use a version override only after the version is in the deployment, and disclose that a targeted request is not independent per-request version-ID attestation unless the Worker or logs expose that ID.
