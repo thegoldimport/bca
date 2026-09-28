@@ -42,3 +42,9 @@ Raw multipart version upload with accepted module bytes, inherited bindings, and
 **Why:** A registration-only staging attempt produced byte-identical modules and all 29 expected bindings but no `UserAppSandboxService` container resource, while the accepted serving version had that container. The inactive candidate remained at zero traffic.
 
 **How to apply:** Compare `script_runtime.containers` and version-level `containers` alongside modules, bindings, and assets *before* any deployment. For an exact clone, first establish a documented version-creation path that preserves both asset state and container metadata; do not deploy a candidate with missing or altered container resources.
+
+The Cloudflare multipart version-upload endpoint accepts `containers: [{class_name: "..."}]` in metadata even though the public multipart schema does not list this key. The installed Wrangler upload serializer sends that exact shape. Combined with `keep_assets: true`, the accepted deployed module bytes, accepted asset-routing config, and the existing non-registration bindings, it produced an inactive version whose exposed runtime/container metadata matched the serving version exactly, apart from the intended registration flag.
+
+**Why:** Omitting `containers` had silently removed the attachment while preserving modules and bindings; including only `class_name` preserved the original attachment without the extra container `name` that a prior no-bundle upload introduced.
+
+**How to apply:** For a strict metadata-only Worker version, check the current Wrangler serializer and serving version first, explicitly include the serving version's container class attachments, and compare all module hashes, bindings, `assets`, `script_runtime`, and version-level `containers` after upload. `keep_assets` documents reuse of the existing set, but version readback alone does not expose individual asset hashes, so report that proof limit honestly.

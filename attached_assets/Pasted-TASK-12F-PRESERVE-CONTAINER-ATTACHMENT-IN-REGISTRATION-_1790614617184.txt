@@ -1,0 +1,808 @@
+TASK 12F — PRESERVE CONTAINER ATTACHMENT IN REGISTRATION-ENABLED RUNTIME VERSION
+
+Task 12E is NOT accepted.
+
+Do NOT open signup.
+
+Do NOT activate either failed candidate.
+
+We have now proven:
+
+ACCEPTED SERVING RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+FAILED OLD CANDIDATE:
+
+ad874ec3-d98f-4c6c-99df-1011cb9c6c64
+
+problem:
+executable code did not match accepted runtime
+
+
+FAILED TASK 12E CANDIDATE:
+
+7adea40a-5f21-4138-ab02-d64306bc6cc2
+
+problem:
+all six modules ARE byte-identical to accepted runtime
+
+BUT:
+
+accepted runtime has:
+
+script_runtime.containers:
+[
+  {
+    "class_name": "UserAppSandboxService"
+  }
+]
+
+Task 12E candidate has:
+
+script_runtime.containers:
+ABSENT
+
+
+Therefore:
+
+DO NOT TOUCH APPLICATION CODE.
+
+DO NOT REBUILD THE RUNTIME FROM LOCAL SOURCE.
+
+DO NOT CREATE ANOTHER VERSION UNTIL THE CORRECT SUPPORTED
+CLOUDFLARE VERSION-CREATION METHOD IS ESTABLISHED.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine the supported Cloudflare mechanism for creating a new inactive
+version of:
+
+buildcustom-vibesdk-launch
+
+that preserves ALL accepted runtime metadata/resources including:
+
+UserAppSandboxService container attachment
+
+assets
+
+modules
+
+bindings
+
+compatibility settings
+
+Durable Objects
+
+D1
+
+KV
+
+R2
+
+service bindings
+
+AI/Gateway bindings
+
+while changing ONLY:
+
+REGISTRATION_ENABLED=false
+→ true
+
+
+Once the correct method is proven:
+
+create exactly ONE new inactive candidate.
+
+Verify exact parity.
+
+DO NOT ACTIVATE IT.
+
+==================================================
+IMPORTANT
+==================================================
+
+This is now a CLOUDFLARE DEPLOYMENT-METADATA problem.
+
+It is NOT:
+
+an auth bug
+
+a BuildCustom code bug
+
+a VibeSDK bug
+
+a container implementation bug
+
+a sandbox bug
+
+
+Do not modify production code to compensate for deployment tooling.
+
+==================================================
+STEP 1 — FREEZE PRODUCTION
+==================================================
+
+Verify:
+
+ACTIVE RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+ACTIVE CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+GATEWAY:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+PUBLIC GENERATED APPS:
+
+true
+
+
+CLAIMS:
+
+zero
+
+
+Do not alter these.
+
+==================================================
+STEP 2 — INSPECT ACCEPTED CONTAINER METADATA
+==================================================
+
+Inspect the accepted serving runtime version directly.
+
+Record all available metadata relating to:
+
+script_runtime.containers
+
+UserAppSandboxService
+
+container class attachment
+
+container image/configuration
+
+Durable Object relationship if applicable
+
+runtime resources
+
+assets
+
+
+Determine exactly where Cloudflare represents the container attachment:
+
+version metadata?
+
+script metadata?
+
+deployment metadata?
+
+container configuration?
+
+Wrangler-generated metadata?
+
+another API field?
+
+
+Do not infer.
+
+==================================================
+STEP 3 — INSPECT HOW ACCEPTED VERSION WAS CREATED
+==================================================
+
+Inspect:
+
+current repository configuration
+
+wrangler configuration
+
+deployment scripts
+
+Cloudflare API usage
+
+historical deployment commands if available
+
+package scripts
+
+Task 6 deployment artifacts/notes
+
+
+Determine how:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+received:
+
+UserAppSandboxService
+
+
+Identify the actual supported creation path that produced the accepted
+container attachment.
+
+==================================================
+STEP 4 — INSPECT CLOUDFLARE TOOLING LOCALLY
+==================================================
+
+Inspect the installed Wrangler version and its supported commands/options.
+
+Use:
+
+wrangler help
+
+local package source/types if needed
+
+Cloudflare API schemas available through the installed tooling
+
+existing repository deployment code
+
+
+Determine whether a supported mechanism exists for:
+
+uploading an inactive Worker version
+
+with containers
+
+without changing active traffic.
+
+
+Possible mechanisms may include:
+
+Wrangler versions upload
+
+Worker versions API multipart metadata
+
+script upload with container metadata
+
+changeset/version workflow
+
+another supported Cloudflare endpoint
+
+
+DO NOT choose based on guesswork.
+
+==================================================
+STEP 5 — IF NEEDED, CHECK OFFICIAL CLOUDFLARE DOCUMENTATION
+==================================================
+
+If local tooling/source does not establish the answer clearly:
+
+consult official Cloudflare documentation/API documentation only.
+
+Determine:
+
+how container-enabled Workers are uploaded
+
+how container metadata is represented
+
+whether versions/upload supports containers
+
+whether assets can be retained
+
+whether an inactive version can be created without deployment
+
+whether a container image/config must be explicitly supplied
+
+whether copying an existing version is supported
+
+
+Do not use random forum answers as authority if official documentation exists.
+
+==================================================
+STEP 6 — EXPLAIN WHY TASK 12E DROPPED THE CONTAINER
+==================================================
+
+Before creating another candidate establish:
+
+exact endpoint/tool used in Task 12E
+
+exact metadata sent
+
+whether container metadata was omitted
+
+whether the API ignores it
+
+whether the API requires another field
+
+whether container configuration exists outside normal Worker bindings
+
+why:
+
+modules copied correctly
+
+bindings copied correctly
+
+assets were retained
+
+BUT:
+
+script_runtime.containers disappeared
+
+
+We need an exact explanation.
+
+==================================================
+STEP 7 — DETERMINE SAFE INACTIVE CREATION PATH
+==================================================
+
+Find a supported path satisfying ALL:
+
+1. creates a NEW version
+
+2. does NOT change active deployment
+
+3. preserves accepted module bytes
+
+4. preserves container attachment
+
+5. preserves assets
+
+6. preserves all bindings/resources
+
+7. allows REGISTRATION_ENABLED=true
+
+8. leaves accepted version serving 100%
+
+
+If no supported path can satisfy these:
+
+STOP.
+
+Do not create another candidate.
+
+Report the limitation and the smallest safe alternative.
+
+==================================================
+STEP 8 — PREPARE CANDIDATE LOCALLY / REQUEST BODY
+==================================================
+
+Before sending the version-creation request:
+
+construct the complete candidate representation.
+
+Compare it against accepted:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Require expected diff BEFORE upload:
+
+ONLY:
+
+REGISTRATION_ENABLED:
+false → true
+
+
+Specifically confirm candidate request includes/preserves:
+
+UserAppSandboxService container attachment
+
+all six accepted module byte streams
+
+accepted assets configuration
+
+compatibility date
+
+compatibility flags
+
+all 29 accepted bindings except registration value
+
+service bindings
+
+DO bindings
+
+D1
+
+KV
+
+R2
+
+AI/Gateway
+
+other exposed resources
+
+
+Do not expose secret values.
+
+==================================================
+STEP 9 — CREATE EXACTLY ONE NEW CANDIDATE
+==================================================
+
+ONLY after Steps 2–8 prove the correct supported method:
+
+create exactly ONE new inactive runtime version.
+
+
+Do NOT activate.
+
+Do NOT move traffic.
+
+Do NOT modify control.
+
+Do NOT open signup.
+
+==================================================
+STEP 10 — VERIFY EXECUTABLE PARITY
+==================================================
+
+Compare accepted vs candidate.
+
+Require:
+
+main module SHA-256:
+IDENTICAL
+
+all six modules:
+BYTE IDENTICAL
+
+
+Accepted main hash from Task 12E:
+
+fe0a4f18d3747be1f37c15911a561077b8b4d3681553ee6f43bcb7740259ba02
+
+
+Candidate main hash must equal exactly that.
+
+==================================================
+STEP 11 — VERIFY CONTAINER PARITY
+==================================================
+
+This is the blocker.
+
+Require candidate readback contains the same accepted container attachment:
+
+UserAppSandboxService
+
+
+Compare the complete exposed container metadata.
+
+Require:
+
+IDENTICAL
+
+
+If absent or different:
+
+candidate FAILS
+
+DO NOT ACTIVATE
+
+STOP.
+
+==================================================
+STEP 12 — VERIFY ASSET PARITY
+==================================================
+
+Task 12E had a remaining medium concern that asset retention metadata did not
+independently prove every static asset byte.
+
+Resolve that here if the Cloudflare APIs/tooling permit it.
+
+Compare accepted and candidate asset configuration and asset identity/hash/
+manifest where available.
+
+Require the strongest practical proof that candidate uses the accepted asset
+set.
+
+Do NOT invent certainty beyond what Cloudflare exposes.
+
+==================================================
+STEP 13 — VERIFY ALL OTHER PARITY
+==================================================
+
+Require:
+
+compatibility:
+identical
+
+service bindings:
+identical
+
+DO:
+identical
+
+D1:
+identical
+
+KV:
+identical
+
+R2:
+identical
+
+AI/Gateway:
+identical
+
+all other exposed runtime resources:
+identical
+
+
+Normalized configuration diff must contain ONLY:
+
+REGISTRATION_ENABLED:
+false → true
+
+
+No missing:
+
+script_runtime.containers
+
+
+==================================================
+STEP 14 — VERIFY CANDIDATE INACTIVE
+==================================================
+
+Require:
+
+candidate traffic:
+0%
+
+accepted runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+Registration remains:
+
+control=false
+
+runtime=false
+
+
+Remember:
+
+an inactive candidate containing REGISTRATION_ENABLED=true does NOT mean
+runtime registration is live.
+
+Serving version is authoritative.
+
+==================================================
+STEP 15 — SAFE PRODUCTION REGRESSION
+==================================================
+
+Verify without changing traffic:
+
+existing user login works
+
+project 2 public app:
+HTTP 200
+
+project 3 public app:
+HTTP 200
+
+claims:
+zero
+
+
+No generation.
+
+No Publish.
+
+No signup.
+
+==================================================
+DO NOT DO
+==================================================
+
+DO NOT modify UserAppSandboxService.
+
+DO NOT rebuild container code.
+
+DO NOT change container image.
+
+DO NOT remove the container requirement.
+
+DO NOT make sandbox optional.
+
+DO NOT modify VibeSDK code.
+
+DO NOT modify auth code.
+
+DO NOT modify logout code.
+
+DO NOT modify control plane.
+
+DO NOT activate candidate.
+
+DO NOT open signup.
+
+DO NOT create more than ONE new candidate after the method is proven.
+
+==================================================
+SUCCESS STATE
+==================================================
+
+At completion we should possess:
+
+ONE new inactive registration-enabled runtime candidate
+
+that is demonstrably equivalent to:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+except:
+
+REGISTRATION_ENABLED=true
+
+
+including exact preservation of:
+
+UserAppSandboxService container attachment.
+
+
+Then STOP.
+
+==================================================
+TASK 12F ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. production frozen
+
+2. accepted container metadata inspected
+
+3. accepted deployment path investigated
+
+4. local Cloudflare tooling investigated
+
+5. official docs checked if needed
+
+6. exact reason Task 12E lost container established
+
+7. supported inactive creation path established
+
+8. expected request diff proven before upload
+
+9. exactly one new candidate created
+
+10. main module byte-identical
+
+11. all six modules byte-identical
+
+12. UserAppSandboxService container attachment preserved
+
+13. container metadata parity passes
+
+14. strongest available asset parity passes
+
+15. compatibility parity passes
+
+16. service-binding parity passes
+
+17. DO parity passes
+
+18. D1 parity passes
+
+19. KV parity passes
+
+20. R2 parity passes
+
+21. AI/Gateway parity passes
+
+22. normalized config diff only registration false→true
+
+23. candidate remains 0%
+
+24. accepted runtime remains 100%
+
+25. active registration remains closed
+
+26. public apps remain enabled
+
+27. production regression passes
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. active runtime version
+
+2. active control version
+
+3. accepted container metadata
+
+4. how accepted runtime received container attachment
+
+5. Task 12E upload mechanism
+
+6. why Task 12E lost container metadata
+
+7. supported mechanism selected
+
+8. evidence it supports inactive container-enabled versions
+
+9. exact expected pre-upload diff
+
+10. new candidate version
+
+11. baseline main hash
+
+12. candidate main hash
+
+13. six-module byte-parity result
+
+14. accepted container metadata
+
+15. candidate container metadata
+
+16. container parity result
+
+17. asset parity evidence/result
+
+18. compatibility parity
+
+19. service-binding parity
+
+20. DO parity
+
+21. D1 parity
+
+22. KV parity
+
+23. R2 parity
+
+24. AI/Gateway parity
+
+25. complete normalized configuration diff
+
+26. candidate REGISTRATION_ENABLED
+
+27. candidate traffic percentage
+
+28. active runtime traffic percentage
+
+29. active control registration
+
+30. active runtime registration
+
+31. public-generated-app state
+
+32. existing-user login result
+
+33. project-2 public-app result
+
+34. project-3 public-app result
+
+35. claims state
+
+36. whether production changed
+
+37. remaining HIGH risks
+
+38. remaining MEDIUM risks
+
+39. whether TASK 12F is ACCEPTED
+
+40. whether candidate is safe for Task 12D
+
+41. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE.
+
+DO NOT OPEN SIGNUP.
