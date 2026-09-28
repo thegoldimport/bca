@@ -48,3 +48,9 @@ The Cloudflare multipart version-upload endpoint accepts `containers: [{class_na
 **Why:** Omitting `containers` had silently removed the attachment while preserving modules and bindings; including only `class_name` preserved the original attachment without the extra container `name` that a prior no-bundle upload introduced.
 
 **How to apply:** For a strict metadata-only Worker version, check the current Wrangler serializer and serving version first, explicitly include the serving version's container class attachments, and compare all module hashes, bindings, `assets`, `script_runtime`, and version-level `containers` after upload. `keep_assets` documents reuse of the existing set, but version readback alone does not expose individual asset hashes, so report that proof limit honestly.
+
+For a live version cutover, capture the deployment version and the live capability response as separate timestamped observations before evaluating a combined guard. If that guard fails, roll back to the exact accepted version and leave the public gate closed; do not attribute the failure to propagation or code without the separate observations.
+
+**Why:** An immediate combined version-and-capability check failed after a registration candidate was deployed, and the exact failing condition was not logged. The accepted version was restored promptly; the historical deployment record proved a brief candidate deployment but could not reconstruct the capability response.
+
+**How to apply:** Keep rollback payloads ready, log non-sensitive versions and boolean capability fields individually, then apply the guard. A failed first live check is a stop condition for the authorized cutover, not permission to retry automatically.
