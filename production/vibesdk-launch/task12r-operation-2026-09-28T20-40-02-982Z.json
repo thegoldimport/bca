@@ -1,0 +1,605 @@
+{
+  "startedAt": "2026-09-28T20:40:02.983Z",
+  "status": "OPEN_GATES_PASS_ACCEPTANCE_PENDING",
+  "inputs": [
+    "production/vibesdk-launch/task12n-runtime-observation-2026-09-28T20-29-58-003Z.json",
+    "production/vibesdk-launch/task12j-observation-2026-09-28T20-30-16-780Z-e65888ab.json",
+    "production/vibesdk-launch/task12l-regression-2026-09-28T20-30-24-456Z.json",
+    "production/vibesdk-launch/task12m-precheck-2026-09-28T20-30-36-033Z.json"
+  ],
+  "events": [
+    {
+      "at": "2026-09-28T20:40:04.470Z",
+      "stage": "precheck-passed-rollback-prepared",
+      "evidence": {
+        "runtime": {
+          "id": "ffbeb84c-e03b-4996-b893-253971235df6",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12Q restore-accepted-runtime-1",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T19:52:49.897243Z"
+        },
+        "control": {
+          "id": "5d935388-efd8-44d6-aad5-500c9a4ce229",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12K failed acceptance: restore closed signup",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T18:33:36.360552Z"
+        },
+        "gateway": {
+          "id": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-27T18:02:37.195852Z"
+        },
+        "parity": "production/vibesdk-launch/task12m-precheck-2026-09-28T20-30-36-033Z.json"
+      }
+    },
+    {
+      "at": "2026-09-28T20:40:04.476Z",
+      "stage": "request-activate-runtime",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "input": {
+          "strategy": "percentage",
+          "versions": [
+            {
+              "version_id": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+              "percentage": 100
+            }
+          ],
+          "annotations": {
+            "workers/message": "Task 12R activate-runtime"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T20:40:05.313Z",
+      "stage": "deployed-activate-runtime",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "result": {
+          "id": "0ddd4923-ad08-4062-bb84-f29f90a42e9f"
+        },
+        "at": "2026-09-28T20:40:05.313Z"
+      }
+    },
+    {
+      "at": "2026-09-28T20:40:21.363Z",
+      "stage": "runtime-candidate-gate",
+      "evidence": {
+        "code": 0,
+        "error": null,
+        "artifact": "production/vibesdk-launch/task12n-runtime-observation-2026-09-28T20-40-07-043Z.json",
+        "status": "PASS",
+        "targeted": {
+          "request": {
+            "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790628007043-2088-targeted",
+            "marker": "1790628007043-2088-targeted",
+            "method": "GET",
+            "requestedAt": "2026-09-28T20:40:12.303Z",
+            "override": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "access-control-allow-credentials": "true",
+              "access-control-expose-headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset",
+              "alt-svc": "h3=\":443\"; ma=86400",
+              "cf-ray": "a4258fd4ef28b0ac-ATL",
+              "connection": "keep-alive",
+              "content-encoding": "br",
+              "content-security-policy": "default-src 'self'; script-src 'self' 'strict-dynamic'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://avatars.githubusercontent.com https://lh3.googleusercontent.com https://*.cloudflare.com; connect-src 'self' ws://localhost:* wss://localhost:* wss://buildcustom-vibesdk-launch.thegoldimport.workers.dev https://api.github.com https://api.cloudflare.com; frame-src 'none'; object-src 'none'; media-src 'self'; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests",
+              "content-type": "application/json",
+              "cross-origin-embedder-policy": "require-corp",
+              "cross-origin-opener-policy": "same-origin",
+              "cross-origin-resource-policy": "same-origin",
+              "date": "Mon, 28 Sep 2026 20:40:12 GMT",
+              "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+              "origin-agent-cluster": "?1",
+              "permissions-policy": "camera=(), microphone=(), geolocation=(), usb=(), payment=(), magnetometer=(), gyroscope=(), accelerometer=(), autoplay=(self), fullscreen=(self), clipboard=(self)",
+              "referrer-policy": "strict-origin-when-cross-origin",
+              "report-to": "[redacted]",
+              "server": "cloudflare",
+              "set-cookie": "[redacted]",
+              "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+              "transfer-encoding": "chunked",
+              "vary": "Origin",
+              "x-content-type-options": "nosniff",
+              "x-dns-prefetch-control": "off",
+              "x-download-options": "noopen",
+              "x-frame-options": "DENY",
+              "x-permitted-cross-domain-policies": "none",
+              "x-xss-protection": "1; mode=block"
+            },
+            "redactedRawBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":true,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+            "parsed": {
+              "success": true,
+              "registrationEnabled": true,
+              "email": true,
+              "hasOAuth": false,
+              "requiresEmailAuth": true
+            },
+            "receivedAt": "2026-09-28T20:40:12.349Z",
+            "note": "CSRF token redacted before persistence; body otherwise JSON-equivalent"
+          },
+          "tail": {
+            "scriptName": "buildcustom-vibesdk-launch",
+            "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "eventTimestamp": 1790628012317,
+            "requestUrl": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790628007043-2088-targeted"
+          },
+          "correlation": {
+            "completedAt": "2026-09-28T20:40:12.366Z",
+            "metrics": {
+              "parsedEvents": 2,
+              "ownMarkerEvents": 2,
+              "matchedEvents": 2
+            },
+            "ownMarkerEvents": [
+              {
+                "marker": "1790628007043-2088-targeted",
+                "scriptName": "buildcustom-vibesdk-launch",
+                "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+                "eventTimestamp": 1790628012317,
+                "urlMatched": true
+              }
+            ],
+            "otherRunEvents": 1,
+            "parseFailures": 0,
+            "tailExited": false
+          },
+          "evaluation": {
+            "http": "PASS",
+            "version": "PASS"
+          },
+          "evidence": {
+            "metrics": {
+              "parsedEvents": 3,
+              "ownMarkerEvents": 3,
+              "matchedEvents": 3
+            },
+            "ownMarkerEvents": [
+              {
+                "marker": "1790628007043-2088-targeted",
+                "scriptName": "buildcustom-vibesdk-launch",
+                "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+                "eventTimestamp": 1790628012317,
+                "urlMatched": true
+              }
+            ],
+            "otherRunEvents": 2,
+            "parseFailures": 0,
+            "tailExited": false
+          }
+        },
+        "ordinary": {
+          "request": {
+            "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790628007043-2088-ordinary",
+            "marker": "1790628007043-2088-ordinary",
+            "method": "GET",
+            "requestedAt": "2026-09-28T20:40:12.366Z",
+            "override": null
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "access-control-allow-credentials": "true",
+              "access-control-expose-headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset",
+              "alt-svc": "h3=\":443\"; ma=86400",
+              "cf-ray": "a4258fd55f4bb0ac-ATL",
+              "connection": "keep-alive",
+              "content-encoding": "br",
+              "content-security-policy": "default-src 'self'; script-src 'self' 'strict-dynamic'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://avatars.githubusercontent.com https://lh3.googleusercontent.com https://*.cloudflare.com; connect-src 'self' ws://localhost:* wss://localhost:* wss://buildcustom-vibesdk-launch.thegoldimport.workers.dev https://api.github.com https://api.cloudflare.com; frame-src 'none'; object-src 'none'; media-src 'self'; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests",
+              "content-type": "application/json",
+              "cross-origin-embedder-policy": "require-corp",
+              "cross-origin-opener-policy": "same-origin",
+              "cross-origin-resource-policy": "same-origin",
+              "date": "Mon, 28 Sep 2026 20:40:12 GMT",
+              "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+              "origin-agent-cluster": "?1",
+              "permissions-policy": "camera=(), microphone=(), geolocation=(), usb=(), payment=(), magnetometer=(), gyroscope=(), accelerometer=(), autoplay=(self), fullscreen=(self), clipboard=(self)",
+              "referrer-policy": "strict-origin-when-cross-origin",
+              "report-to": "[redacted]",
+              "server": "cloudflare",
+              "set-cookie": "[redacted]",
+              "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+              "transfer-encoding": "chunked",
+              "vary": "Origin",
+              "x-content-type-options": "nosniff",
+              "x-dns-prefetch-control": "off",
+              "x-download-options": "noopen",
+              "x-frame-options": "DENY",
+              "x-permitted-cross-domain-policies": "none",
+              "x-xss-protection": "1; mode=block"
+            },
+            "redactedRawBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":true,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+            "parsed": {
+              "success": true,
+              "registrationEnabled": true,
+              "email": true,
+              "hasOAuth": false,
+              "requiresEmailAuth": true
+            },
+            "receivedAt": "2026-09-28T20:40:12.403Z",
+            "note": "CSRF token redacted before persistence; body otherwise JSON-equivalent"
+          },
+          "tail": {
+            "scriptName": "buildcustom-vibesdk-launch",
+            "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "eventTimestamp": 1790628012379,
+            "requestUrl": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790628007043-2088-ordinary"
+          },
+          "correlation": {
+            "completedAt": "2026-09-28T20:40:12.416Z",
+            "metrics": {
+              "parsedEvents": 3,
+              "ownMarkerEvents": 3,
+              "matchedEvents": 3
+            },
+            "ownMarkerEvents": [
+              {
+                "marker": "1790628007043-2088-ordinary",
+                "scriptName": "buildcustom-vibesdk-launch",
+                "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+                "eventTimestamp": 1790628012379,
+                "urlMatched": true
+              }
+            ],
+            "otherRunEvents": 2,
+            "parseFailures": 0,
+            "tailExited": false
+          },
+          "evaluation": {
+            "http": "PASS",
+            "version": "PASS"
+          },
+          "evidence": {
+            "metrics": {
+              "parsedEvents": 3,
+              "ownMarkerEvents": 3,
+              "matchedEvents": 3
+            },
+            "ownMarkerEvents": [
+              {
+                "marker": "1790628007043-2088-ordinary",
+                "scriptName": "buildcustom-vibesdk-launch",
+                "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+                "eventTimestamp": 1790628012379,
+                "urlMatched": true
+              }
+            ],
+            "otherRunEvents": 2,
+            "parseFailures": 0,
+            "tailExited": false
+          }
+        },
+        "existingUser": {
+          "timestamp": "2026-09-28T20:40:21.313Z",
+          "phase": "candidate",
+          "check": "E: existing-user product and runtime authentication",
+          "observed": {
+            "loginStatus": 200,
+            "productAuthenticated": true,
+            "ownProjectIds": [
+              2
+            ],
+            "runtimeStatus": 200,
+            "runtimeAuthenticated": true
+          },
+          "expected": {
+            "loginStatus": 200,
+            "productAuthenticated": true,
+            "runtimeStatus": 200,
+            "runtimeAuthenticated": true
+          },
+          "status": "PASS"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T20:40:21.364Z",
+      "stage": "request-activate-control",
+      "evidence": {
+        "worker": "buildcustom-control-plane-launch",
+        "input": {
+          "strategy": "percentage",
+          "versions": [
+            {
+              "version_id": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+              "percentage": 100
+            }
+          ],
+          "annotations": {
+            "workers/message": "Task 12R activate-control"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T20:40:21.976Z",
+      "stage": "deployed-activate-control",
+      "evidence": {
+        "worker": "buildcustom-control-plane-launch",
+        "result": {
+          "id": "b555f463-5027-46de-a25b-bcca2076f9e9"
+        },
+        "at": "2026-09-28T20:40:21.976Z"
+      }
+    },
+    {
+      "at": "2026-09-28T20:40:28.676Z",
+      "stage": "control-open-gate",
+      "evidence": {
+        "code": 0,
+        "error": null,
+        "artifact": "production/vibesdk-launch/task12j-observation-2026-09-28T20-40-22-439Z-80a0eb70.json",
+        "status": "PASS",
+        "checks": {
+          "A-control-deployment": {
+            "timestamp": "2026-09-28T20:40:24.336Z",
+            "observed": {
+              "deploymentId": "b555f463-5027-46de-a25b-bcca2076f9e9",
+              "rawRelevantApiResponse": {
+                "id": "b555f463-5027-46de-a25b-bcca2076f9e9",
+                "source": "api",
+                "strategy": "percentage",
+                "annotations": {
+                  "workers/message": "Task 12R activate-control",
+                  "workers/triggered_by": "deployment"
+                },
+                "versions": [
+                  {
+                    "version_id": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+                    "percentage": 100
+                  }
+                ],
+                "created_on": "2026-09-28T20:40:21.65855Z"
+              }
+            },
+            "expected": {
+              "version": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+              "percentage": 100
+            },
+            "status": "PASS"
+          },
+          "B-accepted-candidate-percentages": {
+            "timestamp": "2026-09-28T20:40:24.337Z",
+            "observed": {
+              "acceptedVersion": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+              "acceptedPercentage": 0,
+              "candidateVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+              "candidatePercentage": 100
+            },
+            "expected": {
+              "acceptedPercentage": 0,
+              "candidatePercentage": 100
+            },
+            "status": "PASS"
+          },
+          "C-candidate-configuration": {
+            "timestamp": "2026-09-28T20:40:24.892Z",
+            "observed": {
+              "versionId": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+              "mainModule": "worker.js",
+              "candidateMainSha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891",
+              "acceptedMainSha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891",
+              "modules": [
+                {
+                  "name": "worker.js",
+                  "sha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891"
+                }
+              ],
+              "moduleParity": true,
+              "bindings": {
+                "STAGING_REGISTRATION_ENABLED": {
+                  "type": "plain_text",
+                  "value": "true"
+                },
+                "PUBLIC_GENERATED_APPS_ENABLED": {
+                  "type": "plain_text",
+                  "value": "true"
+                },
+                "CONTROL_PLANE_PROFILE": {
+                  "type": "plain_text",
+                  "value": "launch"
+                },
+                "ENVIRONMENT": {
+                  "type": "plain_text",
+                  "value": "production"
+                },
+                "STAGING_LOGIN_ENABLED": {
+                  "type": "plain_text",
+                  "value": "true"
+                },
+                "AUTH_RUNTIME": {
+                  "type": "service",
+                  "service": "buildcustom-vibesdk-launch",
+                  "environment": "production"
+                },
+                "AUTH_RUNTIME_URL": {
+                  "type": "plain_text",
+                  "value": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev"
+                }
+              },
+              "acceptedRegistration": {
+                "type": "plain_text",
+                "value": "false"
+              },
+              "assetConfiguration": {
+                "html_handling": "auto-trailing-slash",
+                "not_found_handling": "single-page-application",
+                "run_worker_first": true,
+                "base_path": "/"
+              }
+            },
+            "expected": {
+              "registration": "true",
+              "acceptedRegistration": "false",
+              "publicApps": "true",
+              "profile": "launch",
+              "environment": "production",
+              "moduleParity": true
+            },
+            "status": "PASS"
+          },
+          "D-live-capability": {
+            "timestamp": "2026-09-28T20:40:24.944Z",
+            "observed": {
+              "request": {
+                "url": "https://app.buildcustom.ai/api/public/capabilities?task12j_observation=1790628022439",
+                "requestedAt": "2026-09-28T20:40:24.893Z",
+                "method": "GET",
+                "cache": "no-store"
+              },
+              "response": {
+                "status": 200,
+                "headers": {
+                  "alt-svc": "h3=\":443\"; ma=86400",
+                  "cache-control": "no-store",
+                  "cf-ray": "a42590239b9f4503-ATL",
+                  "connection": "keep-alive",
+                  "content-encoding": "br",
+                  "content-type": "application/json",
+                  "date": "Mon, 28 Sep 2026 20:40:24 GMT",
+                  "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+                  "report-to": "[redacted]",
+                  "server": "cloudflare",
+                  "transfer-encoding": "chunked"
+                },
+                "cfRay": "a42590239b9f4503-ATL",
+                "contentType": "application/json",
+                "cacheControl": "no-store",
+                "age": null,
+                "cfCacheStatus": null,
+                "rawBody": "{\"registrationEnabled\":true,\"publicGeneratedAppsEnabled\":true}",
+                "parsedJson": {
+                  "registrationEnabled": true,
+                  "publicGeneratedAppsEnabled": true
+                }
+              },
+              "versionEvidence": {
+                "versionEvidenceClassification": "STRONG",
+                "perRequestVersionIdentity": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+                "observedVersionId": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+                "correlation": {
+                  "eventTimestamp": 1790628024907,
+                  "requestUrl": "https://app.buildcustom.ai/api/public/capabilities?task12j_observation=1790628022439",
+                  "requestMethod": "GET",
+                  "scriptName": "buildcustom-control-plane-launch",
+                  "scriptVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+                  "outcome": "ok"
+                },
+                "limitations": "Wrangler tail ScriptVersion identifies the Worker invocation with this exact unique request URL; this is not a signed response header."
+              }
+            },
+            "expected": {
+              "status": 200,
+              "registrationEnabled": true,
+              "publicGeneratedAppsEnabled": true,
+              "servingVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c"
+            },
+            "status": "PASS"
+          },
+          "E-signup-ui": {
+            "timestamp": "2026-09-28T20:40:26.218Z",
+            "observed": {
+              "url": "https://app.buildcustom.ai/app/signup",
+              "httpStatus": 200,
+              "state": {
+                "heading": "Create your account",
+                "submitLabel": "Create Account",
+                "nameInput": true,
+                "emailInput": true,
+                "passwordInput": true,
+                "closedNotice": false,
+                "switchLabel": "Sign in"
+              },
+              "loginAvailable": true
+            },
+            "expected": {
+              "signup": "Create Account",
+              "loginAvailable": true
+            },
+            "status": "PASS"
+          },
+          "F-runtime-registration": {
+            "timestamp": "2026-09-28T20:40:26.311Z",
+            "observed": {
+              "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12j_observation=80a0eb70-037a-4bbd-81ad-b9083d2d3122",
+              "status": 200,
+              "relevantBody": {
+                "success": true,
+                "data": {
+                  "registrationEnabled": true,
+                  "email": true
+                }
+              }
+            },
+            "expected": {
+              "status": 200,
+              "registrationEnabled": true
+            },
+            "status": "PASS"
+          },
+          "G-existing-user-auth": {
+            "timestamp": "2026-09-28T20:40:28.467Z",
+            "observed": {
+              "loginStatus": 200,
+              "product": {
+                "status": 200,
+                "identityPresent": true
+              },
+              "runtime": {
+                "status": 200,
+                "authenticated": true
+              }
+            },
+            "expected": {
+              "loginStatus": 200,
+              "product": {
+                "status": 200,
+                "identityPresent": true
+              },
+              "runtime": {
+                "status": 200,
+                "authenticated": true
+              }
+            },
+            "status": "PASS"
+          }
+        },
+        "versionIdentity": "754a3a04-91f9-49e2-b9a8-614aa183a13c"
+      }
+    }
+  ],
+  "completedAt": "2026-09-28T20:40:28.677Z"
+}

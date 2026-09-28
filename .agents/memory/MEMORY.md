@@ -52,3 +52,4 @@
 - [Cloudflare tail correlation](cloudflare-tail-correlation.md) — calibrate a live versioned tail event; UUID-shaped URL markers can be redacted and break exact matching.
 - [Public signup validation failures](public-signup-validation-failures.md) — runtime Zod errors became 500, then control 502; only expected schema failures should become 4xx.
 - [Runtime cutover capability disagreement](runtime-cutover-capability-disagreement.md) — deployment and binding checks passed but the immediate live capability gate failed; fail closed.
+- [Public signup Origin acceptance](signup-origin-gate-evidence.md) — a duplicate-email 400 does not prove invalid-Origin rejection; keep security guards independently attributable.

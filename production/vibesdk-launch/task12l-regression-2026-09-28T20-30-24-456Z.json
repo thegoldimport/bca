@@ -1,0 +1,56 @@
+{
+  "at": "2026-09-28T20:30:24.456Z",
+  "results": {
+    "closed": {
+      "runtimeBefore": [
+        {
+          "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+          "percentage": 100
+        }
+      ],
+      "controlBefore": [
+        {
+          "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+          "percentage": 100
+        }
+      ],
+      "gatewayBefore": [
+        {
+          "version_id": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+          "percentage": 100
+        }
+      ],
+      "runtimeRegistration": false,
+      "controlRegistration": false,
+      "publicAppsEnabled": true,
+      "claims": 0,
+      "newRuntimeCandidateInactive": true
+    },
+    "user1": {
+      "login": 200,
+      "identity": true,
+      "ownDashboard": true,
+      "ownProject": 2,
+      "crossOwnerStatus": 404
+    },
+    "user2": {
+      "login": 200,
+      "identity": true,
+      "ownDashboard": true,
+      "ownProject": 3,
+      "crossOwnerStatus": 404
+    },
+    "project2": {
+      "status": 200,
+      "marker": true
+    },
+    "project3": {
+      "status": 200,
+      "marker": true
+    },
+    "unknownSlug": 404,
+    "marketing": 200
+  },
+  "status": "PASS",
+  "completedAt": "2026-09-28T20:30:35.959Z"
+}

@@ -1,0 +1,188 @@
+{
+  "startedAt": "2026-09-28T20:40:34.055Z",
+  "checks": {
+    "duplicate-existing-email": {
+      "at": "2026-09-28T20:40:37.580Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 400,
+        "safeJsonValidation": true,
+        "identity": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 1
+          }
+        },
+        "expectedIdentityCount": 1,
+        "noAutomaticLogin": true
+      }
+    },
+    "case-variant-duplicate-existing-email": {
+      "at": "2026-09-28T20:40:38.054Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 400,
+        "safeJsonValidation": true,
+        "identity": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 1
+          }
+        },
+        "expectedIdentityCount": 1,
+        "noAutomaticLogin": true
+      }
+    },
+    "invalid-email": {
+      "at": "2026-09-28T20:40:38.478Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 400,
+        "safeJsonValidation": true,
+        "identity": {
+          "product": {
+            "count": 0,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 0
+          }
+        },
+        "expectedIdentityCount": 0,
+        "noAutomaticLogin": null
+      }
+    },
+    "weak-password": {
+      "at": "2026-09-28T20:40:38.874Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 400,
+        "safeJsonValidation": true,
+        "identity": {
+          "product": {
+            "count": 0,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 0
+          }
+        },
+        "expectedIdentityCount": 0,
+        "noAutomaticLogin": null
+      }
+    },
+    "missing-password": {
+      "at": "2026-09-28T20:40:39.222Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 400,
+        "safeJsonValidation": true,
+        "identity": {
+          "product": {
+            "count": 0,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 0
+          }
+        },
+        "expectedIdentityCount": 0,
+        "noAutomaticLogin": null
+      }
+    },
+    "invalid-request-shape": {
+      "at": "2026-09-28T20:40:39.594Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 400,
+        "safeJsonValidation": true,
+        "identity": {
+          "product": {
+            "count": 0,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 0
+          }
+        },
+        "expectedIdentityCount": 0,
+        "noAutomaticLogin": null
+      }
+    },
+    "invalid-origin": {
+      "at": "2026-09-28T20:40:39.836Z",
+      "status": "FAIL",
+      "evidence": {
+        "status": 400
+      }
+    },
+    "missing-csrf": {
+      "at": "2026-09-28T20:40:39.933Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 403
+      }
+    },
+    "invalid-csrf": {
+      "at": "2026-09-28T20:40:40.024Z",
+      "status": "PASS",
+      "evidence": {
+        "status": 403
+      }
+    },
+    "rejected-registration-identities-unchanged": {
+      "at": "2026-09-28T20:40:40.569Z",
+      "status": "PASS",
+      "evidence": {
+        "existingBefore": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 1
+          }
+        },
+        "existingAfter": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 1
+          }
+        },
+        "disposableBefore": {
+          "product": {
+            "count": 0,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 0
+          }
+        },
+        "disposableAfter": {
+          "product": {
+            "count": 0,
+            "legacyHashNull": true
+          },
+          "runtime": {
+            "count": 0
+          }
+        }
+      }
+    }
+  },
+  "error": {
+    "step": "origin-csrf-rejections",
+    "reason": "Error"
+  },
+  "completedAt": "2026-09-28T20:40:40.853Z",
+  "status": "FAIL"
+}
