@@ -1,0 +1,1168 @@
+TASK 12N — DIAGNOSE NEW RUNTIME CANDIDATE REGISTRATION-CAPABILITY MISMATCH
+
+Task 12M is NOT accepted.
+
+Public signup remains CLOSED.
+
+The single Task 12M activation attempt MUST NOT be retried in this task.
+
+This is a READ-ONLY / PRIVATE DIAGNOSTIC task.
+
+DO NOT:
+
+- move production traffic
+- activate the runtime candidate
+- activate the control candidate
+- create a Worker version
+- modify runtime code
+- modify control code
+- modify bindings
+- modify gateway
+- modify DNS
+- open signup
+- generate
+- edit projects
+- Publish
+- move the waitlist
+- unpublish public Replit
+
+==================================================
+WHY WE ARE DOING THIS
+==================================================
+
+Task 12L successfully diagnosed and fixed a separate registration-validation
+bug:
+
+invalid email / weak password
+→ runtime schema-validation exception
+→ runtime general handler returned 500
+→ control translated upstream 500 to 502
+
+
+Task 12L reproduced those failures BEFORE the fix.
+
+It then created this NEW runtime candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+The candidate was verified inactive and its version metadata showed:
+
+REGISTRATION_ENABLED=true
+
+
+Its main module differed from the previously verified registration-enabled
+runtime candidate only by the reviewed Task 12L validation branch.
+
+The other modules, bindings, asset-routing configuration, and
+UserAppSandboxService container attachment matched.
+
+==================================================
+WHAT TASK 12M DID
+==================================================
+
+Task 12M performed ONE authorized activation attempt.
+
+Closed precheck:
+
+PASS
+
+
+Candidate parity:
+
+PASS
+
+
+Runtime deployment ID:
+
+ea6079e0-4b1d-4d93-b8f5-edba76f86288
+
+
+Recorded around:
+
+19:05:47 UTC
+
+
+Runtime candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+→ 100%
+
+
+Accepted runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 0%
+
+
+RUNTIME A:
+
+candidate 100%
+PASS
+
+
+RUNTIME B:
+
+old runtime 0%
+PASS
+
+
+RUNTIME C:
+
+configured version + targeted registration capability
+FAIL as a combined check
+
+
+RUNTIME D:
+
+ordinary live registration capability
+FAIL
+
+
+RUNTIME E:
+
+existing-user product/runtime auth
+PASS
+
+
+The runtime gate therefore FAILED.
+
+The operator immediately rolled runtime back.
+
+CONTROL WAS NEVER ACTIVATED.
+
+==================================================
+CRITICAL EVIDENCE LIMITATION
+==================================================
+
+Task 12M retained PASS/FAIL observations for runtime C and D.
+
+It DID NOT retain:
+
+- raw targeted capability response body
+- raw ordinary live capability response body
+- complete response headers
+- per-request runtime version identity
+
+Therefore:
+
+we do NOT know exactly what C or D returned.
+
+We do NOT know whether the live request executed the new candidate.
+
+We do NOT know whether registrationEnabled was false, missing, malformed,
+or whether another exact observation caused the combined C failure.
+
+We do NOT know whether this is:
+
+- a candidate configuration problem
+- a runtime capability-code problem
+- a request-destination problem
+- a serving-version observation problem
+- a probe bug
+- another cause
+
+DO NOT GUESS.
+
+==================================================
+CURRENT SAFE PRODUCTION STATE
+==================================================
+
+RUNTIME WORKER:
+
+buildcustom-vibesdk-launch
+
+
+SERVING RUNTIME VERSION:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+NEW RUNTIME CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL WORKER:
+
+buildcustom-control-plane-launch
+
+
+SERVING CONTROL VERSION:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+PRODUCTION GATEWAY:
+
+buildcustom-apps-gateway
+
+
+GATEWAY VERSION:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+CLAIMS:
+
+zero
+
+
+Signup CLOSED.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Determine EXACTLY why runtime candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+has version metadata indicating:
+
+REGISTRATION_ENABLED=true
+
+but failed Task 12M runtime capability checks C and D when it was serving
+100%.
+
+Do this without activating it again.
+
+We need to answer:
+
+1. What exact code produces the runtime registration capability?
+
+2. What exact environment/binding does that code read?
+
+3. Does the NEW candidate executable module contain that same logic?
+
+4. Does its version metadata contain the correct value?
+
+5. Can we privately/directly exercise the candidate without moving public
+   production traffic?
+
+6. Was Task 12M's probe actually observing the runtime candidate or merely
+   assuming it from deployment state?
+
+7. Is the Task 12M failure caused by the candidate, the observation method,
+   the request destination, or something else?
+
+==================================================
+STEP 1 — VERIFY CURRENT CLOSED STATE
+==================================================
+
+Read only.
+
+Require:
+
+runtime accepted version 100%
+
+new runtime candidate 0%
+
+control accepted version 100%
+
+control candidate 0%
+
+runtime registration false
+
+control registration false
+
+public generated apps true
+
+correct production gateway unchanged
+
+claims zero
+
+
+If current state differs:
+
+STOP and report it.
+
+==================================================
+STEP 2 — RECOVER TASK 12M ATTEMPT EVIDENCE
+==================================================
+
+Inspect:
+
+Task 12M operator
+
+attempt journal
+
+deployment records
+
+probe output
+
+logs
+
+local artifacts
+
+
+Recover everything actually retained for runtime checks C and D.
+
+For C determine separately:
+
+C1. configured candidate version result
+
+C2. targeted capability result
+
+
+Do NOT continue referring to C only as one combined boolean if its component
+observations can be recovered.
+
+
+For D determine:
+
+exact URL/destination
+
+HTTP method
+
+headers
+
+query parameters
+
+timestamp
+
+expected response
+
+actual retained response information
+
+
+Explicitly state which historical values are:
+
+KNOWN
+
+UNKNOWN
+
+
+Do not reconstruct missing raw responses.
+
+==================================================
+STEP 3 — TRACE RUNTIME CAPABILITY SOURCE
+==================================================
+
+Trace the exact runtime endpoint used for registration capability.
+
+Expected historical path has been:
+
+/api/auth/providers
+
+
+But verify the actual Task 12M path from code/operator evidence.
+
+Trace:
+
+route
+
+controller
+
+function
+
+environment lookup
+
+boolean expression
+
+response serialization
+
+
+Identify the exact source of:
+
+registrationEnabled
+
+
+Previous accepted evidence indicated runtime uses:
+
+isRegistrationEnabled(env)
+
+and ultimately:
+
+REGISTRATION_ENABLED
+
+
+Verify this against CURRENT source and the DEPLOYED candidate module.
+
+Do not rely only on source comments.
+
+==================================================
+STEP 4 — TRACE ACTUAL RUNTIME REGISTRATION GATE
+==================================================
+
+Separately trace:
+
+POST /api/auth/register
+
+
+Identify every runtime-side gate relevant to first-time email registration.
+
+Verify:
+
+REGISTRATION_ENABLED behavior
+
+ENABLE_EMAIL_AUTH behavior
+
+schema validation
+
+Task 12L validation branch
+
+account creation path
+
+
+Determine whether:
+
+runtime capability
+
+and
+
+actual runtime registration gate
+
+use the SAME registration setting.
+
+Report:
+
+SAME
+
+or
+
+DIFFERENT
+
+
+with evidence.
+
+==================================================
+STEP 5 — INSPECT NEW CANDIDATE EXECUTABLE MODULE
+==================================================
+
+Inspect candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Record:
+
+main module hash
+
+all other module hashes available
+
+REGISTRATION_ENABLED
+
+ENABLE_EMAIL_AUTH
+
+ENVIRONMENT if present
+
+relevant auth bindings
+
+container attachment
+
+asset-routing configuration
+
+
+Compare against:
+
+A. accepted closed runtime
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+AND
+
+B. previously verified registration-enabled candidate
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+
+We already expect the new candidate to differ from B only by Task 12L's
+validation branch.
+
+Reconfirm this.
+
+==================================================
+STEP 6 — COMPARE CAPABILITY LOGIC BETWEEN RUNTIME CANDIDATES
+==================================================
+
+Compare the executable code responsible for:
+
+/api/auth/providers
+
+isRegistrationEnabled
+
+email-auth capability
+
+registration controller gate
+
+
+between:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+and:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Determine whether Task 12L changed ANY code involved in:
+
+registration capability calculation
+
+environment lookup
+
+provider response
+
+registration-enabled boolean
+
+
+Expected:
+
+NO
+
+
+But prove it.
+
+==================================================
+STEP 7 — INVESTIGATE PRIVATE CANDIDATE EXECUTION OPTIONS
+==================================================
+
+We need the strongest SAFE way to execute or observe:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+while it remains at 0% public production traffic.
+
+
+Investigate supported options already available, including if applicable:
+
+Cloudflare version preview URLs
+
+Workers version overrides
+
+preview deployments
+
+Wrangler version-specific invocation
+
+service-binding version targeting
+
+existing private runtime testing mechanism
+
+Cloudflare API-supported version execution
+
+existing Task 12L private reproduction path
+
+
+Do NOT create a new version.
+
+Do NOT move production traffic.
+
+Do NOT expose a public customer endpoint merely for debugging.
+
+==================================================
+STEP 8 — CLASSIFY PRIVATE EXECUTION METHOD
+==================================================
+
+Classify the strongest available method:
+
+DIRECT
+
+The request definitely executes candidate
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2.
+
+
+CORRELATED
+
+Strong supported evidence correlates the request to that version.
+
+
+UNAVAILABLE
+
+There is no supported way to execute/observe the inactive version without
+moving production traffic.
+
+
+Explain exactly why.
+
+==================================================
+STEP 9 — PRIVATELY QUERY CANDIDATE CAPABILITY IF POSSIBLE
+==================================================
+
+If DIRECT or CORRELATED execution is available:
+
+query the candidate's actual runtime capability endpoint.
+
+Retain:
+
+exact destination
+
+UTC timestamp
+
+HTTP status
+
+safe response headers
+
+FULL raw response body
+
+parsed response
+
+registrationEnabled
+
+email-auth/provider fields relevant to registration
+
+version identity evidence
+
+
+Expected candidate behavior:
+
+registrationEnabled=true
+
+
+Do not register a user.
+
+==================================================
+STEP 10 — PRIVATELY TEST REGISTRATION GATE IF SAFE
+==================================================
+
+ONLY if this can be done without creating an account or changing persistent
+production product state.
+
+Use a bounded invalid request that reaches the registration gate but cannot
+create an account.
+
+For example, use an intentionally invalid schema payload only if that safely
+establishes whether registration is OPEN versus registration-disabled.
+
+
+The purpose is to distinguish:
+
+registration gate CLOSED
+
+from
+
+registration gate OPEN + validation rejection.
+
+
+Do not create a customer.
+
+Do not create an identity.
+
+Do not weaken security.
+
+==================================================
+STEP 11 — INSPECT TASK 12M RUNTIME PROBE
+==================================================
+
+Inspect the exact operator/probe used for Task 12M runtime C and D.
+
+Determine:
+
+what endpoint C targeted
+
+what endpoint D targeted
+
+whether either request had version-specific execution
+
+whether either relied only on deployment readback
+
+whether C accidentally combined metadata and HTTP observations in a way that
+hid the actual failure
+
+whether D could have reached a different destination
+
+whether response parsing expected the wrong field
+
+whether stale assumptions from Task 12K's old runtime candidate remained
+
+whether the operator was fully updated from:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+to:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Search the entire Task 12M operator/probe for the OLD runtime candidate ID:
+
+946f5b87-be42-45f1-adf6-67c67ced0dd6
+
+
+There must be no accidental serving/capability expectation still tied to it.
+
+==================================================
+STEP 12 — CHECK REQUEST DESTINATIONS
+==================================================
+
+Map every runtime-capability destination used by Task 12M.
+
+For each record:
+
+hostname
+
+path
+
+whether workers.dev/custom/private/service-binding
+
+which Worker it resolves to
+
+whether it can identify a Worker version
+
+whether it could have observed the accepted runtime despite candidate
+deployment readback
+
+
+Do not assume two similar runtime URLs hit the same path.
+
+==================================================
+STEP 13 — CHECK RESPONSE SHAPE
+==================================================
+
+Determine the exact response shape of the runtime capability endpoint.
+
+Compare:
+
+accepted closed runtime
+
+previous registration-enabled candidate evidence
+
+new candidate expected response
+
+Task 12M parser
+
+
+Check for:
+
+field rename
+
+nested value
+
+boolean/string mismatch
+
+provider-list interpretation
+
+missing field
+
+parser defaulting missing value to false
+
+combined condition that was not logged separately.
+
+==================================================
+STEP 14 — CHECK OBSERVABILITY OPTIONS
+==================================================
+
+Investigate whether the runtime can use the same style of Cloudflare tail
+evidence that solved the control observation problem.
+
+Determine whether a uniquely marked runtime capability request can produce a
+tail event containing:
+
+scriptName
+
+scriptVersion.id
+
+
+If yes:
+
+document exactly how.
+
+Do NOT activate candidate to test this.
+
+Use the currently serving closed runtime only if a harmless read-only
+calibration request is needed.
+
+==================================================
+STEP 15 — BUILD RUNTIME OBSERVATION TOOL IF JUSTIFIED
+==================================================
+
+If Task 12M's runtime observation is materially weaker than the accepted
+Task 12J control observation, create a READ-ONLY runtime observation tool.
+
+Suggested path:
+
+scripts/task12n-runtime-capability-probe.mjs
+
+
+It must retain independently:
+
+A. deployment percentages
+
+B. candidate metadata/configuration
+
+C. complete targeted capability response
+
+D. complete ordinary live capability response
+
+E. per-request serving-version evidence where supported
+
+F. existing-user runtime auth
+
+
+Do not deploy anything.
+
+Do not move traffic.
+
+==================================================
+STEP 16 — CALIBRATE AGAINST CLOSED RUNTIME
+==================================================
+
+If the runtime observation tool is created:
+
+run it against CURRENT CLOSED production.
+
+Expected:
+
+serving runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+registrationEnabled=false
+
+
+Retain:
+
+full raw capability response
+
+safe headers
+
+request marker
+
+serving-version evidence if supported
+
+
+Run twice if necessary to establish repeatability.
+
+This is read-only.
+
+==================================================
+STEP 17 — ROOT-CAUSE CLASSIFICATION
+==================================================
+
+Classify the Task 12M failure as exactly one of:
+
+A. NEW CANDIDATE CONFIGURATION
+
+B. NEW CANDIDATE CODE
+
+C. TASK 12M PROBE / PARSER
+
+D. REQUEST DESTINATION
+
+E. SERVING-VERSION OBSERVATION GAP
+
+F. CLOUDFLARE VERSION / ENVIRONMENT BEHAVIOR
+
+G. OTHER — PROVEN
+
+H. UNRESOLVED
+
+
+Evidence only.
+
+Do NOT select a cause merely because it seems likely.
+
+==================================================
+STEP 18 — DETERMINE WHETHER NEW CANDIDATE IS REUSABLE
+==================================================
+
+Classify:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+as:
+
+REUSABLE
+
+NOT REUSABLE
+
+UNKNOWN
+
+
+If REUSABLE:
+
+explain why Task 12M failed despite candidate correctness.
+
+
+If NOT REUSABLE:
+
+identify exact defect.
+
+
+If UNKNOWN:
+
+state exactly what evidence is missing.
+
+==================================================
+STEP 19 — DESIGN SMALLEST NEXT FIX
+==================================================
+
+ONLY design the fix.
+
+DO NOT implement it in this task unless the issue is solely a LOCAL
+read-only probe/operator bug that can be corrected without changing any
+Worker version or production configuration.
+
+
+If Worker code/config must change:
+
+describe the smallest change only.
+
+
+If the candidate is correct and probe is wrong:
+
+fix the local probe/operator only and verify it against closed production.
+
+
+Do not create a Worker version.
+
+==================================================
+STEP 20 — SAFE REGRESSION
+==================================================
+
+Production remains closed.
+
+Verify:
+
+user 1 login
+
+user 2 login
+
+user 1 only project 2
+
+user 2 only project 3
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+claims zero
+
+
+Verify correct production gateway:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+==================================================
+TASK 12N ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. zero production traffic moved
+
+2. signup remains closed
+
+3. no Worker version created
+
+4. Task 12M C decomposed as far as evidence permits
+
+5. Task 12M D exact destination identified
+
+6. historical unknowns explicitly retained as unknown
+
+7. runtime capability code traced
+
+8. actual registration gate traced
+
+9. capability vs registration gate relationship established
+
+10. new candidate executable inspected
+
+11. comparison to candidate 946f completed
+
+12. Task 12L shown to affect or not affect capability logic
+
+13. strongest private candidate-execution method established
+
+14. candidate privately queried if safely possible
+
+15. Task 12M probe/operator inspected
+
+16. old candidate ID searched for stale references
+
+17. request destinations mapped
+
+18. response shape verified
+
+19. runtime tail/version observability investigated
+
+20. runtime observation tool created if justified
+
+21. closed calibration passes if tool created
+
+22. root cause classified with evidence
+
+23. new runtime candidate classified REUSABLE / NOT REUSABLE / UNKNOWN
+
+24. smallest next fix designed
+
+25. safe production regression passes
+
+26. claims remain zero
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current runtime version/traffic
+
+2. new runtime candidate/traffic
+
+3. current control version/traffic
+
+4. current registration states
+
+5. Task 12M runtime deployment ID
+
+6. historical C1 configured-version evidence
+
+7. historical C2 targeted-capability evidence
+
+8. historical D evidence
+
+9. exact historical unknowns
+
+10. runtime capability endpoint
+
+11. capability handler/controller
+
+12. exact registrationEnabled expression
+
+13. actual registration gate expression
+
+14. capability and registration gate SAME/DIFFERENT
+
+15. new candidate REGISTRATION_ENABLED
+
+16. new candidate ENABLE_EMAIL_AUTH
+
+17. new candidate main-module hash
+
+18. comparison to 946f candidate
+
+19. did Task 12L alter capability logic?
+
+20. strongest private execution method
+
+21. private execution classification DIRECT/CORRELATED/UNAVAILABLE
+
+22. private candidate capability HTTP status if available
+
+23. private candidate raw capability body if available
+
+24. private candidate version evidence if available
+
+25. private bounded registration-gate result if performed
+
+26. Task 12M C endpoint
+
+27. Task 12M D endpoint
+
+28. stale old-candidate references found?
+
+29. request-destination mapping
+
+30. expected runtime capability response shape
+
+31. Task 12M parser behavior
+
+32. runtime Cloudflare tail/version evidence availability
+
+33. runtime observation tool path if created
+
+34. closed calibration run 1
+
+35. closed calibration run 2 if used
+
+36. root-cause classification
+
+37. evidence supporting classification
+
+38. new candidate REUSABLE / NOT REUSABLE / UNKNOWN
+
+39. smallest next fix
+
+40. Worker code change required?
+
+41. new Worker version required?
+
+42. production traffic moved?
+
+43. signup state
+
+44. user-1 regression
+
+45. user-2 regression
+
+46. ownership isolation
+
+47. project-2 public app
+
+48. project-3 public app
+
+49. unknown slug
+
+50. production gateway Worker/version
+
+51. marketing
+
+52. claims
+
+53. remaining HIGH risks
+
+54. remaining MEDIUM risks
+
+55. TASK 12N ACCEPTED?
+
+56. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT RETRY TASK 12M.
+
+DO NOT ACTIVATE THE CANDIDATE.
+
+DO NOT CREATE A WORKER VERSION.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT MODIFY CONTROL.
+
+DO NOT MODIFY RUNTIME WORKER CODE.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
