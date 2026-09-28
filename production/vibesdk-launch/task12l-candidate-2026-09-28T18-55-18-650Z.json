@@ -1,0 +1,71 @@
+{
+  "createdAt": "2026-09-28T18:55:18.650Z",
+  "state": "VERIFIED_INACTIVE",
+  "baseline": {
+    "version": "946f5b87-be42-45f1-adf6-67c67ced0dd6",
+    "moduleHashes": [
+      {
+        "name": "207675bc61985763007bef924b915f43ff3dc25d-SKILL.md",
+        "sha256": "bb620c71dd6762ca61ee5acb563c710600f961eeb6ccc6eb1f7003359f2aa9aa"
+      },
+      {
+        "name": "3e51c3b6c51d14c0f926fc51bac892d3382548bf-SKILL.md",
+        "sha256": "6cc26ebc78673680cb3960e10192dcbd7c4dff74e7da9a13f1c343e2cc86121b"
+      },
+      {
+        "name": "6128e62305fc8de5a3c6845ea6b3fd1f4412c6c4-esbuild.wasm",
+        "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+      },
+      {
+        "name": "b2a76c4e89b97beb69394911244f8582a08adf64-SKILL.md",
+        "sha256": "e0283287a2bf95f5659c62c31f4fa27bea9a4df492d7f5f4ad9955d775cb2f9b"
+      },
+      {
+        "name": "bc659942f46fcff9304d22e8b012089016e80cfd-SKILL.md",
+        "sha256": "671c46dc33a771834b1db9e60656361b41f46ba8f29822f4f18799cd46d6e49e"
+      },
+      {
+        "name": "index.js",
+        "sha256": "fe0a4f18d3747be1f37c15911a561077b8b4d3681553ee6f43bcb7740259ba02"
+      }
+    ]
+  },
+  "expected": {
+    "moduleHashes": [
+      {
+        "name": "207675bc61985763007bef924b915f43ff3dc25d-SKILL.md",
+        "sha256": "bb620c71dd6762ca61ee5acb563c710600f961eeb6ccc6eb1f7003359f2aa9aa"
+      },
+      {
+        "name": "3e51c3b6c51d14c0f926fc51bac892d3382548bf-SKILL.md",
+        "sha256": "6cc26ebc78673680cb3960e10192dcbd7c4dff74e7da9a13f1c343e2cc86121b"
+      },
+      {
+        "name": "6128e62305fc8de5a3c6845ea6b3fd1f4412c6c4-esbuild.wasm",
+        "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+      },
+      {
+        "name": "b2a76c4e89b97beb69394911244f8582a08adf64-SKILL.md",
+        "sha256": "e0283287a2bf95f5659c62c31f4fa27bea9a4df492d7f5f4ad9955d775cb2f9b"
+      },
+      {
+        "name": "bc659942f46fcff9304d22e8b012089016e80cfd-SKILL.md",
+        "sha256": "671c46dc33a771834b1db9e60656361b41f46ba8f29822f4f18799cd46d6e49e"
+      },
+      {
+        "name": "index.js",
+        "sha256": "db3fa64dd2b56a4d3f336919bc45cf9c7ee02bf6bda98035fd012dabdebd4432"
+      }
+    ],
+    "changedMainOnly": true
+  },
+  "version": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+  "parity": {
+    "modules": true,
+    "bindings": true,
+    "runtimeResources": true,
+    "trafficUnchanged": true,
+    "assets": "reused via keep_assets; individual asset hashes not exposed by version readback"
+  },
+  "completedAt": "2026-09-28T18:55:32.893Z"
+}

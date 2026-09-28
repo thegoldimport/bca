@@ -1,0 +1,6 @@
+{
+  "createdAt": "2026-09-28T18:54:36.608Z",
+  "state": "FAILED_OR_UNVERIFIED",
+  "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    {\n      percentage: 100,\n+     version_id: '26ac7a8c-695f-49d9-845a-8fe79ec2c28e'\n-     version_id: '9d80432b-4e53-4fe7-950a-2b53f0213eff'\n    }\n  ]\n",
+  "completedAt": "2026-09-28T18:54:39.102Z"
+}
