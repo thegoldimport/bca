@@ -1,0 +1,478 @@
+{
+  "startedAt": "2026-09-28T19:52:36.256Z",
+  "status": "CANDIDATE_OBSERVED_CLOSED_RESTORED",
+  "events": [
+    {
+      "at": "2026-09-28T19:52:36.526Z",
+      "stage": "precheck-passed",
+      "evidence": {
+        "before": {
+          "id": "217ff89f-7d07-463b-90a0-ad236cde95f3",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12M rollback-runtime",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T19:05:54.317419Z"
+        },
+        "control": {
+          "deployment": {
+            "id": "5d935388-efd8-44d6-aad5-500c9a4ce229",
+            "source": "api",
+            "strategy": "percentage",
+            "annotations": {
+              "workers/message": "Task 12K failed acceptance: restore closed signup",
+              "workers/triggered_by": "deployment"
+            },
+            "versions": [
+              {
+                "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+                "percentage": 100
+              }
+            ],
+            "created_on": "2026-09-28T18:33:36.360552Z"
+          },
+          "registration": false,
+          "publicApps": true
+        },
+        "gateway": {
+          "id": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-27T18:02:37.195852Z"
+        },
+        "parity": "production/vibesdk-launch/task12m-precheck-2026-09-28T19-50-34-983Z.json",
+        "runtimeClosed": "production/vibesdk-launch/task12n-runtime-observation-2026-09-28T19-50-07-247Z.json",
+        "controlClosed": "production/vibesdk-launch/task12j-observation-2026-09-28T19-50-27-450Z-d4ff657d.json",
+        "regression": "production/vibesdk-launch/task12l-regression-2026-09-28T19-50-38-083Z.json"
+      }
+    },
+    {
+      "at": "2026-09-28T19:52:36.528Z",
+      "stage": "request-activate-runtime-candidate",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "input": {
+          "strategy": "percentage",
+          "versions": [
+            {
+              "version_id": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+              "percentage": 100
+            }
+          ],
+          "annotations": {
+            "workers/message": "Task 12Q activate-runtime-candidate"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:52:37.036Z",
+      "stage": "deployment-activate-runtime-candidate",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "response": {
+          "id": "eb71d142-1b6b-4e6a-8672-4607bfbba463"
+        },
+        "requestedAt": "2026-09-28T19:52:37.036Z"
+      }
+    },
+    {
+      "at": "2026-09-28T19:52:37.344Z",
+      "stage": "candidate-readback",
+      "evidence": {
+        "active": {
+          "id": "eb71d142-1b6b-4e6a-8672-4607bfbba463",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12Q activate-runtime-candidate",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T19:52:36.617228Z"
+        },
+        "control": {
+          "deployment": {
+            "id": "5d935388-efd8-44d6-aad5-500c9a4ce229",
+            "source": "api",
+            "strategy": "percentage",
+            "annotations": {
+              "workers/message": "Task 12K failed acceptance: restore closed signup",
+              "workers/triggered_by": "deployment"
+            },
+            "versions": [
+              {
+                "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+                "percentage": 100
+              }
+            ],
+            "created_on": "2026-09-28T18:33:36.360552Z"
+          },
+          "registration": false,
+          "publicApps": true
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:52:49.644Z",
+      "stage": "candidate-observer",
+      "evidence": {
+        "exitCode": 0,
+        "error": null,
+        "artifact": "production/vibesdk-launch/task12n-runtime-observation-2026-09-28T19-52-37-383Z.json",
+        "status": "PASS",
+        "observations": {
+          "candidatePercentage": {
+            "expected": 100,
+            "observed": 100,
+            "status": "PASS"
+          },
+          "acceptedPercentage": {
+            "expected": 0,
+            "observed": 0,
+            "status": "PASS"
+          },
+          "candidateRegistrationBinding": {
+            "expected": "true",
+            "observed": "true",
+            "status": "PASS"
+          },
+          "candidateEmailAuthBinding": {
+            "expected": "not false",
+            "observed": "absent",
+            "status": "PASS"
+          },
+          "targetedHttpStatus": {
+            "expected": 200,
+            "observed": 200,
+            "status": "PASS"
+          },
+          "targetedSafeBody": {
+            "expected": "redacted JSON",
+            "observed": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":true,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+            "status": "PASS"
+          },
+          "targetedRegistrationEnabled": {
+            "expected": true,
+            "observed": true,
+            "status": "PASS"
+          },
+          "targetedEmail": {
+            "expected": true,
+            "observed": true,
+            "status": "PASS"
+          },
+          "targetedScriptName": {
+            "expected": "buildcustom-vibesdk-launch",
+            "observed": "buildcustom-vibesdk-launch",
+            "status": "PASS"
+          },
+          "targetedVersionId": {
+            "expected": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "observed": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "status": "PASS"
+          },
+          "ordinaryHttpStatus": {
+            "expected": 200,
+            "observed": 200,
+            "status": "PASS"
+          },
+          "ordinarySafeBody": {
+            "expected": "redacted JSON",
+            "observed": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":true,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+            "status": "PASS"
+          },
+          "ordinaryRegistrationEnabled": {
+            "expected": true,
+            "observed": true,
+            "status": "PASS"
+          },
+          "ordinaryEmail": {
+            "expected": true,
+            "observed": true,
+            "status": "PASS"
+          },
+          "ordinaryScriptName": {
+            "expected": "buildcustom-vibesdk-launch",
+            "observed": "buildcustom-vibesdk-launch",
+            "status": "PASS"
+          },
+          "ordinaryVersionId": {
+            "expected": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "observed": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "status": "PASS"
+          },
+          "existingUserAuth": {
+            "expected": "PASS",
+            "observed": "PASS",
+            "status": "PASS"
+          }
+        },
+        "targeted": {
+          "request": {
+            "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790625157383-32008-targeted",
+            "marker": "1790625157383-32008-targeted",
+            "method": "GET",
+            "requestedAt": "2026-09-28T19:52:40.073Z",
+            "override": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "access-control-allow-credentials": "true",
+              "access-control-expose-headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset",
+              "alt-svc": "h3=\":443\"; ma=86400",
+              "cf-ray": "a4254a328bdcb6c2-ATL",
+              "connection": "keep-alive",
+              "content-encoding": "br",
+              "content-security-policy": "default-src 'self'; script-src 'self' 'strict-dynamic'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://avatars.githubusercontent.com https://lh3.googleusercontent.com https://*.cloudflare.com; connect-src 'self' ws://localhost:* wss://localhost:* wss://buildcustom-vibesdk-launch.thegoldimport.workers.dev https://api.github.com https://api.cloudflare.com; frame-src 'none'; object-src 'none'; media-src 'self'; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests",
+              "content-type": "application/json",
+              "cross-origin-embedder-policy": "require-corp",
+              "cross-origin-opener-policy": "same-origin",
+              "cross-origin-resource-policy": "same-origin",
+              "date": "Mon, 28 Sep 2026 19:52:40 GMT",
+              "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+              "origin-agent-cluster": "?1",
+              "permissions-policy": "camera=(), microphone=(), geolocation=(), usb=(), payment=(), magnetometer=(), gyroscope=(), accelerometer=(), autoplay=(self), fullscreen=(self), clipboard=(self)",
+              "referrer-policy": "strict-origin-when-cross-origin",
+              "report-to": "[redacted]",
+              "server": "cloudflare",
+              "set-cookie": "[redacted]",
+              "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+              "transfer-encoding": "chunked",
+              "vary": "Origin",
+              "x-content-type-options": "nosniff",
+              "x-dns-prefetch-control": "off",
+              "x-download-options": "noopen",
+              "x-frame-options": "DENY",
+              "x-permitted-cross-domain-policies": "none",
+              "x-xss-protection": "1; mode=block"
+            },
+            "redactedRawBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":true,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+            "parsed": {
+              "success": true,
+              "registrationEnabled": true,
+              "email": true,
+              "hasOAuth": false,
+              "requiresEmailAuth": true
+            },
+            "receivedAt": "2026-09-28T19:52:40.098Z",
+            "note": "CSRF token redacted before persistence; body otherwise JSON-equivalent"
+          },
+          "tail": {
+            "scriptName": "buildcustom-vibesdk-launch",
+            "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "eventTimestamp": 1790625160082,
+            "requestUrl": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790625157383-32008-targeted"
+          },
+          "evaluation": {
+            "http": "PASS",
+            "version": "PASS"
+          }
+        },
+        "ordinary": {
+          "request": {
+            "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790625157383-32008-ordinary",
+            "marker": "1790625157383-32008-ordinary",
+            "method": "GET",
+            "requestedAt": "2026-09-28T19:52:40.114Z",
+            "override": null
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "access-control-allow-credentials": "true",
+              "access-control-expose-headers": "X-Request-ID,X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset",
+              "alt-svc": "h3=\":443\"; ma=86400",
+              "cf-ray": "a4254a32cca1b6c2-ATL",
+              "connection": "keep-alive",
+              "content-encoding": "br",
+              "content-security-policy": "default-src 'self'; script-src 'self' 'strict-dynamic'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://avatars.githubusercontent.com https://lh3.googleusercontent.com https://*.cloudflare.com; connect-src 'self' ws://localhost:* wss://localhost:* wss://buildcustom-vibesdk-launch.thegoldimport.workers.dev https://api.github.com https://api.cloudflare.com; frame-src 'none'; object-src 'none'; media-src 'self'; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests",
+              "content-type": "application/json",
+              "cross-origin-embedder-policy": "require-corp",
+              "cross-origin-opener-policy": "same-origin",
+              "cross-origin-resource-policy": "same-origin",
+              "date": "Mon, 28 Sep 2026 19:52:40 GMT",
+              "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+              "origin-agent-cluster": "?1",
+              "permissions-policy": "camera=(), microphone=(), geolocation=(), usb=(), payment=(), magnetometer=(), gyroscope=(), accelerometer=(), autoplay=(self), fullscreen=(self), clipboard=(self)",
+              "referrer-policy": "strict-origin-when-cross-origin",
+              "report-to": "[redacted]",
+              "server": "cloudflare",
+              "set-cookie": "[redacted]",
+              "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+              "transfer-encoding": "chunked",
+              "vary": "Origin",
+              "x-content-type-options": "nosniff",
+              "x-dns-prefetch-control": "off",
+              "x-download-options": "noopen",
+              "x-frame-options": "DENY",
+              "x-permitted-cross-domain-policies": "none",
+              "x-xss-protection": "1; mode=block"
+            },
+            "redactedRawBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":true,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+            "parsed": {
+              "success": true,
+              "registrationEnabled": true,
+              "email": true,
+              "hasOAuth": false,
+              "requiresEmailAuth": true
+            },
+            "receivedAt": "2026-09-28T19:52:40.139Z",
+            "note": "CSRF token redacted before persistence; body otherwise JSON-equivalent"
+          },
+          "tail": {
+            "scriptName": "buildcustom-vibesdk-launch",
+            "versionId": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+            "eventTimestamp": 1790625160123,
+            "requestUrl": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12n_observation=1790625157383-32008-ordinary"
+          },
+          "evaluation": {
+            "http": "PASS",
+            "version": "PASS"
+          }
+        },
+        "auth": {
+          "timestamp": "2026-09-28T19:52:49.609Z",
+          "phase": "candidate",
+          "check": "E: existing-user product and runtime authentication",
+          "observed": {
+            "loginStatus": 200,
+            "productAuthenticated": true,
+            "ownProjectIds": [
+              2
+            ],
+            "runtimeStatus": 200,
+            "runtimeAuthenticated": true
+          },
+          "expected": {
+            "loginStatus": 200,
+            "productAuthenticated": true,
+            "runtimeStatus": 200,
+            "runtimeAuthenticated": true
+          },
+          "status": "PASS"
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:52:49.645Z",
+      "stage": "request-restore-accepted-runtime-1",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "input": {
+          "strategy": "percentage",
+          "versions": [
+            {
+              "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+              "percentage": 100
+            }
+          ],
+          "annotations": {
+            "workers/message": "Task 12Q restore-accepted-runtime-1"
+          }
+        }
+      }
+    },
+    {
+      "at": "2026-09-28T19:52:50.280Z",
+      "stage": "deployment-restore-accepted-runtime-1",
+      "evidence": {
+        "worker": "buildcustom-vibesdk-launch",
+        "response": {
+          "id": "ffbeb84c-e03b-4996-b893-253971235df6"
+        },
+        "requestedAt": "2026-09-28T19:52:50.280Z"
+      }
+    },
+    {
+      "at": "2026-09-28T19:52:50.499Z",
+      "stage": "rollback-readback",
+      "evidence": {
+        "deploymentId": "ffbeb84c-e03b-4996-b893-253971235df6",
+        "readback": {
+          "id": "ffbeb84c-e03b-4996-b893-253971235df6",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12Q restore-accepted-runtime-1",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-28T19:52:49.897243Z"
+        },
+        "control": {
+          "deployment": {
+            "id": "5d935388-efd8-44d6-aad5-500c9a4ce229",
+            "source": "api",
+            "strategy": "percentage",
+            "annotations": {
+              "workers/message": "Task 12K failed acceptance: restore closed signup",
+              "workers/triggered_by": "deployment"
+            },
+            "versions": [
+              {
+                "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+                "percentage": 100
+              }
+            ],
+            "created_on": "2026-09-28T18:33:36.360552Z"
+          },
+          "registration": false,
+          "publicApps": true
+        },
+        "restored": true
+      }
+    },
+    {
+      "at": "2026-09-28T19:53:01.102Z",
+      "stage": "rollback-observer",
+      "evidence": {
+        "exitCode": 0,
+        "error": null,
+        "artifact": "production/vibesdk-launch/task12n-runtime-observation-2026-09-28T19-52-50-527Z.json",
+        "status": "PASS",
+        "targeted": {
+          "http": "PASS",
+          "version": "PASS"
+        },
+        "ordinary": {
+          "http": "PASS",
+          "version": "PASS"
+        },
+        "targetedVersion": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+        "ordinaryVersion": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+        "targetedBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":false,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}",
+        "ordinaryBody": "{\"success\":true,\"data\":{\"providers\":{\"google\":false,\"github\":false,\"cloudflare\":false,\"email\":true},\"registrationEnabled\":false,\"hasOAuth\":false,\"requiresEmailAuth\":true,\"csrfToken\":\"[redacted]\",\"csrfExpiresIn\":7200}}"
+      }
+    }
+  ],
+  "completedAt": "2026-09-28T19:53:01.103Z"
+}

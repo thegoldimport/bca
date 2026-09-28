@@ -1,0 +1,1138 @@
+TASK 12Q — ONE GUARDED RUNTIME-CANDIDATE LIVE DIAGNOSTIC
+
+Task 12P is ACCEPTED.
+
+The hardened runtime observer is now accepted for a single separately
+authorized runtime-only diagnostic deployment.
+
+This is NOT a public-signup cutover.
+
+This is NOT authorization to activate control.
+
+This is NOT authorization to leave the candidate serving.
+
+This task has ONE purpose:
+
+Temporarily activate runtime candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+and use the hardened Task 12P observer to determine, with per-request
+Cloudflare Worker-version identity, what that exact candidate returns from:
+
+GET /api/auth/providers
+
+Then ALWAYS restore the accepted closed runtime.
+
+==================================================
+AUTHORIZATION
+==================================================
+
+You ARE authorized to:
+
+1. verify the current closed state
+2. verify candidate parity
+3. prepare exact rollback
+4. perform ONE temporary runtime-only activation
+5. run the hardened version-traced runtime observer
+6. perform harmless read-only capability requests
+7. perform ONE bounded non-account-creating registration-gate probe if it is
+   provably safe
+8. test existing-user authentication while the candidate is serving
+9. ALWAYS restore the accepted closed runtime
+10. verify rollback with the hardened observer
+11. correct LOCAL diagnostic/operator code only if needed to preserve evidence
+
+You are NOT authorized to:
+
+- activate the control candidate
+- open public signup
+- create another Worker version
+- modify runtime Worker code
+- modify control Worker code
+- modify Worker bindings
+- modify gateway
+- modify DNS
+- create a user
+- create a product identity
+- create a runtime identity
+- generate
+- edit projects
+- Publish
+- move the waitlist
+- unpublish public Replit
+- leave the runtime candidate serving
+- retry the candidate activation if this attempt fails
+
+ONE diagnostic activation only.
+
+==================================================
+CURRENT ACCEPTED CLOSED STATE
+==================================================
+
+RUNTIME WORKER:
+
+buildcustom-vibesdk-launch
+
+
+ACCEPTED CLOSED RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+DIAGNOSTIC CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL WORKER:
+
+buildcustom-control-plane-launch
+
+
+ACCEPTED CLOSED CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+PUBLIC SIGNUP:
+
+CLOSED
+
+
+PRODUCTION GATEWAY:
+
+buildcustom-apps-gateway
+
+
+GATEWAY VERSION:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+CLAIMS:
+
+zero
+
+==================================================
+ACCEPTED CANDIDATE EVIDENCE
+==================================================
+
+Candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Main-module SHA-256:
+
+db3fa64dd2b56a4d3f336919bc45cf9c7ee02bf6bda98035fd012dabdebd4432
+
+
+Candidate metadata:
+
+REGISTRATION_ENABLED="true"
+
+
+ENABLE_EMAIL_AUTH:
+
+no disabling binding present
+
+
+Task 12N established:
+
+GET /api/auth/providers
+
+calculates:
+
+registrationEnabled =
+isRegistrationEnabled(env) && isEmailAuthEnabled(env)
+
+
+POST /api/auth/register
+
+checks those SAME two settings before schema validation/account creation.
+
+
+Task 12L did NOT modify:
+
+- capability calculation
+- registration environment lookup
+- provider response
+- registration admission gate
+
+
+Task 12L changed only the registration schema-validation error boundary so
+expected validation errors return bounded 400 instead of runtime 500.
+
+==================================================
+ACCEPTED OBSERVER EVIDENCE
+==================================================
+
+Use the hardened observer:
+
+scripts/task12n-runtime-capability-probe.mjs
+
+
+Task 12P established:
+
+- three fresh targeted observations passed
+- three fresh ordinary observations passed
+- five additional ordinary observations passed
+- 11/11 observed requests correlated successfully after hardening
+- every correlation identified the accepted runtime version
+- missing version identity remains UNKNOWN/FAIL
+- HTTP and version observations are recorded independently
+
+
+Observer hardening included:
+
+- numeric timestamp-shaped markers
+- 12-second per-request tail window
+- independently keyed correlation
+- bounded safe tail diagnostics
+- independent HTTP/version results
+- safe raw response retention
+
+
+DO NOT replace this observer.
+
+==================================================
+STEP 1 — FINAL CLOSED PRECHECK
+==================================================
+
+Run the hardened observer against CURRENT closed runtime.
+
+Require TARGETED:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+tail scriptName:
+buildcustom-vibesdk-launch
+
+tail scriptVersion.id:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Require ORDINARY:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+tail scriptName:
+buildcustom-vibesdk-launch
+
+tail scriptVersion.id:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Also require:
+
+runtime accepted version 100%
+
+candidate 0%
+
+control accepted version 100%
+
+control candidate 0%
+
+control registration=false
+
+runtime registration=false
+
+public apps=true
+
+gateway unchanged
+
+claims zero
+
+
+If ANY precheck fails:
+
+STOP.
+
+DO NOT ACTIVATE CANDIDATE.
+
+Do not repeat the precheck under this authorization.
+
+==================================================
+STEP 2 — RECHECK CANDIDATE PARITY
+==================================================
+
+Read candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Require:
+
+traffic 0%
+
+REGISTRATION_ENABLED="true"
+
+no ENABLE_EMAIL_AUTH=false binding
+
+main module SHA:
+
+db3fa64dd2b56a4d3f336919bc45cf9c7ee02bf6bda98035fd012dabdebd4432
+
+five other modules match verified baseline
+
+29 bindings match accepted Task 12L evidence
+
+asset-routing configuration matches
+
+UserAppSandboxService container attachment present
+
+
+Do not modify candidate.
+
+If parity fails:
+
+STOP.
+
+==================================================
+STEP 3 — PREPARE EXACT ROLLBACK
+==================================================
+
+Before moving traffic prepare exact rollback:
+
+ACCEPTED RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 100%
+
+
+CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+→ 0%
+
+
+Rollback acceptance requires BOTH:
+
+deployment readback
+
+AND
+
+hardened observer proving the accepted runtime served the request and returned
+registrationEnabled=false.
+
+
+Do not rely on deployment percentages alone.
+
+==================================================
+STEP 4 — TEMPORARILY ACTIVATE ONLY THE RUNTIME CANDIDATE
+==================================================
+
+Perform ONE runtime deployment:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+→ 100%
+
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 0%
+
+
+Record:
+
+deployment ID
+
+UTC timestamp
+
+raw relevant deployment response
+
+deployment readback
+
+
+DO NOT TOUCH CONTROL.
+
+
+Control must remain:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+Control registration must remain:
+
+false
+
+
+Therefore public signup remains CLOSED throughout this diagnostic.
+
+==================================================
+STEP 5 — TARGETED CANDIDATE OBSERVATION
+==================================================
+
+Run the hardened observer's TARGETED capability observation.
+
+Retain independently:
+
+1. exact URL
+2. request marker
+3. UTC timestamp
+4. HTTP status
+5. safe response headers
+6. full safe raw JSON body
+7. parsed body
+8. registrationEnabled
+9. providers.email
+10. tail scriptName
+11. tail scriptVersion.id
+
+
+PASS requires:
+
+HTTP 200
+
+
+registrationEnabled=true
+
+
+providers.email=true
+
+
+tail scriptName:
+buildcustom-vibesdk-launch
+
+
+tail scriptVersion.id:
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+If tail event is missing:
+
+UNKNOWN → FAIL.
+
+
+If another version handled request:
+
+FAIL.
+
+
+If candidate handled request but registrationEnabled=false:
+
+FAIL.
+
+==================================================
+STEP 6 — ORDINARY CANDIDATE OBSERVATION
+==================================================
+
+Run the hardened observer's ORDINARY capability observation.
+
+This request must NOT depend on a version override to select the candidate.
+
+A harmless unique marker for correlation is allowed and expected.
+
+Retain independently:
+
+1. exact URL
+2. request marker
+3. UTC timestamp
+4. HTTP status
+5. safe response headers
+6. full safe raw JSON body
+7. parsed body
+8. registrationEnabled
+9. providers.email
+10. tail scriptName
+11. tail scriptVersion.id
+
+
+PASS requires:
+
+HTTP 200
+
+
+registrationEnabled=true
+
+
+providers.email=true
+
+
+tail scriptName:
+buildcustom-vibesdk-launch
+
+
+tail scriptVersion.id:
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+If tail event is missing:
+
+UNKNOWN → FAIL.
+
+
+If another version handled request:
+
+FAIL.
+
+
+If candidate handled request but registrationEnabled=false:
+
+FAIL.
+
+==================================================
+STEP 7 — RECORD OBSERVATIONS INDEPENDENTLY
+==================================================
+
+Do NOT recreate Task 12M's opaque combined C result.
+
+Record separately:
+
+A. candidate deployment percentage
+
+B. accepted-runtime deployment percentage
+
+C. candidate REGISTRATION_ENABLED metadata
+
+D. candidate ENABLE_EMAIL_AUTH state
+
+E. targeted HTTP status
+
+F. targeted raw safe body
+
+G. targeted registrationEnabled
+
+H. targeted providers.email
+
+I. targeted scriptName
+
+J. targeted scriptVersion.id
+
+K. ordinary HTTP status
+
+L. ordinary raw safe body
+
+M. ordinary registrationEnabled
+
+N. ordinary providers.email
+
+O. ordinary scriptName
+
+P. ordinary scriptVersion.id
+
+
+Each gets:
+
+EXPECTED
+
+OBSERVED
+
+PASS / FAIL / UNKNOWN
+
+==================================================
+STEP 8 — OPTIONAL BOUNDED REGISTRATION-GATE PROBE
+==================================================
+
+Only perform this if it is provably impossible to create an identity.
+
+Use an intentionally schema-invalid registration request.
+
+The purpose is ONLY to distinguish:
+
+registration disabled
+
+from:
+
+registration enabled + Task 12L schema-validation rejection.
+
+
+Expected if candidate is behaving correctly:
+
+registration gate is open
+
+request reaches schema validation
+
+runtime returns bounded 4xx
+
+
+Do NOT use valid customer details.
+
+Do NOT create an account.
+
+Do NOT create a product identity.
+
+Do NOT create a runtime identity.
+
+
+If there is ANY uncertainty that this request could create an identity:
+
+SKIP IT.
+
+The version-traced capability observations are sufficient.
+
+==================================================
+STEP 9 — EXISTING USER AUTH
+==================================================
+
+While candidate is serving:
+
+use ONE existing test user.
+
+Require:
+
+normal login succeeds
+
+product identity present
+
+runtime /api/auth/check:
+authenticated=true
+
+same existing project ownership preserved
+
+
+No generation.
+
+No editing.
+
+No Publish.
+
+==================================================
+STEP 10 — CAPTURE DIAGNOSTIC ARTIFACT
+==================================================
+
+Before rollback verify the saved diagnostic artifact contains:
+
+candidate deployment percentages
+
+candidate registration metadata
+
+targeted raw safe response
+
+targeted registrationEnabled
+
+targeted providers.email
+
+targeted scriptName
+
+targeted scriptVersion.id
+
+ordinary raw safe response
+
+ordinary registrationEnabled
+
+ordinary providers.email
+
+ordinary scriptName
+
+ordinary scriptVersion.id
+
+existing-user auth result
+
+
+If anything is missing:
+
+mark it UNKNOWN.
+
+Do NOT repeat candidate activation.
+
+==================================================
+STEP 11 — ALWAYS ROLLBACK RUNTIME
+==================================================
+
+REGARDLESS OF DIAGNOSTIC RESULT:
+
+restore:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 100%
+
+
+and:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+→ 0%
+
+
+Record:
+
+rollback deployment ID
+
+UTC timestamp
+
+deployment readback
+
+==================================================
+STEP 12 — VERSION-TRACED ROLLBACK VERIFICATION
+==================================================
+
+Run hardened observer again.
+
+Require TARGETED:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+tail version:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Require ORDINARY:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+tail version:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Also require:
+
+accepted runtime 100%
+
+candidate 0%
+
+control unchanged
+
+control registration=false
+
+public signup CLOSED
+
+==================================================
+STEP 13 — CLASSIFY CANDIDATE
+==================================================
+
+Classify:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+as exactly one:
+
+REUSABLE
+
+NOT REUSABLE
+
+UNKNOWN
+
+
+REUSABLE requires:
+
+- candidate definitely served targeted request
+- targeted returned registrationEnabled=true
+- targeted providers.email=true
+- candidate definitely served ordinary request
+- ordinary returned registrationEnabled=true
+- ordinary providers.email=true
+- existing-user auth remained valid
+
+
+NOT REUSABLE requires:
+
+candidate definitely served one or both required requests and exhibited a
+concrete incorrect behavior.
+
+
+UNKNOWN requires:
+
+required serving-version identity or response evidence is missing.
+
+==================================================
+STEP 14 — CLASSIFY TASK 12M HISTORICAL FAILURE
+==================================================
+
+Classify only as far as evidence permits.
+
+Possible outcomes:
+
+A. candidate defect
+
+B. old Task 12M probe/observation defect
+
+C. request-destination/version-override defect
+
+D. historical transient/observation issue
+
+E. other — proven
+
+F. exact historical cause remains unresolved
+
+
+IMPORTANT:
+
+If Task 12Q proves the candidate works correctly now, that proves the candidate
+is reusable.
+
+It does NOT automatically prove exactly why Task 12M failed.
+
+It is acceptable to conclude:
+
+CANDIDATE REUSABLE
+
+while:
+
+TASK 12M EXACT HISTORICAL CAUSE UNRESOLVED.
+
+==================================================
+STEP 15 — SAFE CLOSED PRODUCTION REGRESSION
+==================================================
+
+Only after accepted runtime is restored:
+
+verify:
+
+user 1 login
+
+user 2 login
+
+user 1 only project 2
+
+user 2 only project 3
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+claims zero
+
+
+Verify gateway remains:
+
+buildcustom-apps-gateway
+
+version:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+100%
+
+==================================================
+SUCCESS INTERPRETATION
+==================================================
+
+If:
+
+TARGETED candidate request
+→ candidate version proven
+→ registrationEnabled=true
+→ providers.email=true
+
+
+AND:
+
+ORDINARY candidate request
+→ candidate version proven
+→ registrationEnabled=true
+→ providers.email=true
+
+
+AND:
+
+existing-user auth passes
+
+
+AND:
+
+accepted closed runtime is restored and verified
+
+
+then:
+
+TASK 12Q IS ACCEPTED
+
+and candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+is PROVEN REUSABLE for a separately authorized final public-signup cutover.
+
+
+Do NOT leave it serving in Task 12Q.
+
+==================================================
+FAILURE RULE
+==================================================
+
+If ANY candidate observation fails:
+
+preserve evidence
+
+DO NOT RETRY
+
+restore accepted runtime
+
+verify rollback
+
+run safe production regression
+
+STOP.
+
+
+If a tail event is missing:
+
+UNKNOWN
+
+not PASS.
+
+
+No second diagnostic activation.
+
+==================================================
+TASK 12Q ACCEPTANCE
+==================================================
+
+PASS requires:
+
+1. closed precheck passes
+
+2. candidate parity passes
+
+3. exact rollback prepared
+
+4. control never activated
+
+5. control registration remains false
+
+6. candidate activated exactly once
+
+7. targeted HTTP evidence retained
+
+8. targeted serving version retained
+
+9. ordinary HTTP evidence retained
+
+10. ordinary serving version retained
+
+11. observations recorded independently
+
+12. no opaque combined capability result
+
+13. existing-user auth checked
+
+14. no new identity created
+
+15. no generation
+
+16. no editing
+
+17. no Publish
+
+18. accepted runtime ALWAYS restored
+
+19. rollback proven with targeted observer
+
+20. rollback proven with ordinary observer
+
+21. public signup remains closed
+
+22. candidate classified
+
+23. safe regression passes
+
+24. claims remain zero
+
+25. no Worker version created
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. initial closed runtime version/traffic
+
+2. initial candidate traffic
+
+3. initial control version/traffic
+
+4. initial registration states
+
+5. closed precheck targeted result
+
+6. closed precheck ordinary result
+
+7. candidate parity result
+
+8. diagnostic deployment ID
+
+9. diagnostic deployment timestamp
+
+10. candidate deployment percentage
+
+11. accepted-runtime deployment percentage
+
+12. candidate REGISTRATION_ENABLED metadata
+
+13. candidate ENABLE_EMAIL_AUTH state
+
+14. targeted request URL
+
+15. targeted marker
+
+16. targeted HTTP status
+
+17. targeted safe raw body
+
+18. targeted registrationEnabled
+
+19. targeted providers.email
+
+20. targeted tail scriptName
+
+21. targeted tail scriptVersion.id
+
+22. targeted version identity PASS/FAIL/UNKNOWN
+
+23. ordinary request URL
+
+24. ordinary marker
+
+25. ordinary HTTP status
+
+26. ordinary safe raw body
+
+27. ordinary registrationEnabled
+
+28. ordinary providers.email
+
+29. ordinary tail scriptName
+
+30. ordinary tail scriptVersion.id
+
+31. ordinary version identity PASS/FAIL/UNKNOWN
+
+32. bounded registration-gate probe performed?
+
+33. bounded gate result
+
+34. identities created
+
+35. existing-user auth result
+
+36. candidate classification
+
+37. evidence supporting classification
+
+38. Task 12M historical failure classification
+
+39. exact historical cause proven?
+
+40. rollback deployment ID
+
+41. rollback timestamp
+
+42. final accepted runtime version/traffic
+
+43. final candidate traffic
+
+44. rollback targeted HTTP/body/version
+
+45. rollback ordinary HTTP/body/version
+
+46. final runtime registration
+
+47. final control version/traffic
+
+48. final control registration
+
+49. public signup state
+
+50. user-1 regression
+
+51. user-2 regression
+
+52. ownership isolation
+
+53. project-2 public app
+
+54. project-3 public app
+
+55. unknown slug
+
+56. gateway Worker/version/traffic
+
+57. marketing
+
+58. claims
+
+59. Worker code changed?
+
+60. Worker version created?
+
+61. production traffic moved temporarily?
+
+62. production traffic fully restored?
+
+63. remaining HIGH risks
+
+64. remaining MEDIUM risks
+
+65. TASK 12Q ACCEPTED?
+
+66. Is runtime candidate
+    95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+    proven REUSABLE for the final signup cutover?
+
+67. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE CONTROL.
+
+DO NOT LEAVE CANDIDATE SERVING.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE A WORKER VERSION.
+
+DO NOT MODIFY WORKER CODE.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MOVE WAITLIST.
+
+DO NOT UNPUBLISH PUBLIC REPLIT.

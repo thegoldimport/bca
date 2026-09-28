@@ -87,7 +87,11 @@ async function existingUserAuth() {
     const login = await pending;
     const identity = await page.evaluate(async () => {
       const me = await (await fetch("/api/auth/me", { cache: "no-store" })).json();
-      return { authenticated: !!me?.id };
+      const projectsResponse = await fetch("/api/projects", { cache: "no-store" });
+      const projects = await projectsResponse.json();
+      return { authenticated: !!me?.id,
+        ownProjectIds: projectsResponse.status === 200 && Array.isArray(projects)
+          ? projects.map(project => Number(project.id)) : null };
     });
     const cookies = await page.cookies(product);
     const cookie = cookies.map((item) => `${item.name}=${item.value}`).join("; ");
@@ -99,6 +103,7 @@ async function existingUserAuth() {
     return {
       loginStatus: login.status(),
       productAuthenticated: identity.authenticated,
+      ownProjectIds: identity.ownProjectIds,
       runtimeStatus: response.status,
       runtimeAuthenticated: body.data?.authenticated ?? body.authenticated,
     };
@@ -173,7 +178,9 @@ async function main() {
       "E: existing-user product and runtime authentication",
       auth,
       { loginStatus: 200, productAuthenticated: true, runtimeStatus: 200, runtimeAuthenticated: true },
-      auth.loginStatus === 200 && auth.productAuthenticated && auth.runtimeStatus === 200 && auth.runtimeAuthenticated === true,
+      auth.loginStatus === 200 && auth.productAuthenticated
+        && JSON.stringify(auth.ownProjectIds) === "[2]"
+        && auth.runtimeStatus === 200 && auth.runtimeAuthenticated === true,
     );
   } catch (error) {
     record("E: existing-user product and runtime authentication", { error: error.message }, { authenticated: true }, false);
