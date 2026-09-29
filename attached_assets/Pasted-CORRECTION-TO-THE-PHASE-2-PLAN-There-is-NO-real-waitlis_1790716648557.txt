@@ -1,0 +1,204 @@
+CORRECTION TO THE PHASE 2 PLAN:
+
+There is NO real waitlist.
+
+The existing waitlist records are all my own disposable test data.
+
+DO NOT migrate the waitlist.
+DO NOT preserve waitlist records.
+DO NOT create a replacement waitlist endpoint in Cloudflare.
+DO NOT add waitlist infrastructure to D1.
+DO NOT treat the Replit waitlist endpoint as a production capability that must
+be preserved.
+
+Remove that entire requirement from the Phase 2 plan.
+
+The actual goal is now much simpler:
+
+GitHub = permanent source of truth
+Cloudflare = all production infrastructure
+Replit = optional development IDE only, with ZERO production dependency
+
+Continue with the READ-ONLY Phase 2 review, focused only on what is necessary
+to reach that state.
+
+1. CANONICAL PRODUCTION SOURCE
+
+Map the exact current accepted production source for:
+
+- BuildCustom runtime
+- BuildCustom control plane
+- generated-app gateway
+- marketing site
+
+Current accepted production versions:
+
+runtime:
+e1dda75e-2082-4f38-a1fc-a16d25542425
+
+control plane:
+df8f155e-aabf-4b69-98b1-30f704a5689b
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Determine whether current GitHub main contains the exact source required to
+reproduce these accepted production components.
+
+Identify any real source drift.
+
+2. CURRENT-TREE CLEANUP
+
+Identify:
+
+- duplicate VibeSDK snapshots
+- .bak files
+- temporary attachments
+- acceptance evidence
+- obsolete test artifacts
+- obsolete Replit-specific production files
+- other obvious workspace debris
+
+Classify each as:
+
+A. required production source
+B. required test/deployment tooling
+C. genuinely useful documentation
+D. disposable artifact
+
+Propose a NORMAL cleanup commit for the CURRENT TREE.
+
+Do NOT rewrite Git history.
+Do NOT force-push.
+
+The historical exposed Replit admin credential is permanently considered
+compromised. Its live capability has already been removed and verified 404.
+
+We do not need to sanitize old Git history as a launch prerequisite.
+
+3. SECURITY FINDINGS
+
+Reduce the broad scanner results to findings that actually affect the
+production source/dependency paths.
+
+Do NOT treat 6 critical + 287 high findings as automatic launch blockers.
+
+For production-relevant HIGH/CRITICAL findings only, report:
+
+- affected package/file
+- affected production component
+- whether vulnerable functionality is actually reachable
+- runtime vs build/dev/test-only
+- smallest remediation
+- whether it must be fixed before Replit shutdown or can be handled afterward
+
+Do not upgrade anything yet.
+
+4. CURRENT SECRET EXPOSURE
+
+Confirm current HEAD contains no usable copy of the retired Replit admin
+credential.
+
+Check current tracked source/config/build/deployment files for any OTHER actual
+credential values.
+
+Do not confuse:
+- environment variable names
+- Cloudflare IDs
+- resource IDs
+- redacted examples
+- documentation references
+
+with actual secrets.
+
+Do not print secret values.
+
+If another actual live-looking credential is found, STOP and report its
+location/type without reproducing it.
+
+5. REPRODUCIBLE DEPLOYMENT
+
+Determine whether a FRESH GitHub checkout can build and deploy:
+
+- runtime
+- control plane
+- gateway
+- marketing site
+
+without requiring source/files/state that exist only in Replit.
+
+Document:
+
+- canonical directories
+- Node/Bun versions
+- install commands
+- build commands
+- Wrangler/deployment configs
+- required secret/environment variable NAMES only
+- deployment commands
+
+Do not deploy yet.
+
+6. REPLIT PRODUCTION DEPENDENCY INVENTORY
+
+Find every CURRENT thing that would stop working if the Replit deployment and
+development environment disappeared completely.
+
+Do not count:
+- Git history references
+- documentation mentioning Replit
+- optional developer convenience
+- disposable test data
+- the old waitlist test records
+
+Only report REAL production dependencies.
+
+7. OLD WAITLIST CODE
+
+Because there is no real waitlist:
+
+Determine whether the marketing site currently exposes a waitlist/signup form
+that still calls the Replit waitlist endpoint.
+
+If YES:
+- identify exactly where it exists
+- propose removing the form/API call entirely as part of the cleanup unless
+  it serves another real current purpose
+
+Do NOT migrate it.
+
+If NO:
+- mark the waitlist system as disposable and eligible for removal with the
+  Replit deployment.
+
+8. RETURN THE PHASE 2 REPORT
+
+Return:
+
+A. canonical production source map
+B. GitHub HEAD parity with accepted production
+C. actual source drift
+D. proposed current-tree cleanup
+E. production-relevant HIGH/CRITICAL findings only
+F. actual current credential exposure, if any
+G. fresh-checkout deployment reproducibility
+H. REAL remaining production dependencies on Replit
+I. whether obsolete waitlist code/form should simply be removed
+J. smallest plan to reach ZERO production Replit dependency
+K. GO / NO-GO for the cleanup + Replit shutdown phase
+
+A NO-GO must be based on a concrete current production/security/deployment
+problem.
+
+Do not make historical repository cleanliness an automatic blocker.
+
+STOP after the report.
+
+Do not commit.
+Do not push.
+Do not rewrite history.
+Do not force-push.
+Do not deploy.
+Do not modify Cloudflare.
+Do not modify Replit production.
+Do not upgrade dependencies.
