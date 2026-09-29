@@ -1,0 +1,162 @@
+That preflight mismatch is NOT a reason to stop.
+
+Do not mutate historical production state merely to manufacture an account
+that simultaneously has a previously revoked session AND owns a project.
+
+Those are separate acceptance properties and may be proven using the existing
+accounts that naturally contain the required state.
+
+Proceed with the password recovery deployment and acceptance using the
+following evidence model.
+
+ACCOUNT A — RECOVERY / SESSION SECURITY ACCOUNT
+
+Use the existing disposable account:
+
+runtime/product user ID:
+7bc6d134-a147-4d52-b712-6778ce82e544
+
+This is the account with the already-recorded revoked runtime session.
+
+For THIS disposable account only, I approve changing its email to the same
+Gmail inbox that successfully received the isolated Cloudflare Email Service
+test.
+
+Change ONLY its email address.
+
+Preserve:
+- product user ID
+- runtime user ID
+- product/runtime identity mapping
+- existing revoked session record/history
+- all other identity/auth state
+
+Do not create a new identity.
+
+Use Account A to prove:
+
+1. The historical revoked session remains revoked after the email change.
+2. Forgot-password sends a real recovery email to the Gmail inbox.
+3. The actual reset link works.
+4. The reset preserves the same product/runtime identity.
+5. The reset token is single-use and replay is rejected.
+6. The new password permits normal login.
+7. Product auth succeeds.
+8. Runtime auth succeeds.
+9. Logout revokes that active session server-side.
+10. The saved logged-out credential is rejected by product and runtime.
+11. Fresh login succeeds.
+12. While a fresh session is active, perform a second password reset.
+13. That reset revokes the active session.
+14. The previous password is rejected.
+15. The newest password succeeds.
+16. An unrelated user's active session remains unaffected.
+
+Account A does NOT need to own a project for these auth/session/recovery tests.
+
+ACCOUNT B — EXISTING PROJECT REGRESSION ACCOUNT
+
+Use an existing project-owning cutover/test account for the product regression.
+
+Do NOT alter its identity merely to give it historical revoked-session state.
+
+Using its existing owned project, verify:
+
+- login/authentication as currently supported
+- dashboard
+- project ownership
+- project reopen
+- Files
+- styled preview
+- idle WebSocket/conversation state without inference
+- existing public generated app
+- generated-app gateway
+- unknown slug returns 404
+- cross-user ownership isolation
+- active publish claims remain 0
+
+Do not perform AI generation.
+
+CROSS-ACCOUNT SECURITY
+
+Use the existing accounts to prove:
+- Account A cannot access Account B's project
+- Account B ownership remains unchanged
+- password reset for Account A does not revoke Account B sessions
+- no identity mapping changed unexpectedly
+
+DEPLOYMENT
+
+The local runtime and control-plane password-recovery checks have already
+passed.
+
+Proceed with the minimum reviewed password-recovery deployment.
+
+Requirements remain:
+
+- public signup stays CLOSED
+- public generated apps stay ENABLED
+- runtime remains sole password/session/recovery authority
+- native Cloudflare EMAIL binding
+- sender: BuildCustom <security@buildcustom.ai>
+- reset URL on https://app.buildcustom.ai/reset-password
+- secure hashed reset token
+- 60-minute expiration
+- user-bound
+- single-use
+- atomic consumption
+- existing password strength/hashing
+- successful reset revokes that user's active sessions
+- other users unaffected
+- generic forgot-password response
+- Origin protection
+- CSRF protection
+- reasonable abuse/rate protection
+- Forgot password UI
+- reset-password UI
+
+Do not investigate support@buildcustom.ai.
+
+Do not change DNS.
+
+Do not change marketing.
+
+Do not change the generated-app gateway.
+
+Do not create another signup account.
+
+Do not require Account A to own a project.
+
+Do not require Account B to have historical revoked-session state.
+
+If an ACTUAL recovery, authentication, authorization, session-revocation,
+email-delivery, or customer-path security check fails, STOP and report the
+exact failure.
+
+Do not stop because two unrelated historical acceptance fixtures exist on
+different disposable accounts.
+
+After successful acceptance:
+
+- leave password recovery LIVE
+- leave EMAIL binding LIVE
+- leave security@buildcustom.ai as reset sender
+- leave public generated apps ENABLED
+- leave public signup CLOSED
+- leave gateway unchanged
+- remove the temporary email-test Worker once production recovery email
+  delivery is proven
+
+Return:
+- deployed runtime version ID
+- deployed control-plane version ID
+- Account A identity before/after
+- email delivery evidence
+- token replay result
+- historical logout revocation evidence
+- new logout revocation evidence
+- password-reset active-session revocation evidence
+- unrelated-user session evidence
+- Account B project regression results
+- cross-account isolation results
+- final registration/public-app/gateway state

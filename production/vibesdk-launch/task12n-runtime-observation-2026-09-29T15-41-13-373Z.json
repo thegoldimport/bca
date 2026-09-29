@@ -1,0 +1,33 @@
+{
+  "at": "2026-09-29T15:41:13.373Z",
+  "mode": "closed-read-only",
+  "expectedVersion": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+  "status": "FAIL",
+  "checks": {
+    "A_deployment": {
+      "id": "3cae815e-50f7-43df-a865-5fe4cb8f3ce3",
+      "versions": [
+        {
+          "version_id": "e1dda75e-2082-4f38-a1fc-a16d25542425",
+          "percentage": 100
+        }
+      ],
+      "expected": false,
+      "candidatePercentage": 0
+    },
+    "B_candidateMetadata": {
+      "id": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+      "hasPreview": false,
+      "registration": "true",
+      "emailAuth": null,
+      "acceptedRegistration": "false",
+      "container": [
+        {
+          "class_name": "UserAppSandboxService"
+        }
+      ]
+    }
+  },
+  "error": "Expected version not currently serving at 100%; no probes issued",
+  "completedAt": "2026-09-29T15:41:13.820Z"
+}
