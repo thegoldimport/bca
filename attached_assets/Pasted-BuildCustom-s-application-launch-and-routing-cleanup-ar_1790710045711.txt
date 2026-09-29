@@ -1,0 +1,248 @@
+BuildCustom's application launch and routing cleanup are ACCEPTED.
+
+Freeze the current accepted production state:
+
+SOURCE COMMIT:
+c249c459cde921b77b3b23920272fad9579e712c
+
+RUNTIME:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+CONTROL:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+GATEWAY:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+MARKETING PAGES:
+3b205b01-11c0-40bf-9acd-21fec2309244
+
+Current accepted state:
+
+- public signup OPEN
+- app.buildcustom.ai/ -> login signed out / dashboard signed in
+- canonical clean auth routes live
+- password recovery live
+- EMAIL binding live
+- public generated apps enabled
+- buildcustom.ai marketing healthy
+- primary Build It! -> https://app.buildcustom.ai/signup
+- pricing/partner CTAs unchanged
+- active publish claims = 0
+
+NEXT TASK: TASK 13 — ESTABLISH DURABLE SOURCE/DEPLOYMENT OWNERSHIP AND REMOVE
+THE REMAINING PRODUCTION REPLIT DEPENDENCY.
+
+IMPORTANT:
+
+Do NOT change production yet.
+
+Start with READ-ONLY inspection and reconciliation planning.
+
+PART 1 — GIT / GITHUB SOURCE OF TRUTH
+
+Inspect the current repository state and determine:
+
+1. Current git remote(s).
+2. Current branch.
+3. Whether commit
+   c249c459cde921b77b3b23920272fad9579e712c
+   exists on GitHub.
+4. Whether all source required to reproduce the currently accepted runtime,
+   control plane, gateway, and marketing releases is committed.
+5. Whether there are untracked or ignored production-critical files.
+6. Whether production secrets/configuration are appropriately externalized
+   rather than committed.
+7. Whether GitHub can become the canonical source of truth without losing any
+   currently accepted production changes.
+
+Do not push/create/change anything yet if GitHub is not already configured.
+
+Report any discrepancy.
+
+PART 2 — MARKETING PAGES RECONCILIATION
+
+The currently accepted marketing Pages release:
+
+3b205b01-11c0-40bf-9acd-21fec2309244
+
+was uploaded directly.
+
+Inspect the Cloudflare Pages project and its GitHub-connected build
+configuration.
+
+Determine:
+
+1. Which GitHub repository is connected.
+2. Which branch is production.
+3. Current production build command.
+4. Current output directory.
+5. Environment variables/build configuration.
+6. Which Git commit the GitHub-connected pipeline currently considers latest.
+7. Whether commit c249c459... is present in that repository/branch.
+8. Whether a new GitHub-triggered build from the current canonical source
+   would reproduce the accepted marketing site.
+
+Specifically prove that the source used by a future GitHub build contains:
+
+Primary Build It! ->
+https://app.buildcustom.ai/signup
+
+and that:
+
+- pricing CTA behavior remains unchanged
+- partner/strategy CTA behavior remains unchanged
+- other remaining waitlist behavior remains unchanged
+
+Do NOT trigger a Pages build yet.
+
+PART 3 — DEPLOYMENT REPRODUCIBILITY
+
+Map how each production component should eventually deploy from canonical
+GitHub source:
+
+- runtime
+- control plane/frontend
+- generated-app gateway
+- marketing Pages
+
+Identify:
+
+- build command
+- deployment command
+- Wrangler config/profile
+- required Cloudflare bindings
+- required secrets
+- which secrets must remain in Cloudflare/GitHub secrets rather than source
+- any current step that depends on Replit-specific filesystem paths,
+  environment variables, secrets, deployment APIs, or runtime services
+
+Goal:
+
+A fresh checkout of the canonical GitHub repository outside Replit should be
+able to build/test/deploy BuildCustom using external secrets and Cloudflare
+configuration.
+
+Do not implement CI/CD yet unless it is already present.
+
+PART 4 — REMAINING PRODUCTION REPLIT DEPENDENCIES
+
+Search production source, deployed frontend assets, configuration, DNS,
+Cloudflare bindings, and marketing code for production dependencies on
+Replit.
+
+Distinguish between:
+
+A. REAL PRODUCTION DEPENDENCY
+Production stops working if Replit is unavailable.
+
+B. DEVELOPMENT-ONLY REFERENCE
+Replit may still be used as an IDE/tool, but production does not depend on it.
+
+C. HISTORICAL/DOCUMENTATION REFERENCE
+No runtime effect.
+
+We already know one expected real dependency:
+
+The marketing waitlist currently posts to:
+
+https://ai-build-studio.replit.app/api/waitlist
+
+Confirm whether this is still true.
+
+Find any others.
+
+PART 5 — WAITLIST MIGRATION PLAN
+
+Do NOT migrate it yet.
+
+Design the smallest migration using EXISTING clean BuildCustom infrastructure.
+
+Preferred architecture:
+
+buildcustom.ai marketing form
+    ->
+existing BuildCustom Cloudflare control plane
+    ->
+existing clean product D1
+
+Do NOT create a new service if the existing control plane can safely handle
+this.
+
+Preserve the current marketing contract:
+
+POST body:
+{name,email,source}
+
+Preserve existing validation and customer-facing success/error behavior.
+
+Old waitlist records are disposable.
+Do NOT migrate old Replit waitlist records.
+
+Determine:
+
+- exact new endpoint
+- required D1 schema/table
+- Origin/CORS requirements for buildcustom.ai and www.buildcustom.ai
+- abuse/rate protection appropriate for a public lead form
+- response contract
+- smallest marketing source change
+- rollback path
+
+PART 6 — REPLIT SHUTDOWN PLAN
+
+Do NOT stop Replit yet.
+
+Create the final sequence required to prove Replit can be unavailable without
+affecting production.
+
+The eventual acceptance must prove, with Replit development/public deployment
+unavailable:
+
+- buildcustom.ai marketing loads
+- www.buildcustom.ai loads
+- Build It! reaches app.buildcustom.ai/signup
+- app signup remains open
+- login works
+- password recovery remains available
+- dashboard works
+- existing project reopens
+- Files works
+- preview works
+- idle WebSocket works
+- existing public generated apps work
+- unknown generated-app slug returns 404
+- marketing waitlist submits successfully to Cloudflare and persists in clean
+  D1
+- gateway remains healthy
+- active publish claims = 0
+- no production request references replit.app
+
+After that passes, the Replit PUBLIC production deployment can be stopped/
+unpublished.
+
+Replit may remain available as a development IDE if desired, but BuildCustom
+production must have ZERO runtime dependency on it.
+
+PART 7 — RETURN THE PLAN ONLY
+
+Return:
+
+1. GitHub/source-of-truth findings.
+2. Marketing Pages GitHub reconciliation findings.
+3. Reproducible deployment map.
+4. Complete Replit production-dependency inventory.
+5. Waitlist migration design.
+6. Exact proposed Task 13 implementation sequence.
+7. Exact production acceptance sequence.
+8. Exact point at which it becomes safe to shut down the Replit public
+   deployment.
+9. Any credentials/account action you need from me.
+
+Then STOP.
+
+Do not deploy.
+Do not trigger Pages builds.
+Do not change GitHub.
+Do not migrate waitlist.
+Do not stop Replit.
