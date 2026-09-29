@@ -55,3 +55,4 @@
 - [Runtime cutover capability disagreement](runtime-cutover-capability-disagreement.md) — deployment and binding checks passed but the immediate live capability gate failed; fail closed.
 - [Public signup Origin acceptance](signup-origin-gate-evidence.md) — a duplicate-email 400 does not prove invalid-Origin rejection; keep security guards independently attributable.
 - [Acceptance artifact ordering](acceptance-artifact-ordering.md) — persist PASS only after cleanup and before one-time credential handoff; test production-shaped reconciliation evidence.
+- [Transactional email provider](transactional-email-provider.md) — BuildCustom chose Cloudflare Email Service; wait for verified sending-domain onboarding before recovery implementation.
