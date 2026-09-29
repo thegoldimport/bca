@@ -61,7 +61,7 @@
     "PUBLIC_GENERATED_APPS_ENABLED": "true",
     "STAGING_MANAGED_GATEWAY_URL": "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p",
     "STAGING_LOGIN_ENABLED": "true",
-    "STAGING_REGISTRATION_ENABLED": "false",
+    "STAGING_REGISTRATION_ENABLED": "true",
     "RUNTIME_OPERATIONS_ENABLED": "true"
   }
 }

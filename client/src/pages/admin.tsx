@@ -32,13 +32,13 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "same-origin" })
       .then((res) => res.ok ? res.json() : null)
-      .then((user) => user?.role === "super_admin" ? fetchEntries() : setLocation("/login"))
-      .catch(() => setLocation("/login"));
+      .then((user) => user?.role === "super_admin" ? fetchEntries() : setLocation("/admin/login"))
+      .catch(() => setLocation("/admin/login"));
   }, [setLocation]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-    setLocation("/login");
+    setLocation("/admin/login");
   };
 
   const filteredData = data.filter(

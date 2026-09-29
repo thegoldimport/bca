@@ -9,16 +9,33 @@ import AppDashboard from "@/pages/app-dashboard";
 import AppAuth from "@/pages/app-auth";
 import ResetPassword from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
+import AppEntry from "@/pages/app-entry";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
+
+function LegacyAuthRedirect({ to }: { to: string }) {
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    navigate(`${to}${window.location.search}`, { replace: true });
+  }, [navigate, to]);
+  return null;
+}
 
 function Router() {
+  const appHost = window.location.hostname.toLowerCase() === "app.buildcustom.ai";
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={appHost ? AppEntry : Home} />
       <Route path="/admin" component={AdminDashboard} />
-      <Route path="/login" component={Login} />
-      <Route path="/app/login" component={AppAuth} />
-      <Route path="/app/signup" component={AppAuth} />
+      <Route path="/admin/login" component={Login} />
+      <Route path="/login" component={appHost ? AppAuth : Login} />
+      {appHost && <Route path="/signup" component={AppAuth} />}
+      {appHost && <Route path="/forgot-password" component={AppAuth} />}
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/app/login">{() => <LegacyAuthRedirect to="/login" />}</Route>
+      <Route path="/app/signup">{() => <LegacyAuthRedirect to="/signup" />}</Route>
+      <Route path="/app/forgot-password">{() => <LegacyAuthRedirect to="/forgot-password" />}</Route>
+      <Route path="/app/reset-password">{() => <LegacyAuthRedirect to="/reset-password" />}</Route>
       <Route path="/app" component={AppDashboard} />
       <Route path="/app/project/:id" component={AppDashboard} />
       <Route path="/app/editor/:id" component={AppDashboard} />

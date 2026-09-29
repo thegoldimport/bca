@@ -56,3 +56,4 @@
 - [Public signup Origin acceptance](signup-origin-gate-evidence.md) — a duplicate-email 400 does not prove invalid-Origin rejection; keep security guards independently attributable.
 - [Acceptance artifact ordering](acceptance-artifact-ordering.md) — persist PASS only after cleanup and before one-time credential handoff; test production-shaped reconciliation evidence.
 - [Transactional email provider](transactional-email-provider.md) — BuildCustom chose Cloudflare Email Service; wait for verified sending-domain onboarding before recovery implementation.
+- [Marketing Pages release](marketing-pages-release.md) — preserve the live Pages asset baseline for narrow changes; reconcile direct uploads with GitHub builds.

@@ -5157,11 +5157,11 @@ export default function AppDashboard() {
       })
       .then((user: AppUser | null) => {
         if (!active) return;
-        if (!user) { setCurrentUser(null); navigate("/app/login"); return; }
+        if (!user) { setCurrentUser(null); navigate("/login"); return; }
         setAppUser(user);
         setCurrentUser(user);
       })
-      .catch(() => { if (active) { setCurrentUser(null); navigate("/app/login"); } })
+      .catch(() => { if (active) { setCurrentUser(null); navigate("/login"); } })
       .finally(() => { if (active) setCheckingSession(false); });
     return () => { active = false; };
   }, [navigate]);

@@ -10,7 +10,7 @@ export default function AppAuth() {
   const [location, navigate] = useLocation();
   const { registrationEnabled } = usePublicCapabilities();
   const [mode, setMode] = useState<"login" | "signup" | "forgot">(
-    location.includes("signup") && registrationEnabled ? "signup" : "login",
+    location.includes("forgot-password") ? "forgot" : location.includes("signup") && registrationEnabled ? "signup" : "login",
   );
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -19,8 +19,9 @@ export default function AppAuth() {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
 
   useEffect(() => {
-    if (location.includes("signup") && registrationEnabled) setMode("signup");
-    else if (!registrationEnabled || !location.includes("signup")) setMode("login");
+    if (location.includes("forgot-password")) setMode("forgot");
+    else if (location.includes("signup") && registrationEnabled) setMode("signup");
+    else setMode("login");
   }, [location, registrationEnabled]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
@@ -98,7 +99,7 @@ export default function AppAuth() {
           {forgotNotice ? (
             <div className="space-y-5">
               <p className="text-sm text-emerald-300" role="status" data-testid="forgot-password-success">{forgotNotice}</p>
-              <button type="button" onClick={() => { setMode("login"); setForgotNotice(""); }}
+              <button type="button" onClick={() => { setMode("login"); setForgotNotice(""); navigate("/login"); }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm bg-white/10 hover:bg-white/15 transition-colors"
                 data-testid="button-back-to-signin">Back to sign in</button>
             </div>
@@ -172,7 +173,7 @@ export default function AppAuth() {
               {loading ? "Please wait..." : mode === "login" ? "Sign In" : mode === "forgot" ? "Send reset instructions" : "Create Account"}
             </button>
             {mode === "login" && (
-              <button type="button" onClick={() => { setMode("forgot"); setError(""); setForgotNotice(""); }}
+              <button type="button" onClick={() => { setMode("forgot"); setError(""); setForgotNotice(""); navigate("/forgot-password"); }}
                 className="w-full text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
                 data-testid="link-forgot-password">Forgot password?</button>
             )}
@@ -187,7 +188,7 @@ export default function AppAuth() {
                   const nextMode = mode === "login" ? "signup" : "login";
                   setMode(nextMode);
                   setError("");
-                  navigate(nextMode === "signup" ? "/app/signup" : "/app/login");
+                  navigate(nextMode === "signup" ? "/signup" : "/login");
                 }}
                 className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
                 data-testid="button-switch-mode"

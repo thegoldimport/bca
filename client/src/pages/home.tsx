@@ -25,7 +25,7 @@ export default function Home() {
       <WaitlistModal isOpen={isWaitlistOpen} onClose={() => setIsWaitlistOpen(false)} source={waitlistSource} />
       <main>
         {/* 1. Hero (Locked) */}
-        <Hero onBuildClick={() => openWaitlist("waitlist")} />
+        <Hero onBuildClick={() => window.location.assign("https://app.buildcustom.ai/signup")} />
         
         {/* 2. Logos (Glass Theme) */}
         <LogosSection />
@@ -53,7 +53,7 @@ export default function Home() {
 
         {/* 9. Hero Duplicate (Final CTA) */}
         <div className="relative border-t border-white/10">
-           <Hero onBuildClick={() => openWaitlist("waitlist")} />
+           <Hero onBuildClick={() => window.location.assign("https://app.buildcustom.ai/signup")} />
         </div>
       </main>
       <Footer />

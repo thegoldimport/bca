@@ -183,7 +183,7 @@
     }
   ],
   "vars": {
-    "REGISTRATION_ENABLED": "false",
+    "REGISTRATION_ENABLED": "true",
     "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
     "DISPATCH_NAMESPACE": "buildcustom-vibesdk-launch-dispatch",
     "CLOUDFLARE_ACCOUNT_ID": "03ef1e6e42498920987f07059e107538",

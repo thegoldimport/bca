@@ -45,5 +45,5 @@ export async function signOut(): Promise<void> {
   });
   if (!response.ok) throw new Error("Could not sign out. Please try again.");
   clearAppUser();
-  window.location.href = "/app/login";
+  window.location.href = "/login";
 }
