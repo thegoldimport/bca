@@ -1,0 +1,619 @@
+TASK — COMPLETE LOGOUT SECURITY PROOF USING THE EXISTING TEST ACCOUNT
+
+We have narrowed the remaining launch blocker down to ONE thing.
+
+The previous public signup succeeded.
+
+The previous logout returned HTTP 204.
+
+The authoritative runtime database proves that the exact pre-logout session
+was revoked with reason:
+
+user_logout
+
+Therefore DO NOT investigate logout implementation again.
+
+The only reason the complete lifecycle was not proven is that the acceptance
+run did not retain:
+
+- the generated password
+- the old browser credential
+
+We are NOT reopening signup.
+
+We are NOT creating another user.
+
+We are NOT deploying anything.
+
+We are NOT changing Worker code.
+
+We are NOT moving production traffic.
+
+We are NOT building another observer.
+
+We are NOT doing another full acceptance run.
+
+We need to determine whether the EXISTING test account can regain normal login
+access through an already-supported account recovery/password reset mechanism,
+then complete one clean login/logout/login lifecycle.
+
+==================================================
+EXISTING TEST ACCOUNT
+==================================================
+
+Email:
+
+task12v-1790686912874-a2956bb5a5@example.net
+
+
+Product/runtime identity:
+
+existing mapped identity ending:
+
+…ce82e544
+
+
+Previous authoritative session:
+
+…68fb067f
+
+
+Previous session state:
+
+REVOKED
+
+
+Previous revocation reason:
+
+user_logout
+
+
+Previous logout:
+
+HTTP 204
+
+
+Do NOT create another account.
+
+==================================================
+CURRENT PRODUCTION STATE MUST REMAIN UNCHANGED
+==================================================
+
+Runtime:
+
+buildcustom-vibesdk-launch
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+Control:
+
+buildcustom-control-plane-launch
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+Runtime registration:
+
+false
+
+
+Control registration:
+
+false
+
+
+Public signup:
+
+CLOSED
+
+
+Public generated apps:
+
+true
+
+
+Gateway:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+Do not change any of this.
+
+==================================================
+STEP 1 — DETERMINE WHETHER SUPPORTED ACCOUNT RECOVERY EXISTS
+==================================================
+
+Inspect the CURRENT stock/native VibeSDK authentication implementation.
+
+Determine whether an existing supported mechanism exists for this email-auth
+user to:
+
+- reset password
+- recover account
+- set a new password
+- receive a reset token/link
+- otherwise regain normal login access
+
+Look specifically for existing:
+
+routes
+
+AuthService methods
+
+password reset implementation
+
+forgot-password implementation
+
+reset-token implementation
+
+email recovery implementation
+
+admin-supported password reset mechanism if one is explicitly part of the
+existing auth system
+
+
+IMPORTANT:
+
+Do not invent a recovery mechanism.
+
+Do not manually edit the password hash.
+
+Do not directly write a new password to D1.
+
+Do not create a bypass route.
+
+Do not create a bootstrap route.
+
+Do not modify Worker code.
+
+Do not create a Worker version.
+
+==================================================
+STEP 2 — CLASSIFY RECOVERY
+==================================================
+
+Return one of:
+
+A. EXISTING NORMAL USER PASSWORD-RESET FLOW EXISTS
+
+B. EXISTING SUPPORTED ADMIN/OPERATOR RESET EXISTS
+
+C. NO SUPPORTED RECOVERY MECHANISM EXISTS
+
+D. UNKNOWN
+
+
+If C or D:
+
+STOP.
+
+Do not build password recovery.
+
+Do not reopen signup.
+
+Do not create another account.
+
+Report exactly what is missing.
+
+==================================================
+STEP 3 — USE THE EXISTING SUPPORTED RECOVERY FLOW
+==================================================
+
+ONLY if Step 2 is A or B:
+
+Use that EXISTING supported mechanism for:
+
+task12v-1790686912874-a2956bb5a5@example.net
+
+
+Set/recover a known temporary acceptance password.
+
+Do not expose the password in the final report.
+
+Do not create another identity.
+
+After recovery verify:
+
+runtime identity count for this email remains exactly 1
+
+product identity count remains exactly 1
+
+product/runtime mapping unchanged
+
+old revoked session remains revoked
+
+
+If recovery creates a duplicate identity:
+
+SECURITY FAILURE.
+
+STOP.
+
+==================================================
+STEP 4 — NORMAL PUBLIC LOGIN
+==================================================
+
+With signup still CLOSED:
+
+go through the normal public login flow at:
+
+https://app.buildcustom.ai
+
+
+Log in as the existing test account using the recovered credential.
+
+Require:
+
+login succeeds
+
+same product identity
+
+same runtime identity
+
+/api/auth/me identifies correct user
+
+runtime /api/auth/check returns authenticated=true
+
+dashboard loads
+
+
+If normal login fails:
+
+STOP.
+
+Report the actual failure.
+
+==================================================
+STEP 5 — IDENTIFY THE NEW SESSION
+==================================================
+
+Read authoritative runtime session state.
+
+Require:
+
+the OLD session:
+
+…68fb067f
+
+remains revoked
+
+
+AND
+
+the login created or uses a NEW valid session.
+
+
+Record safely:
+
+new session ID redacted
+
+is_revoked=0
+
+
+Do not expose credentials.
+
+==================================================
+STEP 6 — NORMAL LOGOUT
+==================================================
+
+Perform ONE normal logout through the public BuildCustom application.
+
+Require:
+
+successful logout response
+
+expected HTTP 204 if unchanged
+
+
+Then inspect authoritative runtime session state.
+
+Require the NEW session transitions:
+
+is_revoked=0
+
+→
+
+is_revoked=1
+
+
+Require revocation reason:
+
+user_logout
+
+or the established equivalent.
+
+
+The OLD session must remain revoked.
+
+==================================================
+STEP 7 — POST-LOGOUT AUTHENTICATION
+==================================================
+
+Using the normal browser state immediately after logout:
+
+check product authentication.
+
+Require:
+
+unauthenticated
+
+
+Existing product semantics may be:
+
+HTTP 200
+body null
+
+
+Check runtime authentication.
+
+Require:
+
+authenticated=false
+
+
+This is a HARD security gate.
+
+If either still authenticates:
+
+REAL SECURITY FAILURE.
+
+STOP.
+
+==================================================
+STEP 8 — OLD SESSION REPLAY IF AVAILABLE
+==================================================
+
+If the browser automation can safely retain the PRE-LOGOUT session credential
+for this newly created session:
+
+replay it after logout.
+
+Product:
+
+must not authenticate.
+
+
+Runtime:
+
+authenticated=false.
+
+
+If credential extraction is unavailable because the cookie is HttpOnly or the
+browser tooling cannot retain it:
+
+mark:
+
+UNAVAILABLE
+
+
+Do NOT fail solely because credential extraction is unavailable.
+
+We already have:
+
+authoritative session revocation
+
+plus normal post-logout unauthenticated behavior.
+
+==================================================
+STEP 9 — FINAL FRESH LOGIN
+==================================================
+
+Using the same recovered password:
+
+log in normally again.
+
+Require:
+
+same user
+
+same identities
+
+product auth works
+
+runtime authenticated=true
+
+dashboard loads
+
+
+Confirm this creates/uses a valid session while BOTH previously revoked
+sessions remain revoked.
+
+==================================================
+STEP 10 — OWNERSHIP SMOKE TEST
+==================================================
+
+Perform one concise ownership check.
+
+Require:
+
+existing User A can access User A project
+
+existing User B can access User B project
+
+cross-owner project access denied
+
+
+Do not rerun the giant security suite.
+
+==================================================
+STEP 11 — FINAL CLOSED STATE
+==================================================
+
+Require:
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public generated apps=true
+
+gateway:
+buildcustom-apps-gateway
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+claims zero
+
+existing apps healthy
+
+marketing healthy
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT use Cloudflare tail correlation as a pass/fail gate.
+
+Do NOT use targeted/version-override requests.
+
+Do NOT reopen signup.
+
+Do NOT create a new account.
+
+Do NOT modify Worker code.
+
+Do NOT create a Worker version.
+
+Do NOT create a deployment.
+
+Do NOT manually modify password hashes.
+
+Do NOT add a temporary recovery endpoint.
+
+Do NOT add a bootstrap endpoint.
+
+Do NOT retry anything automatically.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+If an existing supported recovery mechanism exists, PASS requires:
+
+1. same existing account recovered
+
+2. no duplicate identity
+
+3. old revoked session remains revoked
+
+4. normal login succeeds
+
+5. new valid session established
+
+6. normal logout succeeds
+
+7. authoritative new session changes active -> revoked
+
+8. post-logout product auth is unauthenticated
+
+9. post-logout runtime auth is authenticated=false
+
+10. old-session replay fails if credential is available
+
+11. final fresh login succeeds
+
+12. previous revoked sessions remain revoked
+
+13. ownership smoke test passes
+
+14. production remains closed and unchanged
+
+
+If there is NO supported recovery mechanism:
+
+STOP after proving that.
+
+That is NOT a logout security failure.
+
+It simply means this disposable account cannot be reused for the remaining
+browser lifecycle test without adding recovery functionality.
+
+==================================================
+RETURN ONLY
+==================================================
+
+1. Supported recovery mechanism:
+   NORMAL USER / ADMIN-OPERATOR / NONE / UNKNOWN
+
+2. Recovery mechanism:
+   short description
+
+3. Existing account recovered:
+   YES/NO/NOT ATTEMPTED
+
+4. Product identity count:
+   number
+
+5. Runtime identity count:
+   number
+
+6. Original revoked session remained revoked:
+   PASS/FAIL
+
+7. Normal login:
+   PASS/FAIL/NOT ATTEMPTED
+
+8. New session established:
+   PASS/FAIL/NOT ATTEMPTED
+
+9. Normal logout:
+   PASS/FAIL/NOT ATTEMPTED
+
+10. New session authoritative transition:
+    ACTIVE -> REVOKED / FAIL / NOT ATTEMPTED
+
+11. Product auth after logout:
+    UNAUTHENTICATED / AUTHENTICATED / NOT ATTEMPTED
+
+12. Runtime auth after logout:
+    FALSE / TRUE / NOT ATTEMPTED
+
+13. Credential replay:
+    PASS / FAIL / UNAVAILABLE / NOT ATTEMPTED
+
+14. Final fresh login:
+    PASS/FAIL/NOT ATTEMPTED
+
+15. Ownership:
+    PASS/FAIL/NOT ATTEMPTED
+
+16. Worker code changed:
+    NO
+
+17. Worker versions created:
+    NO
+
+18. Production traffic moved:
+    NO
+
+19. Public signup:
+    CLOSED
+
+20. SECURITY VERDICT:
+    COMPLETE LOGOUT LIFECYCLE PROVEN
+    or
+    REAL SECURITY FAILURE
+    or
+    EXISTING ACCOUNT CANNOT BE RECOVERED
+    or
+    INSUFFICIENT EVIDENCE
+
+21. Exact next single step.
+
+Then STOP.
