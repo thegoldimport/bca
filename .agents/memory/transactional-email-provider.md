@@ -14,3 +14,9 @@ Cloudflare REST sends and local simulated sends do not prove that the production
 **Why:** The local failure was a transport problem on the development path, not evidence of recipient rejection. A successful `EMAIL.send()` returns a message ID but does not prove inbox receipt; the sending quota can also lag the send response.
 
 **How to apply:** For future delivery investigations, distinguish API acceptance, binding success, Email Sending activity, recipient-server acceptance, and actual inbox receipt. Do not automatically retry an uncertain send. Keep an isolated test Worker sender-restricted and non-public on its ordinary workers.dev route.
+
+An isolated deployed Worker using the restricted native binding produced a real external inbox receipt, while an earlier same-domain recipient remained in retries. This establishes that the sender/binding can work; it does not prove that every recipient path works.
+
+**Why:** Testing the actual Cloudflare-hosted Worker separated a local workerd TLS problem from delivery behavior and provided stronger evidence than a send API response alone.
+
+**How to apply:** Treat delivery failures to other destinations as separate cases. Require a real receipt at the intended recovery mailbox before changing an existing acceptance identity to that address.
