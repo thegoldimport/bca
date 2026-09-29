@@ -1,0 +1,194 @@
+The previous cutover established that the registration-enabled production
+versions work through the normal customer path.
+
+The operation stopped ONLY because the browser verification tool failed to
+start.
+
+Do NOT diagnose or repair the browser tool.
+
+Do NOT make browser automation a launch prerequisite.
+
+Authorize ONE final cutover using HTTP/API/customer-path verification only.
+
+Use the existing candidates:
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Control:
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+
+Rollback versions:
+
+Runtime:
+e1dda75e-2082-4f38-a1fc-a16d25542425
+
+Control:
+df8f155e-aabf-4b69-98b1-30f704a5689b
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Do not change code.
+
+Do not create new candidate versions.
+
+Do not add new acceptance checks.
+
+Do not use browser automation.
+
+CUTOVER
+
+1. Activate runtime candidate at 100%.
+
+2. Confirm normal Cloudflare deployment readback shows that exact version at
+   100%.
+
+3. Wait 15 seconds.
+
+4. Through normal production HTTP/customer paths verify:
+
+   - registrationEnabled = true
+   - existing-user login succeeds
+   - forgot-password entry page returns 200
+   - reset-password page returns 200
+
+If an actual listed check fails, rollback and STOP.
+
+5. Activate control candidate at 100%.
+
+6. Confirm normal Cloudflare deployment readback shows that exact version at
+   100%.
+
+7. Wait 15 seconds.
+
+8. Make three ordinary requests approximately 2 seconds apart to:
+
+   https://app.buildcustom.ai/api/public/capabilities
+
+All three must return:
+
+registrationEnabled: true
+publicGeneratedAppsEnabled: true
+
+SECURITY CHECKS
+
+Use direct normal HTTP requests against the public production hostname.
+
+Verify:
+
+- invalid Origin registration request is rejected
+- missing CSRF registration request is rejected
+- mismatched CSRF registration request is rejected
+- duplicate existing email is rejected safely
+- case-variant duplicate existing email is rejected safely
+- malformed registration input is rejected safely
+
+For checks requiring valid CSRF:
+
+- obtain the CSRF token through the normal public endpoint
+- retain its matching cookie
+- send the matching X-CSRF-Token header
+- use the correct Origin
+
+Do not create a new account.
+
+Do not require browser automation for these checks.
+
+PUBLIC PAGE CHECKS
+
+Using ordinary HTTP GET requests, verify:
+
+- /app/signup returns 200
+- signup page/assets required by that route return successfully
+- /app/login returns 200
+- Forgot Password route returns 200
+- Reset Password route returns 200
+
+Do NOT attempt to prove visual rendering with browser automation.
+
+I will personally verify the signup UI visually after the cutover.
+
+FINAL SMOKE CHECKS
+
+Using HTTP/API checks:
+
+- existing-user authentication works
+- existing dashboard API works
+- existing project is returned for its owner
+- existing public generated app returns 200
+- unknown generated-app slug returns 404
+- public generated apps remain enabled
+- active publish claims = 0
+- marketing returns 200
+- gateway remains:
+  9d80432b-4e53-4fe7-950a-2b53f0213eff
+  with accepted ROUTES and DISPATCHER bindings
+- production EMAIL binding remains present
+- security@buildcustom.ai remains the allowed recovery sender
+
+Do NOT:
+
+- use browser automation
+- perform AI generation
+- send another recovery email
+- perform another password reset
+- create another account
+- submit the marketing waitlist
+- change DNS
+- change gateway
+- change marketing
+- investigate support@buildcustom.ai
+- add observability infrastructure
+- add any acceptance requirement not explicitly listed here
+
+If an ACTUAL listed customer-path or security check fails:
+
+ROLL BACK BOTH WORKERS and STOP.
+
+Do not fix and retry within this operation.
+
+If every listed check passes:
+
+LEAVE BOTH REGISTRATION-ENABLED VERSIONS AT 100%.
+
+DO NOT ROLLBACK.
+
+Final required production state:
+
+PUBLIC SIGNUP: OPEN
+LOGIN: ENABLED
+PASSWORD RECOVERY: ENABLED
+EMAIL: LIVE
+PUBLIC GENERATED APPS: ENABLED
+GATEWAY: UNCHANGED
+MARKETING: UNCHANGED
+ACTIVE PUBLISH CLAIMS: 0
+
+Return:
+
+- serving runtime version
+- serving control version
+- gateway version
+- runtime registration result
+- all three public capability responses
+- Origin security result
+- CSRF security results
+- duplicate result
+- case-duplicate result
+- malformed-input result
+- signup HTTP result
+- login HTTP result
+- recovery-page HTTP results
+- existing-user auth result
+- dashboard/project result
+- public generated-app result
+- unknown-slug result
+- marketing result
+- active publish claims
+- EMAIL binding/sender state
+- FINAL PUBLIC SIGNUP STATE
+
+If all listed checks pass, explicitly state:
+
+BUILDCUSTOM PUBLIC SIGNUP IS LIVE.
