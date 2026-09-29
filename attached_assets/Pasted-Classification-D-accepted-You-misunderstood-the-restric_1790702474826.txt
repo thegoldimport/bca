@@ -1,0 +1,147 @@
+Classification D accepted.
+
+You misunderstood the restriction on modifying Account B.
+
+Creating a fresh normal login session for Account B is AUTHORIZED and is NOT
+considered modifying the account.
+
+You may log into Account B using its existing credentials and create normal
+temporary authentication/session state required to inspect its existing
+project.
+
+Do NOT change Account B's:
+- email
+- password
+- user ID
+- identity mapping
+- project
+- files
+- ownership
+- releases
+- generated app
+- or other persistent product state
+
+Now resume the existing acceptance from the preview check.
+
+PREVIEW RECHECK
+
+1. Log into Account B normally.
+2. Open its existing project.
+3. Obtain a fresh signed preview normally.
+4. Load the preview exactly as a customer would.
+
+Capture the evidence that was missing:
+
+- authoritative public/index.html
+- authoritative public/styles.css if present
+- actual styling mechanism used by index.html
+- actual CSS/stylesheet network request(s)
+- HTTP status and Content-Type
+- relevant browser console/network errors
+- document.styleSheets where useful
+
+Most importantly, verify FUNCTIONAL STYLING using computed browser styles.
+
+Choose at least one deterministic visual rule from the authoritative project
+source and compare:
+
+EXPECTED:
+the CSS/style value defined by the project
+
+ACTUAL:
+getComputedStyle() on the rendered element
+
+Do not require a specific /styles.css link if the project legitimately uses
+inline styles, JS-injected styles, or another styling mechanism.
+
+Preview PASS requires:
+- expected content renders
+- required assets load successfully
+- expected styling is actually applied
+- no relevant asset/security failure prevents styling
+
+If that proves a REAL preview failure, STOP and report it.
+
+If preview PASSES, immediately finish the remaining acceptance checks in the
+same run:
+
+1. Existing project idle WebSocket/conversation state works without AI
+   generation or inference.
+
+2. Existing public generated app loads successfully with expected content and
+   required assets.
+
+3. Unknown generated-app slug returns 404.
+
+4. Account A remains unable to access Account B's project.
+
+5. Active publish claims remain 0.
+
+6. Marketing remains healthy and unchanged.
+   Do not submit the waitlist form.
+
+7. Signup remains CLOSED at both runtime and control plane.
+
+8. Public generated apps remain ENABLED.
+
+9. Existing gateway version and bindings remain unchanged.
+
+Do NOT repeat:
+- password reset
+- recovery email
+- logout acceptance
+- password changes
+- identity changes
+
+Those security checks have already completed successfully and their evidence
+should be preserved.
+
+Do NOT:
+- perform AI generation
+- deploy anything
+- change DNS
+- change marketing
+- change gateway configuration
+- investigate support@buildcustom.ai
+- invent additional acceptance requirements
+
+If all remaining checks pass:
+
+- classify the overall password-recovery production acceptance as PASS
+- leave password recovery LIVE
+- leave the production EMAIL binding LIVE
+- leave security@buildcustom.ai as reset sender
+- leave public generated apps ENABLED
+- leave signup CLOSED
+- leave the gateway unchanged
+- remove the temporary isolated email-test Worker
+
+Return a concise final report with:
+
+- runtime version ID
+- control-plane version ID
+- password recovery: PASS/FAIL
+- email delivery: PASS/FAIL
+- token expiration/hash/single-use: PASS/FAIL
+- logout server-side revocation: PASS/FAIL
+- password-reset session revocation: PASS/FAIL
+- identity preservation: PASS/FAIL
+- unrelated-user session isolation: PASS/FAIL
+- Account B dashboard/project/Files: PASS/FAIL
+- preview functional styling: PASS/FAIL with expected vs computed evidence
+- idle WebSocket: PASS/FAIL
+- public generated app: PASS/FAIL
+- unknown slug 404: PASS/FAIL
+- cross-account isolation: PASS/FAIL
+- publish claims count
+- marketing state
+- signup state
+- public generated-app state
+- gateway state
+- temporary test Worker removed: YES/NO
+- OVERALL ACCEPTANCE: PASS/FAIL
+
+If an actual customer-path or security failure occurs, STOP.
+
+Otherwise complete the acceptance without stopping for another intermediate
+approval.

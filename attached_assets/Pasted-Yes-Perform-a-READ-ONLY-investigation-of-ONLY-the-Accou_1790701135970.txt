@@ -1,0 +1,119 @@
+Yes. Perform a READ-ONLY investigation of ONLY the Account B styled-preview
+check.
+
+Do not deploy anything.
+
+Do not modify either Worker.
+
+Do not modify either account.
+
+Do not modify the project or its files.
+
+Do not retry logout or password reset.
+
+Do not send email.
+
+Do not reopen signup.
+
+Do not perform AI generation.
+
+Do not continue the remaining acceptance checks yet.
+
+The current evidence is:
+
+- Account B's preview iframe loaded successfully
+- expected project text rendered
+- authoritative Files includes public/styles.css
+- the browser acceptance check did not find a /styles.css link with link.sheet
+- this does NOT yet prove the stylesheet failed to load
+- password recovery/session-security acceptance completed successfully up to
+  this unrelated preview check
+
+Investigate the existing Account B preview READ-ONLY.
+
+Determine:
+
+1. Inspect the authoritative public/index.html for Account B.
+
+   Report exactly how CSS is referenced:
+   - <link rel="stylesheet"...>
+   - inline <style>
+   - imported through JS
+   - another path
+   - or something else
+
+2. Determine whether public/styles.css is actually requested when the preview
+   loads.
+
+   If requested, report:
+   - exact requested URL/path
+   - HTTP status
+   - Content-Type
+   - whether response body matches the authoritative public/styles.css
+   - whether browser reports any CSS/network/security error
+
+3. Inspect the rendered iframe after load.
+
+   Determine:
+   - whether a stylesheet link element exists
+   - its actual href
+   - whether link.sheet is accessible
+   - whether browser security/sandbox behavior affects link.sheet inspection
+   - document.styleSheets contents if safely readable
+
+4. Most importantly, verify styling through COMPUTED STYLE rather than relying
+   only on link.sheet.
+
+   Choose one or more elements whose expected CSS values are known from
+   public/styles.css.
+
+   Compare:
+   - expected CSS rule
+   - actual getComputedStyle(...) value
+
+   This should establish whether the stylesheet is functionally applied.
+
+5. Compare this preview behavior with the previously accepted Account B
+   preview behavior if the necessary evidence/source is available.
+
+6. Inspect the acceptance assertion itself.
+
+   Determine whether it incorrectly assumes:
+   - href must literally contain "/styles.css"
+   - stylesheet must be represented by a specific link element
+   - link.sheet must be non-null
+   - a particular asset URL shape that the preview proxy does not guarantee
+
+7. Classify the result as exactly one of:
+
+A. TEST ASSERTION FAILURE
+The preview is correctly styled and the CSS is loaded/applied, but the
+acceptance checker failed to recognize it.
+
+B. REAL PREVIEW REGRESSION
+The CSS exists in authoritative Files but is not successfully loaded/applied
+by the preview.
+
+C. PROJECT-SPECIFIC EXPECTATION MISMATCH
+The project does not actually use public/styles.css in the manner the
+acceptance checker assumed.
+
+D. INCONCLUSIVE
+Available read-only evidence cannot establish whether styling is applied.
+
+Return:
+
+- exact CSS reference from index.html
+- exact asset request/status/content-type if applicable
+- relevant browser/network evidence
+- expected vs actual computed styles
+- why link.sheet was absent/not recognized
+- classification A/B/C/D
+- smallest proposed correction if one is needed
+
+Do NOT make the correction yet.
+
+Do NOT broaden this investigation into password recovery, auth, runtime
+sessions, deployment, gateway, or unrelated infrastructure.
+
+STOP after the read-only report.
