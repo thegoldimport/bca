@@ -34,7 +34,20 @@ async function visit(path: string, authenticated = false, hostname = "app.buildc
     calls.push(url);
     const body = url === "/api/auth/me" ? (authenticated ? user : null)
       : url === "/api/public/capabilities" ? { registrationEnabled: true, publicGeneratedAppsEnabled: true }
-      : url === "/api/projects" ? [] : {};
+      : url === "/api/projects" ? []
+      : url === "/api/projects/17" ? {
+        id: 17,
+        name: "Test project",
+        type: "website",
+        status: "draft",
+        description: "",
+        framework: "React + TailwindCSS",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        runtimeStatus: "ready",
+      }
+      : url === "/api/projects/17/blog-posts" ? []
+      : {};
     return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
   window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as typeof ResizeObserver;

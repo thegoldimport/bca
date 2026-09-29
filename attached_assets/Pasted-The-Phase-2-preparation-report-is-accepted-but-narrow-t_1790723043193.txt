@@ -1,0 +1,255 @@
+The Phase 2 preparation report is accepted, but narrow the remaining gate.
+
+We do NOT need to prove byte-for-byte reproduction of historical Cloudflare
+Worker bundles before GitHub can become the source of truth going forward.
+
+We also do NOT need to redeploy the runtime, control plane, or gateway merely
+to shut down Replit.
+
+The currently serving Cloudflare versions are already live:
+
+runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+control:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+The runtime/control discrepancy is explained by the later signup-enabled
+cutover.
+
+Current public signup is OPEN.
+
+Password recovery remains present.
+
+EMAIL binding remains present.
+
+Public generated apps remain enabled.
+
+Do not roll those deployments back.
+
+NEXT TASK:
+
+Resolve ONLY the concrete blockers to committing the prepared GitHub source
+and replacing the marketing Pages asset.
+
+Do NOT turn this into another historical provenance project.
+
+A. DASHBOARD TEST TIMEOUT
+
+Investigate the failing dashboard routing test at /app/project/17.
+
+Determine whether this is:
+
+1. a real product regression introduced by the current local changes
+2. an obsolete test expectation
+3. JSDOM/test-harness timing behavior
+4. an unrelated pre-existing failure
+
+Compare the relevant current source against the last committed version.
+
+If the local marketing/waitlist cleanup did not alter the dashboard/project
+routing behavior, do not assume the timeout is caused by this task.
+
+Find the exact cause.
+
+If it is a test-only issue, make the smallest correction to the test.
+
+If it is a real product issue, make the smallest product fix.
+
+Run the affected test first, then the full root test suite once.
+
+Do not repeatedly rerun the entire suite while diagnosing.
+
+B. PAGES BUILD
+
+We have:
+
+- one Cloudflare Pages npm install failure with:
+  "Exit handler never called"
+- no npm debug log from that failure
+- an isolated clean checkout that successfully installed under the same
+  Node 22.16.0 / npm 10.9.2 environment
+- another clean install/build passing under Node 22.22.0 / npm 10.9.4
+- no evidence that package-lock.json itself is broken
+
+Therefore:
+
+Do NOT invent a package or npm fix without evidence.
+
+Keep the useful Node version metadata if it improves reproducibility.
+
+Verify locally from a genuinely clean copy of the PREPARED tree:
+
+- npm ci
+- typecheck
+- production build
+- dist/public exists
+- built JS contains no ai-build-studio.replit.app
+- built JS contains no /api/waitlist customer call
+- signup CTAs point to https://app.buildcustom.ai/signup
+
+If that passes, classify the previous Pages install failure as an
+UNEXPLAINED CI/Pages failure, not a proven source failure.
+
+The real proof will be the next actual Pages build after commit/push.
+
+Do not block the source commit solely because an earlier Pages job failed
+without diagnostic evidence.
+
+C. RUNTIME DEPENDENCY FINDINGS
+
+Do NOT upgrade runtime dependencies in this task.
+
+We are NOT planning to redeploy the runtime as part of Replit shutdown.
+
+For each currently identified serving-path finding:
+
+- brace-expansion
+- smol-toml
+- drizzle
+- fast-uri
+- ws
+
+classify only:
+
+1. confirmed runtime-reachable security issue requiring immediate remediation
+2. dependency present/reachable but vulnerable feature not shown reachable
+3. build/dev/transitive issue not requiring pre-shutdown remediation
+4. insufficient evidence
+
+A finding blocks THIS commit/Replit shutdown only if the current production
+system is demonstrably unsafe to leave serving while we remove Replit.
+
+"Fix before next runtime deployment" is NOT the same as "block GitHub cleanup
+or Replit shutdown."
+
+Record legitimate runtime remediation as follow-up work if appropriate.
+
+D. CANONICAL SOURCE GOING FORWARD
+
+Treat the tracked runtime recipe as the intended canonical source going
+forward:
+
+- pinned upstream VibeSDK commit
+- ordered tracked BuildCustom patches
+- manifest
+- launch Wrangler configuration
+
+We do not need to claim that it is byte-for-byte identical to every historical
+deployed Worker.
+
+We DO need confidence that it contains the accepted required behavior.
+
+The existing:
+
+- 68 focused tests
+- typecheck
+- build
+
+are sufficient evidence for this task unless the dependency review finds an
+actual current security failure.
+
+Do not attempt to recover deleted temporary build directories or reconstruct
+historical upload workspaces.
+
+E. GATEWAY
+
+Do not deploy the gateway.
+
+The new production gateway config targets the correct unsuffixed gateway and
+its ROUTES/DISPATCHER bindings match live metadata.
+
+Review the zone-wide */* route once to ensure the tracked gateway source
+continues to pass non-app hosts through exactly as the accepted gateway does.
+
+If yes, retain the production config.
+
+Do not require bundle fingerprint parity for this commit.
+
+F. ATTACHED ASSETS / CLEANUP
+
+Do NOT spend time individually reviewing 253 historical attached_assets files
+unless current production imports them.
+
+Determine mechanically which tracked attached_assets are referenced by:
+
+- current source
+- CSS
+- HTML
+- build config
+
+Retain referenced assets.
+
+Delete unreferenced disposable attached_assets from the CURRENT TREE.
+
+This is a normal cleanup commit.
+
+Do not rewrite history.
+
+Retain genuinely required acceptance documentation, patches, manifests, and
+tests.
+
+G. LEGACY REPLIT SERVER
+
+Do not remove the currently published Replit server yet.
+
+Its admin capability is already retired.
+
+Its obsolete waitlist data is disposable.
+
+The live marketing asset still calls its waitlist endpoint until the new Pages
+asset successfully deploys.
+
+Therefore keep Replit production alive only until the waitlist-free marketing
+asset is live.
+
+Do not migrate any waitlist data or endpoint.
+
+H. FINAL LOCAL GATE
+
+Before committing, require:
+
+- affected dashboard test PASS
+- full root test suite PASS, unless any remaining failure is explicitly proven
+  unrelated/pre-existing and documented
+- root TypeScript PASS
+- clean npm ci PASS from a fresh prepared-tree copy
+- marketing production build PASS
+- no Replit waitlist URL in built marketing assets
+- no customer-facing /api/waitlist call in built marketing assets
+- signup CTAs correct
+- control-plane typecheck/build/dry-run PASS
+- runtime focused tests/typecheck/build PASS
+- gateway dry-run PASS
+- gateway non-app-host pass-through behavior verified
+- no usable retired admin credential in current HEAD
+
+If those pass, the prepared source is GO FOR COMMIT even though historical
+deployed bundle parity is not proven.
+
+I. RETURN
+
+Return:
+
+1. dashboard timeout root cause and resolution
+2. full root test result
+3. clean install/build result
+4. Pages failure classification
+5. runtime dependency classifications
+6. gateway route/pass-through review
+7. attached_assets referenced vs removed counts
+8. exact cleanup/source changes ready to commit
+9. whether the prepared tree is now reproducible enough to be canonical
+   GitHub source going forward
+10. GO / NO-GO FOR COMMIT
+
+Do not commit yet.
+Do not push yet.
+Do not deploy yet.
+Do not change Cloudflare.
+Do not stop Replit production.
+
+STOP after the report.
