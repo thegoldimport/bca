@@ -1,0 +1,1444 @@
+TASK 12W — FINAL GUARDED PUBLIC SIGNUP CUTOVER
+
+Task 12V is ACCEPTED.
+
+This is the separately authorized ONE final live signup acceptance attempt.
+
+The exact acceptance orchestration that passed 43/43 offline tests must be
+used live.
+
+DO NOT create another acceptance implementation.
+
+DO NOT modify the runner or adapters during this task.
+
+DO NOT modify Worker code.
+
+ONE ATTEMPT.
+
+If every required gate passes:
+
+LEAVE SIGNUP OPEN.
+
+If any required gate FAILS or becomes UNKNOWN:
+
+ROLL BACK BOTH WORKERS,
+VERIFY CLOSED STATE,
+AND STOP.
+
+NO RETRY.
+
+==================================================
+AUTHORIZATION
+==================================================
+
+You ARE authorized to:
+
+1. perform fresh closed-state prechecks
+2. verify both existing candidates remain unchanged
+3. prepare rollback
+4. activate the existing proven runtime candidate
+5. version-trace runtime open state
+6. activate the existing proven control candidate
+7. version-trace control open state
+8. invoke the exact live acceptance entrypoint with --execute
+9. execute the corrected Origin/CSRF matrix
+10. execute bounded registration validation
+11. create exactly ONE fresh disposable public acceptance user
+12. reconcile an uncertain signup outcome WITHOUT retry
+13. verify identity/session authority
+14. verify logout revocation
+15. verify old-session rejection
+16. verify fresh login
+17. verify existing owners
+18. temporarily stop ONLY the Replit development workflow
+19. leave the open candidates serving and signup OPEN if all gates pass
+
+You are NOT authorized to:
+
+- create a new Worker version
+- modify runtime Worker code
+- modify control Worker code
+- modify Worker bindings
+- modify gateway
+- modify DNS
+- modify the Task 12V runner
+- modify the Task 12V production adapter
+- create a second acceptance user
+- retry signup after an uncertain click
+- retry this cutover
+- generate a project
+- edit a project
+- Publish
+- move the marketing waitlist
+- unpublish the public Replit deployment
+
+==================================================
+CURRENT CLOSED PRODUCTION
+==================================================
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+ACCEPTED CLOSED VERSION:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+OPEN CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL:
+
+buildcustom-control-plane-launch
+
+ACCEPTED CLOSED VERSION:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+OPEN CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+CONTROL REGISTRATION:
+
+false
+
+PUBLIC SIGNUP:
+
+CLOSED
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+VERSION:
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+TRAFFIC:
+
+100%
+
+
+CLAIMS:
+
+zero
+
+==================================================
+FROZEN ACCEPTANCE TOOL
+==================================================
+
+AUTHORITATIVE RUNNER:
+
+scripts/lib/task12v-registration-runner.mjs
+
+
+EXPORTED FUNCTION:
+
+runRegistrationAcceptance
+
+
+PRODUCTION ADAPTER:
+
+scripts/lib/task12v-production-adapter.mjs
+
+
+LIVE ENTRYPOINT:
+
+scripts/task12r-registration-acceptance.mjs
+
+
+Task 12V proved:
+
+- production and offline use the same runner
+- no duplicate orchestration remains
+- environment-specific behavior is injected
+- one-click signup invariant
+- maximum signup action count = 1
+- uncertain click never retries
+- successful mutation can be reconciled
+- insufficient/conflicting evidence becomes UNKNOWN
+- atomic checkpoints
+- structured partial artifacts
+- artifact-write failure handling
+- cleanup-failure handling
+- timeout reconciliation
+- --execute safety gate
+- 43/43 final offline tests PASS
+
+DO NOT MODIFY THESE FILES DURING TASK 12W.
+
+If the live operator exposes a new defect:
+
+preserve evidence,
+rollback,
+stop.
+
+Do not repair and retry.
+
+==================================================
+STEP 1 — FRESH CLOSED PRECHECK
+==================================================
+
+Immediately before moving traffic verify:
+
+runtime accepted:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+runtime candidate:
+0%
+
+control accepted:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+control candidate:
+0%
+
+runtime registration=false
+
+control registration=false
+
+PUBLIC_GENERATED_APPS_ENABLED=true
+
+public signup CLOSED
+
+claims zero
+
+
+Gateway EXACTLY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+Run the accepted version-traced runtime observer.
+
+Require TARGETED:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+tail version:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Require ORDINARY:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+tail version:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Run the accepted control observer.
+
+Require:
+
+HTTP 200
+
+registrationEnabled=false
+
+publicGeneratedAppsEnabled=true
+
+tail version:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+
+Also verify:
+
+user 1 login/ownership
+
+user 2 login/ownership
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+
+If any required precheck fails:
+
+STOP WITHOUT CUTOVER.
+
+==================================================
+STEP 2 — VERIFY FROZEN TOOLING
+==================================================
+
+Before activation verify the Task 12V files are unchanged from the accepted
+43/43-test state.
+
+Run the accepted local test suite again.
+
+Require:
+
+43/43 PASS
+
+syntax checks PASS
+
+non---execute invocation still exits code 2
+
+
+If tooling changed or tests fail:
+
+STOP.
+
+Do not cut over.
+
+==================================================
+STEP 3 — CANDIDATE PARITY
+==================================================
+
+Verify existing runtime candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+still matches accepted Task 12Q/12L evidence.
+
+
+Verify existing control candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+still matches accepted Task 12J/12K/12R evidence.
+
+
+Do not alter either candidate.
+
+==================================================
+STEP 4 — PREPARE ROLLBACK
+==================================================
+
+Prepare exact rollback BEFORE moving traffic.
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 100%
+
+
+CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+→ 100%
+
+
+Rollback target:
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public apps=true
+
+gateway unchanged
+
+claims zero
+
+
+Rollback must be followed by version-traced closed observers.
+
+==================================================
+STEP 5 — ACTIVATE RUNTIME CANDIDATE
+==================================================
+
+Perform ONE runtime deployment:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+→ 100%
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 0%
+
+
+Record:
+
+deployment ID
+
+UTC timestamp
+
+deployment readback
+
+==================================================
+STEP 6 — RUNTIME OPEN GATE
+==================================================
+
+Run the hardened runtime observer.
+
+TARGETED must prove:
+
+HTTP 200
+
+registrationEnabled=true
+
+providers.email=true
+
+tail scriptName:
+buildcustom-vibesdk-launch
+
+tail version:
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+ORDINARY must independently prove:
+
+HTTP 200
+
+registrationEnabled=true
+
+providers.email=true
+
+tail scriptName:
+buildcustom-vibesdk-launch
+
+tail version:
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Existing-user authentication/ownership must pass.
+
+
+If any runtime gate fails:
+
+rollback runtime
+
+verify closed runtime
+
+STOP.
+
+Do not activate control.
+
+==================================================
+STEP 7 — ACTIVATE CONTROL CANDIDATE
+==================================================
+
+Only after runtime gate passes.
+
+Perform ONE control deployment:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+→ 100%
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+→ 0%
+
+
+Record:
+
+deployment ID
+
+UTC timestamp
+
+deployment readback
+
+==================================================
+STEP 8 — CONTROL OPEN GATE
+==================================================
+
+Run the accepted Task 12J control observer.
+
+Require:
+
+HTTP 200
+
+registrationEnabled=true
+
+publicGeneratedAppsEnabled=true
+
+
+Matching tail MUST identify:
+
+scriptName:
+buildcustom-control-plane-launch
+
+scriptVersion.id:
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+Require:
+
+runtime registration still true
+
+signup UI shows Create Account
+
+
+If any control gate fails:
+
+rollback control
+
+rollback runtime
+
+verify closed state
+
+STOP.
+
+==================================================
+STEP 9 — RUN THE EXACT LIVE ACCEPTANCE OPERATOR
+==================================================
+
+Now invoke the frozen production entrypoint WITH its explicit execution gate:
+
+scripts/task12r-registration-acceptance.mjs --execute
+
+Use the exact supported invocation/arguments established by the script.
+
+DO NOT bypass the entrypoint.
+
+DO NOT manually reproduce its cases.
+
+DO NOT modify the runner.
+
+DO NOT modify the production adapter.
+
+DO NOT run a separate fixture sequence.
+
+
+The authoritative Task 12V runner must own the live acceptance lifecycle.
+
+==================================================
+STEP 10 — REQUIRED BOUNDED VALIDATION
+==================================================
+
+The shared runner must execute and record:
+
+duplicate existing email
+
+case-variant existing email
+
+invalid email
+
+weak password
+
+missing password
+
+invalid request shape
+
+
+Require:
+
+bounded expected rejection
+
+no unexpected 500/502
+
+no identity mutation
+
+
+Every case must have its own atomic evidence.
+
+If any case FAILS or becomes UNKNOWN:
+
+rollback both Workers
+
+STOP.
+
+==================================================
+STEP 11 — REQUIRED ORIGIN MATRIX
+==================================================
+
+Use the Task 12S semantics already encoded in the shared runner.
+
+VALID ORIGIN:
+
+https://app.buildcustom.ai
+
+valid CSRF
+
+deliberately invalid email
+
+Expected:
+
+reaches downstream validation
+
+NOT ORIGIN_REJECTED
+
+no identity
+
+
+INVALID ORIGIN:
+
+same request category
+
+change only Origin
+
+Expected EXACTLY:
+
+HTTP 400
+
+{"message":"ORIGIN_REJECTED"}
+
+no identity
+
+
+MISSING ORIGIN:
+
+Expected EXACTLY:
+
+HTTP 400
+
+{"message":"ORIGIN_REJECTED"}
+
+no identity
+
+
+An arbitrary 400 MUST NOT pass.
+
+==================================================
+STEP 12 — REQUIRED CSRF MATRIX
+==================================================
+
+Use valid Origin.
+
+Use the same deliberately invalid email.
+
+VALID CSRF:
+
+must reach downstream validation
+
+
+MISSING CSRF:
+
+expected public HTTP 403 according to accepted Task 12S semantics
+
+
+INVALID CSRF:
+
+expected public HTTP 403 according to accepted Task 12S semantics
+
+
+Attribution must use the matched matrix and established middleware semantics.
+
+Generic 403 alone is not independent proof.
+
+Identity counts must remain unchanged.
+
+==================================================
+STEP 13 — ONE REAL PUBLIC SIGNUP
+==================================================
+
+The shared runner may now perform exactly ONE signup action.
+
+Use one fresh disposable acceptance-test identity.
+
+It must use the normal public BuildCustom signup path.
+
+No bootstrap.
+
+No direct runtime registration.
+
+No D1 user insertion.
+
+
+Maximum signup action count:
+
+1
+
+==================================================
+STEP 14 — UNCERTAIN SIGNUP RULE
+==================================================
+
+If the signup click/request outcome is uncertain:
+
+DO NOT CLICK AGAIN.
+
+DO NOT RESEND REGISTRATION.
+
+
+Move to the Task 12V reconciliation path.
+
+
+Reconciliation may inspect:
+
+product identity count
+
+runtime identity count
+
+matching IDs
+
+product auth
+
+runtime auth
+
+session state
+
+local-session count
+
+request count
+
+dashboard state
+
+read-error evidence
+
+
+Then classify:
+
+SUCCESS
+
+FAIL
+
+UNKNOWN
+
+
+If UNKNOWN:
+
+rollback both Workers
+
+STOP.
+
+No retry.
+
+==================================================
+STEP 15 — SUCCESSFUL NEW-USER REQUIREMENTS
+==================================================
+
+Require:
+
+exactly one product identity
+
+exactly one runtime identity
+
+correct identity mapping
+
+normal authenticated session
+
+dashboard loads
+
+legacy_password_hash NULL/unused
+
+no BuildCustom-local password authority
+
+no BuildCustom-local session authority
+
+
+DO NOT create a project.
+
+DO NOT invoke Think.
+
+DO NOT generate.
+
+==================================================
+STEP 16 — DUPLICATE NEW-USER PROTECTION
+==================================================
+
+After successful signup:
+
+exact duplicate email:
+bounded rejection
+no second identity
+
+
+case-variant duplicate:
+bounded rejection
+no second identity
+
+==================================================
+STEP 17 — NEW-USER AUTHORITY
+==================================================
+
+Require:
+
+product /api/auth/me:
+correct identity
+
+
+runtime /api/auth/check:
+authenticated=true
+
+
+Product D1:
+one matching product user
+
+
+Runtime D1:
+one matching runtime user
+
+
+Runtime remains authentication/session authority.
+
+==================================================
+STEP 18 — NEW-USER LOGOUT
+==================================================
+
+Before logout:
+
+product identity present
+
+runtime authenticated=true
+
+runtime session exists
+
+is_revoked=0
+
+
+Perform normal public logout.
+
+
+Require:
+
+HTTP 204
+
+browser cookie cleared
+
+runtime session is_revoked=1
+
+
+Replay exact old credential.
+
+
+PRODUCT:
+
+body = null
+
+
+RUNTIME:
+
+authenticated=false
+
+
+Then fresh normal login.
+
+Require:
+
+same identity
+
+dashboard loads
+
+==================================================
+STEP 19 — ACCEPT LIVE OPERATOR RESULT
+==================================================
+
+The runner must finish with a durable PASS artifact.
+
+If:
+
+runner result = FAIL
+
+or
+
+runner result = UNKNOWN
+
+or
+
+final PASS artifact cannot be safely persisted
+
+then:
+
+rollback both Workers
+
+STOP.
+
+
+Do not manually override the runner.
+
+Do not interpret an UNKNOWN as PASS.
+
+==================================================
+STEP 20 — EXISTING OWNER REGRESSION
+==================================================
+
+Only after live signup operator PASS.
+
+USER 1:
+
+fresh login
+
+own dashboard
+
+project 2 reopen
+
+conversation preserved
+
+Files load
+
+preview loads
+
+idle WebSocket connects
+
+release unchanged
+
+
+USER 2:
+
+fresh login
+
+own dashboard
+
+project 3 reopen
+
+conversation preserved
+
+Files load
+
+preview loads
+
+idle WebSocket connects
+
+release unchanged
+
+
+Cross-owner:
+
+denied / 404
+
+
+NO generation.
+
+NO editing.
+
+NO Publish.
+
+==================================================
+STEP 21 — PUBLIC APP REGRESSION
+==================================================
+
+Require:
+
+project 2 public app:
+200 + expected marker
+
+
+project 3 public app:
+200 + expected marker
+
+
+unknown slug:
+404
+
+
+Gateway remains EXACTLY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+100%
+
+==================================================
+STEP 22 — NETWORK AUDIT
+==================================================
+
+Require zero customer runtime dependency on:
+
+Replit development
+
+legacy runtime
+
+staging runtime
+
+lab runtime
+
+old control
+
+private generated-app gateway
+
+customer-facing workers.dev URLs
+
+
+Fonts and Cloudflare analytics allowed.
+
+==================================================
+STEP 23 — REPLIT DEVELOPMENT-OFF TEST
+==================================================
+
+Temporarily stop ONLY the Replit DEVELOPMENT workflow.
+
+DO NOT unpublish the PUBLIC Replit deployment.
+
+Marketing waitlist still depends on that public deployment until Task 13.
+
+
+While development workflow is stopped verify:
+
+app.buildcustom.ai loads
+
+Create Account visible
+
+runtime registration=true
+
+control registration=true
+
+
+NEW ACCEPTANCE USER:
+
+fresh login
+
+correct identity
+
+dashboard
+
+
+USER 1:
+
+login
+
+project 2
+
+Files
+
+preview
+
+idle WebSocket
+
+
+USER 2:
+
+login
+
+project 3
+
+Files
+
+preview
+
+idle WebSocket
+
+
+PUBLIC:
+
+project 2 app works
+
+project 3 app works
+
+marketing works
+
+
+Perform one logout while development remains stopped.
+
+Require:
+
+runtime session revoked
+
+old product credential → null
+
+old runtime credential → authenticated=false
+
+
+Restore development workflow afterward if desired.
+
+==================================================
+STEP 24 — FINAL VERSION-TRACED OPEN GATES
+==================================================
+
+RUNTIME TARGETED:
+
+HTTP 200
+
+registrationEnabled=true
+
+providers.email=true
+
+tail version:
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+RUNTIME ORDINARY:
+
+HTTP 200
+
+registrationEnabled=true
+
+providers.email=true
+
+tail version:
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+CONTROL:
+
+HTTP 200
+
+registrationEnabled=true
+
+publicGeneratedAppsEnabled=true
+
+tail version:
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+Require:
+
+claims zero
+
+gateway unchanged
+
+public apps healthy
+
+marketing healthy
+
+==================================================
+SUCCESS STATE
+==================================================
+
+If EVERY required gate passes:
+
+DO NOT ROLLBACK.
+
+
+FINAL RUNTIME:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+100%
+
+
+FINAL CONTROL:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+100%
+
+
+RUNTIME REGISTRATION:
+
+true
+
+
+CONTROL REGISTRATION:
+
+true
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+PUBLIC SIGNUP:
+
+OPEN
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+CLAIMS:
+
+zero
+
+
+TASK 12W:
+
+ACCEPTED
+
+
+TASK 12:
+
+COMPLETE
+
+
+BUILDCUSTOM:
+
+OPEN FOR PUBLIC SIGNUP
+
+==================================================
+FAILURE / UNKNOWN RULE
+==================================================
+
+If ANY required gate FAILS or becomes UNKNOWN:
+
+NO RETRY.
+
+NO CODE CHANGE.
+
+NO TOOLING CHANGE.
+
+Preserve the exact runner artifact.
+
+
+Rollback:
+
+RUNTIME:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 100%
+
+
+CONTROL:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+→ 100%
+
+
+Then version-trace closed state and require:
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public apps=true
+
+gateway unchanged
+
+project 2 app healthy
+
+project 3 app healthy
+
+unknown slug 404
+
+marketing 200
+
+claims zero
+
+
+Then STOP.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. closed precheck
+
+2. closed runtime targeted result/version
+
+3. closed runtime ordinary result/version
+
+4. closed control result/version
+
+5. frozen tooling 43/43 retest
+
+6. --execute refusal retest
+
+7. runtime candidate parity
+
+8. control candidate parity
+
+9. runtime deployment ID/time
+
+10. runtime open targeted result/version
+
+11. runtime open ordinary result/version
+
+12. runtime existing-user gate
+
+13. control deployment ID/time
+
+14. control open capability/body/version
+
+15. signup UI result
+
+16. live operator invocation
+
+17. live runner final result
+
+18. live runner artifact path
+
+19. bounded duplicate-existing result
+
+20. bounded case-variant-existing result
+
+21. bounded invalid-email result
+
+22. bounded weak-password result
+
+23. bounded missing-password result
+
+24. bounded invalid-shape result
+
+25. valid-Origin result/body/stage
+
+26. invalid-Origin result/body/exact match
+
+27. missing-Origin result/body/exact match
+
+28. valid-CSRF result/stage
+
+29. missing-CSRF result
+
+30. invalid-CSRF result
+
+31. matrix identity-count effect
+
+32. Origin/CSRF matrix accepted?
+
+33. signup action count
+
+34. signup click/result classification
+
+35. reconciliation used?
+
+36. reconciliation evidence if used
+
+37. signup final classification
+
+38. product identities created
+
+39. runtime identities created
+
+40. identity mapping
+
+41. legacy_password_hash
+
+42. local password authority
+
+43. local session authority
+
+44. duplicate-new-user result
+
+45. case-variant-new-user result
+
+46. product auth result
+
+47. runtime auth result
+
+48. runtime session before logout
+
+49. logout result
+
+50. runtime session after logout
+
+51. old product credential replay
+
+52. old runtime credential replay
+
+53. fresh login result
+
+54. durable PASS artifact written?
+
+55. user-1/project-2 regression
+
+56. user-2/project-3 regression
+
+57. ownership isolation
+
+58. project-2 public app
+
+59. project-3 public app
+
+60. unknown slug
+
+61. gateway Worker/version/traffic
+
+62. network audit
+
+63. Replit-development-off result
+
+64. development-off logout result
+
+65. marketing
+
+66. final runtime targeted result/version
+
+67. final runtime ordinary result/version
+
+68. final control result/version
+
+69. final runtime version/traffic
+
+70. final control version/traffic
+
+71. final runtime registration
+
+72. final control registration
+
+73. final public signup state
+
+74. claims
+
+75. rollback performed?
+
+76. Worker version created?
+
+77. Worker code changed?
+
+78. acceptance tooling changed during live attempt?
+
+79. gateway modified?
+
+80. DNS modified?
+
+81. generation performed?
+
+82. project edit performed?
+
+83. Publish performed?
+
+84. remaining HIGH risks
+
+85. remaining MEDIUM risks
+
+86. TASK 12W ACCEPTED?
+
+87. TASK 12 COMPLETE?
+
+88. BUILDCUSTOM OPEN FOR PUBLIC SIGNUP?
+
+89. Based on combined accepted Tasks 1–12 evidence, can a stranger complete:
+
+signup
+→ authentication
+→ project
+→ native Think build
+→ edit
+→ reopen
+→ Files
+→ preview
+→ immutable Publish
+→ public *.apps.buildcustom.ai app
+→ logout
+→ old-session rejection
+→ fresh login
+
+without manual intervention?
+
+90. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT CREATE ANOTHER WORKER VERSION.
+
+DO NOT MODIFY WORKER CODE.
+
+DO NOT MODIFY ACCEPTANCE TOOLING DURING THE ATTEMPT.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MOVE WAITLIST.
+
+DO NOT UNPUBLISH PUBLIC REPLIT.
