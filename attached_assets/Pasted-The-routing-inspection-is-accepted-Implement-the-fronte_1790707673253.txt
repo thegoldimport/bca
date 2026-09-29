@@ -1,0 +1,402 @@
+The routing inspection is accepted.
+
+Implement the frontend routing cleanup now.
+
+This is a FRONTEND ROUTING / SOURCE-CONFIG cleanup only.
+
+Do not redesign auth.
+
+Do not change runtime authentication/session/recovery logic.
+
+Do not change EMAIL.
+
+Do not change gateway/generated-app infrastructure.
+
+Do not change DNS.
+
+Do not change databases or account/project state.
+
+CURRENT ACCEPTED PRODUCTION
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+registration ENABLED
+
+Control:
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+registration ENABLED
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Public generated apps:
+ENABLED
+
+Password recovery:
+LIVE
+
+FINAL URL CONTRACT
+
+MARKETING
+
+https://buildcustom.ai/
+https://www.buildcustom.ai/
+
+remain the marketing website.
+
+Do not move the marketing site to app.buildcustom.ai.
+
+APPLICATION
+
+https://app.buildcustom.ai/
+
+is the application entry point.
+
+When signed OUT:
+app.buildcustom.ai/ -> Login
+
+When signed IN:
+app.buildcustom.ai/ -> existing dashboard at /app
+
+Do not show the marketing Home component at app.buildcustom.ai/.
+
+AUTH ROUTES
+
+Canonical customer-facing routes:
+
+/login
+-> existing AppAuth login mode
+
+/signup
+-> existing AppAuth signup mode
+
+/forgot-password
+-> existing AppAuth forgot-password mode
+
+/reset-password?token=<TOKEN>
+-> existing ResetPassword component
+
+Do not create duplicate authentication implementations.
+
+ADMIN
+
+Move/preserve the existing separate admin login at:
+
+/admin/login
+
+Do not let /login resolve to the admin login anymore on app.buildcustom.ai.
+
+APPLICATION ROUTES
+
+Keep:
+
+/app
+-> dashboard
+
+/app/project/:id
+-> project detail
+
+/app/editor/:id
+-> builder
+
+Do not rename those routes in this task.
+
+COMPATIBILITY
+
+Existing old auth paths must continue working:
+
+/app/login
+/app/signup
+/app/forgot-password
+/app/reset-password
+
+Prefer redirects to the canonical clean paths.
+
+Requirements:
+
+/app/login
+-> /login
+
+/app/signup
+-> /signup
+
+/app/forgot-password
+-> /forgot-password
+
+/app/reset-password?token=ABC
+-> /reset-password?token=ABC
+
+The reset redirect MUST preserve the complete query string/token.
+
+These compatibility routes must be evaluated BEFORE the generic /app/:rest*
+dashboard handling.
+
+AUTH-AWARE APP ROOT
+
+Implement a small app-root routing component using the EXISTING authentication
+mechanism.
+
+At app.buildcustom.ai/:
+
+- check the existing /api/auth/me session
+- authenticated -> /app
+- unauthenticated -> /login
+
+Avoid rendering the marketing Home component first and then visibly flashing
+to another page if reasonably possible.
+
+Do not create another session/auth authority.
+
+Do not duplicate auth state.
+
+FORGOT PASSWORD
+
+Give the existing forgot-password mode its canonical URL:
+
+/forgot-password
+
+The existing "Forgot password?" action from Login should navigate to that URL.
+
+The recovery implementation itself must remain unchanged.
+
+RESET PASSWORD
+
+Keep the already-working:
+
+/reset-password?token=...
+
+The production recovery email already generates this URL.
+
+After successful reset, send the user to:
+
+/login
+
+not /app/login.
+
+LOGIN / SIGNUP NAVIGATION
+
+Update internal auth navigation to canonical paths:
+
+Login -> /login
+Signup -> /signup
+Forgot password -> /forgot-password
+
+After successful login/signup:
+
+-> /app
+
+Logout/session-expired navigation:
+
+-> /login
+
+Do not change the underlying logout/session behavior.
+
+MARKETING "BUILD IT!" CTA
+
+Signup is now publicly live.
+
+The primary "Build It!" CTA should no longer open the waitlist modal.
+
+On the marketing site, change the relevant primary Build It! CTA(s) to:
+
+https://app.buildcustom.ai/signup
+
+If the app-host copy of the old Home component remains in the bundle but is no
+longer reachable at app root, keep its Build It behavior consistent if
+appropriate.
+
+Do NOT change pricing CTAs or partner/strategy-call CTAs.
+
+Do NOT change other waitlist behavior yet.
+
+We will move the remaining marketing waitlist backend off Replit separately.
+
+IMPORTANT PRODUCTION CONFIG CLEANUP
+
+The checked-in launch configuration still says registration false even though
+public signup is now intentionally LIVE.
+
+Before building/deploying the frontend update, change the intended production
+launch configuration to match accepted production:
+
+runtime registration = true
+control-plane registration = true
+
+Use the existing configuration mechanism.
+
+Do not introduce another flag.
+
+Also preserve:
+
+public generated apps = true
+
+This prevents this frontend deployment from accidentally closing signup.
+
+TEST BEFORE DEPLOYMENT
+
+Run focused routing/frontend tests proving:
+
+1. app hostname /:
+   authenticated -> /app
+   unauthenticated -> /login
+
+2. /login renders customer login.
+
+3. /signup renders customer signup.
+
+4. /forgot-password renders forgot-password UI.
+
+5. /reset-password?token=test preserves token and reaches ResetPassword.
+
+6. old /app/login redirects/aliases correctly.
+
+7. old /app/signup redirects/aliases correctly.
+
+8. old /app/forgot-password redirects/aliases correctly.
+
+9. old /app/reset-password?token=test preserves token.
+
+10. /admin/login renders existing admin login.
+
+11. /app still requires normal authentication.
+
+12. /app/project/:id and /app/editor/:id remain unchanged.
+
+13. marketing Build It! points to:
+    https://app.buildcustom.ai/signup
+
+14. pricing/partner CTAs remain unchanged.
+
+15. production launch config has registration enabled.
+
+16. public generated apps remain enabled.
+
+DEPLOYMENT
+
+Deploy only the minimum control-plane/frontend release necessary for these
+routing/assets changes.
+
+Do NOT deploy a new runtime unless the registration source-config mechanism
+requires a runtime deployment to keep its checked-in configuration aligned.
+
+If a runtime deployment is NOT required for the routing change, leave the
+currently accepted runtime serving version unchanged.
+
+CRITICAL:
+
+Do not accidentally deploy a registration-disabled control version.
+
+After deployment, allow normal Cloudflare convergence before checking public
+paths.
+
+PRODUCTION ACCEPTANCE
+
+Verify through normal customer paths:
+
+Signed out:
+
+https://app.buildcustom.ai/
+-> Login experience
+
+https://app.buildcustom.ai/login
+-> Login
+
+https://app.buildcustom.ai/signup
+-> Signup
+
+https://app.buildcustom.ai/forgot-password
+-> Forgot Password
+
+https://app.buildcustom.ai/reset-password?token=test
+-> Reset Password page
+
+Compatibility:
+
+/app/login
+/app/signup
+/app/forgot-password
+/app/reset-password?token=test
+
+all resolve to their intended canonical auth pages and reset token is
+preserved.
+
+Authenticated existing user:
+
+app.buildcustom.ai/
+-> /app/dashboard experience
+
+Existing:
+- dashboard
+- project
+- Files
+- preview
+
+remain healthy.
+
+Also verify:
+
+- registration remains ENABLED at runtime
+- registration remains ENABLED at control plane
+- public generated apps remain ENABLED
+- existing public generated app returns 200
+- unknown generated-app slug returns 404
+- password recovery remains available
+- EMAIL binding remains present
+- security@buildcustom.ai remains allowed sender
+- active publish claims = 0
+- gateway remains unchanged
+
+MARKETING
+
+Verify:
+
+buildcustom.ai/
+-> marketing remains healthy
+
+Primary Build It! CTA:
+-> https://app.buildcustom.ai/signup
+
+Pricing/partner CTAs:
+-> unchanged
+
+Do not submit the waitlist form.
+
+Do not perform AI generation.
+
+Do not send recovery email.
+
+Do not create another user.
+
+Do not change any account/project state.
+
+If an ACTUAL customer-path regression occurs, STOP and report it.
+
+Do not redesign unrelated systems.
+
+If all checks pass, leave the new frontend/control version live and leave
+public signup OPEN.
+
+Commit the source/config changes.
+
+RETURN:
+
+- commit SHA
+- exact files changed
+- serving runtime version
+- new serving control version
+- gateway version
+- app root signed-out result
+- app root signed-in result
+- canonical auth-route results
+- compatibility-route results
+- reset-token preservation result
+- admin-login result
+- dashboard/project/Files/preview result
+- registration state
+- password-recovery state
+- public-generated-app state
+- marketing result
+- Build It! destination
+- pricing/partner CTA unchanged confirmation
+- active publish claims
+- FINAL PUBLIC SIGNUP STATE
