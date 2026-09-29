@@ -1,0 +1,64 @@
+The Gmail test did NOT reach Cloudflare Email Sending.
+
+I confirmed in the Cloudflare dashboard:
+- there is no Gmail recipient entry in Email Sending Activity
+- the only Activity entries are the existing support@buildcustom.ai attempts
+- the daily sending quota did not increase
+
+Therefore the local Replit/workerd TLS error occurred before Cloudflare accepted
+the Gmail test.
+
+Do not perform any more local/remote-binding email tests.
+
+Instead, perform ONE controlled test from Cloudflare's actual deployed Workers
+environment.
+
+Create a TEMPORARY isolated Cloudflare Worker solely for this test.
+
+Requirements:
+
+1. Do NOT modify or deploy the BuildCustom production runtime or control plane.
+2. Do NOT modify the existing acceptance account.
+3. Do NOT change DNS.
+4. Do NOT change signup. It must remain CLOSED.
+5. Do NOT modify the generated-app gateway.
+6. Preserve all completed local password recovery work.
+
+The temporary Worker should use the same native Cloudflare Email Service
+`send_email` binding/configuration intended for BuildCustom password recovery.
+
+Send exactly ONE email:
+
+FROM:
+BuildCustom <security@buildcustom.ai>
+
+TO:
+[MY GMAIL ADDRESS]
+
+SUBJECT:
+BuildCustom Cloudflare Email Test
+
+BODY:
+This is a test of BuildCustom's Cloudflare Email Service configuration.
+
+Deploy the temporary Worker to Cloudflare first, then invoke it exactly ONCE.
+
+Do not retry automatically if the result is uncertain.
+
+After the single invocation:
+
+1. Report whether the Worker invocation succeeded.
+2. Report whether EMAIL.send() succeeded or threw an error.
+3. Report any returned error exactly.
+4. Tell me whether Cloudflare Email Sending accepted the message.
+5. Tell me whether the Email Sending Activity Log contains the Gmail recipient.
+6. Tell me the Activity status if available.
+7. Tell me whether the daily sending count increased.
+
+Then STOP so I can check Gmail myself.
+
+Do not delete the temporary Worker until after reporting the result, in case
+we need to inspect it. Do not send another email.
+
+This is an infrastructure-isolation test only. Do not deploy password recovery
+or make any other production changes.

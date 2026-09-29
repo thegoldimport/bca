@@ -1,0 +1,15 @@
+{
+  "name": "buildcustom-email-test-20260929",
+  "main": "index.mjs",
+  "account_id": "03ef1e6e42498920987f07059e107538",
+  "compatibility_date": "2026-09-25",
+  "workers_dev": false,
+  "preview_urls": true,
+  "observability": { "enabled": true },
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["security@buildcustom.ai"]
+    }
+  ]
+}
