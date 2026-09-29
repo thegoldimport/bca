@@ -1,0 +1,105 @@
+Yes. Investigate the logout failure READ-ONLY first.
+
+This is a real security regression because all three facts agree:
+
+- Account A logout returned HTTP 502
+- the pre-logout credential still authenticated afterward
+- the authoritative runtime session row remained active
+
+Do NOT retry logout yet.
+
+Do NOT perform the second password reset.
+
+Do NOT change either account.
+
+Do NOT change or revoke production sessions manually.
+
+Do NOT deploy, rollback, or modify any Worker yet.
+
+Do NOT reopen signup.
+
+Do NOT send another email.
+
+Do NOT perform AI generation.
+
+We previously had working server-side logout revocation in the accepted runtime,
+so treat this as a regression introduced somewhere in the recovery-capable
+runtime/control-plane path until evidence shows otherwise.
+
+Perform a READ-ONLY investigation of the exact failed logout.
+
+Trace:
+
+1. The public control-plane logout request for Account A.
+2. The control-plane handler and its call into the runtime.
+3. The runtime logout handler.
+4. CSRF handling.
+5. Origin handling.
+6. Session-cookie forwarding.
+7. Runtime identity/session lookup.
+8. The Task 6A server-side revocation logic.
+9. Any interaction with the new password-recovery/session-revocation changes.
+10. The exact source of the HTTP 502.
+
+Compare the currently deployed recovery-capable logout path against the last
+accepted runtime where logout revocation was proven:
+
+accepted runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+Specifically determine whether the recovery changes accidentally altered,
+omitted, bypassed, or became incompatible with the Task 6A logout patch that:
+
+- binds the signed credential to the stored runtime session
+- revokes that exact server-side session on logout
+- confirms revocation before clearing the cookie
+- leaves other sessions unaffected
+
+Inspect Account A's current active session READ-ONLY and correlate it to the
+failed logout if possible.
+
+Also inspect Account B's active session READ-ONLY only as necessary to ensure
+we do not accidentally affect it later.
+
+I want ONE root-cause report before any fix.
+
+Return:
+
+1. Exact failing component:
+   browser/control plane/runtime/database/etc.
+
+2. Exact failing request and response path.
+
+3. Exact reason the control plane returned 502.
+
+4. Whether the runtime logout endpoint was actually reached.
+
+5. If reached, whether it identified Account A's correct session.
+
+6. Whether a revocation UPDATE was attempted.
+
+7. Why the authoritative session remained active.
+
+8. Whether Task 6A logout behavior is still present in the currently deployed
+   runtime source.
+
+9. Exact source/code difference between the accepted logout implementation and
+   the recovery-capable implementation that explains the regression.
+
+10. Whether the password-reset "revoke all sessions" implementation shares any
+    code with logout and whether that contributed to the failure.
+
+11. Smallest proposed fix.
+
+12. Focused tests that would prove the fix locally before another production
+    logout attempt.
+
+Do not make the fix yet.
+
+Do not broaden this into an auth redesign.
+
+Do not add a second session authority, blacklist, or workaround.
+
+The runtime database remains the sole session authority.
+
+STOP after the read-only root-cause report.
