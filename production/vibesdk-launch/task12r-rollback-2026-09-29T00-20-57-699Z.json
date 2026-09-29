@@ -1,0 +1,110 @@
+{
+  "startedAt": "2026-09-29T00:20:57.700Z",
+  "status": "CLOSED_VERIFIED",
+  "events": [
+    {
+      "at": "2026-09-29T00:20:58.154Z",
+      "attempt": 1,
+      "worker": "buildcustom-control-plane-launch",
+      "result": {
+        "id": "1ac9eb40-74e3-4a69-8225-c1af6535961f"
+      }
+    },
+    {
+      "at": "2026-09-29T00:20:58.675Z",
+      "attempt": 1,
+      "worker": "buildcustom-vibesdk-launch",
+      "result": {
+        "id": "30d7359c-e1d8-4b3c-8a75-b4ad2ad07509"
+      }
+    },
+    {
+      "at": "2026-09-29T00:20:58.912Z",
+      "attempt": 1,
+      "states": [
+        {
+          "name": "buildcustom-control-plane-launch",
+          "deployment": {
+            "id": "1ac9eb40-74e3-4a69-8225-c1af6535961f",
+            "source": "api",
+            "strategy": "percentage",
+            "annotations": {
+              "workers/message": "Task 12R failed acceptance rollback 1",
+              "workers/triggered_by": "deployment"
+            },
+            "versions": [
+              {
+                "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+                "percentage": 100
+              }
+            ],
+            "created_on": "2026-09-29T00:20:57.888436Z"
+          },
+          "matches": true
+        },
+        {
+          "name": "buildcustom-vibesdk-launch",
+          "deployment": {
+            "id": "30d7359c-e1d8-4b3c-8a75-b4ad2ad07509",
+            "source": "api",
+            "strategy": "percentage",
+            "annotations": {
+              "workers/message": "Task 12R failed acceptance rollback 1",
+              "workers/triggered_by": "deployment"
+            },
+            "versions": [
+              {
+                "version_id": "8e28025f-e415-4405-9b1f-67d93eff7fd8",
+                "percentage": 100
+              }
+            ],
+            "created_on": "2026-09-29T00:20:58.253968Z"
+          },
+          "matches": true
+        },
+        {
+          "name": "buildcustom-apps-gateway",
+          "deployment": {
+            "id": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427",
+            "source": "api",
+            "strategy": "percentage",
+            "annotations": {
+              "workers/triggered_by": "deployment"
+            },
+            "versions": [
+              {
+                "version_id": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+                "percentage": 100
+              }
+            ],
+            "created_on": "2026-09-27T18:02:37.195852Z"
+          },
+          "matches": true
+        }
+      ],
+      "restored": true
+    },
+    {
+      "at": "2026-09-29T00:21:07.562Z",
+      "script": "task12n-runtime-capability-probe.mjs",
+      "code": 0,
+      "artifact": "production/vibesdk-launch/task12n-runtime-observation-2026-09-29T00-20-58-945Z.json",
+      "status": "PASS"
+    },
+    {
+      "at": "2026-09-29T00:21:13.727Z",
+      "script": "task12j-control-cutover-probe.mjs",
+      "code": 0,
+      "artifact": "production/vibesdk-launch/task12j-observation-2026-09-29T00-21-07-710Z-1c903708.json",
+      "status": "PASS"
+    },
+    {
+      "at": "2026-09-29T00:21:18.191Z",
+      "script": "task12l-production-regression.mjs",
+      "code": 0,
+      "artifact": "production/vibesdk-launch/task12l-regression-2026-09-29T00-21-13-763Z.json",
+      "status": "PASS"
+    }
+  ],
+  "completedAt": "2026-09-29T00:21:18.193Z"
+}

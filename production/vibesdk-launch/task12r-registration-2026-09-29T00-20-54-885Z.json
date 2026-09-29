@@ -1,0 +1,19 @@
+{
+  "startedAt": "2026-09-29T00:20:54.885Z",
+  "checks": {
+    "browser-cdp-forbidden-customer-dependencies": {
+      "at": "2026-09-29T00:20:57.654Z",
+      "status": "PASS",
+      "evidence": {
+        "forbiddenHostnameCount": 0,
+        "forbiddenHostnameCountsByPhase": {}
+      }
+    }
+  },
+  "error": {
+    "step": "bounded-registration-validation",
+    "reason": "Error"
+  },
+  "completedAt": "2026-09-29T00:20:57.655Z",
+  "status": "FAIL"
+}

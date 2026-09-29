@@ -23,6 +23,7 @@ const report = { startedAt: new Date().toISOString(), checks: {} };
 let failed = false;
 let browser;
 let step = "preconditions";
+let networkAuditChecked = false;
 
 function check(name, evidence, passed) {
   report.checks[name] = { at: new Date().toISOString(), status: passed ? "PASS" : "FAIL", evidence };
@@ -36,6 +37,60 @@ function requireCondition(condition, message) {
 
 function safeError(error) {
   return { step, reason: error?.name || "acceptance_failure" };
+}
+
+function forbiddenCustomerHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const labels = host.split(".");
+  const ipv4 = host.split(".").map(Number);
+  const privateIpv4 = ipv4.length === 4 && ipv4.every(part => Number.isInteger(part) && part >= 0 && part <= 255)
+    && (ipv4[0] === 0 || ipv4[0] === 10 || ipv4[0] === 127 || ipv4[0] === 169 && ipv4[1] === 254
+      || ipv4[0] === 192 && ipv4[1] === 168
+      || ipv4[0] === 172 && ipv4[1] >= 16 && ipv4[1] <= 31);
+  const privateIpv6 = host === "::1" || host === "::"
+    || host.startsWith("fc") || host.startsWith("fd") || /^fe[89ab]/.test(host);
+  return /(^|\.)replit\.(com|dev|app)$/.test(host)
+    || /(^|\.)repl\.co$/.test(host)
+    || labels.some(label => /(^|[-])(legacy|staging|lab)([-]|$)/.test(label))
+    || host === "workers.dev" || host.endsWith(".workers.dev")
+    || labels.some(label => /gateway|private|internal/.test(label))
+    || host === "localhost" || host.endsWith(".localhost")
+    || host.endsWith(".local") || host.endsWith(".internal")
+    || privateIpv4 || privateIpv6;
+}
+
+const browserNetworkAudit = {
+  currentPhase: "setup",
+  forbiddenHosts: new Set(),
+  phases: new Map(),
+  record(hostname) {
+    this.forbiddenHosts.add(hostname);
+    if (!this.phases.has(this.currentPhase)) this.phases.set(this.currentPhase, new Set());
+    this.phases.get(this.currentPhase).add(hostname);
+  },
+  evidence() {
+    return {
+      forbiddenHostnameCount: this.forbiddenHosts.size,
+      forbiddenHostnameCountsByPhase: Object.fromEntries(
+        [...this.phases].map(([phase, hosts]) => [phase, hosts.size]),
+      ),
+    };
+  },
+};
+
+async function attachBrowserNetworkAudit(page) {
+  const client = await page.target().createCDPSession();
+  await client.send("Network.enable");
+  const observe = urlValue => {
+    try {
+      const hostname = new URL(urlValue).hostname.toLowerCase();
+      if (forbiddenCustomerHost(hostname)) browserNetworkAudit.record(hostname);
+    } catch {
+      // Do not retain malformed or opaque URLs.
+    }
+  };
+  client.on("Network.requestWillBeSent", ({ request }) => observe(request.url));
+  client.on("Network.webSocketCreated", ({ url }) => observe(url));
 }
 
 async function d1(database, sql, params = []) {
@@ -187,7 +242,11 @@ function safeResponseBody(raw) {
   }
   const keys = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed) : [];
   const message = keys.length === 1 && keys[0] === "message" ? parsed.message : null;
-  if (typeof message !== "string" || message.length > 200
+  const allowedMessages = new Set([
+    "ORIGIN_REJECTED",
+    "Could not create your account. Check your details.",
+  ]);
+  if (typeof message !== "string" || !allowedMessages.has(message)
     || /stack|exception|token|secret|authorization|cookie/i.test(raw)
     || raw.length > 2048) {
     return { classification: "UNKNOWN", exactBody: null, message: null };
@@ -270,6 +329,7 @@ async function logout(page) {
 }
 
 async function assertLogoutFlow({ label, page, email, password, identity, projectsBefore }) {
+  browserNetworkAudit.currentPhase = `${label}-logout-and-old-session-replay`;
   step = `${label}-login-before-logout`;
   await login(page, email, password, identity.product[0].id);
   const beforeCookies = await page.cookies(product);
@@ -302,6 +362,7 @@ async function assertLogoutFlow({ label, page, email, password, identity, projec
   requireCondition(oldProduct.body === null, `${label}: old product credential replay did not return null`);
   requireCondition(!oldRuntime.authenticated, `${label}: old runtime credential replay remained authenticated`);
 
+  browserNetworkAudit.currentPhase = `${label}-fresh-login`;
   step = `${label}-fresh-login`;
   const fresh = await login(page, email, password, identity.product[0].id);
   const freshRuntime = await runtimeCheck(cookieHeader(await page.cookies(product)));
@@ -331,6 +392,10 @@ async function assertLogoutFlow({ label, page, email, password, identity, projec
 }
 
 try {
+  const handoffPath = process.env.TASK12T_CREDENTIAL_HANDOFF_PATH;
+  requireCondition(typeof handoffPath === "string" && path.isAbsolute(handoffPath)
+    && handoffPath === path.resolve(handoffPath) && path.dirname(handoffPath) === "/tmp",
+  "TASK12T_CREDENTIAL_HANDOFF_PATH must name a fresh absolute file directly under /tmp");
   requireCondition(!!process.env.CLOUDFLARE_API_TOKEN, "CLOUDFLARE_API_TOKEN is required for read-only D1 evidence");
   requireCondition(!!process.env.BUILDCUSTOM_CUTOVER_TESTER_PASSWORD,
     "BUILDCUSTOM_CUTOVER_TESTER_PASSWORD is required for existing-user logout regression");
@@ -353,7 +418,9 @@ try {
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage();
+  await attachBrowserNetworkAudit(page);
   page.setDefaultTimeout(30000);
+  browserNetworkAudit.currentPhase = "anonymous-signup";
   await page.goto(`${product}/app/signup`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() =>
     document.querySelector('[data-testid="button-submit"]')?.textContent?.includes("Create Account"),
@@ -377,6 +444,7 @@ try {
   requireCondition(csrf.status === 200 && csrf.token, "Public registration CSRF token unavailable");
   const csrfCookie = cookieValue(await page.cookies(product), "csrf-token");
   requireCondition(csrfCookie, "Public registration CSRF cookie unavailable");
+  browserNetworkAudit.currentPhase = "security-matrix";
   await submitBounded(page, "duplicate-existing-email", {
     name: disposableName, email: existingEmail, password: ephemeralPassword,
   }, 1, true);
@@ -435,17 +503,13 @@ try {
       const evidence = {
         origin: {
           state: originState,
-          value: originState === "valid" ? product
-            : originState === "invalid" ? "https://not-buildcustom.example" : null,
         },
         csrf: {
           state: csrfState,
-          cookie: "acquired-valid-cookie",
-          header: csrfState === "valid" ? "acquired-valid-header"
-            : csrfState === "invalid" ? "deliberately-invalid-header" : "missing",
         },
-        payloadCategory: { name: "string", email: matrixEmail, password: "strong" },
+        payloadCategory: { name: "string", password: "strong" },
         status: result.status,
+        responseClassification: result.body.classification,
         safeResponseBody: result.body.exactBody,
         expectedNextStage,
         observedStage,
@@ -474,6 +538,7 @@ try {
   requireCondition(!failed, "At least one bounded registration validation check failed");
 
   step = "single-public-ui-signup";
+  browserNetworkAudit.currentPhase = "successful-single-signup";
   await page.goto(`${product}/app/signup`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() =>
     document.querySelector('[data-testid="button-submit"]')?.textContent?.includes("Create Account"),
@@ -540,6 +605,7 @@ try {
   requireCondition(signupSuccess, "Public signup failed its identity/authentication acceptance checks");
 
   step = "new-user-dashboard";
+  browserNetworkAudit.currentPhase = "new-user-dashboard";
   const newDashboard = await apiRead(`${product}/api/projects`, cookieHeader(await page.cookies(product)));
   requireCondition(newDashboard.status === 200 && Array.isArray(newDashboard.body),
     "New user's authenticated dashboard did not load");
@@ -591,7 +657,9 @@ try {
   const existingProjects = existingProjectsRows.map(project => Number(project.id));
   requireCondition(existingProjects.length > 0, "Existing acceptance user has no project ownership evidence");
   const existingPage = await browser.newPage();
+  await attachBrowserNetworkAudit(existingPage);
   existingPage.setDefaultTimeout(30000);
+  browserNetworkAudit.currentPhase = "existing-user";
   await assertLogoutFlow({
     label: "existing-user",
     page: existingPage,
@@ -604,11 +672,28 @@ try {
     projectCount: existingProjects.length,
     ownershipStableAfterLogoutAndLogin: true,
   }, true);
+  const networkEvidence = browserNetworkAudit.evidence();
+  check("browser-cdp-forbidden-customer-dependencies", networkEvidence,
+    networkEvidence.forbiddenHostnameCount === 0);
+  networkAuditChecked = true;
+  requireCondition(!failed, "Acceptance checks failed; credential handoff withheld");
+  step = "credential-handoff";
+  await writeFile(handoffPath, `${JSON.stringify({
+    email: disposableEmail,
+    password: ephemeralPassword,
+  })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  check("credential-handoff", { written: true, permissions: "0600" }, true);
 } catch (error) {
   failed = true;
   report.error = safeError(error);
 } finally {
   if (browser) await browser.close().catch(() => undefined);
+  if (!networkAuditChecked) {
+    const networkEvidence = browserNetworkAudit.evidence();
+    check("browser-cdp-forbidden-customer-dependencies", networkEvidence,
+      networkEvidence.forbiddenHostnameCount === 0);
+    networkAuditChecked = true;
+  }
   report.completedAt = new Date().toISOString();
   report.status = failed ? "FAIL" : "PASS";
   try {

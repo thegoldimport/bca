@@ -1,0 +1,284 @@
+{
+  "phase": "open",
+  "runId": "13cecb33-fe4a-45cc-9707-c63e3a78871d",
+  "startedAt": "2026-09-29T00:20:29.619Z",
+  "expectedVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+  "versionEvidenceClassification": "STRONG",
+  "checks": {
+    "A-control-deployment": {
+      "timestamp": "2026-09-29T00:20:31.428Z",
+      "observed": {
+        "deploymentId": "d04a1744-87a4-4281-9204-d4617d8653d6",
+        "rawRelevantApiResponse": {
+          "id": "d04a1744-87a4-4281-9204-d4617d8653d6",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12R activate-control",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-29T00:20:29.004829Z"
+        }
+      },
+      "expected": {
+        "version": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+        "percentage": 100
+      },
+      "status": "PASS"
+    },
+    "B-accepted-candidate-percentages": {
+      "timestamp": "2026-09-29T00:20:31.428Z",
+      "observed": {
+        "acceptedVersion": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+        "acceptedPercentage": 0,
+        "candidateVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+        "candidatePercentage": 100
+      },
+      "expected": {
+        "acceptedPercentage": 0,
+        "candidatePercentage": 100
+      },
+      "status": "PASS"
+    },
+    "C-candidate-configuration": {
+      "timestamp": "2026-09-29T00:20:31.871Z",
+      "observed": {
+        "versionId": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+        "mainModule": "worker.js",
+        "candidateMainSha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891",
+        "acceptedMainSha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891",
+        "modules": [
+          {
+            "name": "worker.js",
+            "sha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891"
+          }
+        ],
+        "moduleParity": true,
+        "bindings": {
+          "STAGING_REGISTRATION_ENABLED": {
+            "type": "plain_text",
+            "value": "true"
+          },
+          "PUBLIC_GENERATED_APPS_ENABLED": {
+            "type": "plain_text",
+            "value": "true"
+          },
+          "CONTROL_PLANE_PROFILE": {
+            "type": "plain_text",
+            "value": "launch"
+          },
+          "ENVIRONMENT": {
+            "type": "plain_text",
+            "value": "production"
+          },
+          "STAGING_LOGIN_ENABLED": {
+            "type": "plain_text",
+            "value": "true"
+          },
+          "AUTH_RUNTIME": {
+            "type": "service",
+            "service": "buildcustom-vibesdk-launch",
+            "environment": "production"
+          },
+          "AUTH_RUNTIME_URL": {
+            "type": "plain_text",
+            "value": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev"
+          }
+        },
+        "acceptedRegistration": {
+          "type": "plain_text",
+          "value": "false"
+        },
+        "assetConfiguration": {
+          "html_handling": "auto-trailing-slash",
+          "not_found_handling": "single-page-application",
+          "run_worker_first": true,
+          "base_path": "/"
+        }
+      },
+      "expected": {
+        "registration": "true",
+        "acceptedRegistration": "false",
+        "publicApps": "true",
+        "profile": "launch",
+        "environment": "production",
+        "moduleParity": true
+      },
+      "status": "PASS"
+    },
+    "D-live-capability": {
+      "timestamp": "2026-09-29T00:20:31.903Z",
+      "observed": {
+        "request": {
+          "url": "https://app.buildcustom.ai/api/public/capabilities?task12j_observation=1790641229618",
+          "requestedAt": "2026-09-29T00:20:31.871Z",
+          "method": "GET",
+          "cache": "no-store"
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-store",
+            "cf-ray": "a426d29338371c72-ATL",
+            "connection": "keep-alive",
+            "content-encoding": "br",
+            "content-type": "application/json",
+            "date": "Tue, 29 Sep 2026 00:20:31 GMT",
+            "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+            "report-to": "[redacted]",
+            "server": "cloudflare",
+            "transfer-encoding": "chunked"
+          },
+          "cfRay": "a426d29338371c72-ATL",
+          "contentType": "application/json",
+          "cacheControl": "no-store",
+          "age": null,
+          "cfCacheStatus": null,
+          "rawBody": "{\"registrationEnabled\":true,\"publicGeneratedAppsEnabled\":true}",
+          "parsedJson": {
+            "registrationEnabled": true,
+            "publicGeneratedAppsEnabled": true
+          }
+        },
+        "versionEvidence": {
+          "versionEvidenceClassification": "STRONG",
+          "perRequestVersionIdentity": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+          "observedVersionId": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+          "correlation": {
+            "eventTimestamp": 1790641231884,
+            "requestUrl": "https://app.buildcustom.ai/api/public/capabilities?task12j_observation=1790641229618",
+            "requestMethod": "GET",
+            "scriptName": "buildcustom-control-plane-launch",
+            "scriptVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+            "outcome": "ok"
+          },
+          "limitations": "Wrangler tail ScriptVersion identifies the Worker invocation with this exact unique request URL; this is not a signed response header."
+        }
+      },
+      "expected": {
+        "status": 200,
+        "registrationEnabled": true,
+        "publicGeneratedAppsEnabled": true,
+        "servingVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c"
+      },
+      "status": "PASS"
+    },
+    "E-signup-ui": {
+      "timestamp": "2026-09-29T00:20:33.797Z",
+      "observed": {
+        "url": "https://app.buildcustom.ai/app/signup",
+        "httpStatus": 200,
+        "state": {
+          "heading": "Create your account",
+          "submitLabel": "Create Account",
+          "nameInput": true,
+          "emailInput": true,
+          "passwordInput": true,
+          "closedNotice": false,
+          "switchLabel": "Sign in"
+        },
+        "loginAvailable": true
+      },
+      "expected": {
+        "signup": "Create Account",
+        "loginAvailable": true
+      },
+      "status": "PASS"
+    },
+    "F-runtime-registration": {
+      "timestamp": "2026-09-29T00:20:34.590Z",
+      "observed": {
+        "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12j_observation=13cecb33-fe4a-45cc-9707-c63e3a78871d",
+        "status": 200,
+        "relevantBody": {
+          "success": true,
+          "data": {
+            "registrationEnabled": true,
+            "email": true
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "registrationEnabled": true
+      },
+      "status": "PASS"
+    },
+    "G-existing-user-auth": {
+      "timestamp": "2026-09-29T00:20:41.069Z",
+      "observed": {
+        "loginStatus": 200,
+        "product": {
+          "status": 200,
+          "identityPresent": true
+        },
+        "runtime": {
+          "status": 200,
+          "authenticated": true
+        }
+      },
+      "expected": {
+        "loginStatus": 200,
+        "product": {
+          "status": 200,
+          "identityPresent": true
+        },
+        "runtime": {
+          "status": 200,
+          "authenticated": true
+        }
+      },
+      "status": "PASS"
+    }
+  },
+  "tailCalibration": {
+    "ready": true,
+    "attempts": 2,
+    "metrics": {
+      "stdoutChunks": 2,
+      "starts": 2,
+      "parsedEvents": 2,
+      "matchedUrls": 2,
+      "samples": [
+        {
+          "scriptMatches": true,
+          "isCalibration": true,
+          "urlMatched": true,
+          "eventType": "GET",
+          "hasVersion": true
+        },
+        {
+          "scriptMatches": true,
+          "isCalibration": false,
+          "urlMatched": true,
+          "eventType": "GET",
+          "hasVersion": true
+        }
+      ]
+    }
+  },
+  "perRequestVersionIdentity": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+  "versionCorrelation": {
+    "versionEvidenceClassification": "STRONG",
+    "perRequestVersionIdentity": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+    "observedVersionId": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+    "correlation": {
+      "eventTimestamp": 1790641231884,
+      "requestUrl": "https://app.buildcustom.ai/api/public/capabilities?task12j_observation=1790641229618",
+      "requestMethod": "GET",
+      "scriptName": "buildcustom-control-plane-launch",
+      "scriptVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+      "outcome": "ok"
+    },
+    "limitations": "Wrangler tail ScriptVersion identifies the Worker invocation with this exact unique request URL; this is not a signed response header."
+  },
+  "completedAt": "2026-09-29T00:20:41.348Z",
+  "status": "PASS"
+}
