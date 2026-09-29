@@ -1,0 +1,977 @@
+TASK 12S — PROVE REGISTRATION ORIGIN/CSRF TEST SEMANTICS WHILE SIGNUP STAYS CLOSED
+
+Task 12R is NOT accepted.
+
+The Task 12R cutover itself reached both open-state infrastructure gates
+successfully.
+
+The failure was specifically an AMBIGUOUS security acceptance test.
+
+DO NOT retry Task 12R in this task.
+
+This is a READ-ONLY / LOCAL TEST-DESIGN / CLOSED-PRODUCTION task.
+
+==================================================
+WHAT TASK 12R PROVED
+==================================================
+
+Runtime candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+was activated and passed:
+
+- targeted runtime capability
+- ordinary runtime capability
+- per-request candidate version identity
+- registrationEnabled=true
+- providers.email=true
+- existing-user authentication
+- existing project ownership
+
+
+Control candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+was then activated and passed:
+
+- deployment gate
+- public capability HTTP 200
+- registrationEnabled=true
+- publicGeneratedAppsEnabled=true
+- Cloudflare tail version identity
+- signup UI open
+
+
+Public registration validation then passed:
+
+duplicate existing email:
+HTTP 400
+no duplicate identity
+
+
+case-variant duplicate:
+HTTP 400
+no duplicate identity
+
+
+invalid email:
+HTTP 400
+NOT 500/502
+no identity
+
+
+weak password:
+HTTP 400
+NOT 500/502
+no identity
+
+
+missing password:
+HTTP 400
+no identity
+
+
+invalid request shape:
+HTTP 400
+no identity
+
+
+Therefore the Task 12L registration-validation fix is now ALSO proven through
+the real public control → runtime path.
+
+Do not re-diagnose it.
+
+==================================================
+WHY TASK 12R STOPPED
+==================================================
+
+The invalid-Origin registration test returned:
+
+HTTP 400
+
+
+BUT the request used an EXISTING email.
+
+Therefore HTTP 400 could have been caused by:
+
+- Origin rejection
+
+OR
+
+- duplicate-account validation
+
+OR another earlier/later validation path.
+
+
+The test did not retain evidence proving which guard rejected the request.
+
+Task 12R correctly treated Origin acceptance as FAIL/UNPROVEN and rolled back.
+
+Missing CSRF:
+
+HTTP 403
+
+
+Invalid CSRF:
+
+HTTP 403
+
+
+Those results are useful, but this task must still trace and prove the exact
+security semantics rather than infer them from status alone.
+
+==================================================
+CURRENT SAFE PRODUCTION STATE
+==================================================
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+RUNTIME CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL:
+
+buildcustom-control-plane-launch
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+PUBLIC SIGNUP:
+
+CLOSED
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+CLAIMS:
+
+zero
+
+==================================================
+HARD RULES
+==================================================
+
+DO NOT:
+
+- activate runtime candidate
+- activate control candidate
+- open signup
+- create a Worker version
+- create a deployment
+- modify Worker code
+- modify Worker bindings
+- modify gateway
+- modify DNS
+- create a user
+- generate
+- edit projects
+- Publish
+- move waitlist
+- stop/unpublish public Replit
+
+You MAY:
+
+- inspect source
+- inspect deployed candidate modules
+- inspect Task 12R evidence
+- modify LOCAL acceptance/probe scripts
+- add LOCAL tests
+- make harmless read-only requests
+- make closed-state requests that are guaranteed not to create identities
+- run local/unit/integration tests against the existing implementation
+
+==================================================
+OBJECTIVE
+==================================================
+
+Design and prove a deterministic final security acceptance test for:
+
+1. valid Origin
+
+2. invalid Origin
+
+3. missing Origin if relevant to the implementation
+
+4. valid CSRF
+
+5. missing CSRF
+
+6. invalid CSRF
+
+
+The test must distinguish SECURITY-GUARD rejection from:
+
+- duplicate-account rejection
+- schema validation
+- registration-disabled rejection
+- runtime validation
+- account creation
+
+
+We need to know EXACTLY which guard rejected the request.
+
+==================================================
+STEP 1 — VERIFY CLOSED PRODUCTION
+==================================================
+
+Read only.
+
+Require:
+
+runtime accepted version 100%
+
+runtime candidate 0%
+
+control accepted version 100%
+
+control candidate 0%
+
+runtime registration=false
+
+control registration=false
+
+public apps=true
+
+gateway unchanged
+
+claims zero
+
+signup closed
+
+
+If not:
+
+STOP.
+
+==================================================
+STEP 2 — TRACE PUBLIC REGISTRATION REQUEST
+==================================================
+
+Trace the exact public endpoint used by the signup UI.
+
+Expected historically:
+
+POST /api/auth/register
+
+
+But verify from source.
+
+Trace the request from:
+
+browser/signup UI
+
+→ control Worker route
+
+→ security middleware/guards
+
+→ control validation
+
+→ AUTH_RUNTIME service binding
+
+→ runtime registration handler
+
+
+Document the exact execution order.
+
+Do not infer ordering from function names.
+
+==================================================
+STEP 3 — TRACE ORIGIN ENFORCEMENT
+==================================================
+
+Find the exact Origin validation implementation for the public registration
+request.
+
+Document:
+
+- function/middleware name
+- source file
+- when it executes
+- allowed Origin logic
+- behavior for app.buildcustom.ai
+- behavior for invalid Origin
+- behavior for missing Origin
+- returned HTTP status
+- returned response shape
+- whether processing stops immediately
+- whether runtime service binding is called afterward
+- whether any DB mutation can occur afterward
+
+Determine whether Origin enforcement happens:
+
+BEFORE
+
+or
+
+AFTER:
+
+schema validation
+
+duplicate lookup
+
+runtime registration
+
+identity creation
+
+==================================================
+STEP 4 — TRACE CSRF ENFORCEMENT
+==================================================
+
+Find the exact CSRF implementation used by registration.
+
+Document:
+
+- where token originates
+- cookie/header/body relationship
+- middleware/function
+- validation order
+- valid token behavior
+- missing token behavior
+- invalid token behavior
+- returned status
+- returned response shape
+- whether Origin is checked before/after CSRF
+- whether runtime is called after CSRF rejection
+
+Determine exact ordering between:
+
+Origin
+
+CSRF
+
+schema validation
+
+duplicate/account logic
+
+runtime service call
+
+==================================================
+STEP 5 — EXPLAIN TASK 12R'S HTTP 400
+==================================================
+
+Inspect the exact Task 12R invalid-Origin request.
+
+Record:
+
+Origin
+
+email category
+
+payload shape
+
+CSRF state
+
+HTTP status
+
+safe response body
+
+any local instrumentation
+
+whether runtime was called if evidence exists
+
+
+Determine whether its response body itself identifies:
+
+Origin rejection
+
+duplicate rejection
+
+or neither.
+
+
+Classify Task 12R invalid-Origin result as:
+
+A. Origin rejection actually proven by body/evidence
+
+B. duplicate rejection proven
+
+C. another rejection proven
+
+D. ambiguous
+
+
+Do not infer from HTTP 400 alone.
+
+==================================================
+STEP 6 — DEFINE A NON-MUTATING ORIGIN TEST
+==================================================
+
+Design the safest deterministic test for invalid Origin.
+
+The test must NOT depend on:
+
+- an existing email
+- duplicate-account behavior
+- successful account creation
+- registration being publicly open
+
+
+Preferred strategy:
+
+exercise the Origin guard at the control boundary using a request whose
+downstream operation is guaranteed not to execute because Origin rejection
+occurs first.
+
+
+Use a syntactically valid, unique disposable email-shaped value ONLY if source
+and tests prove that invalid Origin terminates processing before any runtime
+call or identity mutation.
+
+
+If that cannot be proven:
+
+DO NOT send such a live request.
+
+
+Instead prove the guard through local integration tests or an existing private
+control test harness.
+
+==================================================
+STEP 7 — DEFINE OBSERVABLE PROOF OF ORIGIN REJECTION
+==================================================
+
+HTTP status alone is NOT enough.
+
+The future acceptance test must establish at least one strong discriminator,
+preferably multiple:
+
+- exact safe Origin-rejection response body/code
+- explicit local acceptance classification from response semantics
+- proof runtime service binding was NOT invoked
+- proof identity counts unchanged
+- request trace showing control rejection before runtime
+- deterministic integration test of middleware order
+
+
+Define exactly what constitutes:
+
+ORIGIN PASS
+
+ORIGIN FAIL
+
+ORIGIN UNKNOWN
+
+==================================================
+STEP 8 — DEFINE VALID-ORIGIN CONTROL CASE
+==================================================
+
+A security test also needs a positive control.
+
+Design a request with:
+
+Origin:
+https://app.buildcustom.ai
+
+
+that reaches the expected NEXT validation stage.
+
+It does NOT need to create an account.
+
+
+For example, if safe and consistent with actual middleware ordering:
+
+valid Origin + valid CSRF + deliberately invalid downstream schema
+
+should produce the downstream schema error rather than Origin rejection.
+
+
+The positive control must prove:
+
+valid Origin is accepted
+
+without creating an identity.
+
+==================================================
+STEP 9 — DEFINE INVALID-ORIGIN CASE
+==================================================
+
+Design:
+
+same request class
+
+same downstream payload category
+
+same CSRF state
+
+but:
+
+Origin:
+a clearly invalid external origin
+
+
+Expected:
+
+Origin-specific rejection
+
+before downstream validation/runtime mutation.
+
+
+The valid and invalid cases should differ ONLY in Origin wherever practical.
+
+==================================================
+STEP 10 — DEFINE CSRF TEST MATRIX
+==================================================
+
+Create a similarly deterministic matrix for CSRF.
+
+Keep Origin valid.
+
+Test:
+
+A. valid CSRF
+
+B. missing CSRF
+
+C. invalid CSRF
+
+
+Use the same downstream non-mutating request category.
+
+
+Expected:
+
+VALID CSRF:
+
+passes CSRF guard and reaches the next known validation stage
+
+
+MISSING CSRF:
+
+CSRF-specific rejection
+
+
+INVALID CSRF:
+
+CSRF-specific rejection
+
+
+Again:
+
+status alone is insufficient if another guard can produce the same status.
+
+==================================================
+STEP 11 — PROVE NO IDENTITY CAN BE CREATED
+==================================================
+
+For every proposed security acceptance request determine:
+
+could product identity be created?
+
+could runtime identity be created?
+
+could a session be created?
+
+could any registration mutation occur?
+
+
+The answer must be:
+
+NO
+
+
+for the local/closed-state proof requests in Task 12S.
+
+If not:
+
+do not issue the request.
+
+==================================================
+STEP 12 — ADD FOCUSED LOCAL TESTS
+==================================================
+
+Add focused tests around the ACTUAL production registration path.
+
+At minimum prove:
+
+1. valid Origin reaches next stage
+
+2. invalid Origin is rejected by Origin guard
+
+3. invalid Origin does not invoke runtime registration
+
+4. invalid Origin cannot create identity
+
+5. missing Origin behavior matches intended policy
+
+6. valid CSRF reaches next stage
+
+7. missing CSRF is rejected by CSRF guard
+
+8. invalid CSRF is rejected by CSRF guard
+
+9. CSRF rejection does not invoke runtime registration
+
+10. security rejection cannot create identity
+
+11. duplicate-account validation cannot masquerade as Origin PASS
+
+12. schema validation cannot masquerade as Origin PASS
+
+13. response semantics allow the acceptance operator to distinguish outcomes
+
+==================================================
+STEP 13 — HARDEN FINAL ACCEPTANCE OPERATOR
+==================================================
+
+Modify ONLY the LOCAL final-cutover acceptance operator.
+
+Do not deploy it.
+
+The future operator must record independently:
+
+ORIGIN VALID CASE:
+
+- Origin
+- CSRF state
+- payload category
+- HTTP status
+- safe response body
+- expected next-stage result
+- observed result
+- identity counts before/after
+- PASS/FAIL/UNKNOWN
+
+
+ORIGIN INVALID CASE:
+
+same fields plus:
+
+- explicit Origin-rejection evidence
+
+
+CSRF VALID CASE:
+
+same independent evidence
+
+
+CSRF MISSING CASE:
+
+explicit CSRF-rejection evidence
+
+
+CSRF INVALID CASE:
+
+explicit CSRF-rejection evidence
+
+
+Never reduce security acceptance to:
+
+"got a 4xx, therefore PASS."
+
+==================================================
+STEP 14 — CLOSED-STATE SAFE VERIFICATION
+==================================================
+
+If source ordering proves these requests can safely be sent while registration
+is closed without creating identities, run the bounded safe matrix.
+
+Remember:
+
+registration-disabled itself may mask downstream behavior.
+
+Therefore do NOT claim live Origin/CSRF proof if the closed registration gate
+runs before those guards.
+
+
+If closed state cannot exercise the guards meaningfully:
+
+use local/integration proof only
+
+and clearly state that final live confirmation still requires the next
+authorized cutover.
+
+==================================================
+STEP 15 — DETERMINE WHETHER CODE CHANGE IS NEEDED
+==================================================
+
+Classify:
+
+A. NO WORKER CHANGE NEEDED
+
+The implementation already enforces Origin/CSRF correctly and Task 12R merely
+used an ambiguous acceptance request.
+
+
+B. WORKER CHANGE NEEDED
+
+A real security enforcement defect exists.
+
+
+C. UNKNOWN
+
+
+If A:
+
+do not create a Worker version.
+
+
+If B:
+
+identify the smallest exact fix but DO NOT implement it in Task 12S.
+
+
+Do not create a Worker version either way.
+
+==================================================
+STEP 16 — SAFE PRODUCTION REGRESSION
+==================================================
+
+Verify:
+
+runtime accepted closed version 100%
+
+runtime candidate 0%
+
+control accepted closed version 100%
+
+control candidate 0%
+
+both registration gates false
+
+public apps true
+
+claims zero
+
+user 1 login/ownership
+
+user 2 login/ownership
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+gateway unchanged
+
+==================================================
+TASK 12S ACCEPTANCE
+==================================================
+
+Task 12S passes if:
+
+1. no production traffic moved
+
+2. signup remains closed
+
+3. no Worker version created
+
+4. exact public registration path traced
+
+5. Origin guard traced
+
+6. CSRF guard traced
+
+7. middleware/validation order established
+
+8. Task 12R invalid-Origin response classified accurately
+
+9. deterministic invalid-Origin test designed
+
+10. deterministic valid-Origin control designed
+
+11. deterministic CSRF matrix designed
+
+12. no proposed local proof can create identity
+
+13. focused tests pass
+
+14. local final-cutover operator hardened
+
+15. closed-state live proof used only where semantically valid
+
+16. implementation classified:
+    NO WORKER CHANGE NEEDED / WORKER CHANGE NEEDED / UNKNOWN
+
+17. production remains in accepted closed state
+
+18. safe regression passes
+
+19. claims remain zero
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current runtime version/traffic
+
+2. current control version/traffic
+
+3. current registration states
+
+4. public registration endpoint
+
+5. registration request execution order
+
+6. Origin guard function/file
+
+7. Origin allowed-host logic
+
+8. invalid-Origin expected status/body
+
+9. missing-Origin behavior
+
+10. does Origin rejection stop runtime invocation?
+
+11. CSRF function/file
+
+12. CSRF token source
+
+13. missing-CSRF expected status/body
+
+14. invalid-CSRF expected status/body
+
+15. does CSRF rejection stop runtime invocation?
+
+16. exact ordering:
+    Origin / CSRF / schema / runtime / identity mutation
+
+17. Task 12R invalid-Origin request details
+
+18. Task 12R invalid-Origin body semantics
+
+19. Task 12R classification A/B/C/D
+
+20. deterministic valid-Origin test
+
+21. deterministic invalid-Origin test
+
+22. exact discriminator proving Origin rejection
+
+23. deterministic valid-CSRF test
+
+24. deterministic missing-CSRF test
+
+25. deterministic invalid-CSRF test
+
+26. exact discriminator proving CSRF rejection
+
+27. identity-mutation safety proof
+
+28. focused test results
+
+29. closed-state live security checks performed?
+
+30. closed-state results if performed
+
+31. can closed state fully prove live security behavior?
+
+32. local final-cutover operator hardened?
+
+33. Worker implementation defect found?
+
+34. Worker code change required?
+
+35. new Worker version required?
+
+36. implementation classification
+
+37. user-1 regression
+
+38. user-2 regression
+
+39. ownership isolation
+
+40. project-2 public app
+
+41. project-3 public app
+
+42. unknown slug
+
+43. gateway Worker/version
+
+44. marketing
+
+45. claims
+
+46. Worker version created?
+
+47. deployment created?
+
+48. production traffic moved?
+
+49. public signup state
+
+50. remaining HIGH risks
+
+51. remaining MEDIUM risks
+
+52. TASK 12S ACCEPTED?
+
+53. Is the system ready for ONE separately authorized final signup cutover
+    using the corrected security acceptance matrix?
+
+54. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE RUNTIME.
+
+DO NOT ACTIVATE CONTROL.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE A WORKER VERSION.
+
+DO NOT CREATE A DEPLOYMENT.
+
+DO NOT MODIFY WORKER CODE.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT CREATE USERS.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MOVE WAITLIST.

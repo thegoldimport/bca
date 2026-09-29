@@ -91,6 +91,10 @@ function cookieHeader(cookies) {
   return cookies.map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
 }
 
+function cookieValue(cookies, name) {
+  return cookies.find(cookie => cookie.name === name)?.value || null;
+}
+
 function accessCookie(cookies) {
   return cookies.find(cookie => cookie.name === "accessToken")?.value || null;
 }
@@ -174,27 +178,63 @@ async function submitBounded(page, kind, body, expectedIdentityCount = 0, requir
     identity: counts, expectedIdentityCount, noAutomaticLogin: requireNoLogin ? !identityAfter.present : null }, passed);
 }
 
+function safeResponseBody(raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { classification: "UNKNOWN", exactBody: null, message: null };
+  }
+  const keys = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed) : [];
+  const message = keys.length === 1 && keys[0] === "message" ? parsed.message : null;
+  if (typeof message !== "string" || message.length > 200
+    || /stack|exception|token|secret|authorization|cookie/i.test(raw)
+    || raw.length > 2048) {
+    return { classification: "UNKNOWN", exactBody: null, message: null };
+  }
+  return { classification: "SAFE_JSON", exactBody: raw, message };
+}
+
+function classifyRegistrationMatrix(originState, csrfState, status, body) {
+  if (status === null || body.classification !== "SAFE_JSON") return "UNKNOWN";
+  const expected = originState !== "valid"
+    ? { status: 400, message: "ORIGIN_REJECTED" }
+    : csrfState === "valid"
+      ? { status: 400, message: "Could not create your account. Check your details." }
+      : { status: 403, message: "Could not create your account. Check your details." };
+  return status === expected.status && body.message === expected.message ? "PASS" : "FAIL";
+}
+
+async function registrationMatrixAttempt({ originState, csrfState, csrfToken, csrfCookie, email, password }) {
+  const headers = { "Content-Type": "application/json" };
+  if (originState === "valid") headers.Origin = product;
+  if (originState === "invalid") headers.Origin = "https://not-buildcustom.example";
+  if (csrfCookie) headers.Cookie = `csrf-token=${csrfCookie}`;
+  if (csrfState === "valid") headers["X-CSRF-Token"] = csrfToken;
+  if (csrfState === "invalid") headers["X-CSRF-Token"] = "invalid-task12r-csrf";
+  let status = null;
+  let body = { classification: "UNKNOWN", exactBody: null, message: null };
+  try {
+    const response = await fetch(`${product}/api/auth/register`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: disposableName, email, password }),
+      redirect: "manual",
+    });
+    status = response.status;
+    body = safeResponseBody(await response.text());
+  } catch {
+    // Keep request failures as UNKNOWN without leaking request or credential data.
+  }
+  return { status, body };
+}
+
 async function publicAuthIdentity(page) {
   return page.evaluate(async () => {
     const response = await fetch("/api/auth/me", { credentials: "same-origin", cache: "no-store" });
     const body = await response.json().catch(() => null);
     return { present: !!body?.id };
   });
-}
-
-async function directRegisterAttempt(kind, origin, csrfToken, cookie, email, password) {
-  const response = await fetch(`${product}/api/auth/register`, {
-    method: "POST",
-    headers: {
-      Origin: origin,
-      Cookie: cookie,
-      "Content-Type": "application/json",
-      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-    },
-    body: JSON.stringify({ name: disposableName, email, password }),
-    redirect: "manual",
-  });
-  check(kind, { status: response.status }, response.status === 403);
 }
 
 async function login(page, email, password, expectedId) {
@@ -318,20 +358,31 @@ try {
   await page.waitForFunction(() =>
     document.querySelector('[data-testid="button-submit"]')?.textContent?.includes("Create Account"),
   { timeout: 20000 });
+  const [productCapabilities, runtimeProviders] = await Promise.all([
+    apiRead(`${product}/api/public/capabilities`),
+    apiRead(`${runtime}/api/auth/providers`),
+  ]);
+  requireCondition(productCapabilities.status === 200
+    && productCapabilities.body?.registrationEnabled === true
+    && runtimeProviders.status === 200
+    && runtimeProviders.body?.registrationEnabled === true
+    && runtimeProviders.body?.email === true,
+  "Origin/CSRF matrix requires both public and runtime registration enabled with email authentication");
+  check("security-matrix-open-preconditions", {
+    productRegistration: true, runtimeRegistration: true, runtimeEmailAuthentication: true,
+  }, true);
 
   const ephemeralPassword = `Qa9!${randomBytes(20).toString("hex")}`;
   const csrf = await getCsrfToken(page);
   requireCondition(csrf.status === 200 && csrf.token, "Public registration CSRF token unavailable");
-  const csrfCookies = cookieHeader(await page.cookies(product));
+  const csrfCookie = cookieValue(await page.cookies(product), "csrf-token");
+  requireCondition(csrfCookie, "Public registration CSRF cookie unavailable");
   await submitBounded(page, "duplicate-existing-email", {
     name: disposableName, email: existingEmail, password: ephemeralPassword,
   }, 1, true);
   await submitBounded(page, "case-variant-duplicate-existing-email", {
     name: disposableName, email: existingEmail.toUpperCase(), password: ephemeralPassword,
   }, 1, true);
-  await submitBounded(page, "invalid-email", {
-    name: disposableName, email: "not-an-email", password: ephemeralPassword,
-  });
   await submitBounded(page, "weak-password", {
     name: disposableName, email: `task12r-weak-${Date.now()}@example.net`, password: "short",
   });
@@ -344,16 +395,82 @@ try {
   });
 
   step = "origin-csrf-rejections";
-  await directRegisterAttempt("invalid-origin", "https://not-buildcustom.example", csrf.token,
-    csrfCookies, existingEmail, ephemeralPassword);
-  await directRegisterAttempt("missing-csrf", product, null, csrfCookies, existingEmail, ephemeralPassword);
-  await directRegisterAttempt("invalid-csrf", product, "invalid", csrfCookies, existingEmail, ephemeralPassword);
+  const matrixEmail = "not-an-email";
+  const matrixCases = [];
+  for (const originState of ["valid", "invalid", "missing"]) {
+    for (const csrfState of ["valid", "missing", "invalid"]) {
+      const before = {
+        invalidEmail: await countEvidence(matrixEmail),
+        existing: await countEvidence(existingEmail),
+        disposable: await countEvidence(disposableEmail),
+      };
+      const result = await registrationMatrixAttempt({
+        originState, csrfState, csrfToken: csrf.token, csrfCookie,
+        email: matrixEmail, password: ephemeralPassword,
+      });
+      const after = {
+        invalidEmail: await countEvidence(matrixEmail),
+        existing: await countEvidence(existingEmail),
+        disposable: await countEvidence(disposableEmail),
+      };
+      const classification = classifyRegistrationMatrix(originState, csrfState, result.status, result.body);
+      const expectedNextStage = originState !== "valid" ? "control Origin guard stops before runtime"
+        : csrfState === "valid" ? "runtime email schema rejects before identity mutation"
+          : "runtime CSRF middleware stops before auth controller";
+      const observedStage = originState !== "valid" && result.status === 400
+        && result.body.message === "ORIGIN_REJECTED" ? "control Origin-specific response"
+        : originState === "valid" && result.status === 400
+          && result.body.message === "Could not create your account. Check your details."
+          ? "runtime client rejection mapped by control"
+          : originState === "valid" && result.status === 403
+            && result.body.message === "Could not create your account. Check your details."
+            ? "runtime 403 mapped by control; CSRF provenance is source/test-backed, not exposed in public body"
+            : "UNKNOWN";
+      const countsUnchanged = JSON.stringify(before) === JSON.stringify(after);
+      const countEvidenceValid = countIsZero(before.invalidEmail) && countIsZero(after.invalidEmail)
+        && countIsOne(before.existing) && countIsOne(after.existing)
+        && countIsZero(before.disposable) && countIsZero(after.disposable);
+      const passed = classification === "PASS" && countsUnchanged && countEvidenceValid;
+      const name = `registration-origin-${originState}-csrf-${csrfState}`;
+      const evidence = {
+        origin: {
+          state: originState,
+          value: originState === "valid" ? product
+            : originState === "invalid" ? "https://not-buildcustom.example" : null,
+        },
+        csrf: {
+          state: csrfState,
+          cookie: "acquired-valid-cookie",
+          header: csrfState === "valid" ? "acquired-valid-header"
+            : csrfState === "invalid" ? "deliberately-invalid-header" : "missing",
+        },
+        payloadCategory: { name: "string", email: matrixEmail, password: "strong" },
+        status: result.status,
+        safeResponseBody: result.body.exactBody,
+        expectedNextStage,
+        observedStage,
+        classification: passed ? "PASS" : classification === "PASS" ? "FAIL" : classification,
+        countsBefore: before,
+        countsAfter: after,
+        countsUnchanged,
+        localMiddlewareOrderProof: {
+          source: "cloudflare/worker.ts and tests/cloudflare-launch-registration-origin.test.ts",
+          detail: "assertOrigin precedes dispatch; launch-boundary tests prove rejection before runtime, and runtime createApp/CsrfService tests prove CSRF rejects before the auth controller.",
+          limitation: "The public control response maps a runtime 403 to a generic message. CSRF attribution also depends on the independently version-traced runtime and the verified open/email-enabled prerequisites; this response alone is not proof.",
+        },
+      };
+      matrixCases.push({ name, ...evidence });
+      check(name, evidence, passed);
+    }
+  }
   const afterRejectedExisting = await countEvidence(existingEmail);
   const afterRejectedDisposable = await countEvidence(disposableEmail);
   check("rejected-registration-identities-unchanged", {
     existingBefore: beforeExisting, existingAfter: afterRejectedExisting,
     disposableBefore: beforeDisposable, disposableAfter: afterRejectedDisposable,
-  }, countIsOne(afterRejectedExisting) && countIsZero(afterRejectedDisposable));
+    matrixCases: matrixCases.map(({ name, classification }) => ({ name, classification })),
+  }, countIsOne(afterRejectedExisting) && countIsZero(afterRejectedDisposable)
+    && matrixCases.every(testCase => testCase.classification === "PASS"));
   requireCondition(!failed, "At least one bounded registration validation check failed");
 
   step = "single-public-ui-signup";
