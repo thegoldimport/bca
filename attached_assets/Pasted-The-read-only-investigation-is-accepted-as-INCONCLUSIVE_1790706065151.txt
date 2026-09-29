@@ -1,0 +1,213 @@
+The read-only investigation is accepted as INCONCLUSIVE.
+
+The important findings are:
+
+- control candidate 0114f49c-5ecc-4613-b7cf-c9924a6b7ce6 is correctly
+  configured with STAGING_REGISTRATION_ENABLED="true"
+- its deployed worker.js is identical to the accepted version
+- that binding is the only relevant difference
+- /api/public/capabilities directly evaluates that binding
+- if the candidate handled the request, it should have returned true
+- caching is not supported by the available evidence
+- app.buildcustom.ai is attached to the correct production service
+- the failed public capability request occurred only about 0.7 seconds after
+  Cloudflare reported the deployment at 100%
+
+Do NOT change code.
+
+Do NOT create another candidate.
+
+Do NOT add observability infrastructure.
+
+Do NOT change routing, DNS, gateway, recovery, EMAIL, marketing, or product
+data.
+
+Perform ONE separately controlled signup cutover using the already-created
+registration-enabled candidates:
+
+Runtime candidate:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Control candidate:
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+
+Accepted rollback versions:
+
+Runtime:
+e1dda75e-2082-4f38-a1fc-a16d25542425
+
+Control:
+df8f155e-aabf-4b69-98b1-30f704a5689b
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+GOAL
+
+Enable public signup and LEAVE IT ENABLED if the normal customer path passes.
+
+IMPORTANT CHANGE FROM THE PREVIOUS ATTEMPT
+
+Do not issue the public acceptance request immediately after deployment
+readback reaches 100%.
+
+After each Worker reaches 100%:
+
+1. Confirm normal Cloudflare deployment readback shows the intended version at
+   100%.
+2. Wait 15 seconds for normal edge/deployment convergence.
+3. Then make the normal customer-path capability request.
+
+Do not use Cloudflare tail correlation, version overrides, or targeted probes
+as acceptance gates.
+
+RUNTIME
+
+Activate:
+
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+at 100%.
+
+After 100% readback, wait 15 seconds.
+
+Then through the normal production path verify:
+
+- registration enabled
+- existing user login works
+- password recovery remains available
+
+If any actual customer-path check fails:
+
+- rollback runtime to
+  e1dda75e-2082-4f38-a1fc-a16d25542425
+- STOP
+- do not retry
+
+CONTROL PLANE
+
+If runtime passes, activate:
+
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+
+at 100%.
+
+After 100% readback, wait 15 seconds.
+
+Then request through the normal public hostname:
+
+https://app.buildcustom.ai/api/public/capabilities
+
+Make three normal requests spaced approximately 2 seconds apart.
+
+All three must report:
+
+registrationEnabled: true
+publicGeneratedAppsEnabled: true
+
+These are ordinary customer-path requests, not version-targeted requests.
+
+Also verify the signup page shows the normal Create Account flow.
+
+If the capability remains false after the 15-second convergence period:
+
+- rollback control to
+  df8f155e-aabf-4b69-98b1-30f704a5689b
+- rollback runtime to
+  e1dda75e-2082-4f38-a1fc-a16d25542425
+- STOP
+- do not retry
+
+If the three capability requests report true, continue.
+
+SECURITY CHECKS
+
+Using existing identities only:
+
+- invalid Origin registration request is rejected
+- missing CSRF registration request is rejected
+- mismatched CSRF registration request is rejected
+- duplicate existing email is rejected safely
+- case-variant duplicate is rejected safely
+- malformed registration input is rejected safely
+
+Do NOT create another real account for acceptance.
+
+We already proved real public registration successfully creates matching
+product/runtime identities during the previous registration work.
+
+SMOKE CHECKS
+
+Verify:
+
+- existing user login works
+- Forgot password page works
+- existing dashboard loads
+- existing project appears
+- existing public generated app returns 200
+- unknown generated-app slug returns 404
+- public generated apps remain enabled
+- active publish claims = 0
+- marketing returns 200
+- gateway remains:
+  9d80432b-4e53-4fe7-950a-2b53f0213eff
+  with the accepted ROUTES and DISPATCHER bindings
+- production EMAIL binding remains present
+- security@buildcustom.ai remains the allowed recovery sender
+
+Do not perform AI generation.
+
+Do not send a password recovery email.
+
+Do not submit the marketing waitlist form.
+
+Do not change any account.
+
+Do not introduce any new acceptance requirement.
+
+SUCCESS
+
+If every listed check passes:
+
+LEAVE BOTH REGISTRATION-ENABLED VERSIONS AT 100%.
+
+Do NOT roll them back.
+
+Final desired state:
+
+PUBLIC SIGNUP: OPEN
+LOGIN: ENABLED
+PASSWORD RECOVERY: ENABLED
+PUBLIC GENERATED APPS: ENABLED
+EMAIL: LIVE
+GATEWAY: UNCHANGED
+MARKETING: UNCHANGED
+ACTIVE PUBLISH CLAIMS: 0
+
+Return:
+
+- serving runtime version
+- serving control-plane version
+- gateway version
+- three public capability responses
+- signup UI result
+- Origin result
+- CSRF results
+- duplicate/case-duplicate results
+- malformed-input result
+- existing-user login result
+- recovery-page result
+- dashboard/project result
+- public-app result
+- unknown-slug result
+- marketing result
+- publish claims count
+- EMAIL binding/sender state
+- FINAL SIGNUP STATE
+
+If successful, explicitly state:
+
+BUILDCUSTOM PUBLIC SIGNUP IS LIVE.
+
+If an actual customer-path or security check fails, rollback and STOP.
+Do not fix and retry within this operation.
