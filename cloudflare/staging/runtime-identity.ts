@@ -1,4 +1,4 @@
-import { expiredSessionCookie, parseCookie, revokeSession, type SessionUser } from "./auth";
+import { expiredSessionCookie, hasValidCsrfToken, parseCookie, revokeSession, type SessionUser } from "./auth";
 
 const LAB_AUTH_URL = "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev";
 const LAUNCH_AUTH_URL = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
@@ -178,6 +178,54 @@ export async function handleStagingCustomerAuth(
     if (!identity) throw new RuntimeIdentityError("Could not establish your session.");
     const user = await productUser(env, identity);
     return Response.json(user, { headers: responseCookies(response) });
+  }
+
+  if ((pathname === "/api/auth/forgot-password" || pathname === "/api/auth/reset-password") && request.method === "POST") {
+    if (!hasValidCsrfToken(request)) {
+      return Response.json({ message: "A secure request is required." }, { status: 403 });
+    }
+    const forgot = pathname.endsWith("forgot-password");
+    const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+    const token = typeof input.token === "string" ? input.token : "";
+    const newPassword = typeof input.newPassword === "string" ? input.newPassword : "";
+    const confirmPassword = typeof input.confirmPassword === "string" ? input.confirmPassword : "";
+    if (forgot && (!email || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) {
+      // Keep the public response indistinguishable from an unknown account.
+      return Response.json({ message: "If an account exists for that email, password reset instructions will be sent." });
+    }
+    if (!forgot && (!token || token.length > 4096 || newPassword.length < 6 || newPassword.length > 256
+      || !confirmPassword || confirmPassword.length > 256 || newPassword !== confirmPassword)) {
+      return Response.json({ message: "Enter a valid reset link and a password of at least 6 characters." }, { status: 400 });
+    }
+    const body = forgot ? { email } : { token, newPassword, confirmPassword };
+    let response: Response;
+    try {
+      response = await runtimeRequest(env, request, pathname, { method: "POST", body, timeoutMs: 10_000 });
+    } catch {
+      return Response.json({ message: forgot
+        ? "Password recovery is temporarily unavailable. Please try again."
+        : "We could not reset your password. Please request a new reset link." }, { status: 502 });
+    }
+    if (forgot) {
+      if ([400, 403, 429].includes(response.status)) {
+        return Response.json({ message: response.status === 403
+          ? "A secure request is required."
+          : response.status === 429
+            ? "Too many requests. Please wait before trying again."
+            : "Password recovery is temporarily unavailable. Please try again." }, { status: response.status });
+      }
+      if (!response.ok) {
+        return Response.json({ message: "Password recovery is temporarily unavailable. Please try again." }, { status: 502 });
+      }
+      return Response.json({ message: "If an account exists for that email, password reset instructions will be sent." });
+    }
+    if (!response.ok) {
+      const status = [400, 401, 403, 404, 410, 429].includes(response.status) ? response.status : 502;
+      return Response.json({ message: status === 429
+        ? "Too many requests. Please wait before trying again."
+        : "We could not reset your password. The link may be invalid or expired." }, { status });
+    }
+    return Response.json({ success: true });
   }
 
   if (pathname === "/api/auth/me" && request.method === "GET") {

@@ -1,5 +1,6 @@
 declare namespace Cloudflare {
 	interface Env {
+EMAIL: SendEmail;
 		// Dashboard-managed settings are intentionally omitted from wrangler vars.
 		ALLOWED_EMAIL?: string;
 		ALLOCATION_STRATEGY?: string;

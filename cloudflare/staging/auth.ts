@@ -25,6 +25,13 @@ export function parseCookie(header: string | null, name = SESSION_COOKIE): strin
   return null;
 }
 
+export function hasValidCsrfToken(request: Request): boolean {
+  const cookieToken = parseCookie(request.headers.get("Cookie"), "csrf-token");
+  const headerToken = request.headers.get("X-CSRF-Token");
+  return Boolean(cookieToken && headerToken && cookieToken.length <= 4096 && headerToken.length <= 4096
+    && !/[\r\n;]/.test(cookieToken) && !/[\r\n;]/.test(headerToken) && cookieToken === headerToken);
+}
+
 export function sessionCookie(token: string, maxAge = SESSION_TTL_SECONDS): string {
   return `${SESSION_COOKIE}=${token}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }

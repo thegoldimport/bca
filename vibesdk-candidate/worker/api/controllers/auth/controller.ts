@@ -10,7 +10,9 @@ import { generateApiKey, sha256Hash } from '../../../utils/cryptoUtils';
 import { 
     loginSchema, 
     registerSchema, 
-    oauthProviderSchema
+    oauthProviderSchema,
+    forgotPasswordSchema,
+    resetPasswordSchema
 } from './authSchemas';
 import { SecurityError } from 'shared/types/errors';
 import {
@@ -135,6 +137,77 @@ export class AuthController extends BaseController {
             
             return AuthController.handleError(error, 'login user');
         }
+    }
+
+    /**
+     * Request a password reset. The response intentionally does not disclose
+     * whether the address belongs to an account.
+     */
+    static async forgotPassword(request: Request, env: Env, ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const csrfFailure = AuthController.validatePublicAuthMutation(request);
+            if (csrfFailure) return csrfFailure;
+            if (!isEmailAuthEnabled(env)) {
+                return AuthController.createErrorResponse(
+                    'Email/password authentication is disabled on this deployment.',
+                    403
+                );
+            }
+
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+            const { email } = forgotPasswordSchema.parse(bodyResult.data);
+
+            await new AuthService(env).requestPasswordReset(email, request, ctx);
+            return AuthController.createSuccessResponse({
+                message: 'If an account exists for that email, password reset instructions will be sent.'
+            });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'request password reset');
+        }
+    }
+
+    /**
+     * Set a new password using a one-time reset token.
+     */
+    static async resetPassword(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const csrfFailure = AuthController.validatePublicAuthMutation(request);
+            if (csrfFailure) return csrfFailure;
+            if (!isEmailAuthEnabled(env)) {
+                return AuthController.createErrorResponse(
+                    'Email/password authentication is disabled on this deployment.',
+                    403
+                );
+            }
+
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+            const { token, newPassword } = resetPasswordSchema.parse(bodyResult.data);
+            await new AuthService(env).resetPassword(token, newPassword, request);
+            return AuthController.createSuccessResponse({
+                message: 'Password updated successfully. Please sign in again.'
+            });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'reset password');
+        }
+    }
+
+    private static validatePublicAuthMutation(request: Request): Response | null {
+        const origin = request.headers.get('Origin');
+        if (origin && origin !== new URL(request.url).origin) {
+            return AuthController.createErrorResponse('Invalid request origin', 403);
+        }
+        if (!CsrfService.validateToken(request)) {
+            return AuthController.createErrorResponse('CSRF token validation failed', 403);
+        }
+        return null;
     }
     
     /**

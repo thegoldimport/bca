@@ -41,6 +41,12 @@
         "run_worker_first": true,
         "binding": "ASSETS"
 	},
+    "send_email": [
+        {
+            "name": "EMAIL",
+            "allowed_sender_addresses": ["security@buildcustom.ai"]
+        }
+    ],
 	"observability": {
 		"enabled": true,
         "head_sampling_rate": 1,

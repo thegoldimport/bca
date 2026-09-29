@@ -4,9 +4,9 @@
  */
 
 import * as schema from '../schema';
-import { eq, and, sql, or, lt, isNull } from 'drizzle-orm';
+import { eq, and, sql, or, lt, isNull, gte, count } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
-import { generateSecureToken } from '../../utils/cryptoUtils';
+import { generateSecureToken, sha256Hash } from '../../utils/cryptoUtils';
 import { SessionService } from './SessionService';
 import { ApiKeyService } from './ApiKeyService';
 import { PasswordService } from '../../utils/passwordService';
@@ -292,6 +292,143 @@ export class AuthService extends BaseService {
                 500
             );
         }
+    }
+
+    /**
+     * Create a hashed, single-use password reset token and deliver it through
+     * Cloudflare Email Service. Unknown and OAuth-only accounts receive the
+     * same successful API response as local accounts.
+     */
+    async requestPasswordReset(
+        email: string,
+        request: Request,
+        context?: ExecutionContext
+    ): Promise<void> {
+        const normalizedEmail = email.trim().toLowerCase();
+        const metadata = extractRequestMetadata(request);
+        const now = new Date();
+        const windowStart = new Date(now.getTime() - 15 * 60 * 1000);
+
+        const [emailAttempts, ipAttempts] = await Promise.all([
+            this.database.select({ total: count() }).from(schema.authAttempts).where(and(
+                eq(schema.authAttempts.attemptType, 'reset_password'),
+                eq(schema.authAttempts.identifier, normalizedEmail),
+                gte(schema.authAttempts.attemptedAt, windowStart)
+            )).get(),
+            this.database.select({ total: count() }).from(schema.authAttempts).where(and(
+                eq(schema.authAttempts.attemptType, 'reset_password'),
+                eq(schema.authAttempts.ipAddress, metadata.ipAddress),
+                gte(schema.authAttempts.attemptedAt, windowStart)
+            )).get()
+        ]);
+
+        if ((emailAttempts?.total ?? 0) >= 3 || (ipAttempts?.total ?? 0) >= 15) {
+            await this.logAuthAttempt(normalizedEmail, 'reset_password', false, request);
+            throw new SecurityError(SecurityErrorType.RATE_LIMITED, 'Too many password reset requests. Please try again later.', 429);
+        }
+
+        await this.logAuthAttempt(normalizedEmail, 'reset_password', false, request);
+        if (!this.env.EMAIL) {
+            throw new SecurityError(SecurityErrorType.INVALID_INPUT, 'Password reset email service is unavailable.', 503);
+        }
+
+        const processing = this.issuePasswordResetEmail(normalizedEmail, now);
+        if (context) {
+            context.waitUntil(processing.catch(() => {
+                logger.error('Password reset processing failed');
+            }));
+            return;
+        }
+        await processing;
+    }
+
+    private async issuePasswordResetEmail(normalizedEmail: string, now: Date): Promise<void> {
+        const user = await this.database.select().from(schema.users).where(and(
+            eq(schema.users.email, normalizedEmail),
+            isNull(schema.users.deletedAt),
+            eq(schema.users.isActive, true)
+        )).get();
+
+        if (!user?.passwordHash) return;
+
+        const rawToken = generateSecureToken(32);
+        const tokenHash = await sha256Hash(rawToken);
+        const expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+
+        await this.database.update(schema.passwordResetTokens)
+            .set({ used: true })
+            .where(and(
+                eq(schema.passwordResetTokens.userId, user.id),
+                eq(schema.passwordResetTokens.used, false)
+            ));
+        await this.database.insert(schema.passwordResetTokens).values({
+            id: generateId(),
+            userId: user.id,
+            tokenHash,
+            expiresAt,
+            used: false,
+            createdAt: now
+        });
+
+        const resetUrl = `https://app.buildcustom.ai/reset-password?token=${encodeURIComponent(rawToken)}`;
+        const text = `We received a request to reset your password.\n\nReset your password using this link (valid for 60 minutes):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
+        const html = `<p>We received a request to reset your password.</p><p><a href="${resetUrl}">Reset your password</a> (valid for 60 minutes).</p><p>If you did not request this, you can ignore this email.</p>`;
+        try {
+            await this.env.EMAIL.send({
+                from: { email: 'security@buildcustom.ai', name: 'BuildCustom' },
+                to: normalizedEmail,
+                subject: 'Reset your BuildCustom password',
+                text,
+                html
+            });
+        } catch {
+            try {
+                await this.database.update(schema.passwordResetTokens)
+                    .set({ used: true })
+                    .where(eq(schema.passwordResetTokens.tokenHash, tokenHash));
+            } catch {
+                logger.error('Failed to invalidate undelivered password reset token');
+            }
+            logger.error('Password reset email delivery failed');
+        }
+    }
+
+    /**
+     * Validate the reset password and atomically consume its token, update the
+     * password, and revoke the account's sessions.
+     */
+    async resetPassword(token: string, newPassword: string, request: Request): Promise<void> {
+        const tokenHash = await sha256Hash(token);
+        const resetRow = await this.database.select()
+            .from(schema.passwordResetTokens)
+            .where(eq(schema.passwordResetTokens.tokenHash, tokenHash))
+            .get();
+        const user = resetRow
+            ? await this.database.select().from(schema.users).where(and(
+                eq(schema.users.id, resetRow.userId),
+                isNull(schema.users.deletedAt),
+                eq(schema.users.isActive, true)
+            )).get()
+            : undefined;
+        const validation = this.passwordService.validatePassword(newPassword, {
+            email: user?.email
+        });
+        if (!validation.valid) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                validation.errors?.join(', ') || 'Invalid password',
+                400
+            );
+        }
+
+        if (!user?.passwordHash) {
+            throw new SecurityError(SecurityErrorType.INVALID_INPUT, 'Invalid or expired password reset token.', 400);
+        }
+
+        const now = new Date();
+        const passwordHash = await this.passwordService.hash(newPassword);
+        await this.sessionService.changePasswordAndRevokeSessions(user.id, tokenHash, passwordHash, now);
+        await this.logAuthAttempt(user.email, 'reset_password', true, request);
     }
     
     /**

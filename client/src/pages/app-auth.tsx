@@ -9,12 +9,13 @@ import { usePublicCapabilities } from "@/hooks/use-public-capabilities";
 export default function AppAuth() {
   const [location, navigate] = useLocation();
   const { registrationEnabled } = usePublicCapabilities();
-  const [mode, setMode] = useState<"login" | "signup">(
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">(
     location.includes("signup") && registrationEnabled ? "signup" : "login",
   );
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [forgotNotice, setForgotNotice] = useState("");
   const [form, setForm] = useState({ name: "", email: "", password: "" });
 
   useEffect(() => {
@@ -34,10 +35,12 @@ export default function AppAuth() {
     }
     setLoading(true);
     try {
-      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+      const endpoint = mode === "login" ? "/api/auth/login"
+        : mode === "forgot" ? "/api/auth/forgot-password" : "/api/auth/register";
       const body = mode === "login"
         ? { email: form.email, password: form.password }
-        : { name: form.name, email: form.email, password: form.password };
+        : mode === "forgot" ? { email: form.email }
+          : { name: form.name, email: form.email, password: form.password };
       const token = await csrfToken();
       const res = await fetch(endpoint, {
         method: "POST",
@@ -47,6 +50,10 @@ export default function AppAuth() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.message || "Something went wrong"); return; }
+      if (mode === "forgot") {
+        setForgotNotice(data.message || "If an account exists for that email, password reset instructions will be sent.");
+        return;
+      }
       setAppUser(data);
       navigate("/app");
     } catch {
@@ -72,12 +79,13 @@ export default function AppAuth() {
         <div className="text-center mb-8">
           <img src={logo} alt="BuildCustom.Ai" className="h-10 w-auto mx-auto mb-6" />
           <h1 className="text-2xl font-display font-bold text-white mb-2">
-            {mode === "login" ? "Welcome back" : "Create your account"}
+            {mode === "login" ? "Welcome back" : mode === "forgot" ? "Reset your password" : "Create your account"}
           </h1>
           <p className="text-white/40 text-sm">
             {mode === "login"
               ? "Sign in to your BuildCustom.Ai dashboard"
-              : "Start building with AI today"}
+              : mode === "forgot" ? "Enter your email and we’ll send reset instructions"
+                : "Start building with AI today"}
           </p>
           {location.includes("signup") && !registrationEnabled && (
             <p className="mt-3 text-sm text-amber-300" role="status" data-testid="registration-closed-notice">
@@ -87,7 +95,14 @@ export default function AppAuth() {
         </div>
 
         <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-8">
-          <form onSubmit={submit} className="space-y-4">
+          {forgotNotice ? (
+            <div className="space-y-5">
+              <p className="text-sm text-emerald-300" role="status" data-testid="forgot-password-success">{forgotNotice}</p>
+              <button type="button" onClick={() => { setMode("login"); setForgotNotice(""); }}
+                className="w-full py-3 rounded-xl text-white font-semibold text-sm bg-white/10 hover:bg-white/15 transition-colors"
+                data-testid="button-back-to-signin">Back to sign in</button>
+            </div>
+          ) : <form onSubmit={submit} className="space-y-4">
             {mode === "signup" && (
               <div>
                 <label className="block text-xs font-medium text-white/50 mb-1.5">Full Name</label>
@@ -117,7 +132,7 @@ export default function AppAuth() {
               />
             </div>
 
-            <div>
+            {mode !== "forgot" && <div>
               <label className="block text-xs font-medium text-white/50 mb-1.5">Password</label>
               <div className="relative">
                 <input
@@ -139,7 +154,7 @@ export default function AppAuth() {
                   {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-            </div>
+            </div>}
 
             {error && (
               <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
@@ -154,11 +169,16 @@ export default function AppAuth() {
               style={{ background: "linear-gradient(90deg, #00c9b7 0%, #6366f1 50%, #ec4899 100%)" }}
               data-testid="button-submit"
             >
-              {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
+              {loading ? "Please wait..." : mode === "login" ? "Sign In" : mode === "forgot" ? "Send reset instructions" : "Create Account"}
             </button>
-          </form>
+            {mode === "login" && (
+              <button type="button" onClick={() => { setMode("forgot"); setError(""); setForgotNotice(""); }}
+                className="w-full text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                data-testid="link-forgot-password">Forgot password?</button>
+            )}
+          </form>}
 
-          {registrationEnabled && <div className="mt-6 text-center">
+          {mode !== "forgot" && registrationEnabled && <div className="mt-6 text-center">
             <p className="text-white/30 text-sm">
               {mode === "login" ? "Don't have an account?" : "Already have an account?"}
               {" "}
@@ -178,7 +198,7 @@ export default function AppAuth() {
           </div>}
         </div>
 
-        {registrationEnabled && <p className="text-center text-white/20 text-xs mt-6">
+        {mode !== "forgot" && registrationEnabled && <p className="text-center text-white/20 text-xs mt-6">
           By signing up you agree to our Terms of Service and Privacy Policy
         </p>}
       </motion.div>

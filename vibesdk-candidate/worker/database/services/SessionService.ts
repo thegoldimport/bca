@@ -185,7 +185,43 @@ export class SessionService extends BaseService {
             );
         }
     }
-    
+
+    /**
+     * Change a user's password and revoke that user's sessions in one atomic D1
+     * batch. A failure in either statement rolls both changes back.
+     */
+    async changePasswordAndRevokeSessions(
+        userId: string,
+        tokenHash: string,
+        passwordHash: string,
+        changedAt: Date
+    ): Promise<void> {
+        const timestamp = Math.floor(changedAt.getTime() / 1000);
+        // The conditional token claim, password update, and session revocation
+        // run in one D1 transaction. changes() gates each following statement on
+        // its predecessor, so replayed/expired tokens cannot alter either users
+        // or sessions. A SQL failure rolls the complete batch back.
+        const [tokenClaim, passwordUpdate] = await this.env.DB.batch([
+            this.env.DB.prepare(
+                'UPDATE password_reset_tokens SET used = 1 WHERE token_hash = ? AND user_id = ? AND used = 0 AND expires_at >= ?'
+            ).bind(tokenHash, userId, timestamp),
+            this.env.DB.prepare(
+                'UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ? WHERE id = ? AND password_hash IS NOT NULL AND changes() = 1'
+            ).bind(passwordHash, timestamp, timestamp, userId),
+            this.env.DB.prepare(
+                "UPDATE sessions SET is_revoked = 1, revoked_at = ?, revoked_reason = 'password_reset' WHERE user_id = ? AND is_revoked = 0 AND changes() = 1"
+            ).bind(timestamp, userId)
+        ]);
+
+        if ((tokenClaim?.meta.changes ?? 0) !== 1 || (passwordUpdate?.meta.changes ?? 0) !== 1) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                'Invalid or expired password reset token.',
+                400
+            );
+        }
+    }
+
     /**
      * Revoke all sessions for a user
      */
