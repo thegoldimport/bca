@@ -1,0 +1,251 @@
+I manually inspected production and found that our public URL architecture is
+not behaving the way BuildCustom should work.
+
+DO NOT change or deploy anything yet.
+
+This is INSPECTION ONLY.
+
+INTENDED URL ARCHITECTURE
+
+buildcustom.ai
+= marketing/sales website
+
+www.buildcustom.ai
+= marketing/sales website
+
+app.buildcustom.ai
+= the BuildCustom SaaS application
+
+These should be separate experiences.
+
+For app.buildcustom.ai:
+
+IF USER IS LOGGED OUT:
+
+https://app.buildcustom.ai/
+should show the LOGIN page.
+
+IF USER IS LOGGED IN:
+
+https://app.buildcustom.ai/
+should take them directly to their DASHBOARD.
+
+The app hostname should NOT show the marketing homepage.
+
+Canonical auth URLs should be:
+
+https://app.buildcustom.ai/login
+https://app.buildcustom.ai/signup
+https://app.buildcustom.ai/forgot-password
+https://app.buildcustom.ai/reset-password?token=<TOKEN>
+
+Current manual production observations:
+
+1. https://buildcustom.ai/
+shows the marketing site.
+This is correct.
+
+2. https://app.buildcustom.ai/
+also appears to show the marketing/landing experience.
+This is NOT the intended app-root behavior.
+
+3. https://app.buildcustom.ai/signup
+currently returns the application's 404 page.
+This is NOT correct.
+
+Previous acceptance checks used paths such as /app/signup, which appears to
+have hidden this customer-facing URL problem.
+
+IMPORTANT:
+
+Public signup itself is now enabled and accepted at the API/security layer.
+
+Do NOT change:
+- registration behavior
+- authentication architecture
+- session architecture
+- password recovery behavior
+- runtime auth
+- EMAIL
+- gateway
+- generated-app infrastructure
+- DNS
+- marketing site
+- product data
+- existing accounts
+- existing projects
+
+We only need to understand the frontend/application routing problem.
+
+INSPECT:
+
+1. CURRENT ROUTE MAP
+
+Identify the actual frontend routes currently defined for:
+
+- /
+- /app
+- /app/login
+- /app/signup
+- /app/forgot-password
+- /app/reset-password
+- /login
+- /signup
+- /forgot-password
+- /reset-password
+- dashboard
+- projects
+- project detail/builder
+- 404
+
+Show which component/page each currently renders.
+
+2. APP ROOT
+
+Determine exactly why:
+
+https://app.buildcustom.ai/
+
+currently renders the marketing/landing experience.
+
+Is this:
+- the same marketing component bundled into the app?
+- a logged-out application landing page?
+- hostname routing behavior?
+- SPA fallback behavior?
+- frontend router behavior?
+- something else?
+
+3. AUTHENTICATED ROOT BEHAVIOR
+
+Determine what currently happens when an authenticated user visits:
+
+https://app.buildcustom.ai/
+
+Does it:
+- show marketing?
+- redirect to dashboard?
+- render dashboard?
+- depend on client-side auth initialization?
+
+We want the final behavior to be:
+
+SIGNED OUT:
+app.buildcustom.ai/ -> login
+
+SIGNED IN:
+app.buildcustom.ai/ -> dashboard
+
+4. AUTH ROUTES
+
+Determine why:
+
+https://app.buildcustom.ai/signup
+
+returns 404 while the previously tested /app/signup route works.
+
+Inspect the equivalent situation for:
+
+/login
+/forgot-password
+/reset-password
+
+5. INTERNAL LINKS
+
+Find all relevant internal navigation destinations for:
+
+- Sign Up
+- Login
+- Logout
+- Forgot Password
+- Reset Password
+- Build It!
+- Dashboard
+- project navigation
+
+Determine whether they currently use /app/... paths.
+
+6. PASSWORD RECOVERY
+
+Confirm the exact reset URL currently generated in production recovery emails.
+
+We want the canonical URL to ultimately be:
+
+https://app.buildcustom.ai/reset-password?token=<TOKEN>
+
+Do NOT change recovery behavior yet.
+
+7. MARKETING CTA
+
+Inspect the Build It! CTA and other relevant marketing CTAs.
+
+Marketing should remain on:
+
+buildcustom.ai
+
+When a logged-out visitor chooses to start building, the appropriate
+destination should be on:
+
+app.buildcustom.ai
+
+Determine the current destination and what should change.
+
+8. PROPOSE THE SMALLEST ROUTING CLEANUP
+
+Desired final behavior:
+
+buildcustom.ai/
+-> marketing
+
+www.buildcustom.ai/
+-> marketing
+
+app.buildcustom.ai/
+-> login if signed out
+-> dashboard if signed in
+
+app.buildcustom.ai/login
+-> login
+
+app.buildcustom.ai/signup
+-> signup
+
+app.buildcustom.ai/forgot-password
+-> forgot password
+
+app.buildcustom.ai/reset-password?token=...
+-> reset password
+
+Authenticated application/dashboard/project routes remain on
+app.buildcustom.ai.
+
+Existing old /app/... auth URLs should not abruptly break if currently used.
+
+Prefer redirecting old routes to their clean canonical equivalents or
+temporarily supporting both.
+
+Do NOT create duplicate auth implementations.
+
+Do NOT modify /api routes.
+
+Do NOT modify generated-app routing.
+
+Do NOT modify buildcustom.ai marketing routing.
+
+RETURN ONLY:
+
+- current relevant route map
+- why app.buildcustom.ai/ currently shows the marketing experience
+- current authenticated vs unauthenticated root behavior
+- why /signup returns 404
+- current internal auth/navigation URLs
+- current recovery-email reset URL
+- current marketing CTA destinations
+- smallest proposed routing cleanup
+- exact files that would need modification
+- whether any backend/Worker change is required
+- compatibility plan for existing /app/... URLs
+
+Then STOP.
+
+Do not implement or deploy anything yet.
