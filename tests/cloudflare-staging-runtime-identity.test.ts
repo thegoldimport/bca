@@ -278,7 +278,10 @@ function runtime(options: { silentLogout?: boolean; gitFixture?: Awaited<ReturnT
         return Response.json({ success: true, data: { user: account, sessionId: issuedId } }, { headers });
       }
       if (path === "/api/auth/logout") {
-        if (request.headers.get("X-CSRF-Token") !== "csrf-value") return Response.json({ success: false }, { status: 403 });
+        if (request.headers.get("X-CSRF-Token") !== "csrf-value"
+          || !cookie.includes("csrf-token=csrf-cookie")) {
+          return Response.json({ success: false }, { status: 403 });
+        }
         const verifiedId = cookie.match(/(?:^|;\s*)sessionId=([^;]+)/)?.[1];
         if (!session || verifiedId !== session.id) return Response.json({ success: false }, { status: 401 });
         if (!options.silentLogout) sessions.delete(token!);
@@ -376,7 +379,7 @@ function browser(env: Env) {
   };
   const auth = async (path: string, body: Record<string, unknown>) => {
     const csrf = await send("/api/auth/csrf-token");
-    assert.equal(csrf.status, 200);
+    assert.equal(csrf.status, 200, await csrf.clone().text());
     const { token } = await csrf.json() as { token: string };
     return send(path, "POST", body, { "X-CSRF-Token": token });
   };
@@ -392,6 +395,79 @@ function browser(env: Env) {
   };
   return { send, auth, create, initialize, jar };
 }
+
+test("browser-equivalent logout requires matching CSRF and revokes only the verified session", async () => {
+  const { sqlite, db } = database();
+  try {
+    const stock = runtime();
+    const env = {
+      DB: db,
+      ENVIRONMENT: "staging",
+      AUTH_RUNTIME: stock.fetcher,
+      AUTH_RUNTIME_URL: "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev",
+      STAGING_RUNTIME_URL: "https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev",
+      STAGING_ROUTE_KV_ID: "e5e119fa2abc4c26a8c027e0d8a8d82c",
+      STAGING_DISPATCH_NAMESPACE: "buildcustom-vibesdk-migration-staging",
+      STAGING_ALLOWED_ORIGIN: origin,
+      STAGING_REGISTRATION_ENABLED: "true",
+      STAGING_LOGIN_ENABLED: "true",
+    } as Env;
+    const a = browser(env), aOther = browser(env), b = browser(env);
+    assert.equal((await a.auth("/api/auth/register", {
+      name: "User A", email: "a@example.test", password: "Str0ng!PasswordA",
+    })).status, 200);
+    assert.equal((await aOther.auth("/api/auth/login", {
+      email: "a@example.test", password: "Str0ng!PasswordA",
+    })).status, 200);
+    assert.equal((await b.auth("/api/auth/register", {
+      name: "User B", email: "b@example.test", password: "Str0ng!PasswordB",
+    })).status, 200);
+
+    const csrf = await a.send("/api/auth/csrf-token");
+    assert.equal(csrf.status, 200);
+    const { token } = await csrf.json() as { token: string };
+    assert.equal(token, "csrf-value");
+    assert.equal(a.jar.get("csrf-token"), "csrf-cookie");
+    const oldCookie = [...a.jar].map(([name, value]) => `${name}=${value}`).join("; ");
+    const check = async (cookie: string) => (await (await stock.fetcher.fetch(new Request(
+      `${env.AUTH_RUNTIME_URL}/api/auth/check`, { headers: { Cookie: cookie } },
+    ))).json() as any).data;
+    const originalSession = (await check(oldCookie)).sessionId;
+    assert.ok(originalSession);
+    const otherCookie = [...aOther.jar].map(([name, value]) => `${name}=${value}`).join("; ");
+    const otherSession = (await check(otherCookie)).sessionId;
+    assert.notEqual(originalSession, otherSession);
+
+    const missing = await a.send("/api/auth/logout", "POST");
+    assert.equal(missing.status, 502);
+    assert.equal((await check(oldCookie)).authenticated, true);
+    assert.equal((await b.send("/api/auth/me")).status, 200);
+    assert.equal((await (await b.send("/api/auth/me")).json() as any).email, "b@example.test");
+
+    const mismatch = await a.send("/api/auth/logout", "POST", undefined, { "X-CSRF-Token": "wrong-token" });
+    assert.equal(mismatch.status, 502);
+    assert.equal((await check(oldCookie)).authenticated, true);
+    assert.equal((await check(otherCookie)).authenticated, true);
+
+    const success = await a.send("/api/auth/logout", "POST", undefined, { "X-CSRF-Token": token });
+    assert.equal(success.status, 204);
+    const forwarded = stock.requests.filter((request) => new URL(request.url).pathname === "/api/auth/logout");
+    assert.equal(forwarded.length, 3);
+    assert.equal(forwarded[2].headers.get("X-CSRF-Token"), token);
+    assert.match(forwarded[2].headers.get("Cookie") || "", /csrf-token=csrf-cookie/);
+    assert.match(forwarded[2].headers.get("Cookie") || "", new RegExp(`sessionId=${originalSession}`));
+    assert.equal(forwarded[2].headers.get("Origin"), null);
+    assert.equal((await check(oldCookie)).authenticated, false);
+    assert.equal(await (await worker.fetch(new Request(`${origin}/api/auth/me`, {
+      headers: { Cookie: oldCookie },
+    }), env)).json(), null);
+    assert.equal((await check(otherCookie)).authenticated, true);
+    assert.equal((await (await aOther.send("/api/auth/me")).json() as any).email, "a@example.test");
+    assert.equal((await (await b.send("/api/auth/me")).json() as any).email, "b@example.test");
+  } finally {
+    sqlite.close();
+  }
+});
 
 test("staging D1 migration retains legacy user, project and session without a password for new product users", () => {
   const { sqlite } = database();

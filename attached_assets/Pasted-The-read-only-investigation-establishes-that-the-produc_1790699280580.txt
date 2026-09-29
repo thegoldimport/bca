@@ -1,0 +1,159 @@
+The read-only investigation establishes that the production logout failure was
+caused by an invalid acceptance request, not by a demonstrated logout/session
+security regression.
+
+Do NOT change the Task 6A logout implementation.
+
+Do NOT change the control-plane 502 mapping right now. We can improve that
+error reporting later; it is not part of this acceptance.
+
+Before touching production, run the focused local tests you proposed:
+
+1. Valid access cookie + matching CSRF cookie/header:
+   - logout succeeds
+   - only that exact session is revoked server-side
+   - old credential is rejected afterward
+
+2. Missing CSRF header:
+   - request is rejected
+   - session remains active
+
+3. Mismatched CSRF header:
+   - request is rejected
+   - session remains active
+
+4. Account B remains authenticated throughout Account A logout.
+
+Use the SAME request behavior as the real browser:
+- obtain a fresh CSRF token through the normal supported endpoint
+- retain the matching CSRF cookie
+- send X-CSRF-Token
+- send the access/session cookie
+- send the correct Origin
+
+If those focused local tests pass, resume the existing production acceptance
+from the exact point where it stopped.
+
+Do NOT redo the completed first password reset.
+
+Do NOT send another first recovery email.
+
+Do NOT change Account A's email again.
+
+Do NOT create another identity.
+
+Do NOT reopen signup yet.
+
+PRODUCTION CONTINUATION
+
+Account A currently has an active session created by logging in with the first
+new password.
+
+A. CORRECT LOGOUT TEST
+
+Using the normal browser-equivalent CSRF flow:
+
+1. Obtain a fresh CSRF token and matching cookie.
+2. Perform logout with:
+   - Account A's current access credential
+   - matching CSRF cookie
+   - matching X-CSRF-Token header
+   - correct Origin
+3. Verify logout succeeds.
+4. Verify the authoritative runtime session changes from active to revoked.
+5. Verify revocation reason/state is correct.
+6. Replay the saved pre-logout credential against:
+   - product auth
+   - runtime auth
+7. Verify both treat it as unauthenticated.
+8. Verify Account B remains authenticated.
+
+Then perform a fresh Account A login using the first new password and verify:
+- product auth succeeds
+- runtime auth succeeds
+
+B. SECOND PASSWORD RESET / ACTIVE SESSION REVOCATION
+
+Now, while Account A has that fresh active session:
+
+1. Request the second password reset through the normal production recovery
+   flow.
+2. Confirm the recovery email reaches the connected Gmail inbox.
+3. Use the actual reset link.
+4. Set the second new password.
+5. Verify the reset token is single-use/replay rejected.
+6. Verify the session that was active immediately before reset is now revoked
+   in the authoritative runtime session store.
+7. Verify its saved credential is rejected by product and runtime.
+8. Verify the first new password is rejected.
+9. Verify the second new password successfully logs Account A in.
+10. Verify Account B's session remains unaffected.
+
+C. IDENTITY
+
+Verify Account A still has:
+- same product user ID
+- same runtime user ID
+- same product/runtime identity mapping
+- original historical revoked session still revoked
+- logout-created revoked session still revoked
+- reset-created session revocation recorded correctly
+
+D. PROJECT / PRODUCT REGRESSION
+
+Using Account B's existing owned project, complete the regression that was
+previously deferred:
+
+- dashboard
+- correct project ownership
+- reopen existing project
+- Files
+- styled preview
+- idle WebSocket/conversation-state connection
+- no AI inference/generation
+- existing public generated app
+- generated-app gateway
+- unknown generated-app slug returns 404
+- Account A cannot access Account B's project
+- forged ownership does not bypass authorization
+- active publish claims remain 0
+
+Also verify:
+- marketing remains unchanged
+- public generated apps remain enabled
+- public signup remains closed
+- gateway version/bindings remain unchanged
+
+If an ACTUAL security/customer-path check fails, STOP immediately and report
+the exact failure.
+
+Do not automatically retry a failed security mutation.
+
+Do not redesign auth.
+
+Do not add another session authority.
+
+Do not investigate support@buildcustom.ai.
+
+If all acceptance checks pass:
+
+- leave password recovery LIVE
+- leave the production EMAIL binding LIVE
+- leave security@buildcustom.ai as reset sender
+- leave public generated apps ENABLED
+- leave public signup CLOSED
+- leave the existing gateway unchanged
+- remove the temporary isolated email-test Worker
+
+Return the final:
+- runtime version ID
+- control-plane version ID
+- recovery tests
+- email delivery results
+- logout/revocation results
+- password-reset session-revocation results
+- identity-preservation evidence
+- Account B regression results
+- cross-account isolation results
+- registration/public-app/gateway state
+- confirmation temporary email-test Worker was removed
