@@ -1,0 +1,152 @@
+No. Do not investigate the support@buildcustom.ai delivery retries right now.
+
+We have established the important production requirement:
+
+- Cloudflare Email Sending works from an actually deployed Worker
+- the native EMAIL binding works
+- security@buildcustom.ai works as the sender
+- the test email was successfully delivered to my Gmail inbox
+
+The support@buildcustom.ai retry issue is now a separate email-routing issue
+and should NOT block BuildCustom password recovery or launch.
+
+Proceed with the password recovery work already completed locally.
+
+For THIS DISPOSABLE ACCEPTANCE ACCOUNT ONLY, I approve changing its email to
+the same Gmail address that just successfully received the Cloudflare test.
+
+Change ONLY the email address.
+
+Preserve:
+- the existing product user ID
+- the existing runtime user ID
+- the existing product/runtime identity mapping
+- the existing revoked session history
+- the existing project ownership
+- all other account state
+
+Do NOT create a new identity.
+
+Then complete the password recovery deployment and acceptance we already
+planned.
+
+Requirements:
+
+1. Keep public signup CLOSED throughout this operation.
+2. Deploy only the minimum reviewed runtime/control-plane changes required for
+   password recovery.
+3. Use the native Cloudflare EMAIL binding.
+4. Sender:
+   BuildCustom <security@buildcustom.ai>
+5. Password reset URL:
+   https://app.buildcustom.ai/reset-password?token=<TOKEN>
+6. Runtime remains the sole password/session/recovery authority.
+7. Do not introduce another password/session store.
+
+Verify the recovery implementation:
+
+- forgot-password returns the same generic response for existing and
+  nonexistent accounts
+- reset tokens are securely generated
+- plaintext token is sent only in the email/reset URL
+- stored token is hashed
+- token expires after 60 minutes
+- token is user-bound
+- token is single-use
+- replay is rejected
+- password strength uses the existing password rules
+- reset uses the existing password hashing mechanism
+- successful reset preserves the same user identity
+- successful reset revokes all active sessions belonging to that user
+- sessions belonging to other users are unaffected
+- Origin protection works
+- CSRF protection works
+- reasonable abuse/rate protection exists
+- login UI has Forgot password
+- forgot-password UI works
+- reset-password page works
+
+Then perform the production acceptance using the SAME existing disposable
+account whose email was changed.
+
+Prove:
+
+A. EMAIL RECOVERY
+- request one password reset
+- confirm Cloudflare accepted the email
+- confirm the email reaches the Gmail inbox
+- use the actual reset link from that email
+- set a new password
+- prove the reset token cannot be reused
+
+B. IDENTITY PRESERVATION
+- product user ID is unchanged
+- runtime user ID is unchanged
+- product/runtime mapping is unchanged
+- project ownership is unchanged
+
+C. SESSION SECURITY
+- the previously revoked session remains revoked
+- log in with the new password
+- prove product auth works
+- prove runtime auth works
+- log out
+- prove that session becomes server-side revoked
+- prove the saved old credential is rejected by both product and runtime
+- perform a fresh login with the new password and prove it succeeds
+
+D. PASSWORD-RESET SESSION REVOCATION
+- while logged in with a fresh active session, request another reset
+- complete that reset to another new password
+- prove the previously active session is now rejected
+- prove the previous password is rejected
+- prove the newest password succeeds
+- prove another user's session remains unaffected
+
+E. PRODUCT REGRESSION
+Using the existing owned project, verify:
+- dashboard
+- project ownership
+- reopen
+- Files
+- styled preview
+- idle WebSocket/conversation state without inference
+- existing public generated app
+- generated-app gateway
+- unknown slug 404
+- cross-user isolation
+- active publish claims remain 0
+- marketing remains unchanged
+
+Do not perform AI generation.
+
+Do not create another signup account.
+
+Do not change the generated-app gateway.
+
+Do not change marketing.
+
+Do not touch the support@buildcustom.ai routing issue.
+
+Do not reopen signup.
+
+If an actual security or customer-path check fails, STOP and report the exact
+failure. Do not automatically redesign the system or retry the production
+operation.
+
+At the end, leave:
+
+- password recovery LIVE
+- Cloudflare EMAIL binding LIVE
+- security@buildcustom.ai as the reset sender
+- public generated apps ENABLED
+- public signup CLOSED
+- existing gateway unchanged
+
+Also remove the temporary email-test Worker after the production recovery
+email has been successfully delivered and the production EMAIL binding is
+proven.
+
+Return the exact deployed runtime and control-plane version IDs, test results,
+account identity preservation evidence, session/revocation evidence, email
+delivery evidence, and final production state.
