@@ -26,10 +26,32 @@ export function parseCookie(header: string | null, name = SESSION_COOKIE): strin
 }
 
 export function hasValidCsrfToken(request: Request): boolean {
-  const cookieToken = parseCookie(request.headers.get("Cookie"), "csrf-token");
+  const rawCookieToken = parseCookie(request.headers.get("Cookie"), "csrf-token");
   const headerToken = request.headers.get("X-CSRF-Token");
-  return Boolean(cookieToken && headerToken && cookieToken.length <= 4096 && headerToken.length <= 4096
-    && !/[\r\n;]/.test(cookieToken) && !/[\r\n;]/.test(headerToken) && cookieToken === headerToken);
+  if (!rawCookieToken || !headerToken || rawCookieToken.length > 8192 || headerToken.length > 4096
+    || /[\r\n;]/.test(rawCookieToken) || /[\r\n;]/.test(headerToken)) return false;
+  let cookieValue: string;
+  try {
+    // Runtime cookies are URL-encoded JSON: { token, timestamp }. The runtime's
+    // cookie parser decodes this before validating it, so the control must too.
+    cookieValue = decodeURIComponent(rawCookieToken);
+  } catch {
+    return false;
+  }
+  try {
+    const data = JSON.parse(cookieValue);
+    if (!data || typeof data !== "object" || Array.isArray(data)
+      || typeof data.token !== "string" || !data.token || data.token.length > 4096
+      || !Number.isFinite(data.timestamp)) return false;
+    const age = Date.now() - data.timestamp;
+    if (age < 0 || age > 2 * 60 * 60 * 1000) return false;
+    return data.token === headerToken;
+  } catch {
+    // The runtime still accepts legacy plain-string CSRF cookies. Do not treat
+    // malformed JSON/object-shaped values as legacy tokens.
+    if (/^\s*[\[{"]/.test(cookieValue) || cookieValue.length > 4096) return false;
+    return cookieValue.length > 0 && cookieValue === headerToken;
+  }
 }
 
 export function sessionCookie(token: string, maxAge = SESSION_TTL_SECONDS): string {

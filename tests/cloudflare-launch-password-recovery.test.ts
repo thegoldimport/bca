@@ -111,6 +111,80 @@ test("forgot password rejects missing or mismatched CSRF before runtime", async 
   assert.equal(calls, 0);
 });
 
+test("GET-issued runtime CSRF cookie and JSON token authorize forgot and reset proxy requests", async () => {
+  const issuedToken = "runtime-issued-csrf-value";
+  const issuedCookieValue = encodeURIComponent(JSON.stringify({ token: issuedToken, timestamp: Date.now() }));
+  const received: Request[] = [];
+  const fixture = launchEnv(async (request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/api/auth/csrf-token") {
+      return Response.json({ success: true, data: { token: issuedToken } }, {
+        headers: { "Set-Cookie": `csrf-token=${issuedCookieValue}; Path=/; Secure; HttpOnly; SameSite=Strict` },
+      });
+    }
+    received.push(request);
+    return Response.json({ success: true });
+  });
+  const csrfResponse = await worker.fetch(new Request(`${origin}/api/auth/csrf-token`), fixture.env as never);
+  assert.equal(csrfResponse.status, 200);
+  assert.deepEqual(await csrfResponse.json(), { token: issuedToken });
+  const cookieHeader = csrfResponse.headers.getSetCookie().find((cookie) => cookie.startsWith("csrf-token="));
+  assert.ok(cookieHeader);
+  const csrfCookie = cookieHeader!.split(";", 1)[0];
+
+  for (const [path, body] of [
+    ["/api/auth/forgot-password", { email: "person@example.test" }],
+    ["/api/auth/reset-password", {
+      token: "single-use-password-token",
+      newPassword: "A-long-password-123!",
+      confirmPassword: "A-long-password-123!",
+    }],
+  ] as const) {
+    const response = await worker.fetch(post(path, body, {
+      Origin: origin,
+      Cookie: csrfCookie,
+      "X-CSRF-Token": issuedToken,
+    }), fixture.env as never);
+    assert.equal(response.status, 200, path);
+  }
+  assert.equal(received.length, 2);
+  for (const request of received) {
+    assert.equal(request.headers.get("Cookie"), csrfCookie);
+    assert.equal(request.headers.get("X-CSRF-Token"), issuedToken);
+  }
+  assert.deepEqual(await received[0].json(), { email: "person@example.test" });
+  assert.deepEqual(await received[1].json(), {
+    token: "single-use-password-token",
+    newPassword: "A-long-password-123!",
+    confirmPassword: "A-long-password-123!",
+  });
+});
+
+test("CSRF validator rejects expired/malformed runtime cookies but retains runtime legacy plain tokens", async () => {
+  let calls = 0;
+  const fixture = launchEnv(async () => {
+    calls++;
+    return Response.json({ success: true });
+  });
+  const validToken = "csrf-legacy-token";
+  const requestBody = { email: "person@example.test" };
+  const requestHeaders = (cookie: string, header = validToken) => ({
+    Origin: origin, Cookie: `csrf-token=${cookie}`, "X-CSRF-Token": header,
+  });
+  for (const cookie of [
+    encodeURIComponent(JSON.stringify({ token: validToken, timestamp: Date.now() - 2 * 60 * 60 * 1000 - 1 })),
+    encodeURIComponent('{"token":"broken","timestamp":'),
+  ]) {
+    const response = await worker.fetch(post("/api/auth/forgot-password", requestBody, requestHeaders(cookie)), fixture.env as never);
+    assert.equal(response.status, 403);
+  }
+  assert.equal(calls, 0);
+
+  const legacy = await worker.fetch(post("/api/auth/forgot-password", requestBody, requestHeaders(validToken)), fixture.env as never);
+  assert.equal(legacy.status, 200);
+  assert.equal(calls, 1);
+});
+
 test("reset password forwards runtime-only credentials and returns no token or upstream body", async () => {
   const resetToken = "one-time-reset-token-do-not-leak";
   const newPassword = "new-password-123";

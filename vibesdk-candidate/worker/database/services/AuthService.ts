@@ -374,13 +374,20 @@ export class AuthService extends BaseService {
         const text = `We received a request to reset your password.\n\nReset your password using this link (valid for 60 minutes):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
         const html = `<p>We received a request to reset your password.</p><p><a href="${resetUrl}">Reset your password</a> (valid for 60 minutes).</p><p>If you did not request this, you can ignore this email.</p>`;
         try {
-            await this.env.EMAIL.send({
+            // Cloudflare Email Service's documented builder accepts a named
+            // sender, while the installed workers-types describes the raw
+            // SMTP-envelope EmailMessage (`from: string`). Keep the documented
+            // runtime payload and bridge only that stale type declaration here.
+            const message = {
                 from: { email: 'security@buildcustom.ai', name: 'BuildCustom' },
                 to: normalizedEmail,
                 subject: 'Reset your BuildCustom password',
                 text,
                 html
-            });
+            };
+            await this.env.EMAIL.send(
+                message as unknown as Parameters<Env['EMAIL']['send']>[0]
+            );
         } catch {
             try {
                 await this.database.update(schema.passwordResetTokens)
