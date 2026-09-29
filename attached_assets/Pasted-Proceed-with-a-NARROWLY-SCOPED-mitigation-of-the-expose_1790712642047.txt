@@ -1,0 +1,235 @@
+Proceed with a NARROWLY SCOPED mitigation of the exposed legacy marketing
+waitlist admin credential, then resume Task 13 Phase 1.
+
+OWNER DECISION
+
+The legacy Replit marketing waitlist admin functionality is NOT needed.
+
+We already decided:
+
+- old Replit waitlist data is disposable test data
+- legacy marketing waitlist admin login/list/delete does not need preservation
+- we will replace the public waitlist submission endpoint with Cloudflare/D1
+  later in Task 13
+
+Therefore:
+
+DO NOT rotate or preserve the legacy marketing admin credential merely to keep
+that admin system operational.
+
+DO NOT build replacement admin authentication.
+
+DO NOT migrate its sessions.
+
+Retire the legacy admin ACCESS while keeping the PUBLIC waitlist submission
+endpoint temporarily operational until the Cloudflare waitlist cutover.
+
+==================================================
+STEP 1 — IDENTIFY THE LEGACY ADMIN SURFACE
+==================================================
+
+Inspect the relevant legacy Replit server routes and identify exactly:
+
+- admin login route
+- admin session/auth route(s)
+- waitlist list/read route(s)
+- waitlist delete/mutation route(s)
+- any other route protected by this legacy admin credential/session
+
+Distinguish these from:
+
+- the PUBLIC waitlist submission endpoint
+- BuildCustom SaaS authentication
+- app.buildcustom.ai/admin/login
+
+Do not touch BuildCustom SaaS admin/auth.
+
+==================================================
+STEP 2 — DISABLE LEGACY MARKETING ADMIN ACCESS
+==================================================
+
+Disable the legacy MARKETING WAITLIST admin surface on the Replit deployment.
+
+Preferred result:
+
+- legacy admin login cannot authenticate
+- existing legacy admin sessions cannot access protected waitlist admin data
+- legacy waitlist list/read/delete/admin mutation routes are inaccessible
+- PUBLIC waitlist submission remains temporarily functional
+
+Since this admin workflow is being retired, prefer disabling the routes rather
+than creating replacement credentials.
+
+Use a clear retired response such as 404 or 410 where appropriate.
+
+Do not expose information about the previous credential.
+
+Do not affect the public waitlist POST used by the currently live marketing
+site.
+
+==================================================
+STEP 3 — REMOVE THE HARDCODED FALLBACK FROM CURRENT SOURCE
+==================================================
+
+Remove the hardcoded fallback credential from the current source.
+
+Do not replace it with another hardcoded value.
+
+Do not print, log, report, or reproduce the old credential.
+
+If the surrounding legacy admin code is no longer needed after disabling the
+routes, remove or neutralize it cleanly.
+
+Do NOT rewrite Git history during this step.
+
+The credential already exists in historical commits and must be considered
+permanently exposed.
+
+Our immediate security requirement is that the historical value no longer
+grants access to anything.
+
+==================================================
+STEP 4 — INVALIDATE LEGACY ADMIN ACCESS
+==================================================
+
+Because a successful legacy admin session was obtained during inspection,
+ensure that existing legacy admin sessions can no longer authorize access.
+
+Since the admin system is being retired, this does NOT require preserving
+normal session continuity.
+
+Use the smallest safe mechanism appropriate to the existing implementation.
+
+Then verify:
+
+OLD EXPOSED CREDENTIAL:
+-> cannot authenticate
+
+PREVIOUSLY ISSUED LEGACY ADMIN SESSION:
+-> cannot access protected admin functionality
+
+ADMIN LIST/READ:
+-> inaccessible
+
+ADMIN DELETE/MUTATION:
+-> inaccessible
+
+PUBLIC WAITLIST SUBMISSION:
+-> still works exactly as required by the currently serving marketing bundle
+
+Do not delete the old waitlist test data yet merely for this mitigation.
+
+==================================================
+STEP 5 — SECURITY CHECK
+==================================================
+
+Check whether the exposed fallback credential was reused anywhere else in the
+current source/configuration.
+
+Search for the credential WITHOUT displaying it in output.
+
+Determine whether it protects or appears in:
+
+- any other Replit route
+- Cloudflare
+- BuildCustom application admin
+- production Worker secrets
+- GitHub configuration
+- deployment credentials
+- any unrelated service
+
+If it is reused for ANY other live capability:
+
+STOP.
+
+Report only where it is reused and what must be rotated.
+
+Do NOT display the credential.
+
+If it is isolated to the retired legacy marketing admin system, continue.
+
+==================================================
+STEP 6 — COMMIT THE MITIGATION LOCALLY
+==================================================
+
+Commit the mitigation locally.
+
+Do NOT push to GitHub yet.
+
+Return the mitigation commit SHA.
+
+==================================================
+STEP 7 — RESUME TASK 13 PHASE 1 SECURITY AUDIT
+==================================================
+
+After the legacy admin mitigation is verified, resume the source/history audit
+that previously stopped.
+
+Continue reviewing the GitHub-main -> local-main difference and source that
+would become canonical.
+
+Check for:
+
+- credentials
+- API tokens
+- passwords
+- private keys
+- session credentials
+- reset tokens
+- environment files
+- hardcoded fallback credentials
+- test credentials
+- sensitive generated artifacts
+- large/unnecessary generated files
+- temporary acceptance evidence
+
+IMPORTANT:
+
+The known legacy fallback credential should now be recorded as:
+
+KNOWN HISTORICALLY EXPOSED / LIVE CAPABILITY RETIRED
+
+Its existence in old Git history should NOT by itself block Task 13 once:
+
+- current source no longer contains the fallback
+- legacy admin routes are inaccessible
+- old credential no longer authenticates
+- existing legacy admin sessions no longer authorize anything
+- it is confirmed not to be reused elsewhere
+
+Do NOT rewrite the entire Git history merely to erase this retired credential
+unless another reason makes that necessary.
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+STOP if you discover:
+
+1. another live credential exposed in source/history;
+2. the old credential is reused by another live system;
+3. disabling legacy admin access breaks the public waitlist submission;
+4. mitigation would require changing BuildCustom SaaS auth;
+5. mitigation affects current Cloudflare production.
+
+Otherwise:
+
+Complete the remaining Phase 1 audit and return:
+
+- mitigation commit SHA
+- exact files changed
+- legacy admin login status
+- existing legacy session status
+- legacy admin list/delete status
+- public Replit waitlist submission status
+- credential reuse result
+- remaining Phase 1 security/history findings
+- whether it is now SAFE TO PROCEED TO TASK 13 PHASE 2
+
+Then STOP.
+
+Do not push GitHub.
+Do not trigger Pages.
+Do not deploy Cloudflare.
+Do not migrate waitlist.
+Do not shut down Replit.
