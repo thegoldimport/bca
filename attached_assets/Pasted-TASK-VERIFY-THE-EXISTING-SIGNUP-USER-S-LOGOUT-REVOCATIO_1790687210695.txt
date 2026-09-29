@@ -1,0 +1,584 @@
+TASK — VERIFY THE EXISTING SIGNUP USER'S LOGOUT REVOCATION
+
+Do NOT reopen public signup.
+
+Do NOT activate either open candidate.
+
+Do NOT create another user.
+
+Do NOT perform another signup.
+
+Do NOT create a Worker version.
+
+Do NOT change Worker code.
+
+Do NOT change Cloudflare configuration.
+
+Do NOT run another full acceptance suite.
+
+We have ONE narrow question to answer:
+
+Did the account created during the successful public signup at:
+
+production/vibesdk-launch/task12v-registration-2026-09-29T13-01-52-865Z.json
+
+have its PRE-LOGOUT session correctly revoked, and can that same account now
+log in normally again?
+
+==================================================
+CURRENT PRODUCTION MUST REMAIN CLOSED
+==================================================
+
+Runtime:
+
+buildcustom-vibesdk-launch
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+Control:
+
+buildcustom-control-plane-launch
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+Runtime registration:
+
+false
+
+
+Control registration:
+
+false
+
+
+Public signup:
+
+CLOSED
+
+
+Public generated apps:
+
+true
+
+
+Gateway:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+Do not change this state.
+
+==================================================
+STEP 1 — INSPECT THE SAVED SUCCESSFUL SIGNUP EVIDENCE
+==================================================
+
+Read:
+
+production/vibesdk-launch/task12v-registration-2026-09-29T13-01-52-865Z.json
+
+
+Identify the ONE user created by that run.
+
+Record:
+
+product user ID
+
+runtime user ID
+
+email
+
+identity mapping
+
+session ID used before logout
+
+session row/state before logout if retained
+
+session row/state after logout if retained
+
+logout HTTP result
+
+
+Do not print the password or full credential/token.
+
+Do not create or modify identities.
+
+==================================================
+STEP 2 — VERIFY SERVER-SIDE REVOCATION DIRECTLY
+==================================================
+
+Read the authoritative runtime session state for the PRE-LOGOUT session.
+
+Require:
+
+the exact pre-logout session exists or is otherwise identifiable from retained
+evidence
+
+AND
+
+it is revoked according to the runtime's authoritative session model.
+
+
+We already have saved evidence that logout returned 204 and the runtime
+session was revoked.
+
+Confirm that independently from the stored state/evidence.
+
+Report:
+
+session ID safely redacted
+
+revocation state
+
+revocation reason if available
+
+revocation timestamp if available
+
+
+If the authoritative session is NOT revoked:
+
+STOP.
+
+Report a REAL SECURITY FAILURE.
+
+Do not modify anything.
+
+==================================================
+STEP 3 — REPLAY THE OLD PRODUCT CREDENTIAL IF RETAINED
+==================================================
+
+If the exact PRE-LOGOUT credential was safely retained in the acceptance
+artifact/operator state:
+
+replay it against the normal product auth endpoint.
+
+Expected established unauthenticated behavior:
+
+HTTP response may be 200
+
+BUT body must be:
+
+null
+
+or the exact established unauthenticated product semantic.
+
+
+The important property is:
+
+THE OLD CREDENTIAL MUST NOT AUTHENTICATE.
+
+
+If it authenticates:
+
+REAL SECURITY FAILURE.
+
+STOP.
+
+
+If the exact old credential was NOT retained:
+
+do NOT manufacture one.
+
+Mark this specific replay:
+
+UNAVAILABLE FROM RETAINED EVIDENCE.
+
+Continue to the other revocation evidence.
+
+==================================================
+STEP 4 — REPLAY THE OLD RUNTIME CREDENTIAL IF RETAINED
+==================================================
+
+If the exact PRE-LOGOUT runtime credential was safely retained:
+
+replay it against the normal runtime auth check.
+
+Require:
+
+authenticated=false
+
+
+If authenticated=true:
+
+REAL SECURITY FAILURE.
+
+STOP.
+
+
+If exact credential was not retained:
+
+mark:
+
+UNAVAILABLE FROM RETAINED EVIDENCE.
+
+
+Do not treat inability to recover a credential as proof of a security failure.
+
+==================================================
+STEP 5 — NORMAL FRESH LOGIN
+==================================================
+
+Use the SAME account created during the successful public signup.
+
+Do NOT register again.
+
+Use the normal public login flow at:
+
+https://app.buildcustom.ai
+
+
+Registration remains CLOSED.
+
+Login must remain available.
+
+
+Log in normally using the retained acceptance credentials.
+
+Require:
+
+login succeeds
+
+same product identity
+
+same runtime identity
+
+product /api/auth/me returns correct user
+
+runtime auth check returns authenticated=true
+
+dashboard loads
+
+
+This proves the account remains usable after revocation.
+
+==================================================
+STEP 6 — VERIFY NEW SESSION IS NOT THE OLD SESSION
+==================================================
+
+Inspect authoritative runtime session state.
+
+Require:
+
+fresh login created/uses a valid non-revoked session
+
+AND
+
+the old pre-logout session remains revoked.
+
+
+Fresh login must NOT reactivate the old session.
+
+Require:
+
+OLD SESSION:
+revoked
+
+NEW SESSION:
+valid
+
+
+If fresh login reactivates the revoked session:
+
+SECURITY FAILURE.
+
+STOP.
+
+==================================================
+STEP 7 — LOG OUT THE FRESH SESSION ONCE
+==================================================
+
+Now perform ONE normal logout of the fresh session.
+
+Require:
+
+HTTP 204 or established successful logout response
+
+authoritative runtime session state changes from:
+
+is_revoked=0
+
+to:
+
+is_revoked=1
+
+
+Then check normal product authentication with the browser after logout.
+
+Require:
+
+unauthenticated
+
+
+Check runtime authentication after logout.
+
+Require:
+
+authenticated=false
+
+
+This time we do NOT need to depend on extracting/replaying a browser cookie
+manually to establish the primary security property.
+
+The authoritative server-side session transition plus normal post-logout
+authentication behavior is sufficient.
+
+
+If the browser remains authenticated after logout:
+
+SECURITY FAILURE.
+
+STOP.
+
+==================================================
+STEP 8 — OPTIONAL OLD-CREDENTIAL REPLAY FOR FRESH SESSION
+==================================================
+
+If the exact fresh pre-logout credential can be retained safely before Step 7,
+replay it after logout.
+
+Product:
+
+must not authenticate.
+
+
+Runtime:
+
+authenticated=false.
+
+
+This is useful additional evidence.
+
+But if browser tooling cannot expose the credential cleanly, DO NOT fail the
+task merely because manual credential extraction is unavailable.
+
+We care about the security property, not whether Playwright can conveniently
+read an HttpOnly cookie.
+
+==================================================
+STEP 9 — FINAL FRESH LOGIN
+==================================================
+
+Log in normally one more time.
+
+Require:
+
+same identity
+
+product auth works
+
+runtime authenticated=true
+
+dashboard loads
+
+
+This establishes the complete normal lifecycle:
+
+signup happened previously
+
+login works
+
+logout revokes authoritative server session
+
+post-logout browser is unauthenticated
+
+runtime reports unauthenticated
+
+fresh login creates a valid session
+
+==================================================
+STEP 10 — SMALL OWNERSHIP CHECK
+==================================================
+
+Do one concise regression using the existing accounts.
+
+Require:
+
+User A can access User A project.
+
+User B can access User B project.
+
+Cross-owner project access denied.
+
+No need to rerun every Files/preview/publish permutation.
+
+Those were already extensively accepted.
+
+==================================================
+STEP 11 — FINAL CLOSED STATE
+==================================================
+
+Public signup MUST remain CLOSED.
+
+Require final:
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public generated apps=true
+
+gateway:
+buildcustom-apps-gateway
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+claims zero
+
+existing public apps healthy
+
+marketing healthy
+
+==================================================
+IMPORTANT ACCEPTANCE RULE
+==================================================
+
+Do NOT fail because:
+
+Cloudflare tail event is missing
+
+tail correlation is unavailable
+
+targeted version observation is unavailable
+
+Playwright cannot expose an HttpOnly credential
+
+the previous acceptance runner could not serialize a browser credential
+
+
+Those are observability/tooling limitations.
+
+
+FAIL only if an ACTUAL security property fails, such as:
+
+authoritative session was not revoked
+
+logged-out browser remains authenticated
+
+runtime auth remains authenticated after logout
+
+old credential is retained and successfully authenticates
+
+fresh login reactivates a revoked session
+
+cross-user ownership fails
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+PASS if:
+
+1. previous signup user identified
+
+2. previous logout 204 confirmed
+
+3. previous authoritative session revocation confirmed
+
+4. old credential replay passes if retained, otherwise clearly marked unavailable
+
+5. same user can log in normally while signup remains closed
+
+6. fresh session is distinct/valid while old session remains revoked
+
+7. fresh logout succeeds
+
+8. authoritative fresh session transitions valid -> revoked
+
+9. normal browser is unauthenticated after logout
+
+10. runtime auth reports authenticated=false after logout
+
+11. final fresh login succeeds
+
+12. ownership check passes
+
+13. production remains closed and healthy
+
+==================================================
+RETURN ONLY
+==================================================
+
+1. Previous signup user identified: YES/NO
+
+2. Previous logout:
+   status
+
+3. Previous authoritative session:
+   REVOKED / NOT REVOKED / UNKNOWN
+
+4. Previous old product credential replay:
+   PASS / FAIL / UNAVAILABLE
+
+5. Previous old runtime credential replay:
+   PASS / FAIL / UNAVAILABLE
+
+6. Same-user fresh login:
+   PASS/FAIL
+
+7. Old session remained revoked:
+   PASS/FAIL
+
+8. Fresh session valid:
+   PASS/FAIL
+
+9. Fresh logout:
+   PASS/FAIL
+
+10. Fresh authoritative session transition:
+    VALID -> REVOKED / FAIL
+
+11. Browser auth after fresh logout:
+    UNAUTHENTICATED / AUTHENTICATED
+
+12. Runtime auth after fresh logout:
+    FALSE / TRUE
+
+13. Fresh credential replay if available:
+    PASS / FAIL / UNAVAILABLE
+
+14. Final fresh login:
+    PASS/FAIL
+
+15. Ownership:
+    PASS/FAIL
+
+16. Final public signup:
+    CLOSED
+
+17. Worker versions changed:
+    YES/NO
+
+18. Production traffic moved:
+    YES/NO
+
+19. SECURITY VERDICT:
+    LOGOUT REVOCATION PROVEN
+    or
+    REAL SECURITY FAILURE
+    or
+    INSUFFICIENT EVIDENCE
+
+20. Exact next step.
+
+Then STOP.
+
+Do not reopen signup.
+Do not deploy candidates.
+Do not create another user.
+Do not modify Worker code.
