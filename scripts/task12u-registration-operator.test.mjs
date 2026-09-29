@@ -12,7 +12,6 @@ import {
   parseResponseText,
   recordCaseResult,
   responseEvidence,
-  runAcceptanceStateMachine,
   safeRawResponseText,
   safeMatrixBody,
   sanitizeError,
@@ -22,6 +21,9 @@ import {
 
 const genericMessage = "Could not create your account. Check your details.";
 
+// Full lifecycle success/failure scenarios run through the authoritative Task 12V runner:
+// scripts/task12v-registration-runner.test.mjs.
+
 test("live operator accepts only the exact standalone execute argument", () => {
   assert.equal(isExplicitExecute(["--execute"]), true);
   assert.equal(isExplicitExecute([]), false);
@@ -29,141 +31,24 @@ test("live operator accepts only the exact standalone execute argument", () => {
   assert.equal(isExplicitExecute(["--execute=true"]), false);
 });
 
-test("live script is guarded by the exact-argument predicate without invoking it", async () => {
+test("live CLI is guarded and delegates sequencing to the Task 12V runner", async () => {
   const source = await readFile(new URL("./task12r-registration-acceptance.mjs", import.meta.url), "utf8");
+  const adapter = await readFile(new URL("./lib/task12v-production-adapter.mjs", import.meta.url), "utf8");
   assert.match(source, /if \(!isExplicitExecute\(process\.argv\.slice\(2\)\)\)/);
   assert.doesNotMatch(source, /process\.argv\.includes\(["']--execute["']\)/);
-  for (const sharedFunction of [
-    "classifyBoundedResponse", "classifyRegistrationMatrix",
-    "evaluateSignupAcceptance", "evaluateLogoutAcceptance", "recordCaseResult",
-  ]) {
-    assert.ok(source.includes(sharedFunction), `live script must use shared ${sharedFunction}`);
-  }
-  assert.match(source, /const signupResponsePromise = page\.waitForResponse/);
-  assert.match(source, /\.catch\(error => \(\{ responseError: sanitizeError\(error\) \}\)\)/);
-  assert.match(source, /Never retry an uncertain signup; every attempted click is followed by one reconciliation pass/);
-  for (const reconciliationStep of [
-    "productRowsRead", "runtimeRowsRead", "signupMeRead", "runtimeCheckRead",
-  ]) {
-    assert.ok(source.includes(reconciliationStep), `signup reconciliation must include ${reconciliationStep}`);
-  }
+  assert.match(source, /runRegistrationAcceptance\(io\)/);
+  assert.ok(source.indexOf("createTask12VProductionAdapter()")
+    > source.indexOf("if (!isExplicitExecute(process.argv.slice(2)))"),
+  "production adapter must only be constructed after the exact execute guard");
+  assert.match(adapter, /signupResponseTask = page\.waitForResponse/);
+  assert.match(adapter, /requireCondition\(!signupActionConsumed, "Signup action cannot be retried"\)/);
+  assert.match(adapter, /async reconcileSignup\(\)/);
+  assert.match(adapter, /access_token_hash=\?/);
 });
 
 function parse(raw) {
   const result = parseResponseText(raw);
   return { parsedBody: result.parsedBody, parseError: result.parseError };
-}
-
-function boundedDriver({ inject } = {}) {
-  const calls = [];
-  const driver = {
-    calls,
-    async counts(name, side) {
-      calls.push(`counts:${name}:${side}`);
-      if (inject === "count-mismatch" && name === "invalid-email" && side === "after") {
-        return { product: 1, runtime: 0 };
-      }
-      const duplicate = name === "duplicate-existing" || name === "case-variant-existing";
-      return { product: duplicate ? 1 : 0, runtime: duplicate ? 1 : 0 };
-    },
-    async bounded(name) {
-      calls.push(`bounded:${name}`);
-      if (inject === "network" && name === "invalid-email") {
-        const error = new TypeError("fixture network socket failure");
-        error.evidence = { fetchStarted: true, responseReceived: false };
-        throw error;
-      }
-      if (inject === "timeout" && name === "invalid-email") {
-        const error = Object.assign(new Error("fixture request timeout"), { name: "TimeoutError" });
-        error.evidence = { fetchStarted: true, responseReceived: false };
-        throw error;
-      }
-      const status = inject === "invalid-email-502" && name === "invalid-email" ? 502 : 400;
-      return {
-        ...responseEvidence({
-          status, headers: { "content-type": "application/json", "cf-ray": "fixture-ray" },
-          rawText: JSON.stringify({ message: genericMessage }),
-        }),
-        classification: status === 502 ? "FAIL" : "SAFE_JSON",
-      };
-    },
-    evaluateBounded(name, response, before, after) {
-      const expected = name === "duplicate-existing" || name === "case-variant-existing" ? 1 : 0;
-      const parsedResult = parse(response.rawText);
-      return classifyBoundedResponse({
-        status: response.status, ...parsedResult, expectedCount: expected,
-        observedCount: after.product === after.runtime ? after.product : -1,
-        noAutomaticLogin: true,
-      });
-    },
-    async matrix(name) {
-      const [originState, csrfState] = name.slice("origin-".length).split("-csrf-");
-      const status = inject === "invalid-origin-generic-400" && originState === "invalid" ? 400
-        : inject === "missing-csrf-400" && csrfState === "missing" && originState === "valid" ? 400
-          : originState === "valid" ? (csrfState === "valid" ? 400 : 403) : 400;
-      const message = originState !== "valid" && inject === "invalid-origin-generic-400"
-        ? genericMessage : originState !== "valid" ? "ORIGIN_REJECTED" : genericMessage;
-      return { status, rawText: JSON.stringify({ message }), body: safeMatrixBody(JSON.stringify({ message })),
-        responseReceived: true, fetchStarted: true,
-        safeHeaders: { cfRay: "fixture-ray", contentType: "application/json" } };
-    },
-    evaluateMatrix(name, response) {
-      const [originState, csrfState] = name.slice("origin-".length).split("-csrf-");
-      return classifyRegistrationMatrix(originState, csrfState, response.status, response.body);
-    },
-    async flow(name) {
-      calls.push(`flow:${name}`);
-      if (name === "single-signup") {
-        const evidence = {
-          ...validSignupEvidence(),
-          ...(inject === "runtime-identity-missing"
-            ? { runtimeAuthenticated: false, runtimeCheckId: null } : {}),
-        };
-        const result = evaluateSignupAcceptance(evidence);
-        if (!result.passed) {
-          throw Object.assign(new Error(result.errorMessage), {
-            name: result.errorName, phase: "signup", caseName: name,
-            evidence: {
-              status: 201, rawText: '{"message":"created"}', productCount: 1, runtimeCount: 1,
-              runtimeIdentityPresent: evidence.runtimeAuthenticated,
-              fetchStarted: true, responseReceived: true,
-            },
-          });
-        }
-        return "PASS";
-      }
-      if (name === "logout") {
-        const evidence = {
-          ...validLogoutEvidence(),
-          ...(inject === "logout-unrevoked" ? { sessionRevoked: false } : {}),
-        };
-        const result = evaluateLogoutAcceptance(evidence);
-        if (!result.passed) {
-          throw Object.assign(new Error(result.errorMessage), {
-            name: result.errorName, phase: "logout", caseName: name,
-            evidence: { status: 204, rawText: "", sessionRevoked: evidence.sessionRevoked,
-              fetchStarted: true, responseReceived: true },
-          });
-        }
-        return "PASS";
-      }
-      return "PASS";
-    },
-  };
-  return driver;
-}
-
-async function runFixture(inject) {
-  const snapshots = [];
-  let ledger;
-  try {
-    ledger = await runAcceptanceStateMachine(boundedDriver({ inject }), {
-      persist: async current => snapshots.push(JSON.parse(JSON.stringify(current))),
-    });
-    return { ledger, snapshots };
-  } catch (error) {
-    return { ledger: error.ledger, error, snapshots };
-  }
 }
 
 test("bounded fixtures use actual shared classification rules", () => {
@@ -293,91 +178,6 @@ test("raw, nested JSON, URLs, and structured errors fail closed for secrets and 
   const serialized = JSON.stringify(safeError);
   assert.doesNotMatch(serialized, /p@ssword|stack-secret|stack-token|token=private|apiKey=secret/);
   assert.match(safeError.stack, /https:\/\/host\.test\/file/);
-});
-
-test("offline fixture diagnostic orchestration passes", async () => {
-  const { ledger, error } = await runFixture();
-  assert.equal(error, undefined);
-  assert.equal(ledger.status, "PASS");
-  assert.equal(ledger.cases.length, 21);
-  assert.ok(ledger.cases.every(item => item.status === "PASS"));
-});
-
-const injected = [
-  ["invalid-email-502", "bounded-validation", "invalid-email", "classification"],
-  ["invalid-origin-generic-400", "origin-csrf-matrix", "origin-invalid-csrf-valid", "classification"],
-  ["missing-csrf-400", "origin-csrf-matrix", "origin-valid-csrf-missing", "classification"],
-  ["runtime-identity-missing", "signup", "single-signup", "RuntimeIdentityMissingError"],
-  ["logout-unrevoked", "logout", "logout", "RuntimeSessionNotRevokedError"],
-  ["network", "bounded-validation", "invalid-email", "TypeError"],
-];
-
-for (const [injection, phase, caseName, errorName] of injected) {
-  test(`offline fixture runner preserves injected failure: ${injection}`, async () => {
-    const { ledger, error, snapshots } = await runFixture(injection);
-    assert.equal(ledger.status, "FAIL");
-    assert.equal(ledger.error.phase, phase);
-    assert.equal(ledger.error.caseName, caseName);
-    assert.ok(ledger.cases.some(item => item.caseName === caseName && item.status === "FAIL"));
-    assert.ok(ledger.cases.some(item => item.status === "NOT_RUN"));
-    assert.ok(error);
-    assert.notEqual(error.message, "Error");
-    assert.ok(snapshots.length > 0, "artifact checkpoint/final persistence occurred");
-    assert.equal(snapshots.at(-1).status, "FAIL", "failure artifact was persisted last");
-    assert.ok(snapshots.at(-1).cases.some(item => item.status === "NOT_RUN"));
-    const failed = ledger.cases.find(item => item.caseName === caseName && item.status === "FAIL");
-    if (["RuntimeIdentityMissingError", "RuntimeSessionNotRevokedError", "TypeError"].includes(errorName)) {
-      assert.equal(failed.error.cause.name, errorName);
-    } else if (errorName === "classification") {
-      assert.equal(failed.error.name, "DiagnosticFailure");
-      assert.match(failed.error.cause.message, /classification FAIL/);
-    } else {
-      assert.equal(failed.error.name, errorName);
-    }
-    if (injection === "invalid-email-502") {
-      assert.equal(failed.response.status, 502);
-      assert.match(failed.response.rawText, /Could not create/);
-      assert.equal(failed.response.responseReceived, true);
-    }
-    if (injection === "invalid-origin-generic-400" || injection === "missing-csrf-400") {
-      assert.equal(failed.response.status, 400);
-      assert.ok(failed.response.rawText);
-    }
-    if (injection === "runtime-identity-missing") {
-      assert.equal(failed.evidence.status, 201);
-      assert.equal(failed.evidence.runtimeCount, 1);
-      assert.equal(failed.evidence.runtimeIdentityPresent, false);
-      assert.equal(failed.evidence.rawText, '{"message":"[REDACTED]"}');
-    }
-    if (injection === "logout-unrevoked") {
-      assert.equal(failed.evidence.status, 204);
-      assert.equal(failed.evidence.sessionRevoked, false);
-    }
-    if (injection === "network") {
-      assert.equal(failed.evidence.fetchStarted, true);
-      assert.equal(failed.evidence.responseReceived, false);
-    }
-    if (injection === "network") {
-      assert.equal(failed.response, undefined);
-      assert.equal(failed.error.cause.name, "TypeError");
-    }
-  });
-}
-
-test("individual runner records timeout, count mismatch, and NOT_RUN cases", async () => {
-  for (const injection of ["network", "timeout", "count-mismatch"]) {
-    const { ledger, error } = await runFixture(injection);
-    assert.equal(error.ledger.error.caseName, "invalid-email");
-    const fail = ledger.cases.find(item => item.caseName === "invalid-email");
-    assert.equal(fail.status, "FAIL");
-    assert.ok(fail.error.message);
-    assert.ok(ledger.cases.some(item => item.status === "NOT_RUN"));
-    if (injection === "timeout") {
-      assert.equal(fail.error.cause.name, "TimeoutError");
-      assert.equal(fail.evidence.fetchStarted, true);
-      assert.equal(fail.evidence.responseReceived, false);
-    }
-  }
 });
 
 function validSignupEvidence() {

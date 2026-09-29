@@ -1,0 +1,1424 @@
+TASK 12V — UNIFY FINAL SIGNUP ACCEPTANCE INTO ONE INJECTED-I/O RUNNER
+
+Task 12U is NOT accepted.
+
+Production is safely CLOSED.
+
+The remaining blocker is now LOCAL ACCEPTANCE-TOOL ARCHITECTURE.
+
+DO NOT perform another signup cutover.
+
+DO NOT activate either Worker candidate.
+
+DO NOT change production Worker code.
+
+==================================================
+WHY TASK 12V EXISTS
+==================================================
+
+Task 12U substantially improved diagnostics.
+
+It proved:
+
+- bounded-validation classifiers work against fixtures
+- Origin classifiers work against fixtures
+- CSRF classifiers work against fixtures
+- signup evaluator works against fixtures
+- logout evaluator works against fixtures
+- injected failures produce structured diagnostics
+- no tested fixture failure collapses to plain "Error"
+
+BUT:
+
+the deterministic offline fixture runner does NOT execute the same browser
+orchestration used by the live acceptance script.
+
+Therefore:
+
+fixture state machine PASS
+
+does NOT prove:
+
+live browser operator state machine PASS
+
+
+That gap is the ONLY purpose of Task 12V.
+
+We need ONE authoritative acceptance runner.
+
+Production and offline tests must execute the SAME orchestration.
+
+The ONLY difference should be injected I/O implementations.
+
+==================================================
+CURRENT SAFE PRODUCTION STATE
+==================================================
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+RUNTIME CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL:
+
+buildcustom-control-plane-launch
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+PUBLIC SIGNUP:
+
+CLOSED
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+CLAIMS:
+
+zero
+
+==================================================
+HARD RULES
+==================================================
+
+DO NOT:
+
+- activate runtime candidate
+- activate control candidate
+- open signup
+- move production traffic
+- create a Worker version
+- create a deployment
+- modify runtime Worker code
+- modify control Worker code
+- modify Worker bindings
+- modify gateway
+- modify DNS
+- create a production user
+- run a production registration POST
+- generate
+- edit projects
+- Publish
+- move waitlist
+- stop/unpublish public Replit
+
+You MAY:
+
+- refactor LOCAL acceptance tooling
+- create local modules
+- create injected-I/O adapters
+- create deterministic fake browser/network/D1/session implementations
+- add local tests
+- run the complete acceptance lifecycle offline
+- inspect existing Task 12 artifacts
+- make harmless read-only closed-production requests
+- run the existing closed production regression
+
+==================================================
+CORE DESIGN REQUIREMENT
+==================================================
+
+There must be ONE authoritative acceptance orchestration function.
+
+Conceptually:
+
+runRegistrationAcceptance(io, config)
+
+or equivalent.
+
+
+The SAME function must execute:
+
+PRODUCTION MODE
+
+and
+
+DETERMINISTIC OFFLINE TEST MODE.
+
+
+Do NOT maintain:
+
+one fixture state machine
+
+and
+
+one browser state machine.
+
+
+Do NOT copy/paste orchestration between them.
+
+
+Production mode injects real adapters.
+
+Offline mode injects deterministic fake adapters.
+
+The orchestration itself must be identical.
+
+==================================================
+STEP 1 — VERIFY CLOSED PRODUCTION
+==================================================
+
+Read only.
+
+Require:
+
+runtime accepted version 100%
+
+runtime candidate 0%
+
+control accepted version 100%
+
+control candidate 0%
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public apps=true
+
+gateway unchanged
+
+claims zero
+
+
+If not:
+
+STOP.
+
+==================================================
+STEP 2 — MAP CURRENT OPERATOR
+==================================================
+
+Inspect:
+
+scripts/task12r-registration-acceptance.mjs
+
+
+Map every external side effect used by the operator.
+
+At minimum identify:
+
+browser launch
+
+page/context creation
+
+navigation
+
+DOM queries
+
+form filling
+
+button click
+
+browser response waiting
+
+browser network observation
+
+direct HTTP request
+
+cookie reads
+
+cookie writes
+
+CSRF acquisition
+
+product identity lookup
+
+runtime identity lookup
+
+product user counts
+
+runtime user counts
+
+runtime session lookup
+
+logout
+
+old credential replay
+
+fresh login
+
+artifact persistence
+
+clock/time
+
+timeouts
+
+
+Do not refactor blindly.
+
+Produce a concise dependency map first.
+
+==================================================
+STEP 3 — DEFINE THE I/O CONTRACT
+==================================================
+
+Create one explicit injected-I/O interface.
+
+Use names appropriate to the existing codebase.
+
+It should cover only operations actually needed by the acceptance lifecycle.
+
+Conceptually it may include operations like:
+
+navigate()
+
+getCsrf()
+
+sendRegistrationCase()
+
+getIdentityCounts()
+
+performSignupClick()
+
+reconcileSignupOutcome()
+
+getProductIdentity()
+
+getRuntimeIdentity()
+
+getRuntimeSession()
+
+performLogout()
+
+replayProductCredential()
+
+replayRuntimeCredential()
+
+performFreshLogin()
+
+recordNetworkAudit()
+
+writeCheckpoint()
+
+now()
+
+
+Do NOT force this exact naming if the current architecture suggests cleaner
+boundaries.
+
+The important requirement is:
+
+the orchestration contains ZERO hidden direct production I/O.
+
+All environment-specific behavior enters through injected adapters.
+
+==================================================
+STEP 4 — EXTRACT ONE AUTHORITATIVE RUNNER
+==================================================
+
+Extract the orchestration into one reusable local module.
+
+For example:
+
+scripts/lib/task12-registration-runner.mjs
+
+or another sensible path.
+
+
+The authoritative runner must own the lifecycle:
+
+1. initialize
+
+2. bounded registration validation
+
+3. Origin matrix
+
+4. CSRF matrix
+
+5. pre-signup identity counts
+
+6. one real-signup action
+
+7. uncertain-signup reconciliation
+
+8. post-signup identity counts
+
+9. identity mapping
+
+10. duplicate-new-user rejection
+
+11. case-variant duplicate rejection
+
+12. product auth
+
+13. runtime auth
+
+14. runtime session before logout
+
+15. logout
+
+16. runtime session after logout
+
+17. old product credential replay
+
+18. old runtime credential replay
+
+19. fresh login
+
+20. final classification/artifact
+
+
+Production and offline modes MUST execute this same sequence.
+
+==================================================
+STEP 5 — KEEP CLASSIFIERS SHARED
+==================================================
+
+Reuse the Task 12U classifiers/evaluators.
+
+Do NOT create separate test-only versions.
+
+The same functions used to classify:
+
+duplicate email
+
+invalid email
+
+weak password
+
+Origin rejection
+
+CSRF rejection
+
+signup identity mapping
+
+logout revocation
+
+
+must be called by the authoritative runner in BOTH modes.
+
+==================================================
+STEP 6 — PRODUCTION ADAPTER
+==================================================
+
+Refactor the existing live browser implementation into a production I/O
+adapter.
+
+This adapter may use:
+
+Playwright/browser
+
+fetch
+
+Cloudflare/D1 read helpers
+
+cookie handling
+
+existing identity/session inspection helpers
+
+
+BUT:
+
+the adapter must NOT decide the acceptance sequence.
+
+It performs requested operations and returns structured observations.
+
+The authoritative runner decides:
+
+what happens next
+
+what passes
+
+what fails
+
+when to stop
+
+when a case is NOT_RUN
+
+==================================================
+STEP 7 — DETERMINISTIC OFFLINE ADAPTER
+==================================================
+
+Create a deterministic fake I/O adapter implementing the SAME contract.
+
+It must simulate:
+
+browser navigation
+
+CSRF acquisition
+
+cookies
+
+registration HTTP responses
+
+network observations
+
+identity counts
+
+product identity
+
+runtime identity
+
+runtime session
+
+logout
+
+credential replay
+
+fresh login
+
+
+Do not merely feed final classifier objects.
+
+The fake adapter should return results at the same abstraction level that the
+production adapter returns to the runner.
+
+This is important.
+
+We are testing the orchestration, not just the classifiers again.
+
+==================================================
+STEP 8 — MODEL ONE-CLICK SIGNUP CORRECTLY
+==================================================
+
+The live acceptance must NEVER click signup twice because the first result was
+uncertain.
+
+The authoritative runner must model:
+
+PRE_CLICK
+
+CLICK_STARTED
+
+CLICK_OUTCOME_OBSERVED
+
+RECONCILING
+
+SIGNUP_CONFIRMED
+
+SIGNUP_FAILED
+
+SIGNUP_UNKNOWN
+
+
+or equivalent explicit states.
+
+
+There may be EXACTLY ONE signup action.
+
+If the click outcome is uncertain:
+
+DO NOT CLICK AGAIN.
+
+
+Instead reconcile using non-mutating evidence:
+
+product identity count
+
+runtime identity count
+
+product auth state
+
+runtime auth state
+
+expected disposable email
+
+
+Possible classifications:
+
+SUCCESS
+
+FAIL
+
+UNKNOWN
+
+
+UNKNOWN must stop acceptance.
+
+No retry.
+
+==================================================
+STEP 9 — TEST SUCCESS AFTER UNCERTAIN CLICK
+==================================================
+
+Offline adapter scenario:
+
+signup click completes server-side
+
+but browser response/wait is lost or times out.
+
+
+Then reconciliation finds:
+
+exactly one product identity
+
+exactly one runtime identity
+
+correct mapping
+
+authenticated session
+
+
+Expected:
+
+runner classifies signup SUCCESS
+
+without a second click.
+
+
+Prove signup action count:
+
+EXACTLY 1.
+
+==================================================
+STEP 10 — TEST UNKNOWN AFTER UNCERTAIN CLICK
+==================================================
+
+Scenario:
+
+signup click outcome lost
+
+reconciliation cannot determine whether mutation occurred.
+
+
+Expected:
+
+SIGNUP_UNKNOWN
+
+runner stops
+
+signup action count remains 1
+
+no retry
+
+later acceptance stages NOT_RUN
+
+artifact written
+
+==================================================
+STEP 11 — TEST FAILED CLICK WITH NO MUTATION
+==================================================
+
+Scenario:
+
+signup click receives a definite bounded failure
+
+identity counts unchanged.
+
+
+Expected:
+
+SIGNUP_FAILED
+
+runner stops
+
+no retry
+
+artifact written
+
+==================================================
+STEP 12 — ATOMIC CHECKPOINTS
+==================================================
+
+The authoritative runner must checkpoint BEFORE and AFTER every important
+operation.
+
+At minimum:
+
+phase start
+
+case start
+
+before counts
+
+request/action started
+
+response/action observation
+
+after counts
+
+classification
+
+case complete
+
+
+If any adapter call throws:
+
+artifact must identify:
+
+phase
+
+case
+
+operation
+
+exception name
+
+message
+
+stack
+
+cause
+
+last completed checkpoint
+
+next intended checkpoint
+
+
+Later cases must be NOT_RUN.
+
+==================================================
+STEP 13 — ARTIFACT MUST SURVIVE FAILURE
+==================================================
+
+The authoritative runner owns the final artifact model.
+
+Production and offline tests must produce the same artifact schema.
+
+On any failure:
+
+completed cases remain intact
+
+current case retains partial evidence
+
+later cases become NOT_RUN
+
+top-level result becomes:
+
+FAIL
+
+or
+
+UNKNOWN
+
+
+No plain:
+
+Error
+
+
+may be the only diagnostic.
+
+==================================================
+STEP 14 — FULL SUCCESSFUL OFFLINE RUN
+==================================================
+
+Run the ACTUAL authoritative runner with the fake adapter.
+
+Simulate the exact intended production lifecycle:
+
+bounded validation:
+all expected responses
+
+
+Origin:
+valid
+invalid
+missing
+
+
+CSRF:
+valid
+missing
+invalid
+
+
+signup:
+one click
+successful account creation
+
+
+identity:
+one product
+one runtime
+correct mapping
+
+
+duplicates:
+exact duplicate rejected
+case duplicate rejected
+
+
+auth:
+product authenticated
+runtime authenticated
+
+
+session:
+valid before logout
+
+
+logout:
+204
+session revoked
+
+
+replay:
+product null
+runtime authenticated=false
+
+
+fresh login:
+success
+
+
+Require:
+
+ENTIRE RUN PASS.
+
+
+Require:
+
+signup action count = 1.
+
+==================================================
+STEP 15 — REQUIRED SIX FAILURE RUNS
+==================================================
+
+Run the SAME authoritative runner six more times with only fake-adapter
+behavior changed.
+
+--------------------------------------------------
+FAILURE 1 — INVALID EMAIL RETURNS 502
+--------------------------------------------------
+
+Expected:
+
+fails exact bounded-validation case
+
+full diagnostics
+
+later cases NOT_RUN
+
+signup action count 0
+
+
+--------------------------------------------------
+FAILURE 2 — INVALID ORIGIN RETURNS GENERIC 400
+--------------------------------------------------
+
+Expected:
+
+fails invalid-Origin case because exact ORIGIN_REJECTED absent
+
+later cases NOT_RUN
+
+signup action count 0
+
+
+--------------------------------------------------
+FAILURE 3 — MISSING CSRF RETURNS WRONG STATUS/STAGE
+--------------------------------------------------
+
+Expected:
+
+fails missing-CSRF case
+
+later cases NOT_RUN
+
+signup action count 0
+
+
+--------------------------------------------------
+FAILURE 4 — SIGNUP RESPONSE UNCERTAIN + RUNTIME IDENTITY MISSING
+--------------------------------------------------
+
+Simulate:
+
+one signup click
+
+browser outcome lost
+
+product identity appears
+
+runtime identity does not appear
+
+
+Expected:
+
+SIGNUP_UNKNOWN or FAIL according to explicit evidence rules
+
+NO second click
+
+signup action count = 1
+
+later cases NOT_RUN
+
+artifact contains reconciliation evidence
+
+
+--------------------------------------------------
+FAILURE 5 — LOGOUT DOES NOT REVOKE SESSION
+--------------------------------------------------
+
+Everything succeeds through logout.
+
+Then:
+
+logout returns expected response
+
+runtime session remains active
+
+
+Expected:
+
+fails logout/session phase
+
+old-session acceptance does not falsely pass
+
+artifact precise
+
+
+--------------------------------------------------
+FAILURE 6 — NETWORK FAILURE DURING BOUNDED VALIDATION
+--------------------------------------------------
+
+Injected adapter throws during one bounded request.
+
+
+Expected artifact contains:
+
+exact phase
+
+exact case
+
+exact operation
+
+exception name
+
+exception message
+
+stack if available
+
+responseReceived=false
+
+last checkpoint
+
+later cases NOT_RUN
+
+
+No plain Error.
+
+==================================================
+STEP 16 — ADD THREE SIGNUP RECONCILIATION RUNS
+==================================================
+
+In addition to the required six failures, explicitly prove:
+
+A. lost browser response + mutation definitely succeeded
+→ SUCCESS
+→ one click
+
+
+B. lost browser response + mutation definitely absent
+→ FAIL or UNKNOWN according to explicit policy
+→ one click
+
+
+C. lost browser response + conflicting/insufficient evidence
+→ UNKNOWN
+→ one click
+
+
+Document the exact classification rules.
+
+==================================================
+STEP 17 — PROVE PRODUCTION ADAPTER USES SAME RUNNER
+==================================================
+
+This is a mandatory structural check.
+
+Show:
+
+production entrypoint imports/calls authoritative runner
+
+offline test imports/calls SAME authoritative runner
+
+
+There must NOT be another live-only orchestration loop containing the actual
+case sequencing.
+
+
+Search for duplicated sequences.
+
+If duplication remains:
+
+Task 12V fails.
+
+==================================================
+STEP 18 — PROVE --execute SAFETY
+==================================================
+
+Keep the explicit production execution gate.
+
+Without:
+
+--execute
+
+
+the live entrypoint must refuse to perform mutating/live acceptance.
+
+
+Test this locally.
+
+Do not invoke:
+
+--execute
+
+against production in Task 12V.
+
+==================================================
+STEP 19 — TEST ARTIFACT WRITE FAILURE
+==================================================
+
+Because artifact persistence itself was identified as a possible opaque-error
+path:
+
+simulate an artifact/checkpoint write failure.
+
+
+The runner must preserve as much diagnostic information as possible through
+a fallback mechanism appropriate to the local tooling.
+
+At minimum:
+
+the process must emit a structured diagnostic to stderr/stdout
+
+with:
+
+phase
+
+case
+
+operation
+
+original acceptance result
+
+artifact-write exception
+
+
+Do not let an artifact-write error replace the original failure.
+
+==================================================
+STEP 20 — TEST CLEANUP FAILURE
+==================================================
+
+Simulate:
+
+main acceptance failure
+
+AND
+
+browser/context cleanup failure.
+
+
+The original acceptance failure must remain primary.
+
+Cleanup failure must be recorded separately.
+
+Do not replace:
+
+root cause
+
+with:
+
+cleanup error.
+
+==================================================
+STEP 21 — TEST TIMEOUT BEHAVIOR
+==================================================
+
+Use fake timers or deterministic adapter behavior.
+
+Prove:
+
+timeout during browser response wait
+
+does not trigger second signup click
+
+moves to reconciliation if signup action had already started
+
+preserves timeout details
+
+produces SUCCESS/FAIL/UNKNOWN only from reconciliation evidence
+
+==================================================
+STEP 22 — NO PRODUCTION WORKER CHANGE
+==================================================
+
+Inspect the final diff.
+
+Require changes limited to LOCAL tooling/tests.
+
+No modifications to:
+
+runtime Worker
+
+control Worker
+
+gateway
+
+DNS config
+
+production bindings
+
+production deployment manifests
+
+generated-app runtime
+
+==================================================
+STEP 23 — CLOSED PRODUCTION REGRESSION
+==================================================
+
+Read only.
+
+Require:
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+runtime candidate:
+0%
+
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+control candidate:
+0%
+
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public apps=true
+
+claims zero
+
+
+Verify:
+
+user 1 login/ownership
+
+user 2 login/ownership
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+
+Gateway:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+==================================================
+TASK 12V ACCEPTANCE
+==================================================
+
+Task 12V passes ONLY if:
+
+1. one authoritative runner exists
+
+2. production uses that runner
+
+3. offline tests use that SAME runner
+
+4. environment-specific behavior is injected
+
+5. orchestration is not duplicated
+
+6. shared Task 12U classifiers remain shared
+
+7. fake adapter operates at production-adapter abstraction level
+
+8. one-click signup invariant exists
+
+9. uncertain signup never retries
+
+10. reconciliation can confirm success
+
+11. reconciliation can classify unknown
+
+12. checkpoints are atomic
+
+13. failure artifact preserves partial evidence
+
+14. full successful offline lifecycle passes
+
+15. required failure 1 passes
+
+16. required failure 2 passes
+
+17. required failure 3 passes
+
+18. required failure 4 passes
+
+19. required failure 5 passes
+
+20. required failure 6 passes
+
+21. three explicit signup-reconciliation scenarios pass
+
+22. signup action count assertions pass
+
+23. artifact-write failure test passes
+
+24. cleanup-failure test passes
+
+25. timeout/reconciliation test passes
+
+26. no failure collapses to plain Error
+
+27. --execute safety gate passes
+
+28. no Worker code changed
+
+29. no Worker version created
+
+30. no deployment created
+
+31. no production traffic moved
+
+32. no production user created
+
+33. signup remains closed
+
+34. closed production regression passes
+
+35. claims remain zero
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current runtime version/traffic
+
+2. current control version/traffic
+
+3. current registration states
+
+4. authoritative runner path
+
+5. authoritative runner exported function
+
+6. production adapter path
+
+7. offline adapter path
+
+8. production entrypoint path
+
+9. production entrypoint calls same runner?
+
+10. offline tests call same runner?
+
+11. duplicated orchestration remaining?
+
+12. injected I/O operations
+
+13. hidden direct I/O remaining in runner?
+
+14. shared classifiers used
+
+15. signup state machine
+
+16. maximum signup action count
+
+17. uncertain-click retry possible?
+
+18. reconciliation evidence used
+
+19. success-after-lost-response classification
+
+20. absent-mutation-after-lost-response classification
+
+21. conflicting-evidence classification
+
+22. checkpoint model
+
+23. failure artifact schema shared between modes?
+
+24. full successful offline run
+
+25. successful-run signup action count
+
+26. failure 1 result
+
+27. failure 1 later-stage state
+
+28. failure 2 result
+
+29. failure 2 later-stage state
+
+30. failure 3 result
+
+31. failure 3 later-stage state
+
+32. failure 4 result
+
+33. failure 4 signup action count
+
+34. failure 4 reconciliation evidence
+
+35. failure 5 result
+
+36. failure 5 session evidence
+
+37. failure 6 result
+
+38. failure 6 structured exception evidence
+
+39. reconciliation scenario A
+
+40. reconciliation scenario A signup count
+
+41. reconciliation scenario B
+
+42. reconciliation scenario B signup count
+
+43. reconciliation scenario C
+
+44. reconciliation scenario C signup count
+
+45. artifact-write failure test
+
+46. original failure preserved during artifact-write failure?
+
+47. cleanup-failure test
+
+48. original failure preserved during cleanup failure?
+
+49. timeout/reconciliation test
+
+50. timeout caused second signup click?
+
+51. any plain Error remaining?
+
+52. --execute refusal test
+
+53. production Worker files changed?
+
+54. Worker version created?
+
+55. deployment created?
+
+56. production traffic moved?
+
+57. production user created?
+
+58. runtime final version/traffic
+
+59. runtime candidate traffic
+
+60. control final version/traffic
+
+61. control candidate traffic
+
+62. runtime registration
+
+63. control registration
+
+64. public signup state
+
+65. user-1 regression
+
+66. user-2 regression
+
+67. ownership isolation
+
+68. project-2 public app
+
+69. project-3 public app
+
+70. unknown slug
+
+71. gateway Worker/version/traffic
+
+72. marketing
+
+73. claims
+
+74. TASK 12V ACCEPTED?
+
+75. Is the SAME operator that will run the live cutover now proven end-to-end
+    offline?
+
+76. Is it safe and diagnostic enough for ONE separately authorized final
+    public-signup cutover?
+
+77. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE RUNTIME.
+
+DO NOT ACTIVATE CONTROL.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE A WORKER VERSION.
+
+DO NOT CREATE A DEPLOYMENT.
+
+DO NOT MODIFY WORKER CODE.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT CREATE PRODUCTION USERS.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MOVE WAITLIST.
