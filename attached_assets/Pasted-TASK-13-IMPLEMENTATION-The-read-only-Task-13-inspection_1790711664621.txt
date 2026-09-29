@@ -1,0 +1,568 @@
+TASK 13 IMPLEMENTATION
+
+The read-only Task 13 inspection is accepted.
+
+We are now authorized to proceed with Task 13, but follow the ordered gates
+below. Do not jump ahead when a gate has not passed.
+
+NEW OWNER DECISIONS
+
+1. ALL EXISTING REPLIT WAITLIST DATA IS DISPOSABLE TEST DATA.
+
+There are no real customer leads that need migration.
+
+Do NOT migrate, copy, preserve, reconcile, export, or maintain compatibility
+with the old Replit waitlist records.
+
+The new Cloudflare/D1 waitlist may start clean.
+
+2. THE LEGACY MARKETING WAITLIST ADMIN WORKFLOW MAY BE RETIRED.
+
+The old marketing admin login/list/delete functionality that calls the Replit
+deployment is not required.
+
+Do NOT rebuild that legacy admin workflow merely for compatibility.
+
+Remove/retire its reachable production frontend paths and Replit calls as part
+of this work.
+
+Do not confuse this with the separate BuildCustom application admin login at
+/app or /admin/login. Only retire the legacy MARKETING WAITLIST admin workflow
+identified in the Task 13 inspection.
+
+CURRENT ACCEPTED PRODUCTION
+
+Source commit:
+c249c459cde921b77b3b23920272fad9579e712c
+plus the subsequent accepted routing/source work already committed locally.
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Control:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Marketing Pages:
+3b205b01-11c0-40bf-9acd-21fec2309244
+
+Current intended production state:
+
+- public signup OPEN
+- login enabled
+- password recovery enabled
+- EMAIL live
+- security@buildcustom.ai allowed sender
+- public generated apps enabled
+- app.buildcustom.ai root routing accepted
+- canonical auth routes accepted
+- Build It! -> https://app.buildcustom.ai/signup
+- marketing healthy
+- active publish claims = 0
+
+GOAL
+
+At the end of Task 13:
+
+1. GitHub is the canonical source of truth.
+2. A fresh checkout outside Replit can reproduce the production components.
+3. Marketing Pages is safely sourced from canonical GitHub.
+4. The marketing waitlist uses Cloudflare + clean product D1.
+5. No production request depends on replit.app.
+6. Legacy marketing waitlist admin/Replit functionality is retired.
+7. Replit development can be unavailable with no production effect.
+8. Replit PUBLIC deployment can be shut down with no production effect.
+9. Replit may remain as an optional development IDE, but it is NOT production
+   infrastructure.
+
+==================================================
+PHASE 1 — RECONCILE SOURCE BEFORE TOUCHING PRODUCTION
+==================================================
+
+GitHub main is currently far behind the accepted local source.
+
+DO NOT blindly push the 156 commits.
+
+DO NOT force-push.
+
+DO NOT trigger the GitHub-connected Pages production build yet.
+
+First review the local commits/history between GitHub main and current local
+main.
+
+Check for:
+
+- accidental generated files
+- large binaries
+- test artifacts
+- temporary acceptance evidence
+- credentials
+- API tokens
+- passwords
+- private keys
+- secrets
+- environment files
+- Replit-specific secrets
+- hardcoded production credentials
+- disposable test-account credentials
+- reset tokens
+- cookies/session credentials
+- unnecessary temporary files
+
+Also inspect the tracked legacy Express admin fallback credential identified
+during Task 13 inspection.
+
+SECURITY REQUIREMENT:
+
+No known credential, secret, password, session token, reset token, private key,
+or API token may be pushed to GitHub.
+
+If an ACTUAL live secret is discovered in commits that would be pushed:
+
+STOP.
+
+Report:
+- file
+- commit/history scope
+- whether it appears live
+- required rotation/sanitization plan
+
+Do not push it.
+
+Do not expose the secret value in the report.
+
+If the history is safe to synchronize, continue.
+
+==================================================
+PHASE 2 — ESTABLISH REPRODUCIBLE PRODUCTION SOURCE
+==================================================
+
+Before GitHub becomes canonical, close the reproducibility gaps identified in
+Task 13.
+
+A. RUNTIME
+
+Establish tracked, reproducible source for the accepted BuildCustom runtime.
+
+The accepted runtime must no longer depend on an ignored Replit working tree.
+
+Pin/document:
+
+- exact VibeSDK source/commit
+- BuildCustom patches
+- dependency lockfile
+- Node/Bun/toolchain versions as applicable
+- templates
+- container inputs
+- build command
+- Wrangler production config
+- required bindings
+- Cloudflare-held secret names
+
+The tracked source must include the accepted functionality:
+
+- stock VibeSDK runtime
+- Task 4B immutable publishing
+- Task 6A logout/session revocation
+- registration gate
+- password recovery
+- Cloudflare EMAIL binding
+- current accepted auth behavior
+
+Do NOT redesign runtime architecture.
+
+Do NOT change behavior merely to make it reproducible.
+
+B. CONTROL PLANE / FRONTEND
+
+Establish the current accepted source/config as the canonical production
+source.
+
+Preserve:
+
+- registration ENABLED
+- public generated apps ENABLED
+- current auth routing
+- password recovery
+- preview behavior
+- native publish
+- current app root behavior
+- canonical auth URLs
+
+Use the launch production configuration, not obsolete legacy production
+profiles.
+
+C. PUBLIC GENERATED-APP GATEWAY
+
+Create/establish a tracked production Wrangler config specifically for:
+
+buildcustom-apps-gateway
+
+Do NOT accidentally target:
+
+buildcustom-apps-gateway-launch
+
+The public production config must preserve the currently accepted:
+
+ROUTES binding
+DISPATCHER binding
+wildcard generated-app routing
+
+Do not deploy it merely because the config is being made reproducible.
+
+D. MARKETING
+
+Reconcile marketing source so a clean build produces the currently accepted
+behavior:
+
+- Build It! -> https://app.buildcustom.ai/signup
+- pricing CTA unchanged
+- partner/strategy CTA unchanged
+- other intended marketing behavior unchanged
+
+We will deliberately replace the waitlist endpoint in Phase 4.
+
+==================================================
+PHASE 3 — ESTABLISH GITHUB AS CANONICAL
+==================================================
+
+Once source review and reproducibility are safe:
+
+1. Synchronize the accepted source to:
+
+thegoldimport/bca
+
+production branch:
+main
+
+Use a normal, reviewable Git history.
+
+Do NOT force-push unless an unavoidable repository-history issue is discovered
+and I explicitly approve it.
+
+2. Confirm the final GitHub main commit contains all accepted source/config.
+
+3. Confirm no production-critical source exists only inside Replit.
+
+4. Confirm secrets remain externalized.
+
+5. Document the fresh-checkout commands required to:
+
+- install
+- typecheck
+- test
+- build runtime
+- build control/frontend
+- build public gateway
+- build marketing
+
+6. Establish/document deployment commands for each Cloudflare target.
+
+Do not create unnecessary CI complexity.
+
+The immediate requirement is reproducibility outside Replit.
+
+==================================================
+PHASE 4 — MOVE WAITLIST FROM REPLIT TO CLOUDFLARE
+==================================================
+
+Implement the new waitlist using the EXISTING BuildCustom control plane and
+clean product D1.
+
+Do NOT create another Worker/service unless technically unavoidable.
+
+Endpoint:
+
+POST https://app.buildcustom.ai/api/waitlist
+
+Also support the required OPTIONS preflight.
+
+Use the existing clean D1 waitlist_entries table.
+
+NO OLD DATA MIGRATION.
+
+The new table may contain only new submissions after cutover.
+
+Preserve the marketing form contract:
+
+{
+  name,
+  email,
+  source
+}
+
+Preserve the existing customer-facing success/error behavior.
+
+Expected successful creation:
+HTTP 201
+
+Validation failure:
+HTTP 400
+
+Do not expose raw database errors.
+
+SECURITY
+
+For this endpoint only:
+
+Allow Origins:
+
+https://buildcustom.ai
+https://www.buildcustom.ai
+
+Return the matching allowed origin.
+
+Return:
+Vary: Origin
+
+Support the required JSON CORS preflight.
+
+Do not require product login/session cookies.
+
+Do not weaken the existing app-origin security rules for any other control
+endpoint.
+
+Add:
+
+- reasonable small request-body limit
+- reasonable per-IP abuse/rate protection
+
+Do not overengineer a new abuse platform.
+
+Do NOT enable the entire legacy admin router.
+
+Expose only the public waitlist functionality required by marketing.
+
+==================================================
+PHASE 5 — RETIRE LEGACY MARKETING WAITLIST ADMIN
+==================================================
+
+Remove/retire the old marketing waitlist admin paths/calls that depend on:
+
+ai-build-studio.replit.app
+
+This includes the legacy marketing waitlist:
+
+- admin login
+- list
+- delete
+
+identified in the inspection.
+
+These do NOT need replacement.
+
+Again:
+
+Do NOT remove or break the actual BuildCustom SaaS admin login at:
+
+app.buildcustom.ai/admin/login
+
+Only retire the old MARKETING WAITLIST administration functionality.
+
+After this phase, production marketing source/assets should contain no
+reachable Replit-dependent waitlist/admin workflow.
+
+==================================================
+PHASE 6 — RECONCILE MARKETING PAGES WITH GITHUB
+==================================================
+
+Update marketing source to submit the waitlist to:
+
+https://app.buildcustom.ai/api/waitlist
+
+Preserve source values used by the existing forms/modals.
+
+Preserve:
+
+Build It! -> https://app.buildcustom.ai/signup
+
+Pricing CTA behavior unchanged.
+
+Partner/strategy CTA behavior unchanged.
+
+Other intended marketing behavior unchanged.
+
+Build from the canonical GitHub source using the configured Pages build:
+
+npm run build
+
+output:
+dist/public
+
+Before allowing a GitHub-connected production deployment, compare the build
+with the intended accepted marketing behavior.
+
+Then perform ONE controlled marketing Pages release from canonical source.
+
+The goal is that future normal GitHub-connected Pages builds reproduce the
+production marketing site rather than overwriting it with stale behavior.
+
+==================================================
+PHASE 7 — CONTROLLED WAITLIST PRODUCTION ACCEPTANCE
+==================================================
+
+Keep the Replit public deployment running during this phase.
+
+Verify from BOTH:
+
+https://buildcustom.ai
+https://www.buildcustom.ai
+
+that a controlled waitlist submission:
+
+- sends no request to replit.app
+- POSTs to https://app.buildcustom.ai/api/waitlist
+- returns 201
+- creates the expected row in clean product D1
+- preserves name/email/source correctly
+- shows the expected customer-facing success state
+
+Because old records are disposable, do NOT compare against or migrate Replit
+data.
+
+Also verify:
+
+- invalid input -> expected 400
+- disallowed Origin rejected
+- CORS preflight works
+- reasonable rate protection is active
+- no raw DB errors exposed
+
+Verify marketing behavior:
+
+- Build It! -> app.buildcustom.ai/signup
+- pricing CTA unchanged
+- partner/strategy CTA unchanged
+
+Verify legacy marketing waitlist admin paths are retired and do not call
+Replit.
+
+If waitlist cutover fails:
+
+STOP.
+
+While Replit is still available, restore the previously accepted marketing
+Pages deployment first if necessary, then restore the accepted control version
+if necessary.
+
+Do not continue to Replit shutdown.
+
+==================================================
+PHASE 8 — FULL PRE-SHUTDOWN ACCEPTANCE WITH REPLIT DEV OFF
+==================================================
+
+Once the Cloudflare waitlist passes:
+
+Stop/disable the Replit DEVELOPMENT workflow only.
+
+Leave the Replit PUBLIC deployment running temporarily as rollback.
+
+Then verify:
+
+MARKETING
+
+- buildcustom.ai -> 200
+- www.buildcustom.ai -> 200
+- Build It! -> app.buildcustom.ai/signup
+- pricing/partner behavior correct
+- controlled waitlist submission works through Cloudflare
+- row persists in clean D1
+- browser/network observation shows no production request to replit.app
+
+APPLICATION
+
+- app.buildcustom.ai signed out -> login
+- public signup OPEN
+- /signup works
+- /login works
+- /forgot-password works
+- /reset-password works
+- existing-user login works
+- signed-in root -> dashboard
+- dashboard works
+- existing project opens
+- Files works
+- preview works
+- idle WebSocket/conversation state works
+- no AI generation required
+
+GENERATED APPS
+
+- existing public generated app -> 200
+- required assets -> 200
+- unknown slug -> 404
+- gateway healthy
+
+SECURITY/STATE
+
+- password recovery remains enabled
+- EMAIL binding remains present
+- security@buildcustom.ai remains allowed sender
+- registration enabled runtime + control
+- public generated apps enabled
+- active publish claims = 0
+
+If anything requires the Replit development workflow to function:
+
+STOP.
+
+That is a remaining production dependency.
+
+==================================================
+PHASE 9 — SHUT DOWN REPLIT PUBLIC PRODUCTION DEPLOYMENT
+==================================================
+
+Only after Phase 8 passes:
+
+STOP BEFORE SHUTDOWN and return a checkpoint report.
+
+At that checkpoint, tell me explicitly:
+
+READY TO SHUT DOWN REPLIT PUBLIC DEPLOYMENT
+
+Include:
+
+- canonical GitHub commit
+- accepted Cloudflare versions
+- accepted Pages deployment
+- waitlist endpoint result
+- D1 persistence result
+- confirmation no browser request reached replit.app
+- development-off acceptance result
+- remaining Replit dependencies, if any
+
+DO NOT shut down/unpublish the Replit public deployment until I explicitly
+authorize that final action.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do not migrate old Replit waitlist data.
+
+Do not preserve the legacy marketing waitlist admin workflow.
+
+Do not deploy unrelated runtime/gateway changes merely for parity work.
+
+Do not perform AI generation for acceptance.
+
+Do not create another user.
+
+Do not send unnecessary recovery emails.
+
+Do not change DNS unless an actual requirement is discovered and reported
+before mutation.
+
+Do not delete legacy Cloudflare resources yet.
+
+Do not delete the Replit workspace.
+
+Do not shut down the Replit public deployment until the explicit checkpoint
+approval above.
+
+If an actual customer-path/security failure occurs, stop and report the exact
+failure rather than expanding scope.
+
+Proceed through Phases 1–8 and then STOP at the Phase 9 checkpoint.
