@@ -1,0 +1,270 @@
+{
+  "phase": "closed",
+  "runId": "dd31e2b7-a071-4270-bde8-179455e058e1",
+  "startedAt": "2026-09-29T12:53:55.236Z",
+  "expectedVersion": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+  "versionEvidenceClassification": "UNAVAILABLE",
+  "checks": {
+    "A-control-deployment": {
+      "timestamp": "2026-09-29T12:53:57.650Z",
+      "observed": {
+        "deploymentId": "1ac9eb40-74e3-4a69-8225-c1af6535961f",
+        "rawRelevantApiResponse": {
+          "id": "1ac9eb40-74e3-4a69-8225-c1af6535961f",
+          "source": "api",
+          "strategy": "percentage",
+          "annotations": {
+            "workers/message": "Task 12R failed acceptance rollback 1",
+            "workers/triggered_by": "deployment"
+          },
+          "versions": [
+            {
+              "version_id": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+              "percentage": 100
+            }
+          ],
+          "created_on": "2026-09-29T00:20:57.888436Z"
+        }
+      },
+      "expected": {
+        "version": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+        "percentage": 100
+      },
+      "status": "PASS"
+    },
+    "B-accepted-candidate-percentages": {
+      "timestamp": "2026-09-29T12:53:57.650Z",
+      "observed": {
+        "acceptedVersion": "8d07cbf8-c7ad-423e-b592-268e538e3410",
+        "acceptedPercentage": 100,
+        "candidateVersion": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+        "candidatePercentage": 0
+      },
+      "expected": {
+        "acceptedPercentage": 100,
+        "candidatePercentage": 0
+      },
+      "status": "PASS"
+    },
+    "C-candidate-configuration": {
+      "timestamp": "2026-09-29T12:53:58.151Z",
+      "observed": {
+        "versionId": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+        "mainModule": "worker.js",
+        "candidateMainSha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891",
+        "acceptedMainSha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891",
+        "modules": [
+          {
+            "name": "worker.js",
+            "sha256": "f5668d64a2f8f2d23e74ab6e43a15aea5281cb5999ed82746e1525b454c26891"
+          }
+        ],
+        "moduleParity": true,
+        "bindings": {
+          "STAGING_REGISTRATION_ENABLED": {
+            "type": "plain_text",
+            "value": "true"
+          },
+          "PUBLIC_GENERATED_APPS_ENABLED": {
+            "type": "plain_text",
+            "value": "true"
+          },
+          "CONTROL_PLANE_PROFILE": {
+            "type": "plain_text",
+            "value": "launch"
+          },
+          "ENVIRONMENT": {
+            "type": "plain_text",
+            "value": "production"
+          },
+          "STAGING_LOGIN_ENABLED": {
+            "type": "plain_text",
+            "value": "true"
+          },
+          "AUTH_RUNTIME": {
+            "type": "service",
+            "service": "buildcustom-vibesdk-launch",
+            "environment": "production"
+          },
+          "AUTH_RUNTIME_URL": {
+            "type": "plain_text",
+            "value": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev"
+          }
+        },
+        "acceptedRegistration": {
+          "type": "plain_text",
+          "value": "false"
+        },
+        "assetConfiguration": {
+          "html_handling": "auto-trailing-slash",
+          "not_found_handling": "single-page-application",
+          "run_worker_first": true,
+          "base_path": "/"
+        }
+      },
+      "expected": {
+        "registration": "true",
+        "acceptedRegistration": "false",
+        "publicApps": "true",
+        "profile": "launch",
+        "environment": "production",
+        "moduleParity": true
+      },
+      "status": "PASS"
+    },
+    "D-live-capability": {
+      "timestamp": "2026-09-29T12:54:10.155Z",
+      "observed": {
+        "request": {
+          "url": "https://app.buildcustom.ai/api/public/capabilities?task12j_observation=1790686435236",
+          "requestedAt": "2026-09-29T12:53:58.151Z",
+          "method": "GET",
+          "cache": "no-store"
+        },
+        "response": {
+          "status": 200,
+          "headers": {
+            "alt-svc": "h3=\":443\"; ma=86400",
+            "cache-control": "no-store",
+            "cf-ray": "a42b223e7989b261-ATL",
+            "connection": "keep-alive",
+            "content-encoding": "br",
+            "content-type": "application/json",
+            "date": "Tue, 29 Sep 2026 12:53:58 GMT",
+            "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+            "report-to": "[redacted]",
+            "server": "cloudflare",
+            "transfer-encoding": "chunked"
+          },
+          "cfRay": "a42b223e7989b261-ATL",
+          "contentType": "application/json",
+          "cacheControl": "no-store",
+          "age": null,
+          "cfCacheStatus": null,
+          "rawBody": "{\"registrationEnabled\":false,\"publicGeneratedAppsEnabled\":true}",
+          "parsedJson": {
+            "registrationEnabled": false,
+            "publicGeneratedAppsEnabled": true
+          }
+        },
+        "versionEvidence": {
+          "versionEvidenceClassification": "UNAVAILABLE",
+          "perRequestVersionIdentity": "UNKNOWN",
+          "observedVersionId": null,
+          "correlation": null,
+          "limitations": "No matching Wrangler tail event with scriptVersion.id; deployment readback cannot establish per-request version."
+        }
+      },
+      "expected": {
+        "status": 200,
+        "registrationEnabled": false,
+        "publicGeneratedAppsEnabled": true,
+        "servingVersion": "8d07cbf8-c7ad-423e-b592-268e538e3410"
+      },
+      "status": "FAIL"
+    },
+    "E-signup-ui": {
+      "timestamp": "2026-09-29T12:54:12.284Z",
+      "observed": {
+        "url": "https://app.buildcustom.ai/app/signup",
+        "httpStatus": 200,
+        "state": {
+          "heading": "Welcome back",
+          "submitLabel": "Sign In",
+          "nameInput": false,
+          "emailInput": true,
+          "passwordInput": true,
+          "closedNotice": true,
+          "switchLabel": null
+        },
+        "loginAvailable": true
+      },
+      "expected": {
+        "signup": "closed",
+        "loginAvailable": true
+      },
+      "status": "PASS"
+    },
+    "F-runtime-registration": {
+      "timestamp": "2026-09-29T12:54:12.410Z",
+      "observed": {
+        "url": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev/api/auth/providers?task12j_observation=dd31e2b7-a071-4270-bde8-179455e058e1",
+        "status": 200,
+        "relevantBody": {
+          "success": true,
+          "data": {
+            "registrationEnabled": false,
+            "email": true
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "registrationEnabled": false
+      },
+      "status": "PASS"
+    },
+    "G-existing-user-auth": {
+      "timestamp": "2026-09-29T12:54:18.379Z",
+      "observed": {
+        "loginStatus": 200,
+        "product": {
+          "status": 200,
+          "identityPresent": true
+        },
+        "runtime": {
+          "status": 200,
+          "authenticated": true
+        }
+      },
+      "expected": {
+        "loginStatus": 200,
+        "product": {
+          "status": 200,
+          "identityPresent": true
+        },
+        "runtime": {
+          "status": 200,
+          "authenticated": true
+        }
+      },
+      "status": "PASS"
+    }
+  },
+  "tailCalibration": {
+    "ready": true,
+    "attempts": 2,
+    "metrics": {
+      "stdoutChunks": 2,
+      "starts": 2,
+      "parsedEvents": 2,
+      "matchedUrls": 1,
+      "samples": [
+        {
+          "scriptMatches": true,
+          "isCalibration": true,
+          "urlMatched": true,
+          "eventType": "GET",
+          "hasVersion": true
+        },
+        {
+          "scriptMatches": true,
+          "isCalibration": false,
+          "urlMatched": false,
+          "eventType": "GET",
+          "hasVersion": true
+        }
+      ]
+    }
+  },
+  "perRequestVersionIdentity": "UNKNOWN",
+  "versionCorrelation": {
+    "versionEvidenceClassification": "UNAVAILABLE",
+    "perRequestVersionIdentity": "UNKNOWN",
+    "observedVersionId": null,
+    "correlation": null,
+    "limitations": "No matching Wrangler tail event with scriptVersion.id; deployment readback cannot establish per-request version."
+  },
+  "completedAt": "2026-09-29T12:54:18.796Z",
+  "status": "FAIL"
+}

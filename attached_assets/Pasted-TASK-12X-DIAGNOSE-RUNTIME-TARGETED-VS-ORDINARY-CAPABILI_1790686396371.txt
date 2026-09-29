@@ -1,0 +1,1172 @@
+TASK 12X — DIAGNOSE RUNTIME TARGETED-VS-ORDINARY CAPABILITY DISAGREEMENT
+
+Task 12W is NOT accepted.
+
+Production is safely CLOSED.
+
+DO NOT retry the cutover.
+
+This is a READ-ONLY / LOCAL DIAGNOSTIC task.
+
+The ONLY problem we are investigating is:
+
+During Task 12W, after the existing runtime candidate was deployed at 100%:
+
+ORDINARY runtime capability request:
+HTTP 200
+registrationEnabled=true
+candidate version tail matched
+
+TARGETED runtime capability request:
+HTTP 200
+registrationEnabled=false
+NO matching version tail
+
+The required targeted gate therefore failed and runtime was rolled back.
+
+We need to determine what the "targeted" request actually did and whether
+targeted version override remains a valid/meaningful assertion when the
+candidate itself is already deployed at 100%.
+
+==================================================
+CURRENT SAFE PRODUCTION STATE
+==================================================
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+ACCEPTED CLOSED VERSION:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+RUNTIME CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL:
+
+buildcustom-control-plane-launch
+
+ACCEPTED CLOSED VERSION:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+PUBLIC SIGNUP:
+
+CLOSED
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+CLAIMS:
+
+zero
+
+==================================================
+TASK 12W EVIDENCE
+==================================================
+
+Inspect:
+
+production/vibesdk-launch/task12r-operation-2026-09-29T12-37-46-578Z.json
+
+
+Independent closed verification:
+
+production/vibesdk-launch/task12n-runtime-observation-2026-09-29T12-38-56-176Z.json
+
+and the corresponding control/regression artifacts at:
+
+12-39-06-148Z
+
+12-39-16-905Z
+
+
+Task 12W runtime activation deployment:
+
+9c8fca59-c8eb-4559-b74d-debb5e5507e5
+
+
+Runtime rollback deployment:
+
+ea9907eb-8f60-420c-bcbc-a529000e4c34
+
+
+Candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Accepted closed runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+==================================================
+IMPORTANT PRIOR EVIDENCE
+==================================================
+
+Do NOT ignore accepted Task 12Q evidence.
+
+Task 12Q previously deployed this exact candidate under a guarded diagnostic.
+
+During Task 12Q:
+
+TARGETED:
+HTTP 200
+registrationEnabled=true
+email=true
+tail exact candidate
+
+ORDINARY:
+HTTP 200
+registrationEnabled=true
+email=true
+tail exact candidate
+
+Candidate was classified REUSABLE.
+
+Therefore Task 12W's disagreement is NOT enough by itself to conclude that
+the candidate contains the wrong registration binding.
+
+Also remember:
+
+Task 12P hardened the runtime observer after historical tail-correlation
+problems.
+
+Missing version identity always means UNKNOWN.
+
+Never infer version identity from deployment allocation alone.
+
+==================================================
+HARD RULES
+==================================================
+
+DO NOT:
+
+- activate runtime candidate
+- activate control candidate
+- move production traffic
+- open signup
+- create a Worker version
+- create a deployment
+- modify Worker code
+- modify Worker bindings
+- modify gateway
+- modify DNS
+- invoke live signup acceptance
+- create a production user
+- generate
+- edit projects
+- Publish
+- move waitlist
+- stop Replit
+- retry Task 12W
+
+You MAY:
+
+- inspect saved evidence
+- inspect observer code
+- inspect Cloudflare/Wrangler implementation/source already available
+- inspect deployed version/deployment metadata read-only
+- modify LOCAL observer tests/tools if a diagnostic defect is proven
+- create deterministic local tests
+- make harmless read-only requests against the CURRENT CLOSED runtime
+- run closed production regression
+
+==================================================
+STEP 1 — VERIFY CLOSED STATE
+==================================================
+
+Read only.
+
+Require:
+
+runtime accepted version 100%
+
+runtime candidate 0%
+
+control accepted version 100%
+
+control candidate 0%
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public apps=true
+
+gateway unchanged
+
+claims zero
+
+
+Run current runtime observer.
+
+Require both currently valid closed requests to return:
+
+HTTP 200
+
+registrationEnabled=false
+
+providers.email=true
+
+
+And require exact accepted-version tail correlation where available.
+
+If a required read-only production safety check fails:
+
+STOP.
+
+==================================================
+STEP 2 — RECONSTRUCT TASK 12W REQUESTS BYTE-FOR-BYTE
+==================================================
+
+From the saved Task 12W operation artifact and observer code reconstruct:
+
+TARGETED request:
+
+- exact URL
+- hostname
+- path
+- query marker
+- method
+- headers
+- version-override header name
+- version-override value
+- Host if explicitly set
+- Origin if any
+- User-Agent if relevant
+- cookies if any
+- redirect behavior
+- cache mode if any
+- timestamp
+- HTTP response status
+- safe response body
+- response headers
+- CF-Ray
+- tail correlation marker
+- tail match result
+
+
+Then reconstruct ORDINARY request with the same fields.
+
+Produce a field-by-field diff.
+
+We need to know EXACTLY what differed besides intended version targeting.
+
+==================================================
+STEP 3 — IDENTIFY THE TARGETING MECHANISM
+==================================================
+
+Trace the implementation of the targeted request.
+
+Document:
+
+- exact Cloudflare mechanism being used
+- exact header or request feature
+- why we believe it selects a Worker version
+- whether it is officially supported for this Worker configuration
+- whether it requires previews
+- whether it requires a version to be part of the current deployment
+- whether 100% deployment changes its meaning
+- whether it behaves differently on workers.dev versus Custom Domain
+- whether container-backed Workers affect it
+- whether has_preview=false matters
+- whether it can fall through to ordinary serving behavior
+- whether unsupported/invalid targeting can be silently ignored
+
+Use available Cloudflare/Wrangler implementation or documentation already
+present in the project if possible.
+
+If current external documentation is needed, identify that clearly in the
+report rather than guessing.
+
+==================================================
+STEP 4 — RECHECK TASK 12Q TARGETED EVIDENCE
+==================================================
+
+Inspect the accepted Task 12Q evidence.
+
+Compare Task 12Q targeted request with Task 12W targeted request.
+
+Field-by-field compare:
+
+URL
+
+hostname
+
+path
+
+query-marker shape
+
+override header
+
+override value
+
+deployment state
+
+candidate traffic percentage
+
+accepted traffic percentage
+
+observer timing
+
+tail subscription timing
+
+tail window
+
+tail filtering
+
+response body
+
+CF-Ray
+
+tail event
+
+
+Determine whether Task 12Q and Task 12W actually exercised the SAME targeting
+mechanism.
+
+==================================================
+STEP 5 — CHECK CANDIDATE AND ACCEPTED VERSION METADATA
+==================================================
+
+Read only.
+
+Verify candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Verify accepted:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+Record for both:
+
+REGISTRATION_ENABLED
+
+ENABLE_EMAIL_AUTH if present
+
+relevant auth bindings
+
+compatibility settings
+
+container attachment
+
+assets settings
+
+main module hash
+
+deployment eligibility
+
+
+Confirm whether candidate metadata still says:
+
+REGISTRATION_ENABLED=true
+
+
+and accepted says:
+
+REGISTRATION_ENABLED=false.
+
+
+Do not modify anything.
+
+==================================================
+STEP 6 — DETERMINE WHAT COULD PRODUCE FALSE DURING 100% CANDIDATE TRAFFIC
+==================================================
+
+Enumerate only mechanisms supported by evidence/code that could explain:
+
+deployment readback says candidate 100%
+
+ordinary request:
+true + candidate tail
+
+targeted request:
+false + no tail
+
+
+Investigate possibilities such as:
+
+A. targeted request actually reached accepted version
+
+B. override header was ignored/invalid and another path served request
+
+C. targeted request reached a different Worker/hostname
+
+D. response came from cache
+
+E. response came from stale/redirected request
+
+F. query marker/correlation mismatch caused wrong response association
+
+G. targeted request was made before deployment convergence while ordinary was later
+
+H. observer artifact paired response from one request with tail state from another
+
+I. target header referenced the wrong version
+
+J. deployment allocation/readback and request serving were temporarily inconsistent
+
+K. workers.dev/version-override behavior differs for this container-backed Worker
+
+L. another evidence-supported explanation
+
+
+Do not assert any of these without evidence.
+
+Classify each:
+
+SUPPORTED
+
+POSSIBLE BUT UNPROVEN
+
+RULED OUT
+
+==================================================
+STEP 7 — INSPECT TIMING
+==================================================
+
+Build a millisecond-resolution timeline if the artifacts permit:
+
+deployment API request
+
+deployment API response
+
+deployment readback
+
+tail subscription start
+
+targeted request start
+
+targeted response
+
+targeted tail window end
+
+ordinary tail subscription start
+
+ordinary request start
+
+ordinary response
+
+ordinary tail event
+
+rollback trigger
+
+
+Determine how long after deployment acceptance the targeted request ran.
+
+Determine how long after deployment acceptance the ordinary request ran.
+
+This matters because the targeted request apparently observed CLOSED behavior
+while the later ordinary request observed OPEN behavior.
+
+Do not call this propagation delay unless evidence establishes it.
+
+==================================================
+STEP 8 — INSPECT CACHE POSSIBILITY
+==================================================
+
+Trace `/api/auth/providers`.
+
+Determine:
+
+- Worker response cache headers
+- Cache-Control
+- Cloudflare Cache API use
+- CDN caching possibility
+- browser caching relevance
+- whether query marker should make request unique
+- whether targeted and ordinary requests used distinct URLs
+
+
+If caching cannot explain the result:
+
+mark RULED OUT.
+
+==================================================
+STEP 9 — INSPECT REDIRECT / HOST POSSIBILITY
+==================================================
+
+Determine whether either request could redirect.
+
+Record final response URL if retained.
+
+Check:
+
+workers.dev hostname
+
+custom domain
+
+redirect-follow behavior
+
+service binding involvement
+
+route involvement
+
+
+Determine whether the version override header survives any redirect.
+
+Again:
+
+no speculation.
+
+==================================================
+STEP 10 — INSPECT TAIL CORRELATION
+==================================================
+
+Task 12W targeted had:
+
+NO matching version tail.
+
+
+Determine whether:
+
+- no tail event arrived at all
+- tail event arrived but marker did not match
+- tail event arrived for wrong script
+- tail event arrived for wrong version
+- tail parser rejected it
+- event arrived outside window
+- marker was redacted
+- event was malformed/unparsed
+
+
+Return the exact category if recoverable.
+
+Compare to the immediate post-rollback targeted tail miss.
+
+We have now seen two misses in close proximity:
+
+1. open targeted request
+2. immediate rollback targeted request
+
+followed by successful independent read-only tracing.
+
+
+Determine whether this provides evidence of observer/tail instability.
+
+Do not overstate it.
+
+==================================================
+STEP 11 — QUESTION THE VALUE OF TARGETED + ORDINARY WHEN CANDIDATE IS 100%
+==================================================
+
+This is important.
+
+The original targeted probe was useful when validating an inactive or
+partially deployed candidate.
+
+But once deployment readback says:
+
+candidate 100%
+accepted 0%
+
+
+ask whether requiring BOTH:
+
+targeted candidate request
+
+AND
+
+ordinary candidate request
+
+
+actually provides independent safety evidence.
+
+Analyze whether a stronger post-deployment gate would instead be:
+
+1. deployment readback candidate=100 / accepted=0
+
+2. wait only for an evidence-supported readiness condition if one exists
+
+3. multiple independently marked ORDINARY capability requests
+
+4. each HTTP 200
+
+5. each registrationEnabled=true
+
+6. each providers.email=true
+
+7. each independently tail-correlated to exact candidate version
+
+8. existing-user authentication/ownership
+
+This is ANALYSIS ONLY.
+
+Do not change the gate yet unless the evidence supports doing so.
+
+==================================================
+STEP 12 — DETERMINE WHETHER TARGETED PROBE SHOULD REMAIN
+==================================================
+
+Classify targeted post-deployment probe as one of:
+
+A. REQUIRED AND RELIABLE
+
+B. USEFUL BUT NOT AUTHORITATIVE
+
+C. REDUNDANT AFTER 100% DEPLOYMENT
+
+D. UNSUPPORTED/INVALID IN THIS CONFIGURATION
+
+E. UNKNOWN
+
+
+Support classification with concrete evidence.
+
+Do not choose based on convenience.
+
+==================================================
+STEP 13 — DETERMINE THE STRONGEST SAFE OPEN GATE
+==================================================
+
+Without moving traffic, design the exact gate we should use in a FUTURE
+separately authorized attempt.
+
+It must provide per-request version identity.
+
+Potential structure, only if supported:
+
+DEPLOYMENT:
+
+candidate 100%
+accepted 0%
+
+
+Then N independently marked ordinary requests.
+
+Choose N based on evidence, not arbitrary enterprise-style testing.
+
+Likely 2 or 3 is enough if each has exact tail identity.
+
+
+Each must require:
+
+HTTP 200
+
+registrationEnabled=true
+
+providers.email=true
+
+tail scriptName exact
+
+tail version exact candidate
+
+
+Plus:
+
+existing-user auth
+
+ownership
+
+
+If ANY tail identity missing:
+
+UNKNOWN
+
+fail closed.
+
+
+If targeted probe remains required, explain exactly why and how to make it
+reliable.
+
+==================================================
+STEP 14 — LOCAL OBSERVER TESTS
+==================================================
+
+If an observer weakness is found, fix LOCAL observer tooling only.
+
+Do not change Worker code.
+
+Add deterministic tests for the actual failure mode.
+
+At minimum cover, where applicable:
+
+missing targeted tail
+
+late tail
+
+wrong version tail
+
+wrong marker
+
+response true with no tail
+
+response false with no tail
+
+ordinary exact candidate tail
+
+multiple independently marked ordinary requests
+
+deployment-readback mismatch
+
+
+Do not make a tooling change unless diagnosis supports it.
+
+==================================================
+STEP 15 — NO LIVE CANDIDATE TEST
+==================================================
+
+Do NOT deploy candidate to test the theory.
+
+Do NOT perform a "quick activation."
+
+Do NOT use version override against an inactive candidate unless it is proven
+safe and read-only under the current deployment state.
+
+Task 12X is diagnostic only.
+
+==================================================
+STEP 16 — CLASSIFY TASK 12W FAILURE
+==================================================
+
+Choose:
+
+A. PRODUCTION CANDIDATE DEFECT
+
+B. TARGETED PROBE / OBSERVER DEFECT
+
+C. DEPLOYMENT-SERVING TRANSITION ISSUE
+
+D. REQUEST ROUTING/HOST ISSUE
+
+E. OTHER PROVEN CAUSE
+
+F. UNKNOWN
+
+
+It is acceptable to remain UNKNOWN.
+
+Do not invent certainty.
+
+==================================================
+STEP 17 — DETERMINE WHETHER WORKER CHANGE IS NEEDED
+==================================================
+
+Classify:
+
+A. NO WORKER CHANGE INDICATED
+
+B. WORKER CHANGE REQUIRED
+
+C. UNKNOWN
+
+
+No Worker version may be created in Task 12X.
+
+==================================================
+STEP 18 — DETERMINE WHETHER OPERATOR CHANGE IS NEEDED
+==================================================
+
+Separately classify:
+
+A. NO OPERATOR CHANGE
+
+B. LOCAL OBSERVER CHANGE ONLY
+
+C. FUTURE CUTOVER GATE CHANGE
+
+D. BOTH LOCAL OBSERVER + FUTURE GATE CHANGE
+
+E. UNKNOWN
+
+
+Any change must be supported by the diagnosis.
+
+==================================================
+STEP 19 — CLOSED PRODUCTION REGRESSION
+==================================================
+
+Read only.
+
+Require:
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+runtime candidate:
+0%
+
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+control candidate:
+0%
+
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public apps=true
+
+claims zero
+
+
+Verify:
+
+user 1 login/ownership
+
+user 2 login/ownership
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+
+Gateway:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+==================================================
+TASK 12X ACCEPTANCE
+==================================================
+
+Task 12X passes if:
+
+1. no production traffic moved
+
+2. signup remains closed
+
+3. Task 12W targeted and ordinary requests reconstructed
+
+4. exact differences documented
+
+5. targeting mechanism traced
+
+6. Task 12Q comparison completed
+
+7. candidate/accepted metadata verified
+
+8. Task 12W timing reconstructed as far as evidence allows
+
+9. caching analyzed
+
+10. redirects/hosts analyzed
+
+11. targeted tail miss categorized as far as evidence permits
+
+12. immediate rollback tail miss compared
+
+13. targeted probe value after 100% deployment analyzed
+
+14. targeted probe classified A/B/C/D/E
+
+15. strongest future gate designed
+
+16. observer tests added only if justified
+
+17. Task 12W failure classified A/B/C/D/E/F
+
+18. Worker-change need classified
+
+19. operator-change need classified
+
+20. no Worker version created
+
+21. no deployment created
+
+22. no production user created
+
+23. closed production regression passes
+
+24. claims remain zero
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current runtime version/traffic
+
+2. current control version/traffic
+
+3. current registration states
+
+4. Task 12W artifact inspected?
+
+5. targeted exact URL
+
+6. targeted hostname
+
+7. targeted method
+
+8. targeted marker
+
+9. targeted override header/value
+
+10. targeted request timestamp
+
+11. targeted response timestamp
+
+12. targeted status/body
+
+13. targeted CF-Ray
+
+14. targeted tail result
+
+15. ordinary exact URL
+
+16. ordinary hostname
+
+17. ordinary method
+
+18. ordinary marker
+
+19. ordinary override state
+
+20. ordinary request timestamp
+
+21. ordinary response timestamp
+
+22. ordinary status/body
+
+23. ordinary CF-Ray
+
+24. ordinary tail version
+
+25. field-by-field differences
+
+26. exact targeting mechanism
+
+27. targeting mechanism support source
+
+28. previews required?
+
+29. has_preview relevance
+
+30. container relevance
+
+31. 100%-deployment relevance
+
+32. can override be silently ignored?
+
+33. Task 12Q targeted mechanism same as 12W?
+
+34. Task 12Q important differences
+
+35. candidate REGISTRATION_ENABLED
+
+36. accepted REGISTRATION_ENABLED
+
+37. candidate email-auth state
+
+38. accepted email-auth state
+
+39. candidate main hash
+
+40. accepted main hash
+
+41. candidate container/settings parity
+
+42. deployment eligibility
+
+43. deployment API response time
+
+44. deployment readback time
+
+45. targeted delay after deployment
+
+46. ordinary delay after deployment
+
+47. timing conclusion
+
+48. cache analysis
+
+49. cache classification
+
+50. redirect analysis
+
+51. host/routing analysis
+
+52. targeted tail miss exact category
+
+53. rollback targeted tail miss category
+
+54. evidence of tail instability?
+
+55. explanation A status
+
+56. explanation B status
+
+57. explanation C status
+
+58. explanation D status
+
+59. explanation E status
+
+60. explanation F status
+
+61. explanation G status
+
+62. explanation H status
+
+63. explanation I status
+
+64. explanation J status
+
+65. explanation K status
+
+66. any other supported explanation
+
+67. is targeted + ordinary independent after 100% deployment?
+
+68. targeted probe classification A/B/C/D/E
+
+69. strongest future runtime open gate
+
+70. number of ordinary requests recommended
+
+71. exact per-request requirements
+
+72. missing tail behavior
+
+73. observer weakness found?
+
+74. local observer changes made?
+
+75. observer test results
+
+76. Task 12W failure classification A/B/C/D/E/F
+
+77. production candidate defect proven?
+
+78. Worker change classification A/B/C
+
+79. operator change classification A/B/C/D/E
+
+80. runtime final version/traffic
+
+81. runtime candidate final traffic
+
+82. control final version/traffic
+
+83. control candidate final traffic
+
+84. runtime registration
+
+85. control registration
+
+86. public signup
+
+87. user-1 regression
+
+88. user-2 regression
+
+89. ownership isolation
+
+90. project-2 public app
+
+91. project-3 public app
+
+92. unknown slug
+
+93. gateway Worker/version/traffic
+
+94. marketing
+
+95. claims
+
+96. Worker code changed?
+
+97. Worker version created?
+
+98. deployment created?
+
+99. production traffic moved?
+
+100. production user created?
+
+101. TASK 12X ACCEPTED?
+
+102. Is there enough evidence to define ONE safer separately authorized final
+     signup cutover without guessing about targeted requests?
+
+103. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE RUNTIME.
+
+DO NOT ACTIVATE CONTROL.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE A WORKER VERSION.
+
+DO NOT CREATE A DEPLOYMENT.
+
+DO NOT MODIFY WORKER CODE.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT CREATE PRODUCTION USERS.
+
+DO NOT INVOKE LIVE SIGNUP ACCEPTANCE.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MOVE WAITLIST.
