@@ -1,0 +1,1335 @@
+FINAL BUILDCUSTOM PUBLIC SIGNUP LAUNCH
+
+We are done with the Task 12 observer/debugging loop.
+
+The goal of this task is simple:
+
+GET BUILDCUSTOM SAFELY LIVE FOR PUBLIC SIGNUP.
+
+We are NOT lowering the security bar.
+
+We ARE removing unreliable Cloudflare tail correlation, targeted-version
+requests, and observer behavior from the launch decision.
+
+Security failures are blockers.
+
+Actual customer-path failures are blockers.
+
+Missing Cloudflare tail events are NOT blockers.
+
+Do not create another Task 12X/Y/Z investigation.
+
+Do not build another observer.
+
+Do not build another test harness.
+
+Do not create another Worker version unless an actual application/security
+defect is discovered, in which case DO NOT fix it during this launch.
+Rollback and report it.
+
+==================================================
+WHY WE ARE CHANGING THE LAUNCH PROCEDURE
+==================================================
+
+We have spent several days validating this stack.
+
+The actual BuildCustom product has already passed extensive acceptance for:
+
+- Cloudflare control plane
+- Cloudflare VibeSDK runtime
+- native ThinkAgent
+- authentication architecture
+- runtime-owned sessions
+- server-side logout revocation
+- project ownership
+- cross-user isolation
+- project creation
+- generation
+- editing
+- conversation persistence/reopen
+- Files
+- styled preview
+- WebSocket reconnect
+- immutable publishing
+- idempotent publishing
+- public *.apps.buildcustom.ai routing
+- generated-app isolation
+- public generated apps
+- app.buildcustom.ai
+- existing-user authentication
+- public publishing
+- stranger project/build/publish flow
+- Origin middleware
+- CSRF middleware
+- duplicate account validation
+- invalid email validation
+- weak-password validation
+
+The remaining blocker is PUBLIC SIGNUP.
+
+Recent attempts have repeatedly been stopped by observer/tail behavior rather
+than demonstrated application failures.
+
+Most importantly:
+
+A known-good CLOSED control deployment was confirmed at 100%.
+
+Its normal public capability endpoint returned the correct response.
+
+Signup correctly remained closed.
+
+The full production regression passed.
+
+Yet its request did not receive a matching Cloudflare tail event.
+
+Therefore:
+
+CLOUDFLARE TAIL CORRELATION IS NOT A LAUNCH GATE.
+
+Tail data may still be recorded when available.
+
+Missing tail data MUST NOT cause rollback.
+
+==================================================
+SECURITY PRINCIPLE
+==================================================
+
+We are NOT doing a reckless launch.
+
+The following remain HARD launch blockers:
+
+- incorrect deployed Worker version
+- normal production capability response incorrect
+- registration unexpectedly disabled after activation
+- Origin protection failure
+- CSRF protection failure
+- duplicate identity creation
+- case-insensitive duplicate identity creation
+- incorrect product/runtime identity mapping
+- second local password authority becoming active
+- second local session authority becoming active
+- cross-user project access
+- cross-user Files access
+- cross-user preview access
+- cross-user publish access
+- logout failing to revoke the runtime session
+- old credential remaining authenticated after logout
+- fresh login failure
+- generated-app isolation failure
+- private/internal customer dependency appearing
+- gateway regression
+- actual customer-path error
+
+Those failures require rollback.
+
+These are NOT launch blockers:
+
+- missing tail event
+- delayed tail event
+- inability to correlate a tail marker
+- targeted/version-override probe disagreement
+- observer UNKNOWN caused only by missing tail evidence
+
+Do not use targeted/version-override probes during this launch.
+
+==================================================
+KNOWN VERSIONS
+==================================================
+
+CURRENT CLOSED RUNTIME:
+
+Worker:
+buildcustom-vibesdk-launch
+
+Version:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+
+
+EXISTING OPEN RUNTIME CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+CURRENT CLOSED CONTROL:
+
+Worker:
+buildcustom-control-plane-launch
+
+Version:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+
+
+EXISTING OPEN CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+GENERATED APP GATEWAY:
+
+Worker:
+buildcustom-apps-gateway
+
+Version:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+CURRENT PUBLIC SIGNUP:
+
+CLOSED
+
+==================================================
+ROLLBACK TARGETS
+==================================================
+
+Before doing anything, prepare these exact rollback targets.
+
+RUNTIME ROLLBACK:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+→ 100%
+
+
+CONTROL ROLLBACK:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+→ 100%
+
+
+If a REAL application or security gate fails:
+
+rollback both as necessary
+
+verify signup closed
+
+verify existing app still healthy
+
+STOP.
+
+
+Do not repair and retry during this operation.
+
+==================================================
+STEP 1 — SMALL CLOSED-STATE PRECHECK
+==================================================
+
+Do NOT run another giant regression.
+
+Confirm:
+
+1. runtime deployment readback:
+   8e28025f-e415-4405-9b1f-67d93eff7fd8 = 100%
+
+2. control deployment readback:
+   8d07cbf8-c7ad-423e-b592-268e538e3410 = 100%
+
+3. runtime registration=false
+
+4. control registration=false
+
+5. PUBLIC_GENERATED_APPS_ENABLED=true
+
+6. signup page currently shows signup CLOSED
+
+7. app.buildcustom.ai returns normally
+
+8. one existing test user can log in
+
+9. that user's existing project opens
+
+10. one existing *.apps.buildcustom.ai application returns 200
+
+11. unknown generated-app slug returns 404
+
+12. gateway is still:
+    buildcustom-apps-gateway
+    9d80432b-4e53-4fe7-950a-2b53f0213eff
+    100%
+
+13. native publish claims = zero
+
+14. marketing buildcustom.ai returns 200
+
+
+Tail information may be recorded if available.
+
+DO NOT fail this precheck solely because a tail event is missing.
+
+If the ACTUAL HTTP/application checks fail:
+
+STOP.
+
+==================================================
+STEP 2 — VERIFY CANDIDATES HAVE NOT CHANGED
+==================================================
+
+Read only.
+
+Verify the existing runtime candidate is still:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+
+
+Verify the existing control candidate is still:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+
+
+Confirm no Worker code or binding changes have occurred since their accepted
+candidate validation.
+
+Do not rebuild them.
+
+Do not create new versions.
+
+==================================================
+STEP 3 — ACTIVATE OPEN RUNTIME
+==================================================
+
+Deploy EXISTING runtime candidate:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+→ 100%
+
+
+Confirm Cloudflare deployment readback says:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+100%
+
+
+Then make THREE independently marked NORMAL requests to the runtime capability
+endpoint.
+
+IMPORTANT:
+
+NO targeted-version header.
+
+NO version override.
+
+NO preview request.
+
+These must represent ordinary serving behavior.
+
+
+Each request must return:
+
+HTTP 200
+
+registrationEnabled=true
+
+providers.email=true
+
+
+Record:
+
+request marker
+
+status
+
+safe body
+
+CF-Ray if available
+
+tail information if available
+
+
+BUT:
+
+missing tail information is NOT failure.
+
+
+If ANY ordinary HTTP request returns:
+
+registrationEnabled=false
+
+wrong capability
+
+5xx
+
+unexpected body
+
+then:
+
+rollback runtime to:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+verify registration=false
+
+STOP.
+
+==================================================
+STEP 4 — EXISTING USER RUNTIME SMOKE TEST
+==================================================
+
+Before opening public control signup:
+
+Use one existing test user through the normal BuildCustom application.
+
+Require:
+
+login succeeds
+
+/api/auth/me identifies correct user
+
+runtime /api/auth/check says authenticated=true
+
+dashboard loads
+
+their existing project opens
+
+
+If this fails:
+
+rollback runtime
+
+STOP.
+
+==================================================
+STEP 5 — ACTIVATE OPEN CONTROL
+==================================================
+
+Deploy EXISTING control candidate:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+→ 100%
+
+
+Confirm Cloudflare deployment readback says:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+100%
+
+
+Then make THREE normal requests to the public BuildCustom capability endpoint.
+
+Each must return:
+
+HTTP 200
+
+registrationEnabled=true
+
+publicGeneratedAppsEnabled=true
+
+
+Again:
+
+NO targeted-version requests.
+
+Tail information is informational only.
+
+
+Then load:
+
+https://app.buildcustom.ai
+
+
+Require:
+
+Create Account is visible
+
+normal login remains visible/working
+
+
+If the capability or UI is wrong:
+
+rollback control
+
+rollback runtime
+
+verify signup closed
+
+STOP.
+
+==================================================
+STEP 6 — SECURITY CHECK: ORIGIN PROTECTION
+==================================================
+
+Before creating the real account, verify the public registration endpoint's
+Origin protection.
+
+Use a deliberately INVALID email so this check cannot create a valid user.
+
+Use otherwise-valid request structure and valid CSRF where appropriate.
+
+VALID ORIGIN:
+
+https://app.buildcustom.ai
+
+
+Expected:
+
+request reaches normal downstream validation
+
+It must NOT return:
+
+ORIGIN_REJECTED
+
+
+INVALID ORIGIN:
+
+same request category
+
+change only Origin
+
+
+Expected:
+
+HTTP 400
+
+{"message":"ORIGIN_REJECTED"}
+
+
+MISSING ORIGIN:
+
+Expected:
+
+HTTP 400
+
+{"message":"ORIGIN_REJECTED"}
+
+
+Confirm identity counts did not change.
+
+If invalid or missing Origin reaches registration processing:
+
+SECURITY FAILURE.
+
+Rollback both Workers.
+
+STOP.
+
+==================================================
+STEP 7 — SECURITY CHECK: CSRF
+==================================================
+
+Use:
+
+valid Origin
+
+deliberately invalid email
+
+
+VALID CSRF:
+
+must reach downstream registration validation
+
+
+MISSING CSRF:
+
+must be rejected with the established public 403 behavior
+
+
+INVALID/MISMATCHED CSRF:
+
+must be rejected with the established public 403 behavior
+
+
+Confirm identity counts do not change.
+
+
+If missing or invalid CSRF reaches account creation:
+
+SECURITY FAILURE.
+
+Rollback both Workers.
+
+STOP.
+
+==================================================
+STEP 8 — BASIC REGISTRATION VALIDATION
+==================================================
+
+Before real signup, run the bounded non-account-creating cases:
+
+existing email
+
+case-variant existing email
+
+invalid email
+
+weak password
+
+missing password
+
+invalid request shape
+
+
+Require bounded client rejection.
+
+Require no unexpected 500/502.
+
+Require no new identity.
+
+Do not overcomplicate this.
+
+If one of these reveals an ACTUAL application failure:
+
+rollback both Workers
+
+STOP.
+
+==================================================
+STEP 9 — CREATE EXACTLY ONE REAL PUBLIC ACCOUNT
+==================================================
+
+Now test what actually matters.
+
+Use:
+
+https://app.buildcustom.ai
+
+
+Use a fresh disposable acceptance email.
+
+Create the account through the NORMAL PUBLIC SIGNUP UI exactly like a stranger
+would.
+
+
+NO bootstrap.
+
+NO direct runtime registration.
+
+NO manual D1 insertion.
+
+NO private endpoint.
+
+
+Perform exactly ONE signup action.
+
+==================================================
+STEP 10 — UNCERTAIN SIGNUP SAFETY
+==================================================
+
+If the browser loses the response or the click result is uncertain:
+
+DO NOT CLICK AGAIN.
+
+DO NOT RESEND SIGNUP.
+
+
+Reconcile by checking:
+
+does the product identity exist?
+
+does the runtime identity exist?
+
+do their IDs map correctly?
+
+is the browser authenticated?
+
+does runtime auth say authenticated=true?
+
+does the dashboard load?
+
+
+If those prove the signup succeeded:
+
+continue.
+
+
+If the account clearly does not exist:
+
+rollback both Workers
+
+STOP.
+
+
+If evidence conflicts and you genuinely cannot determine whether signup
+succeeded:
+
+rollback both Workers
+
+STOP.
+
+
+Never submit signup twice.
+
+==================================================
+STEP 11 — VERIFY AUTH ARCHITECTURE
+==================================================
+
+For the new user verify:
+
+exactly one runtime identity
+
+exactly one BuildCustom product identity
+
+correct runtime/product identity mapping
+
+legacy_password_hash is NULL/unused
+
+BuildCustom did NOT create a second password authority
+
+BuildCustom did NOT create a second local session authority
+
+runtime remains authentication/session authority
+
+/api/auth/me returns the correct user
+
+runtime /api/auth/check returns authenticated=true
+
+dashboard loads
+
+
+If any of this fails:
+
+SECURITY FAILURE.
+
+Rollback.
+
+STOP.
+
+==================================================
+STEP 12 — DUPLICATE IDENTITY SECURITY
+==================================================
+
+Attempt registration using the same new email.
+
+Require:
+
+bounded rejection
+
+NO second runtime identity
+
+NO second product identity
+
+
+Then attempt the case-variant form of the same email.
+
+Require:
+
+bounded rejection
+
+NO second runtime identity
+
+NO second product identity
+
+
+If duplicates are created:
+
+SECURITY FAILURE.
+
+Rollback.
+
+STOP.
+
+==================================================
+STEP 13 — OWNERSHIP ISOLATION
+==================================================
+
+We have already tested this extensively, so perform one concise regression.
+
+Using two existing users:
+
+User A can access User A project.
+
+User B can access User B project.
+
+
+User A must NOT be able to access User B:
+
+project
+
+Files
+
+preview
+
+publish endpoint
+
+
+User B must NOT be able to access User A equivalents.
+
+
+Expected unauthorized ownership result:
+
+404/denied according to existing behavior.
+
+
+Forged owner/user headers must not bypass ownership.
+
+
+If isolation fails:
+
+SECURITY FAILURE.
+
+Rollback.
+
+STOP.
+
+==================================================
+STEP 14 — LOGOUT REVOCATION
+==================================================
+
+For the NEW user:
+
+Before logout verify:
+
+runtime session exists
+
+is_revoked=0
+
+product auth works
+
+runtime auth works
+
+
+Save the current credential for replay testing.
+
+
+Perform normal logout through BuildCustom.
+
+
+Require:
+
+logout succeeds
+
+runtime session becomes:
+
+is_revoked=1
+
+
+Now replay the OLD credential.
+
+
+Product auth:
+
+must return unauthenticated semantics
+(existing behavior: body null)
+
+
+Runtime auth:
+
+must return:
+
+authenticated=false
+
+
+If old credentials remain authenticated:
+
+SECURITY FAILURE.
+
+Rollback.
+
+STOP.
+
+==================================================
+STEP 15 — FRESH LOGIN
+==================================================
+
+Log the same new user back in normally.
+
+Require:
+
+login succeeds
+
+same identity
+
+runtime authenticated=true
+
+dashboard loads
+
+
+This proves:
+
+signup
+
+logout
+
+server-side revocation
+
+old-session rejection
+
+fresh authentication
+
+==================================================
+STEP 16 — EXISTING PRODUCT REGRESSION
+==================================================
+
+Use the existing accepted projects.
+
+Verify:
+
+USER 1:
+login
+dashboard
+project 2 opens
+Files load
+preview loads
+
+
+USER 2:
+login
+dashboard
+project 3 opens
+Files load
+preview loads
+
+
+Do NOT generate.
+
+Do NOT edit.
+
+Do NOT Publish.
+
+
+Those systems have already been accepted.
+
+==================================================
+STEP 17 — GENERATED APP SECURITY / ROUTING
+==================================================
+
+Verify:
+
+project 2 public app:
+HTTP 200
+expected marker
+
+
+project 3 public app:
+HTTP 200
+expected marker
+
+
+unknown slug:
+HTTP 404
+
+
+Confirm gateway remains:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+Confirm no generated app can access authenticated BuildCustom parent/control
+data through the existing isolation boundary.
+
+Use the already-established safe isolation check.
+
+Do not modify an app.
+
+==================================================
+STEP 18 — CUSTOMER NETWORK CHECK
+==================================================
+
+Use the normal browser flow.
+
+Confirm no customer-facing runtime dependency on:
+
+Replit DEVELOPMENT
+
+legacy BuildCustom runtime
+
+staging runtime
+
+lab runtime
+
+old control plane
+
+private generated-app gateway
+
+customer-facing workers.dev URLs
+
+
+Do not fail for legitimate:
+
+Cloudflare infrastructure
+
+fonts
+
+analytics
+
+
+If an actual forbidden customer dependency exists:
+
+rollback and STOP.
+
+==================================================
+STEP 19 — REPLIT DEVELOPMENT-OFF CHECK
+==================================================
+
+Temporarily stop ONLY the Replit DEVELOPMENT workflow.
+
+DO NOT stop/unpublish the PUBLIC Replit deployment yet.
+
+The marketing waitlist still depends on that public deployment.
+
+
+With development stopped verify:
+
+app.buildcustom.ai loads
+
+Create Account remains visible
+
+new user can log in
+
+existing user can log in
+
+dashboard loads
+
+existing project opens
+
+Files load
+
+preview loads
+
+public generated app loads
+
+marketing buildcustom.ai loads
+
+
+Perform one logout/relogin check while development remains stopped.
+
+Require old session rejection.
+
+
+If all passes:
+
+BuildCustom application production is independent of the Replit development
+workflow.
+
+
+Restore development workflow afterward if desired.
+
+==================================================
+STEP 20 — FINAL HEALTH CHECK
+==================================================
+
+Do a SMALL final check.
+
+Do not run another enormous acceptance suite.
+
+
+Require:
+
+runtime deployment readback:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+100%
+
+
+control deployment readback:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+100%
+
+
+Three normal runtime capability requests:
+
+registrationEnabled=true
+
+providers.email=true
+
+
+Three normal control capability requests:
+
+registrationEnabled=true
+
+publicGeneratedAppsEnabled=true
+
+
+app.buildcustom.ai:
+
+200
+
+
+signup:
+
+OPEN
+
+
+existing login:
+
+works
+
+
+new login:
+
+works
+
+
+project access:
+
+works
+
+
+public generated app:
+
+works
+
+
+unknown slug:
+
+404
+
+
+gateway:
+
+unchanged
+
+
+claims:
+
+zero
+
+
+marketing:
+
+200
+
+
+Tail data may be recorded.
+
+TAIL DATA IS NOT A PASS/FAIL GATE.
+
+==================================================
+SUCCESS
+==================================================
+
+If ALL actual customer-path and security gates pass:
+
+LEAVE IT LIVE.
+
+
+Final runtime:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+100%
+
+
+Final control:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+100%
+
+
+Runtime registration:
+
+true
+
+
+Control registration:
+
+true
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+Public signup:
+
+OPEN
+
+
+Gateway:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+Then declare:
+
+BUILDCUSTOM PUBLIC SIGNUP IS LIVE.
+
+==================================================
+FAILURE
+==================================================
+
+Rollback ONLY for an actual:
+
+application failure
+
+security failure
+
+customer-path failure
+
+incorrect deployment readback
+
+incorrect capability response
+
+identity/session failure
+
+ownership failure
+
+routing failure
+
+
+DO NOT rollback merely because:
+
+tail event missing
+
+tail event delayed
+
+tail marker missing
+
+version-targeted probe unavailable
+
+observer cannot correlate a request
+
+
+If rollback is required:
+
+runtime:
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+control:
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+Verify:
+
+registration=false
+
+signup CLOSED
+
+existing login works
+
+existing public app works
+
+gateway unchanged
+
+claims zero
+
+
+Then STOP.
+
+DO NOT FIX AND RETRY DURING THIS OPERATION.
+
+==================================================
+AFTER SUCCESS
+==================================================
+
+Do NOT start another Task 12.
+
+Do NOT investigate tail correlation.
+
+Do NOT add more launch observers.
+
+Do NOT run another signup cutover.
+
+Task 12 is DONE.
+
+The next work after a successful launch will be:
+
+TASK 13
+
+Remove the remaining production Replit dependency by:
+
+1. establishing GitHub as permanent source of truth
+2. establishing reproducible Cloudflare deployment outside Replit
+3. moving the marketing waitlist endpoint off Replit
+4. updating the marketing frontend to the Cloudflare waitlist endpoint
+5. proving the entire product works with Replit completely unavailable
+6. then shutting down the remaining PUBLIC Replit production dependency
+
+DO NOT perform Task 13 in this task.
+
+==================================================
+RETURN A SHORT REPORT ONLY
+==================================================
+
+Do NOT return another 100-item report.
+
+Return:
+
+1. Closed precheck: PASS/FAIL
+
+2. Runtime activated:
+   version
+   deployment readback
+   three normal capability checks
+
+3. Existing-user smoke:
+   PASS/FAIL
+
+4. Control activated:
+   version
+   deployment readback
+   three normal capability checks
+
+5. Signup UI:
+   OPEN/CLOSED
+
+6. Origin security:
+   PASS/FAIL
+
+7. CSRF security:
+   PASS/FAIL
+
+8. Registration validation:
+   PASS/FAIL
+
+9. Fresh public signup:
+   PASS/FAIL
+   signup action count
+
+10. Identity/session architecture:
+    PASS/FAIL
+
+11. Duplicate protection:
+    PASS/FAIL
+
+12. Ownership isolation:
+    PASS/FAIL
+
+13. Logout revocation:
+    PASS/FAIL
+
+14. Old-session rejection:
+    PASS/FAIL
+
+15. Fresh login:
+    PASS/FAIL
+
+16. Existing project/Files/preview:
+    PASS/FAIL
+
+17. Public generated apps/gateway:
+    PASS/FAIL
+
+18. Customer network audit:
+    PASS/FAIL
+
+19. Replit-development-off:
+    PASS/FAIL
+
+20. Final runtime:
+    version
+    traffic
+
+21. Final control:
+    version
+    traffic
+
+22. Public signup:
+    OPEN/CLOSED
+
+23. Rollback performed:
+    YES/NO
+
+24. If rollback occurred:
+    exact REAL application/security/customer-path failure
+
+25. Final verdict:
+    BUILDCUSTOM PUBLIC SIGNUP IS LIVE
+    or
+    BUILDCUSTOM REMAINS CLOSED
+
+Then STOP.

@@ -1,0 +1,3140 @@
+{
+  "schemaVersion": 1,
+  "status": "FAIL",
+  "startedAt": "2026-09-29T13:01:52.867Z",
+  "completedAt": "2026-09-29T13:02:41.369Z",
+  "phase": "cleanup",
+  "current": {
+    "operation": "final-artifact",
+    "nextCheckpoint": "final-artifact",
+    "lastCompletedCheckpoint": "cleanup:after"
+  },
+  "signup": {
+    "state": "SIGNUP_CONFIRMED",
+    "actionCount": 1,
+    "reconciliation": "SUCCESS"
+  },
+  "cases": [
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "sequence": 1,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:01.078Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "request": {
+          "caseName": "[REDACTED]",
+          "fetchStarted": true
+        },
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "countsBefore": {
+          "product": 1,
+          "runtime": 1,
+          "legacyHashNull": true
+        },
+        "countsAfter": {
+          "product": 1,
+          "runtime": 1,
+          "legacyHashNull": true
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:02.244Z"
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "sequence": 2,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:02.245Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "request": {
+          "caseName": "[REDACTED]",
+          "fetchStarted": true
+        },
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "countsBefore": {
+          "product": 1,
+          "runtime": 1,
+          "legacyHashNull": true
+        },
+        "countsAfter": {
+          "product": 1,
+          "runtime": 1,
+          "legacyHashNull": true
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:03.390Z"
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-email",
+      "sequence": 3,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:03.391Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "request": {
+          "caseName": "invalid-email",
+          "fetchStarted": true
+        },
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "countsBefore": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsAfter": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:04.401Z"
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "weak-password",
+      "sequence": 4,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:04.404Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "request": {
+          "caseName": "weak-password",
+          "fetchStarted": true
+        },
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "countsBefore": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsAfter": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:05.369Z"
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "missing-password",
+      "sequence": 5,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:05.370Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "request": {
+          "caseName": "missing-password",
+          "fetchStarted": true
+        },
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"[REDACTED]\"}",
+          "parsedBody": {
+            "message": "Enter your name, email, and password."
+          },
+          "parseError": null
+        },
+        "countsBefore": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsAfter": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:06.279Z"
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-request-shape",
+      "sequence": 6,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:06.281Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "request": {
+          "caseName": "invalid-request-shape",
+          "fetchStarted": true
+        },
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"[REDACTED]\"}",
+          "parsedBody": {
+            "message": "Enter your name, email, and password."
+          },
+          "parseError": null
+        },
+        "countsBefore": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsAfter": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:07.184Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 7,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:07.186Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "valid",
+        "csrfState": "valid",
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:09.968Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 8,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:09.970Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "valid",
+        "csrfState": "missing",
+        "response": {
+          "status": 403,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:12.490Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 9,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:12.492Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "valid",
+        "csrfState": "invalid",
+        "response": {
+          "status": 403,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:14.843Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 10,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:14.846Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "invalid",
+        "csrfState": "valid",
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+          "parsedBody": {
+            "message": "ORIGIN_REJECTED"
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:17.273Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 11,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:17.275Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "invalid",
+        "csrfState": "missing",
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+          "parsedBody": {
+            "message": "ORIGIN_REJECTED"
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:19.621Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 12,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:19.625Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "invalid",
+        "csrfState": "invalid",
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+          "parsedBody": {
+            "message": "ORIGIN_REJECTED"
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:21.911Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 13,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:21.914Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "missing",
+        "csrfState": "valid",
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+          "parsedBody": {
+            "message": "ORIGIN_REJECTED"
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:24.233Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "sequence": 14,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:24.237Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "missing",
+        "csrfState": "missing",
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+          "parsedBody": {
+            "message": "ORIGIN_REJECTED"
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:26.494Z"
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "sequence": 15,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:26.497Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "originState": "missing",
+        "csrfState": "invalid",
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+          "parsedBody": {
+            "message": "ORIGIN_REJECTED"
+          },
+          "parseError": null
+        },
+        "responseClassification": "SAFE_JSON",
+        "countsBefore": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsAfter": {
+          "existing": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "invalid-email": "[REDACTED]",
+          "disposable": {
+            "product": {
+              "count": 0,
+              "legacyHashNull": true,
+              "id": null
+            },
+            "runtime": {
+              "count": 0,
+              "id": null
+            }
+          }
+        },
+        "countsUnchanged": true,
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:29.054Z"
+    },
+    {
+      "phase": "pre-signup",
+      "caseName": "[REDACTED]",
+      "sequence": 16,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:29.059Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "counts": {
+          "product": 0,
+          "runtime": 0,
+          "legacyHashNull": true
+        }
+      },
+      "completedAt": "2026-09-29T13:02:29.502Z"
+    },
+    {
+      "phase": "signup",
+      "caseName": "single-public-ui-signup",
+      "sequence": 17,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:29.505Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "action": {
+          "outcome": "SUCCESS",
+          "response": {
+            "status": 200,
+            "rawText": "{}",
+            "parsedBody": {
+              "id": "[REDACTED]",
+              "username": "Task 12V Acceptance",
+              "email": "[REDACTED]",
+              "role": "user",
+              "plan": "free",
+              "created_at": "[PHONE]:02:31"
+            },
+            "parseError": null,
+            "fetchStarted": true,
+            "responseReceived": true,
+            "responseBodyReadable": true
+          },
+          "requestCount": 1
+        },
+        "reconciliation": {
+          "counts": {
+            "product": {
+              "count": 1,
+              "legacyHashNull": true,
+              "id": "[REDACTED]"
+            },
+            "runtime": {
+              "count": 1,
+              "id": "[REDACTED]"
+            }
+          },
+          "productD1Id": "[REDACTED]",
+          "runtimeD1Id": "[REDACTED]",
+          "productAuth": {
+            "status": 200,
+            "authenticated": true,
+            "userId": "[REDACTED]"
+          },
+          "runtimeAuth": {
+            "status": 200,
+            "authenticated": true,
+            "userId": "[REDACTED]"
+          },
+          "runtimeSession": {
+            "exists": true,
+            "ownerMatches": true,
+            "revoked": false,
+            "sessionId": "[REDACTED]"
+          },
+          "productLocalSessionCount": 0,
+          "readErrors": [],
+          "requestCount": 1,
+          "dashboardReached": true
+        },
+        "reconciliationClassification": "SUCCESS",
+        "reconciliationRules": {
+          "success": "both identity counts are exactly one, product legacy hash is null, all four identity IDs match, product/runtime auth are authenticated and IDs match, runtime session exists and is active, and all reads succeeded",
+          "fail": "both identities are definitely absent, both auth states are unauthenticated, counts match the pre-signup zero counts, and action returned a definite 4xx rejection",
+          "unknown": "all other evidence combinations or reconciliation read errors"
+        },
+        "sharedSignupEvaluation": {
+          "passed": true,
+          "assertions": {
+            "singleClickAndRequest": true,
+            "successfulResponse": true,
+            "responseBodyReadable": true,
+            "dashboardReached": true,
+            "productCountOne": true,
+            "runtimeCountOne": true,
+            "legacyHashNull": true,
+            "productIdentityPresent": true,
+            "runtimeIdentityPresent": true,
+            "identityMappingMatches": true,
+            "productLocalSessionCountZero": true,
+            "reconciliationSucceeded": true,
+            "runtimeSessionExists": true,
+            "runtimeSessionOwnerMatches": true,
+            "runtimeSessionActive": true
+          },
+          "failures": [],
+          "errorName": null,
+          "errorMessage": null
+        },
+        "actionCount": 1
+      },
+      "classification": "SUCCESS",
+      "completedAt": "2026-09-29T13:02:34.087Z"
+    },
+    {
+      "phase": "[REDACTED]",
+      "caseName": "[REDACTED]",
+      "sequence": 18,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:34.092Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "before": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true,
+            "id": "[REDACTED]"
+          },
+          "runtime": {
+            "count": 1,
+            "id": "[REDACTED]"
+          }
+        },
+        "after": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true,
+            "id": "[REDACTED]"
+          },
+          "runtime": {
+            "count": 1,
+            "id": "[REDACTED]"
+          }
+        },
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:35.114Z"
+    },
+    {
+      "phase": "[REDACTED]",
+      "caseName": "[REDACTED]",
+      "sequence": 19,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:35.121Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "response": {
+          "status": 400,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+          "parsedBody": {
+            "message": "Could not create your account. Check your details."
+          },
+          "parseError": null
+        },
+        "before": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true,
+            "id": "[REDACTED]"
+          },
+          "runtime": {
+            "count": 1,
+            "id": "[REDACTED]"
+          }
+        },
+        "after": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true,
+            "id": "[REDACTED]"
+          },
+          "runtime": {
+            "count": 1,
+            "id": "[REDACTED]"
+          }
+        },
+        "classification": "PASS"
+      },
+      "completedAt": "2026-09-29T13:02:36.091Z"
+    },
+    {
+      "phase": "new-user-authority",
+      "caseName": "new-user-auth-authority",
+      "sequence": 20,
+      "status": "PASS",
+      "startedAt": "2026-09-29T13:02:36.094Z",
+      "lastCompletedCheckpoint": "case:complete",
+      "nextCheckpoint": null,
+      "evidence": {
+        "counts": {
+          "product": {
+            "count": 1,
+            "legacyHashNull": true,
+            "id": "[REDACTED]"
+          },
+          "runtime": {
+            "count": 1,
+            "id": "[REDACTED]"
+          }
+        },
+        "productAuth": {
+          "status": 200,
+          "authenticated": true,
+          "userId": "[REDACTED]",
+          "parseError": null
+        },
+        "runtimeAuth": {
+          "status": 200,
+          "authenticated": true,
+          "authenticatedValue": true,
+          "userId": "[REDACTED]",
+          "parseError": null,
+          "responseReadError": null
+        },
+        "runtimeSession": {
+          "exists": true,
+          "ownerMatches": true,
+          "revoked": false,
+          "sessionId": "[REDACTED]"
+        },
+        "productLocalSessionCount": 0,
+        "sharedSignupEvaluation": {
+          "passed": true,
+          "assertions": {
+            "singleClickAndRequest": true,
+            "successfulResponse": true,
+            "responseBodyReadable": true,
+            "dashboardReached": true,
+            "productCountOne": true,
+            "runtimeCountOne": true,
+            "legacyHashNull": true,
+            "productIdentityPresent": true,
+            "runtimeIdentityPresent": true,
+            "identityMappingMatches": true,
+            "productLocalSessionCountZero": true,
+            "reconciliationSucceeded": true,
+            "runtimeSessionExists": true,
+            "runtimeSessionOwnerMatches": true,
+            "runtimeSessionActive": true
+          },
+          "failures": [],
+          "errorName": null,
+          "errorMessage": null
+        },
+        "preLogoutEvaluation": {
+          "passed": true,
+          "assertions": {
+            "loginSucceeded": true,
+            "authenticatedDashboardLoaded": true,
+            "productIdentityMatches": true,
+            "runtimeIdentityMatches": true,
+            "runtimeSessionActive": true,
+            "productLocalSessionCountZero": true
+          },
+          "failures": [],
+          "errorName": null,
+          "errorMessage": null
+        }
+      },
+      "completedAt": "2026-09-29T13:02:37.759Z"
+    },
+    {
+      "phase": "logout-revocation",
+      "caseName": "[REDACTED]",
+      "sequence": 21,
+      "status": "FAIL",
+      "startedAt": "2026-09-29T13:02:37.763Z",
+      "lastCompletedCheckpoint": "[REDACTED]:after",
+      "nextCheckpoint": "final-artifact",
+      "evidence": {
+        "logout": {
+          "status": 204,
+          "browserCredentialCleared": "[REDACTED]",
+          "responseBodyReadable": false
+        },
+        "session": {
+          "exists": true,
+          "ownerMatches": true,
+          "revoked": true,
+          "sessionId": "[REDACTED]"
+        }
+      },
+      "completedAt": "2026-09-29T13:02:41.094Z",
+      "error": {
+        "name": "RuntimeSessionNotRevokedError",
+        "message": "new user logout did not clear credentials and revoke its runtime session",
+        "stack": "RuntimeSessionNotRevokedError: new user logout did not clear credentials and revoke its runtime session\n    at errorFor (file:///[REDACTED].mjs:69:17)\n    at failCase (file:///[REDACTED].mjs:330:11)\n    at file:///[REDACTED].mjs:640:11\n    at async runCase (file:///[REDACTED].mjs:307:7)\n    at async runOwnerLogoutLifecycle (file:///[REDACTED].mjs:624:7)\n    at async executeLifecycle (file:///[REDACTED].mjs:710:5)\n    at async runRegistrationAcceptance (file:///[REDACTED].mjs:788:5)\n    at async file:///[REDACTED].mjs:13:20",
+        "cause": null
+      },
+      "operation": "[REDACTED]"
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "old-credential-replay",
+      "sequence": 22,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "new-user-fresh-login",
+      "sequence": 23,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 24,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 25,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 26,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 27,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "browser-network-audit",
+      "sequence": 28,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "operations": [
+    {
+      "phase": "initialize",
+      "caseName": null,
+      "operation": "initialize",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:01:52.872Z",
+      "completedAt": "2026-09-29T13:02:00.175Z",
+      "observation": {
+        "ready": true,
+        "productRegistrationEnabled": true,
+        "runtimeRegistrationEnabled": true
+      }
+    },
+    {
+      "phase": "initialize",
+      "caseName": null,
+      "operation": "navigate-to-signup",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:00.176Z",
+      "completedAt": "2026-09-29T13:02:01.075Z",
+      "observation": {
+        "reached": true,
+        "sameOrigin": true
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:01.079Z",
+      "completedAt": "2026-09-29T13:02:01.506Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:01.508Z",
+      "completedAt": "2026-09-29T13:02:01.570Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "registration-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:01.571Z",
+      "completedAt": "2026-09-29T13:02:01.807Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+        "parsedBody": {
+          "message": "Could not create your account. Check your details."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true,
+        "responseBodyReadable": true,
+        "noAutomaticLogin": true
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:01.808Z",
+      "completedAt": "2026-09-29T13:02:02.241Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:02.246Z",
+      "completedAt": "2026-09-29T13:02:02.649Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:02.651Z",
+      "completedAt": "2026-09-29T13:02:02.703Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "registration-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:02.704Z",
+      "completedAt": "2026-09-29T13:02:02.935Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+        "parsedBody": {
+          "message": "Could not create your account. Check your details."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true,
+        "responseBodyReadable": true,
+        "noAutomaticLogin": true
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:02.936Z",
+      "completedAt": "2026-09-29T13:02:03.388Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-email",
+      "operation": "counts-before",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:03.392Z",
+      "completedAt": "2026-09-29T13:02:03.856Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-email",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:03.860Z",
+      "completedAt": "2026-09-29T13:02:03.915Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-email",
+      "operation": "registration-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:03.916Z",
+      "completedAt": "2026-09-29T13:02:04.018Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+        "parsedBody": {
+          "message": "Could not create your account. Check your details."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true,
+        "responseBodyReadable": true,
+        "noAutomaticLogin": true
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-email",
+      "operation": "counts-after",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:04.019Z",
+      "completedAt": "2026-09-29T13:02:04.399Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "weak-password",
+      "operation": "counts-before",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:04.405Z",
+      "completedAt": "2026-09-29T13:02:04.806Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "weak-password",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:04.808Z",
+      "completedAt": "2026-09-29T13:02:04.853Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "weak-password",
+      "operation": "registration-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:04.854Z",
+      "completedAt": "2026-09-29T13:02:04.935Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+        "parsedBody": {
+          "message": "Could not create your account. Check your details."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true,
+        "responseBodyReadable": true,
+        "noAutomaticLogin": true
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "weak-password",
+      "operation": "counts-after",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:04.936Z",
+      "completedAt": "2026-09-29T13:02:05.367Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "missing-password",
+      "operation": "counts-before",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:05.372Z",
+      "completedAt": "2026-09-29T13:02:05.779Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "missing-password",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:05.780Z",
+      "completedAt": "2026-09-29T13:02:05.830Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "missing-password",
+      "operation": "registration-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:05.832Z",
+      "completedAt": "2026-09-29T13:02:05.865Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"[REDACTED]\"}",
+        "parsedBody": {
+          "message": "Enter your name, email, and password."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true,
+        "responseBodyReadable": true,
+        "noAutomaticLogin": true
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "missing-password",
+      "operation": "counts-after",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:05.866Z",
+      "completedAt": "2026-09-29T13:02:06.277Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-request-shape",
+      "operation": "counts-before",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:06.282Z",
+      "completedAt": "2026-09-29T13:02:06.660Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-request-shape",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:06.661Z",
+      "completedAt": "2026-09-29T13:02:06.707Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-request-shape",
+      "operation": "registration-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:06.708Z",
+      "completedAt": "2026-09-29T13:02:06.737Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"[REDACTED]\"}",
+        "parsedBody": {
+          "message": "Enter your name, email, and password."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true,
+        "responseBodyReadable": true,
+        "noAutomaticLogin": true
+      }
+    },
+    {
+      "phase": "bounded-validation",
+      "caseName": "invalid-request-shape",
+      "operation": "counts-after",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:06.739Z",
+      "completedAt": "2026-09-29T13:02:07.182Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:07.188Z",
+      "completedAt": "2026-09-29T13:02:07.545Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:07.553Z",
+      "completedAt": "2026-09-29T13:02:07.973Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:07.975Z",
+      "completedAt": "2026-09-29T13:02:08.543Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:08.545Z",
+      "completedAt": "2026-09-29T13:02:08.593Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:08.595Z",
+      "completedAt": "2026-09-29T13:02:08.716Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+        "parsedBody": {
+          "message": "Could not create your account. Check your details."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:08.718Z",
+      "completedAt": "2026-09-29T13:02:09.177Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:09.179Z",
+      "completedAt": "2026-09-29T13:02:09.563Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:09.566Z",
+      "completedAt": "2026-09-29T13:02:09.964Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:09.971Z",
+      "completedAt": "2026-09-29T13:02:10.411Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:10.413Z",
+      "completedAt": "2026-09-29T13:02:10.887Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:10.889Z",
+      "completedAt": "2026-09-29T13:02:11.246Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:11.248Z",
+      "completedAt": "2026-09-29T13:02:11.332Z",
+      "observation": {
+        "state": "missing",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:11.335Z",
+      "completedAt": "2026-09-29T13:02:11.418Z",
+      "observation": {
+        "status": 403,
+        "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+        "parsedBody": {
+          "message": "Could not create your account. Check your details."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:11.426Z",
+      "completedAt": "2026-09-29T13:02:11.802Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:11.805Z",
+      "completedAt": "2026-09-29T13:02:12.149Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:12.151Z",
+      "completedAt": "2026-09-29T13:02:12.487Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:12.494Z",
+      "completedAt": "2026-09-29T13:02:12.865Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:12.867Z",
+      "completedAt": "2026-09-29T13:02:13.220Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:13.223Z",
+      "completedAt": "2026-09-29T13:02:13.576Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:13.578Z",
+      "completedAt": "2026-09-29T13:02:13.647Z",
+      "observation": {
+        "state": "invalid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:13.649Z",
+      "completedAt": "2026-09-29T13:02:13.714Z",
+      "observation": {
+        "status": 403,
+        "rawText": "{\"message\":\"Could not create your account. Check your details.\"}",
+        "parsedBody": {
+          "message": "Could not create your account. Check your details."
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:13.717Z",
+      "completedAt": "2026-09-29T13:02:14.119Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:14.122Z",
+      "completedAt": "2026-09-29T13:02:14.502Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:14.504Z",
+      "completedAt": "2026-09-29T13:02:14.841Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:14.848Z",
+      "completedAt": "2026-09-29T13:02:15.257Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:15.260Z",
+      "completedAt": "2026-09-29T13:02:15.650Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:15.653Z",
+      "completedAt": "2026-09-29T13:02:16.030Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:16.033Z",
+      "completedAt": "2026-09-29T13:02:16.080Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:16.083Z",
+      "completedAt": "2026-09-29T13:02:16.144Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+        "parsedBody": {
+          "message": "ORIGIN_REJECTED"
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:16.148Z",
+      "completedAt": "2026-09-29T13:02:16.515Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:16.517Z",
+      "completedAt": "2026-09-29T13:02:16.890Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:16.892Z",
+      "completedAt": "2026-09-29T13:02:17.270Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:17.278Z",
+      "completedAt": "2026-09-29T13:02:17.626Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:17.629Z",
+      "completedAt": "2026-09-29T13:02:17.960Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:17.962Z",
+      "completedAt": "2026-09-29T13:02:18.303Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:18.305Z",
+      "completedAt": "2026-09-29T13:02:18.365Z",
+      "observation": {
+        "state": "missing",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:18.368Z",
+      "completedAt": "2026-09-29T13:02:18.422Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+        "parsedBody": {
+          "message": "ORIGIN_REJECTED"
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:18.425Z",
+      "completedAt": "2026-09-29T13:02:18.825Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:18.827Z",
+      "completedAt": "2026-09-29T13:02:19.234Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:19.238Z",
+      "completedAt": "2026-09-29T13:02:19.618Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:19.627Z",
+      "completedAt": "2026-09-29T13:02:19.973Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:19.975Z",
+      "completedAt": "2026-09-29T13:02:20.310Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:20.312Z",
+      "completedAt": "2026-09-29T13:02:20.684Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:20.691Z",
+      "completedAt": "2026-09-29T13:02:20.737Z",
+      "observation": {
+        "state": "invalid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:20.740Z",
+      "completedAt": "2026-09-29T13:02:20.842Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+        "parsedBody": {
+          "message": "ORIGIN_REJECTED"
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:20.845Z",
+      "completedAt": "2026-09-29T13:02:21.211Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:21.213Z",
+      "completedAt": "2026-09-29T13:02:21.597Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:21.600Z",
+      "completedAt": "2026-09-29T13:02:21.908Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:21.917Z",
+      "completedAt": "2026-09-29T13:02:22.264Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:22.267Z",
+      "completedAt": "2026-09-29T13:02:22.628Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:22.635Z",
+      "completedAt": "2026-09-29T13:02:23.010Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:23.013Z",
+      "completedAt": "2026-09-29T13:02:23.063Z",
+      "observation": {
+        "state": "valid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:23.066Z",
+      "completedAt": "2026-09-29T13:02:23.136Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+        "parsedBody": {
+          "message": "ORIGIN_REJECTED"
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:23.139Z",
+      "completedAt": "2026-09-29T13:02:23.476Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:23.479Z",
+      "completedAt": "2026-09-29T13:02:23.836Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:23.839Z",
+      "completedAt": "2026-09-29T13:02:24.230Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:24.241Z",
+      "completedAt": "2026-09-29T13:02:24.597Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:24.602Z",
+      "completedAt": "2026-09-29T13:02:24.932Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:24.936Z",
+      "completedAt": "2026-09-29T13:02:25.301Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:25.305Z",
+      "completedAt": "2026-09-29T13:02:25.354Z",
+      "observation": {
+        "state": "missing",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:25.358Z",
+      "completedAt": "2026-09-29T13:02:25.428Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+        "parsedBody": {
+          "message": "ORIGIN_REJECTED"
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:25.431Z",
+      "completedAt": "2026-09-29T13:02:25.812Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:25.816Z",
+      "completedAt": "2026-09-29T13:02:26.167Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:26.172Z",
+      "completedAt": "2026-09-29T13:02:26.490Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:26.500Z",
+      "completedAt": "2026-09-29T13:02:26.909Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:26.912Z",
+      "completedAt": "2026-09-29T13:02:27.326Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-before:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:27.330Z",
+      "completedAt": "2026-09-29T13:02:27.736Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "csrf-acquisition",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:27.739Z",
+      "completedAt": "2026-09-29T13:02:27.799Z",
+      "observation": {
+        "state": "invalid",
+        "token": "[REDACTED]",
+        "cookie": "[REDACTED]"
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "matrix-request",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:27.802Z",
+      "completedAt": "2026-09-29T13:02:27.856Z",
+      "observation": {
+        "status": 400,
+        "rawText": "{\"message\":\"ORIGIN_REJECTED\"}",
+        "parsedBody": {
+          "message": "ORIGIN_REJECTED"
+        },
+        "parseError": null,
+        "fetchStarted": true,
+        "responseReceived": true
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:existing",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:27.860Z",
+      "completedAt": "2026-09-29T13:02:28.254Z",
+      "observation": {
+        "product": {
+          "count": 1,
+          "legacyHashNull": true,
+          "id": "[REDACTED]"
+        },
+        "runtime": {
+          "count": 1,
+          "id": "[REDACTED]"
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:invalid-email",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:28.260Z",
+      "completedAt": "2026-09-29T13:02:28.647Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "origin-csrf-matrix",
+      "caseName": "[REDACTED]",
+      "operation": "counts-after:disposable",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:28.651Z",
+      "completedAt": "2026-09-29T13:02:29.048Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "pre-signup",
+      "caseName": "[REDACTED]",
+      "operation": "[REDACTED]",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:29.063Z",
+      "completedAt": "2026-09-29T13:02:29.499Z",
+      "observation": {
+        "product": {
+          "count": 0,
+          "legacyHashNull": true,
+          "id": null
+        },
+        "runtime": {
+          "count": 0,
+          "id": null
+        }
+      }
+    },
+    {
+      "phase": "signup",
+      "caseName": "single-public-ui-signup",
+      "operation": "single-signup-action",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:02:29.513Z",
+      "completedAt": "2026-09-29T13:02:32.042Z",
+      "observation": {
+        "outcome": "SUCCESS",
+        "response": {
+          "status": 200,
+          "rawText": "{}",
+          "parsedBody": {
+            "id": "[REDACTED]",
+            "username": "Task 12V Acceptance",
+            "email": "[REDACTED]",
+            "role": "user",
+            "plan": "free",
+            "created_at": "[PHONE]:02:31"
+          },
+          "parseError": null,
+          "fetchStarted": true,
+          "responseReceived": true,
+          "responseBodyReadable": true
+        },
+        "requestCount": 1
+      }
+    }
+  ],
+  "persistenceErrors": [],
+  "cleanupErrors": [],
+  "preSignupCounts": "[CIRCULAR]",
+  "error": {
+    "name": "RuntimeSessionNotRevokedError",
+    "message": "new user logout did not clear credentials and revoke its runtime session",
+    "stack": "RuntimeSessionNotRevokedError: new user logout did not clear credentials and revoke its runtime session\n    at errorFor (file:///[REDACTED].mjs:69:17)\n    at failCase (file:///[REDACTED].mjs:330:11)\n    at file:///[REDACTED].mjs:640:11\n    at async runCase (file:///[REDACTED].mjs:307:7)\n    at async runOwnerLogoutLifecycle (file:///[REDACTED].mjs:624:7)\n    at async executeLifecycle (file:///[REDACTED].mjs:710:5)\n    at async runRegistrationAcceptance (file:///[REDACTED].mjs:788:5)\n    at async file:///[REDACTED].mjs:13:20",
+    "cause": null,
+    "phase": "logout-revocation",
+    "caseName": "[REDACTED]",
+    "operation": "[REDACTED]",
+    "lastCompletedCheckpoint": "[REDACTED]:after",
+    "nextCheckpoint": "final-artifact"
+  },
+  "acceptance": {
+    "status": "FAIL",
+    "completedAt": "2026-09-29T13:02:41.094Z"
+  },
+  "handoff": {
+    "status": "SKIPPED",
+    "completedAt": null,
+    "reason": "acceptance-not-pass"
+  }
+}

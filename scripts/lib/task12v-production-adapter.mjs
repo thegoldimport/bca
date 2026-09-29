@@ -532,8 +532,8 @@ export function createTask12VProductionAdapter() {
       requireCondition(productCapabilities.status === 200
         && productCapabilities.body?.registrationEnabled === true
         && runtimeProviders.status === 200
-        && runtimeProviders.body?.registrationEnabled === true
-        && runtimeProviders.body?.email === true,
+        && runtimeProviders.body?.data?.registrationEnabled === true
+        && runtimeProviders.body?.data?.providers?.email === true,
       "Registration acceptance requires both public and runtime email registration enabled");
       return { reached: true, sameOrigin: true };
     },

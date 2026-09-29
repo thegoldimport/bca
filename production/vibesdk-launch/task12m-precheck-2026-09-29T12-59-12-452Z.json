@@ -1,0 +1,51 @@
+{
+  "startedAt": "2026-09-29T12:59:12.452Z",
+  "status": "PASS",
+  "deployments": {
+    "runtime": "ea9907eb-8f60-420c-bcbc-a529000e4c34",
+    "control": "1ac9eb40-74e3-4a69-8225-c1af6535961f",
+    "gateway": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427"
+  },
+  "runtime": {
+    "version": "95da88fe-fe8a-4ce3-9c62-4565d7f279c2",
+    "moduleHashes": [
+      {
+        "name": "207675bc61985763007bef924b915f43ff3dc25d-SKILL.md",
+        "sha256": "bb620c71dd6762ca61ee5acb563c710600f961eeb6ccc6eb1f7003359f2aa9aa"
+      },
+      {
+        "name": "3e51c3b6c51d14c0f926fc51bac892d3382548bf-SKILL.md",
+        "sha256": "6cc26ebc78673680cb3960e10192dcbd7c4dff74e7da9a13f1c343e2cc86121b"
+      },
+      {
+        "name": "6128e62305fc8de5a3c6845ea6b3fd1f4412c6c4-esbuild.wasm",
+        "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+      },
+      {
+        "name": "b2a76c4e89b97beb69394911244f8582a08adf64-SKILL.md",
+        "sha256": "e0283287a2bf95f5659c62c31f4fa27bea9a4df492d7f5f4ad9955d775cb2f9b"
+      },
+      {
+        "name": "bc659942f46fcff9304d22e8b012089016e80cfd-SKILL.md",
+        "sha256": "671c46dc33a771834b1db9e60656361b41f46ba8f29822f4f18799cd46d6e49e"
+      },
+      {
+        "name": "index.js",
+        "sha256": "db3fa64dd2b56a4d3f336919bc45cf9c7ee02bf6bda98035fd012dabdebd4432"
+      }
+    ],
+    "otherFiveMatch": true,
+    "bindings": 29,
+    "resourcesMatch": true,
+    "assetRoutingMatches": true,
+    "validationFixPresent": true
+  },
+  "control": {
+    "version": "754a3a04-91f9-49e2-b9a8-614aa183a13c",
+    "modulesMatch": true,
+    "bindingsMatchExceptGate": true,
+    "assetRoutingMatches": true,
+    "authRuntime": "buildcustom-vibesdk-launch"
+  },
+  "completedAt": "2026-09-29T12:59:15.783Z"
+}

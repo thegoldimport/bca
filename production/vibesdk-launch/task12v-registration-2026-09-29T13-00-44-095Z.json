@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "status": "FAIL",
+  "startedAt": "2026-09-29T13:00:44.096Z",
+  "completedAt": "2026-09-29T13:00:46.797Z",
+  "phase": "cleanup",
+  "current": {
+    "operation": "final-artifact",
+    "nextCheckpoint": "final-artifact",
+    "lastCompletedCheckpoint": "cleanup:after"
+  },
+  "signup": {
+    "state": "PRE_CLICK",
+    "actionCount": 0
+  },
+  "cases": [
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 1,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 2,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "invalid-email",
+      "sequence": 3,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "weak-password",
+      "sequence": 4,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "missing-password",
+      "sequence": 5,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "invalid-request-shape",
+      "sequence": 6,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 7,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 8,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 9,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 10,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 11,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 12,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 13,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "registration-origin-missing-csrf-missing",
+      "sequence": 14,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 15,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 16,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "single-public-ui-signup",
+      "sequence": 17,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 18,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 19,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "new-user-auth-authority",
+      "sequence": 20,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 21,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "old-credential-replay",
+      "sequence": 22,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "new-user-fresh-login",
+      "sequence": 23,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 24,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 25,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 26,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "[REDACTED]",
+      "sequence": 27,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "phase": "acceptance",
+      "caseName": "browser-network-audit",
+      "sequence": 28,
+      "status": "NOT_RUN",
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "operations": [
+    {
+      "phase": "initialize",
+      "caseName": null,
+      "operation": "initialize",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:00:44.102Z",
+      "completedAt": "2026-09-29T13:00:45.558Z",
+      "observation": {
+        "ready": true,
+        "productRegistrationEnabled": true,
+        "runtimeRegistrationEnabled": true
+      }
+    },
+    {
+      "phase": "initialize",
+      "caseName": null,
+      "operation": "navigate-to-signup",
+      "status": "FAIL",
+      "startedAt": "2026-09-29T13:00:45.559Z",
+      "completedAt": "2026-09-29T13:00:46.457Z",
+      "error": {
+        "name": "AcceptancePreconditionError",
+        "message": "Registration acceptance requires both public and runtime email registration enabled",
+        "stack": "AcceptancePreconditionError: Registration acceptance requires both public and runtime email registration enabled\n    at adapterError (file:///[REDACTED].mjs:84:17)\n    at requireCondition (file:///[REDACTED].mjs:91:25)\n    at Object.navigate (file:///[REDACTED].mjs:532:7)\n    at process.processTicksAndRejections (node:[REDACTED]:105:5)\n    at async operation (file:///[REDACTED].mjs:270:22)\n    at async executeLifecycle (file:///[REDACTED].mjs:419:5)\n    at async runRegistrationAcceptance (file:///[REDACTED].mjs:788:5)\n    at async file:///[REDACTED].mjs:13:20",
+        "cause": null
+      },
+      "responseReceived": false
+    },
+    {
+      "phase": "cleanup",
+      "caseName": null,
+      "operation": "cleanup",
+      "status": "COMPLETED",
+      "startedAt": "2026-09-29T13:00:46.461Z",
+      "completedAt": "2026-09-29T13:00:46.794Z",
+      "observation": null
+    }
+  ],
+  "persistenceErrors": [],
+  "cleanupErrors": [],
+  "error": {
+    "name": "AcceptancePreconditionError",
+    "message": "Registration acceptance requires both public and runtime email registration enabled",
+    "stack": "AcceptancePreconditionError: Registration acceptance requires both public and runtime email registration enabled\n    at adapterError (file:///[REDACTED].mjs:84:17)\n    at requireCondition (file:///[REDACTED].mjs:91:25)\n    at Object.navigate (file:///[REDACTED].mjs:532:7)\n    at process.processTicksAndRejections (node:[REDACTED]:105:5)\n    at async operation (file:///[REDACTED].mjs:270:22)\n    at async executeLifecycle (file:///[REDACTED].mjs:419:5)\n    at async runRegistrationAcceptance (file:///[REDACTED].mjs:788:5)\n    at async file:///[REDACTED].mjs:13:20",
+    "cause": null,
+    "phase": "initialize",
+    "caseName": null,
+    "operation": "navigate-to-signup",
+    "lastCompletedCheckpoint": "navigate-to-signup:failed",
+    "nextCheckpoint": null
+  },
+  "acceptance": {
+    "status": "FAIL",
+    "completedAt": "2026-09-29T13:00:46.461Z"
+  },
+  "handoff": {
+    "status": "SKIPPED",
+    "completedAt": null,
+    "reason": "acceptance-not-pass"
+  }
+}
