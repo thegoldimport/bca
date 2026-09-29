@@ -459,7 +459,6 @@ const CONSOLE_LINES = [
   { time: "10:42:03", type: "info", msg: "Vite dev server running at http://localhost:5173" },
   { time: "10:43:15", type: "info", msg: "GET /api/projects 200 OK (12ms)" },
   { time: "10:43:22", type: "warn", msg: "Image at /public/hero.jpg exceeds recommended size (2.4MB)" },
-  { time: "10:44:01", type: "info", msg: "POST /api/waitlist 201 Created (34ms)" },
   { time: "10:44:58", type: "error", msg: "Failed to load module: chart.js — check your imports" },
   { time: "10:45:12", type: "info", msg: "Hot reload triggered — rebuilding..." },
   { time: "10:45:13", type: "success", msg: "Build complete in 847ms" },

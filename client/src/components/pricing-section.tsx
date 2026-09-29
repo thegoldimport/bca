@@ -69,11 +69,7 @@ const PLANS = [
   }
 ];
 
-interface PricingSectionProps {
-  onPlanClick?: () => void;
-}
-
-export function PricingSection({ onPlanClick }: PricingSectionProps) {
+export function PricingSection() {
   return (
     <section className="py-24 relative overflow-hidden" id="pricing">
       {/* Background - Glass Panel Theme */}
@@ -146,15 +142,15 @@ export function PricingSection({ onPlanClick }: PricingSectionProps) {
                 </ul>
               </div>
 
-              <Button 
-                onClick={onPlanClick}
+              <Button
+                asChild
                 className={`w-full h-12 rounded-xl font-bold tracking-wide transition-all ${
                   plan.featured
                     ? "bg-white text-black hover:bg-white/90"
                     : "bg-white/10 text-white hover:bg-white/20"
                 }`}
               >
-                {plan.cta}
+                <a href="https://app.buildcustom.ai/signup">{plan.cta}</a>
               </Button>
             </motion.div>
           ))}

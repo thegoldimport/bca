@@ -7,22 +7,11 @@ import { CommunitySection } from "@/components/community-section";
 import { PricingSection } from "@/components/pricing-section";
 import { PartnerSection } from "@/components/partner-section";
 import { Footer } from "@/components/footer";
-import { WaitlistModal } from "@/components/waitlist-modal";
-import { useState } from "react";
 
 export default function Home() {
-  const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
-  const [waitlistSource, setWaitlistSource] = useState("waitlist");
-
-  const openWaitlist = (source: string = "waitlist") => {
-    setWaitlistSource(source);
-    setIsWaitlistOpen(true);
-  };
-
   return (
     <div className="min-h-screen bg-[#05050a] text-foreground overflow-x-hidden selection:bg-cyan-500/30">
       <Navbar />
-      <WaitlistModal isOpen={isWaitlistOpen} onClose={() => setIsWaitlistOpen(false)} source={waitlistSource} />
       <main>
         {/* 1. Hero (Locked) */}
         <Hero onBuildClick={() => window.location.assign("https://app.buildcustom.ai/signup")} />
@@ -34,7 +23,7 @@ export default function Home() {
         <ShowcaseSection />
         
         {/* 4. Pricing (Glass Theme) */}
-        <PricingSection onPlanClick={() => openWaitlist("pricing")} />
+        <PricingSection />
         
         {/* 5. Features (Neon Dark Theme) - Moved here */}
         <FeaturesSection />
@@ -45,11 +34,11 @@ export default function Home() {
         {/* 7. Pricing Duplicate (Neon Dark Theme - varied) */}
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-t from-purple-900/20 to-transparent pointer-events-none" />
-          <PricingSection onPlanClick={() => openWaitlist("pricing")} />
+          <PricingSection />
         </div>
         
         {/* 8. Partner / Booking Section */}
-        <PartnerSection onBookClick={() => openWaitlist("strategy_call")} />
+        <PartnerSection />
 
         {/* 9. Hero Duplicate (Final CTA) */}
         <div className="relative border-t border-white/10">

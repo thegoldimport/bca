@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buildcustom-apps-gateway",
+  "main": "infrastructure/buildcustom-apps-gateway.js",
+  "compatibility_date": "2026-09-18",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "*.apps.buildcustom.ai/*",
+      "zone_name": "buildcustom.ai"
+    },
+    {
+      "pattern": "*/*",
+      "zone_name": "buildcustom.ai"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "ROUTES",
+      "id": "248ac5b6821a475794a7fe3d2b0c3718"
+    }
+  ],
+  "dispatch_namespaces": [
+    {
+      "binding": "DISPATCHER",
+      "namespace": "buildcustom-vibesdk-launch-dispatch"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

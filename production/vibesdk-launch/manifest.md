@@ -47,6 +47,33 @@ Two early auth attempts and a CSRF-rejected ownership setup left three additiona
 
 ## Task 8D registration-only gate
 
-The original pinned stock commit, Task 4B patch, and Task 6A patch above remain unchanged. Task 8D is the separate, repo-relative `production/patches/task8d-registration-gate.patch` (SHA-256 `c71153f96265fc3f1cc433dfe0d21f7092d4abce491d5d5200f7fd37ff6c72cc`), verified against a fresh stock+4B+6A checkout. The isolated runtime source is reproduced by applying these three patches in order; the source checkout itself is excluded from Git. The launch runtime config sets `REGISTRATION_ENABLED=false` independently of email login.
+The original pinned stock commit, Task 4B patch, and Task 6A patch above remain unchanged. Task 8D is the separate, repo-relative `production/patches/task8d-registration-gate.patch` (SHA-256 `c71153f96265fc3f1cc433dfe0d21f7092d4abce491d5d5200f7fd37ff6c72cc`), verified against a fresh stock+4B+6A checkout. The isolated runtime source is reproduced by applying these three patches in order; the source checkout itself is excluded from Git. At Task 8D acceptance the launch config set `REGISTRATION_ENABLED=false` independently of email login; the current tracked launch config is now `true`, as recorded below.
 
 Task 8D deployed only to `buildcustom-vibesdk-launch`, version `6ff58ba1-83f5-4951-a3b6-022160ea61c5` (100%). Dry-run Worker bundle SHA-256: `fe0a4f18d3747be1f37c15911a561077b8b4d3681553ee6f43bcb7740259ba02`. Typecheck, build, focused auth tests and the full suite (525 passed, one skipped) succeeded. The direct runtime registration endpoint returned HTTP 403 `REGISTRATION_DISABLED`; provider capabilities reported email login enabled and registration disabled. No new tester was created. See `task8d-acceptance-report.md` for the outstanding private bootstrap and authenticated acceptance blocker.
+
+## Reproducible current runtime source baseline (Task 9)
+
+The pinned upstream commit, stock `bun.lock` SHA-256, and Task 4B/6A/8D patches remain unchanged. Password recovery is the additional, runtime-only patch `production/patches/task9-password-recovery.patch` (SHA-256 `a662e094f9343c4484165c2fbf93ee0d99480348ee49c2c01cb325e3f0007677`). Its source archaeology is BuildCustom commit `d096e4914383a2b1c1676e0d520fab6252a27999`, with the Email binding type adjustment from `829ddf1785ce6c347b5bd4807d1c621264b25cb7`; unrelated control-plane/UI changes from those commits are not included. The patch adds public CSRF/origin-protected forgot/reset endpoints, a non-enumerating reset-request response, rate-limited hashed one-time tokens, Cloudflare EMAIL delivery, and an atomic password update/session revocation. It includes focused service tests. Registration is independently controlled and currently enabled in the tracked launch config; that config declares `EMAIL` with sender `security@buildcustom.ai`.
+
+Reproduce from the stock source without the ignored `runtime-source/` tree:
+
+```sh
+git clone https://github.com/cloudflare/vibesdk.git /tmp/vibesdk-source
+cd /tmp/vibesdk-source
+git checkout --detach 9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+git apply /path/to/production/patches/task4b-immutable-runtime.patch
+git apply /path/to/production/patches/task6a-logout-revocation.patch
+git apply /path/to/production/patches/task8d-registration-gate.patch
+git apply /path/to/production/patches/task9-password-recovery.patch
+cp /path/to/production/vibesdk-launch/wrangler.jsonc ./wrangler.jsonc
+bun install --frozen-lockfile
+bun run test -- worker/database/services/AuthService.password-reset.test.ts worker/database/services/SessionService.password-reset.test.ts worker/database/services/AuthService.test.ts worker/utils/envs.test.ts worker/api/controllers/auth/controller.logout.test.ts worker/api/controllers/auth/controller.test.ts worker/services/deployer/immutable-script-put.test.ts worker/services/deployer/platform-deployment-identity.test.ts worker/services/deployer/think-user-deploy.test.ts worker/agents/core/websocket.test.ts worker/services/deployer/api/cloudflare-api.test.ts
+bun run typecheck
+bun run build
+```
+
+Local checks against that reconstruction passed: 68 focused tests across eleven files, `bun run typecheck`, and `bun run build` with the launch config copied into the source root. The generated `dist/buildcustom_vibesdk_launch/wrangler.json` retained `REGISTRATION_ENABLED=true` and `EMAIL` with `security@buildcustom.ai`. The locked `bun.lock` hash remained `b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f`; pre-existing dependencies from the ignored runtime tree were used only as a local test/build cache after confirming the matching lock hash. They are not part of the recipe or source baseline.
+
+`bun audit --json` reports high advisories in locked production imports, including Hono 4.12.19, Drizzle ORM 0.44.7, React Router 7.15.1, nanoid 5.1.11, and ws 8.20.1; the Vite/Cloudflare build graph also includes high-advisory Browserslist 4.28.2 and Undici 7.24.8. Vitest 3.2.4 is reported critical but is a dev/test-only dependency, not a serving dependency. No dependency was upgraded in this runtime-preparation task; these findings require separate triage before a public launch.
+
+This establishes a tracked, reproducible intended source baseline, not exact source/artifact parity with a deployed Worker version. Cloudflare version metadata and the recorded chronology do not prove that the current deployed bundle was built from this exact patch sequence.

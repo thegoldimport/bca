@@ -63,12 +63,11 @@ test("app root checks the existing session and routes signed-out/in users withou
   }
 });
 
-test("canonical login, signup, forgot, reset and admin routes render the expected UI", async () => {
+test("canonical login, signup, forgot and reset routes render the expected UI", async () => {
   for (const [path, text] of [
     ["/login", "Welcome back"], ["/signup", "Create Account"],
     ["/forgot-password", "Send reset instructions"],
     ["/reset-password?token=test", "Choose a new password"],
-    ["/admin/login", "Admin Access"],
   ]) {
     const page = await visit(path);
     await page.until(() => page.window.document.body.textContent!.includes(text));
@@ -76,6 +75,14 @@ test("canonical login, signup, forgot, reset and admin routes render the expecte
       assert.equal(page.window.document.querySelector<HTMLButtonElement>('[data-testid="button-reset-password"]')?.disabled, false);
       assert.equal(page.window.location.search, "", "reset token is cleared from address bar after capture");
     }
+    page.close();
+  }
+});
+
+test("retired marketing admin routes no longer show the waitlist dashboard or login", async () => {
+  for (const path of ["/admin", "/admin/login"]) {
+    const page = await visit(path, false, "buildcustom.ai");
+    await page.until(() => page.window.document.body.textContent!.includes("404 Page Not Found"));
     page.close();
   }
 });
@@ -111,10 +118,12 @@ test("dashboard protection and existing project/editor paths remain under /app",
   }
 });
 
-test("marketing build retains both hero signup CTAs and unchanged pricing/partner callbacks", () => {
+test("marketing build directs product CTAs to signup without a waitlist or fake booking flow", () => {
   assert.equal((bundle.match(/onBuildClick:\(\)=>window\.location\.assign\("https:\/\/app\.buildcustom\.ai\/signup"\)/g) ?? []).length, 2);
-  assert.match(bundle, /onPlanClick:\(\)=>[a-zA-Z_$][\w$]*\("pricing"\)/);
-  assert.match(bundle, /onBookClick:\(\)=>[a-zA-Z_$][\w$]*\("strategy_call"\)/);
+  assert.ok(!bundle.includes("/api/waitlist"));
+  assert.ok(!bundle.includes("ai-build-studio.replit.app"));
+  assert.ok(!bundle.includes("Book Strategy Call"));
+  assert.match(bundle, /href:"https:\/\/app\.buildcustom\.ai\/signup"/);
   assert.match(bundle, /path:"\/",component:[a-zA-Z_$][\w$]*/);
 });
 

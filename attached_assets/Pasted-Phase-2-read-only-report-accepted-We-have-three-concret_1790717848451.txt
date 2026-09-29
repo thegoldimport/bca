@@ -1,0 +1,235 @@
+Phase 2 read-only report accepted.
+
+We have three concrete issues to resolve before shutting down Replit:
+
+1. The live marketing asset still contains the obsolete Replit waitlist call.
+2. The GitHub-triggered Cloudflare Pages build failed.
+3. Exact source/deployment provenance for the currently serving runtime and
+   public gateway is not yet established.
+
+There is NO real waitlist and NO waitlist data to migrate.
+
+Do not create a replacement waitlist endpoint.
+
+NEXT TASK: prepare the exact source/deployment baseline and marketing cleanup
+locally, but DO NOT deploy yet.
+
+IMPORTANT: FIRST RESOLVE THE VERSION DISCREPANCY
+
+The password-recovery acceptance immediately before this Phase 2 work recorded:
+
+runtime:
+e1dda75e-2082-4f38-a1fc-a16d25542425
+
+control plane:
+df8f155e-aabf-4b69-98b1-30f704a5689b
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+The Phase 2 report now says traffic is being served by:
+
+runtime:
+60de2816...
+
+control:
+816a0c2b...
+
+gateway:
+9d80432b...
+
+Before changing anything, determine READ-ONLY:
+
+- full current runtime version ID
+- full current control-plane version ID
+- full current gateway version ID
+- deployment/version history around the accepted recovery versions
+- when 60de... and 816a... were created
+- what source/configuration change produced them
+- whether they are registration-enabled versions created after recovery
+  acceptance
+- whether public signup is currently OPEN or CLOSED
+- whether password recovery remains present
+- whether EMAIL binding remains present
+- whether public generated apps remain enabled
+
+Do not roll anything back merely because IDs differ.
+
+We need to understand whether these are legitimate later versions or
+unexpected drift.
+
+Then continue:
+
+A. ESTABLISH CANONICAL RUNTIME SOURCE
+
+Using the tracked pinned upstream commit, tracked patches, manifest, current
+candidate, and Cloudflare deployment metadata:
+
+reconstruct the smallest canonical runtime source tree that contains ALL
+currently required BuildCustom behavior, including:
+
+- Task 4B immutable publish requirements where applicable
+- Task 6A logout/session revocation
+- registration gate
+- password recovery
+- EMAIL binding
+- current authentication/session behavior
+
+Do not rely on an untracked runtime-source directory as permanent source.
+
+Do not deploy this reconstruction yet.
+
+Run its focused tests/typecheck/build locally and determine whether it is a
+credible reproducible source baseline for the CURRENT serving runtime.
+
+B. PUBLIC GATEWAY CONFIG
+
+The serving public gateway is:
+
+buildcustom-apps-gateway
+version:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Create/prepare the correct deployment configuration for THIS unsuffixed public
+gateway.
+
+Do not point it at the suffixed test gateway.
+
+The desired bindings remain the accepted clean resources:
+
+ROUTES -> clean BuildCustom route KV
+DISPATCHER -> clean BuildCustom launch dispatch namespace
+
+Compare the proposed config with the actual live gateway configuration.
+
+Do not deploy it.
+
+C. FIX GITHUB/PAGES BUILD REPRODUCIBILITY
+
+Investigate the failed GitHub-triggered Cloudflare Pages build:
+
+npm clean-install / npm ci
+"Exit handler never called"
+
+Determine the actual cause.
+
+Establish a deterministic Node/npm configuration in the repository if needed.
+
+A fresh checkout must be able to:
+
+- install dependencies
+- run TypeScript checks as applicable
+- run the production marketing build
+- produce dist/public
+
+Do not deploy Pages yet.
+
+Do not randomly upgrade dependencies to solve the install problem.
+
+Use the smallest deterministic fix.
+
+D. REMOVE THE NONEXISTENT WAITLIST FROM CURRENT SOURCE
+
+There is no real waitlist.
+
+Remove the marketing WaitlistModal and its API call.
+
+Remove or update all CTAs that currently open the waitlist.
+
+For normal product/pricing CTAs, route them to:
+
+https://app.buildcustom.ai/signup
+
+For the partner/strategy-call CTA:
+
+- if a real booking destination already exists in current product/config,
+  use it
+- otherwise remove that CTA for now rather than inventing a booking URL
+
+Remove obsolete waitlist client code that becomes unused.
+
+The already-retired Replit admin/waitlist server routes can remain scheduled
+for deletion in the cleanup because the entire Replit production server will
+be shut down.
+
+Do NOT create a Cloudflare waitlist endpoint.
+Do NOT migrate waitlist rows.
+Do NOT preserve the test emails.
+
+E. CURRENT TREE CLEANUP
+
+Prepare a normal cleanup of the CURRENT TREE only.
+
+Safe obvious cleanup candidates include:
+
+- the two .bak files
+- disposable attached_assets files
+- obsolete waitlist UI/client code
+- obsolete Replit-only production code once confirmed unused
+- redundant runtime snapshot material ONLY after the canonical runtime source
+  has been established
+
+Be conservative with unique tests/patches/manifests needed to reproduce the
+runtime.
+
+Do not rewrite Git history.
+Do not force-push.
+
+F. SECURITY
+
+Do not attempt to solve all broad scanner findings in this task.
+
+The legacy Express server is about to be retired, so do not upgrade
+drizzle-orm merely for that disposable server unless it unexpectedly must
+remain live.
+
+For the canonical runtime source, report any HIGH/CRITICAL dependency finding
+that is actually in its serving/build dependency tree and needs remediation
+before its NEXT deployment.
+
+Do not automatically upgrade it.
+
+G. VERIFY LOCALLY
+
+Before any deployment, prove from the prepared GitHub tree:
+
+- root install succeeds from a clean dependency state
+- marketing production build succeeds
+- control-plane build/typecheck succeeds
+- canonical runtime focused tests/typecheck/build succeed
+- gateway source/config validates
+- no current marketing source references:
+  ai-build-studio.replit.app
+- no current customer-facing source references the obsolete waitlist
+- no actual usable retired admin credential exists in current HEAD
+
+H. RETURN ONE REPORT
+
+Return:
+
+1. Explanation for runtime/control version discrepancy.
+2. Current public signup state.
+3. Current recovery/EMAIL/public-app state.
+4. Canonical runtime source location and provenance.
+5. Whether canonical runtime reproduces the required current behavior.
+6. Exact public gateway deployment config and parity with live bindings.
+7. Root cause of the Pages install failure.
+8. Exact deterministic Pages/build fix.
+9. Marketing waitlist removal changes.
+10. CTA destinations after cleanup.
+11. Current-tree files/directories proposed for deletion.
+12. Local clean-install/build/test results.
+13. Any production-relevant HIGH/CRITICAL finding that truly blocks the next
+    deployment.
+14. Whether a fresh GitHub checkout is now sufficient to build all four
+    production components.
+15. GO / NO-GO for committing this cleanup/reproducibility work.
+
+Do not deploy.
+Do not change Cloudflare.
+Do not change Replit production.
+Do not push yet.
+Do not rewrite Git history.
+Do not force-push.
+
+STOP after the report.
