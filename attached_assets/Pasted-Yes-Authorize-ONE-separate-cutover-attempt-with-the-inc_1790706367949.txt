@@ -1,0 +1,185 @@
+Yes. Authorize ONE separate cutover attempt with the incorrect `emailEnabled`
+assertion removed.
+
+The previous attempt did NOT expose a product, security, deployment, or
+customer-path failure.
+
+The runtime candidate:
+
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+reached 100%, waited the required 15 seconds, and the normal customer path
+correctly reported:
+
+registrationEnabled: true
+
+The attempt stopped only because the verifier incorrectly required an
+`emailEnabled` field that `/api/auth/providers` does not return.
+
+REMOVE THAT ASSERTION.
+
+Do not replace it with another new assertion.
+
+Do not add any new acceptance requirements.
+
+Do not change code.
+
+Do not create new candidate versions.
+
+Do not change DNS, routing, gateway, EMAIL, recovery, marketing, accounts, or
+product data.
+
+Use the existing candidates:
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Control:
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+
+Rollback versions:
+
+Runtime:
+e1dda75e-2082-4f38-a1fc-a16d25542425
+
+Control:
+df8f155e-aabf-4b69-98b1-30f704a5689b
+
+Gateway remains:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+CUTOVER
+
+1. Activate the runtime candidate at 100%.
+
+2. Confirm normal Cloudflare deployment readback shows that exact runtime
+   version at 100%.
+
+3. Wait 15 seconds.
+
+4. Through the normal customer path verify ONLY:
+
+   - registrationEnabled is true
+   - an existing user can log in
+   - password recovery remains available
+
+Do NOT require `emailEnabled`.
+
+If those pass, continue.
+
+5. Activate the control candidate at 100%.
+
+6. Confirm normal Cloudflare deployment readback shows that exact control
+   version at 100%.
+
+7. Wait 15 seconds.
+
+8. Make three normal requests to:
+
+   https://app.buildcustom.ai/api/public/capabilities
+
+   approximately 2 seconds apart.
+
+All three must report:
+
+registrationEnabled: true
+publicGeneratedAppsEnabled: true
+
+9. Verify the public signup page displays the normal Create Account flow and
+   that Login and Forgot Password remain available.
+
+REGISTRATION SECURITY
+
+Using existing identities only, verify:
+
+- invalid Origin registration request is rejected
+- missing CSRF registration request is rejected
+- mismatched CSRF registration request is rejected
+- duplicate existing email is rejected safely
+- case-variant duplicate existing email is rejected safely
+- malformed registration input is rejected safely
+
+Do not create another real account.
+
+Do not invent additional validation assertions beyond the existing supported
+registration contract.
+
+FINAL SMOKE
+
+Verify:
+
+- existing-user login works
+- existing dashboard loads
+- existing project appears
+- Forgot Password page works
+- existing public generated app returns 200
+- unknown generated-app slug returns 404
+- public generated apps remain enabled
+- active publish claims = 0
+- marketing returns 200
+- gateway remains version
+  9d80432b-4e53-4fe7-950a-2b53f0213eff
+  with its accepted bindings
+- production EMAIL binding remains present
+- security@buildcustom.ai remains the allowed recovery sender
+
+Do NOT:
+
+- perform AI generation
+- send another recovery email
+- submit the marketing waitlist
+- change an account
+- investigate support@buildcustom.ai
+- use tail correlation as a gate
+- use version-targeted requests as a gate
+- add new acceptance requirements
+
+If an ACTUAL listed customer-path or security check fails:
+
+- rollback both Workers to the accepted closed-registration versions
+- STOP
+- report the exact failure
+- do not fix/retry during this operation
+
+If every listed check passes:
+
+LEAVE THE REGISTRATION-ENABLED RUNTIME AND CONTROL VERSIONS AT 100%.
+
+DO NOT ROLLBACK.
+
+Final required state:
+
+PUBLIC SIGNUP: OPEN
+LOGIN: ENABLED
+PASSWORD RECOVERY: ENABLED
+EMAIL: LIVE
+PUBLIC GENERATED APPS: ENABLED
+GATEWAY: UNCHANGED
+MARKETING: UNCHANGED
+ACTIVE PUBLISH CLAIMS: 0
+
+Return a concise report containing:
+
+- serving runtime version
+- serving control version
+- serving gateway version
+- runtime registration result
+- all three public control capability responses
+- signup UI result
+- Origin result
+- CSRF results
+- duplicate/case-duplicate results
+- malformed-input result
+- existing-user login result
+- recovery-page result
+- dashboard/project result
+- public-app result
+- unknown-slug result
+- marketing result
+- publish claims count
+- EMAIL binding/sender state
+- FINAL PUBLIC SIGNUP STATE
+
+If successful, explicitly state:
+
+BUILDCUSTOM PUBLIC SIGNUP IS LIVE.
