@@ -6,9 +6,28 @@ import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  classifyBoundedResponse,
+  classifyRegistrationMatrix as classifyMatrixCore,
+  evaluateLogoutAcceptance,
+  evaluateSignupAcceptance,
+  isExplicitExecute,
+  parseJsonResponse,
+  recordCaseResult,
+  safeRawResponseText,
+  safeMatrixBody,
+  sanitizeError,
+  sanitizeText,
+  sanitizeValue,
+  writeAtomicArtifact,
+} from "./lib/task12u-registration-operator.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const puppeteer = createRequire(path.join(root, "lab/bc-vibesdk-lab-20260925/package.json"))("puppeteer");
+if (!isExplicitExecute(process.argv.slice(2))) {
+  console.error("Refusing to run live registration acceptance without exactly one --execute argument.");
+  process.exitCode = 2;
+} else {
+let puppeteer;
 const product = "https://app.buildcustom.ai";
 const runtime = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
 const account = "https://api.cloudflare.com/client/v4/accounts/03ef1e6e42498920987f07059e107538";
@@ -23,7 +42,183 @@ const report = { startedAt: new Date().toISOString(), checks: {} };
 let failed = false;
 let browser;
 let step = "preconditions";
+let substep = "startup";
+let caseIndex = null;
+let caseSequence = 0;
 let networkAuditChecked = false;
+const boundedCaseNames = [
+  "duplicate-existing-email", "case-variant-duplicate-existing-email", "invalid-email", "weak-password",
+  "missing-password", "invalid-request-shape", ...[
+    "valid-valid", "valid-missing", "valid-invalid", "invalid-valid", "invalid-missing",
+    "invalid-invalid", "missing-valid", "missing-missing", "missing-invalid",
+  ].map(pair => `registration-origin-${pair.split("-")[0]}-csrf-${pair.split("-")[1]}`),
+  "single-public-ui-signup", "duplicate-new-account-exact", "duplicate-new-account-case-variant",
+  "new-user-auth-authority", "new-user-logout-revocation", "existing-user-logout-regression",
+];
+
+async function persistArtifact() {
+  report.current = { phase: step, substep, caseIndex };
+  await writeAtomicArtifact(artifact, report);
+}
+
+async function transition(phase, nextSubstep, index = caseIndex) {
+  step = phase;
+  substep = nextSubstep;
+  caseIndex = index;
+  await persistArtifact();
+}
+
+async function beforeOperation(name) {
+  substep = name;
+  report.operations ||= [];
+  report.operations.push({
+    phase: step, substep: name, startedAt: new Date().toISOString(),
+    status: "STARTED", fetchStarted: false, responseReceived: false,
+  });
+  await persistArtifact();
+}
+
+async function startFetch(name) {
+  const operation = [...(report.operations || [])].reverse()
+    .find(item => item.substep === name && item.status === "STARTED");
+  if (operation) operation.fetchStarted = true;
+  await persistArtifact();
+}
+
+async function markResponseReceived(name, response) {
+  const operation = [...(report.operations || [])].reverse()
+    .find(item => item.substep === name && item.status === "STARTED");
+  if (operation) {
+    operation.responseReceived = true;
+    operation.statusCode = response.status;
+    operation.safeHeaders = {
+      cfRay: sanitizeText(response.headers?.get?.("cf-ray") || "", 200),
+      contentType: sanitizeText(response.headers?.get?.("content-type") || "", 200),
+    };
+  }
+  await persistArtifact();
+}
+
+async function afterOperation(name, evidence = undefined) {
+  const operation = [...(report.operations || [])].reverse()
+    .find(item => item.substep === name && item.status === "STARTED");
+  if (operation) {
+    operation.status = evidence?.responseReadError || evidence?.error ? "FAIL" : "COMPLETED";
+    operation.completedAt = new Date().toISOString();
+    if (evidence && typeof evidence === "object") {
+      operation.fetchStarted ||= evidence.fetchStarted === true;
+      operation.responseReceived ||= evidence.responseReceived === true;
+      operation.statusCode = evidence.status ?? null;
+      if (evidence.parseError) operation.parseError = evidence.parseError;
+      if (evidence.responseReadError) operation.responseReadError = evidence.responseReadError;
+      if (evidence.error) operation.error = sanitizeError(evidence.error);
+    }
+  }
+  const current = report.diagnostics?.at(-1);
+  if (current) {
+    current.lastCompletedOperation = name;
+    if (evidence !== undefined) {
+      current[name] = evidence && typeof evidence === "object"
+        ? {
+          ...evidence,
+          ...(evidence.error ? { error: sanitizeError(evidence.error) } : {}),
+          ...(evidence.rawText ? { rawText: safeRawResponseText(evidence.rawText) } : {}),
+          ...(evidence.parsedBody ? { parsedBody: sanitizeValue(evidence.parsedBody) } : {}),
+        }
+        : evidence;
+    }
+  }
+  await persistArtifact();
+}
+
+async function readResponseTextFirst(operationName, response) {
+  let rawText = "";
+  let responseReadError = null;
+  try {
+    rawText = await response.text();
+  } catch (error) {
+    responseReadError = sanitizeError(error);
+  }
+  const parsed = parseJsonResponse(rawText);
+  const evidence = {
+    fetchStarted: true,
+    responseReceived: true,
+    status: response.status,
+    contentType: sanitizeText(response.headers.get("content-type") || "", 200),
+    cfRay: sanitizeText(response.headers.get("cf-ray") || "", 200),
+    rawText: parsed.rawText,
+    parsedBody: parsed.safeParsedBody,
+    responseBodyParsed: parsed.parseError === null,
+    parseError: parsed.parseError,
+    responseReadError,
+  };
+  await afterOperation(operationName, evidence);
+  return { ...parsed, responseReadError };
+}
+
+async function readBrowserResponseTextFirst(operationName, response) {
+  const headers = response.headers();
+  let rawText = "";
+  let responseReadError = null;
+  try {
+    rawText = await response.text();
+  } catch (error) {
+    responseReadError = sanitizeError(error);
+  }
+  const parsed = parseJsonResponse(rawText);
+  await afterOperation(operationName, {
+    fetchStarted: true, responseReceived: true, status: response.status(),
+    contentType: sanitizeText(headers["content-type"] || "", 200),
+    cfRay: sanitizeText(headers["cf-ray"] || "", 200),
+    rawText: parsed.rawText, parsedBody: parsed.safeParsedBody,
+    responseBodyParsed: parsed.parseError === null,
+    parseError: parsed.parseError, responseReadError,
+  });
+  return {
+    status: response.status(), rawText: parsed.rawText,
+    parsedBody: parsed.safeParsedBody, parseError: parsed.parseError,
+    responseReadError, responseBodyReadable: responseReadError === null,
+    contentType: sanitizeText(headers["content-type"] || "", 200),
+    cfRay: sanitizeText(headers["cf-ray"] || "", 200),
+  };
+}
+
+async function attemptDiagnosticRead(run) {
+  try {
+    return { value: await run(), error: null };
+  } catch (error) {
+    return { value: null, error: sanitizeError(error) };
+  }
+}
+
+function beginDiagnosticCase(name, index, metadata = {}) {
+  report.diagnostics ||= [];
+  const entry = {
+    phase: step, caseName: name, sequence: index, status: "RUNNING",
+    startedAt: new Date().toISOString(), ...metadata,
+  };
+  report.diagnostics.push(entry);
+  caseIndex = index;
+  return entry;
+}
+
+function failDiagnosticCase(entry, error) {
+  entry.status = "FAIL";
+  entry.completedAt = new Date().toISOString();
+  entry.error ||= sanitizeError(error);
+}
+
+function markRemainingNotRun(afterIndex) {
+  report.diagnostics ||= [];
+  for (let index = Math.max(1, afterIndex + 1); index <= boundedCaseNames.length; index += 1) {
+    if (!report.diagnostics.some(item => item.sequence === index)) {
+      report.diagnostics.push({
+        phase: "acceptance", caseName: boundedCaseNames[index - 1], sequence: index,
+        status: "NOT_RUN", startedAt: null, completedAt: null,
+      });
+    }
+  }
+}
 
 function check(name, evidence, passed) {
   report.checks[name] = { at: new Date().toISOString(), status: passed ? "PASS" : "FAIL", evidence };
@@ -32,11 +227,22 @@ function check(name, evidence, passed) {
 }
 
 function requireCondition(condition, message) {
-  if (!condition) throw new Error(message);
+  if (!condition) {
+    const error = new Error(`${step}/${caseIndex ?? "no-case"}: ${message}`, {
+      cause: Object.assign(new Error("Acceptance condition evaluated false"), { name: "AcceptanceConditionError" }),
+    });
+    error.name = "AcceptanceAssertionError";
+    error.phase = step;
+    error.caseIndex = caseIndex;
+    throw error;
+  }
 }
 
 function safeError(error) {
-  return { step, reason: error?.name || "acceptance_failure" };
+  return {
+    phase: step, substep, caseIndex,
+    ...sanitizeError(error),
+  };
 }
 
 function forbiddenCustomerHost(hostname) {
@@ -79,8 +285,12 @@ const browserNetworkAudit = {
 };
 
 async function attachBrowserNetworkAudit(page) {
+  await beforeOperation("browser-cdp-session-creation");
   const client = await page.target().createCDPSession();
+  await afterOperation("browser-cdp-session-creation");
+  await beforeOperation("browser-cdp-network-enable");
   await client.send("Network.enable");
+  await afterOperation("browser-cdp-network-enable");
   const observe = urlValue => {
     try {
       const hostname = new URL(urlValue).hostname.toLowerCase();
@@ -94,6 +304,9 @@ async function attachBrowserNetworkAudit(page) {
 }
 
 async function d1(database, sql, params = []) {
+  const operationName = `d1-count-query:${database}`;
+  await beforeOperation(operationName);
+  await startFetch(operationName);
   const response = await fetch(`${account}/d1/database/${database}/query`, {
     method: "POST",
     headers: {
@@ -102,7 +315,12 @@ async function d1(database, sql, params = []) {
     },
     body: JSON.stringify({ sql, params }),
   });
-  const body = await response.json().catch(() => null);
+  await markResponseReceived(operationName, response);
+  const parsed = await readResponseTextFirst(operationName, response);
+  const body = parsed.parsedBody;
+  const operation = [...report.operations].reverse().find(item => item.substep === operationName);
+  operation.resultRowCount = Array.isArray(body?.result?.[0]?.results) ? body.result[0].results.length : null;
+  await persistArtifact();
   requireCondition(response.ok && body?.success === true && Array.isArray(body.result?.[0]?.results),
     `D1 read failed (${response.status})`);
   return body.result[0].results;
@@ -134,12 +352,22 @@ function countIsOne(value) {
 }
 
 async function apiRead(url, cookie) {
+  const operationName = `api-read:${new URL(url).pathname}`;
+  await beforeOperation(operationName);
+  await startFetch(operationName);
   const response = await fetch(url, {
     headers: cookie ? { Cookie: cookie } : {},
     cache: "no-store",
     redirect: "manual",
   });
-  return { status: response.status, body: await response.json().catch(() => null) };
+  await markResponseReceived(operationName, response);
+  const parsed = await readResponseTextFirst(operationName, response);
+  const body = parsed.parsedBody;
+  const operation = [...report.operations].reverse().find(item => item.substep === operationName);
+  operation.bodyKind = parsed.parseError || parsed.responseReadError ? "non-json" : Array.isArray(body) ? "array" : typeof body;
+  await persistArtifact();
+  return { status: response.status, body, parseError: parsed.parseError,
+    responseReadError: parsed.responseReadError };
 }
 
 function cookieHeader(cookies) {
@@ -159,13 +387,19 @@ function tokenHash(token) {
 }
 
 async function runtimeCheck(cookie) {
+  await beforeOperation("runtime-identity-check");
+  await startFetch("runtime-identity-check");
   const response = await fetch(`${runtime}/api/auth/check`, {
     headers: { Cookie: cookie },
     cache: "no-store",
   });
-  const body = await response.json().catch(() => null);
+  await markResponseReceived("runtime-identity-check", response);
+  const parsed = await readResponseTextFirst("runtime-identity-check", response);
+  const body = parsed.parsedBody;
   return { status: response.status, authenticated: body?.data?.authenticated === true,
-    userId: body?.data?.user?.id ?? null };
+    authenticatedValue: body?.data?.authenticated,
+    userId: body?.data?.user?.id ?? null, parseError: parsed.parseError,
+    responseReadError: parsed.responseReadError };
 }
 
 async function sessionEvidence(database, userId, token) {
@@ -187,18 +421,63 @@ async function productLocalSessionCount(database, userId) {
 }
 
 async function getCsrfToken(page) {
-  return page.evaluate(async () => {
+  await beforeOperation("csrf-token-acquisition");
+  await startFetch("csrf-token-acquisition");
+  const result = await page.evaluate(async () => {
     const response = await fetch("/api/auth/csrf-token", { credentials: "same-origin", cache: "no-store" });
-    const body = await response.json().catch(() => null);
-    return { status: response.status, token: body?.token ?? body?.data?.token ?? null };
+    let raw = "";
+    let readError = null;
+    try { raw = await response.text(); } catch (error) {
+      readError = {
+        name: error?.name || "ResponseReadError",
+        message: error?.message || "response text read failed",
+        stack: error?.stack || "",
+      };
+    }
+    return { status: response.status, rawText: raw, readError,
+      contentType: response.headers.get("content-type"), cfRay: response.headers.get("cf-ray") };
   });
+  const parsed = parseJsonResponse(result.rawText);
+  const token = parsed.parsedBody?.token ?? parsed.parsedBody?.data?.token ?? null;
+  await afterOperation("csrf-token-acquisition", {
+    fetchStarted: true, responseReceived: true, status: result.status, tokenPresent: !!token,
+    parseError: parsed.parseError,
+    responseReadError: sanitizeError(result.readError),
+    contentType: sanitizeText(result.contentType || "", 200),
+    cfRay: sanitizeText(result.cfRay || "", 200),
+    rawText: parsed.rawText,
+    parsedBody: parsed.safeParsedBody,
+  });
+  return { ...result, token, parsedBody: parsed.parsedBody, parseError: parsed.parseError };
 }
 
 async function submitBounded(page, kind, body, expectedIdentityCount = 0, requireNoLogin = false) {
+  const entry = beginDiagnosticCase(kind, ++caseSequence, {
+    request: { method: "POST", path: "/api/auth/register" },
+    payloadCategory: kind,
+    originState: "same-origin",
+    csrfState: "valid",
+    csrfSource: "public csrf-token endpoint",
+    cookieState: "browser-managed same-origin cookies",
+    fetchStarted: false,
+    responseReceived: false,
+  });
+  await persistArtifact();
+  const targetEmail = typeof body.email === "string" ? body.email : null;
+  let countsBefore = null;
+  if (targetEmail) {
+    await beforeOperation(`counts-before:${kind}`);
+    countsBefore = await countEvidence(targetEmail);
+    entry.countsBefore = countsBefore;
+    await persistArtifact();
+  }
   const csrf = await getCsrfToken(page);
   requireCondition(csrf.status === 200 && typeof csrf.token === "string" && csrf.token.length > 0,
     `CSRF token unavailable for ${kind}`);
-  const result = await page.evaluate(async ({ body, token }) => {
+  const boundedOperation = `bounded-request:${kind}`;
+  await beforeOperation(boundedOperation);
+  await startFetch(boundedOperation);
+  const rawResult = await page.evaluate(async ({ body, token }) => {
     const response = await fetch("/api/auth/register", {
       method: "POST",
       credentials: "same-origin",
@@ -206,62 +485,103 @@ async function submitBounded(page, kind, body, expectedIdentityCount = 0, requir
       headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
       body: JSON.stringify(body),
     });
-    const payload = await response.json().catch(() => null);
-    const message = payload?.message ?? payload?.error;
-    const serialized = payload === null ? "" : JSON.stringify(payload);
+    let rawText = "";
+    let readError = null;
+    try { rawText = await response.text(); } catch (error) {
+      readError = {
+        name: error?.name || "ResponseReadError",
+        message: error?.message || "response text read failed",
+        stack: error?.stack || "",
+      };
+    }
     return {
       status: response.status,
-      json: payload !== null && typeof payload === "object",
-      safeMessage: typeof message === "string" && message.length > 0 && message.length <= 200
-        && serialized.length <= 2048
-        && !/stack|exception|token|secret|authorization|cookie/i.test(serialized),
+      rawText,
+      readError,
+      contentType: response.headers.get("content-type"),
+      cfRay: response.headers.get("cf-ray"),
     };
   }, { body, token: csrf.token });
+  const boundedResponse = {
+    status: rawResult.status,
+    headers: { get: name => name.toLowerCase() === "content-type" ? rawResult.contentType
+      : name.toLowerCase() === "cf-ray" ? rawResult.cfRay : null },
+  };
+  await markResponseReceived(boundedOperation, boundedResponse);
+  const parsedResponse = parseJsonResponse(rawResult.rawText);
+  const payload = parsedResponse.parsedBody;
+  const parseError = rawResult.readError ? sanitizeError(rawResult.readError) : parsedResponse.parseError;
+  const result = {
+    status: rawResult.status,
+    json: payload !== null && typeof payload === "object",
+    safeMessage: typeof (payload?.message ?? payload?.error) === "string"
+      && (payload.message ?? payload.error).length > 0
+      && (payload.message ?? payload.error).length <= 200
+      && JSON.stringify(payload).length <= 2048
+      && !/stack|exception|token|secret|authorization|cookie/i.test(JSON.stringify(payload)),
+  };
+  const diag = entry;
+  if (diag) {
+    diag.fetchStarted = true;
+    diag.responseReceived = true;
+    diag.httpStatus = rawResult.status;
+    diag.safeHeaders = {
+      contentType: sanitizeText(rawResult.contentType || "", 200),
+      cfRay: sanitizeText(rawResult.cfRay || "", 200),
+    };
+    diag.rawText = parsedResponse.rawText;
+    diag.parsedBody = payload && typeof payload === "object" ? sanitizeValue(payload) : null;
+    diag.parseError = parseError ? sanitizeError(parseError) : null;
+    diag.responseReadError = rawResult.readError ? sanitizeError(rawResult.readError) : null;
+  }
+  await afterOperation(boundedOperation, {
+    fetchStarted: true, responseReceived: true, status: rawResult.status,
+    rawText: parsedResponse.rawText,
+    parsedBody: diag.parsedBody,
+    parseError,
+    responseReadError: rawResult.readError ? sanitizeError(rawResult.readError) : null,
+  });
   const identityAfter = requireNoLogin
-    ? await publicAuthIdentity(page)
+    ? (await beforeOperation(`auth-identity-after:${kind}`), await publicAuthIdentity(page))
     : null;
-  const targetEmail = typeof body.email === "string" ? body.email : null;
   const counts = targetEmail ? await countEvidence(targetEmail) : null;
   const identityUnchanged = expectedIdentityCount === 0
     ? !!counts && countIsZero(counts)
     : !!counts && counts.product.count === expectedIdentityCount
       && counts.runtime.count === expectedIdentityCount && counts.product.legacyHashNull;
-  const passed = result.status >= 400 && result.status < 500 && result.status !== 500
-    && result.status !== 502 && result.json && result.safeMessage && identityUnchanged
-    && (!requireNoLogin || !identityAfter.present);
+  await beforeOperation(`evaluation:${kind}`);
+  const classification = classifyBoundedResponse({
+    status: result.status, parsedBody: payload, parseError,
+    expectedCount: expectedIdentityCount,
+    observedCount: counts ? Math.max(counts.product.count, counts.runtime.count) : -1,
+    noAutomaticLogin: !requireNoLogin || !identityAfter.present,
+  });
+  const passed = classification === "PASS" && result.json && result.safeMessage && identityUnchanged;
+  if (diag) {
+    diag.countsBefore = countsBefore;
+    diag.countsAfter = counts;
+    recordCaseResult(diag, {
+      classification, status: passed ? "PASS" : "FAIL", httpStatus: result.status,
+      error: passed ? null : {
+      name: "BoundedResponseAssertionError",
+      message: `Expected bounded validation response and unchanged identity count; observed HTTP ${result.status}`,
+      stack: null, cause: null,
+      },
+    });
+    await persistArtifact();
+  }
+  await persistArtifact();
   check(kind, { status: result.status, safeJsonValidation: result.json && result.safeMessage,
     identity: counts, expectedIdentityCount, noAutomaticLogin: requireNoLogin ? !identityAfter.present : null }, passed);
+  requireCondition(passed, `Bounded registration case ${kind} failed (${classification})`);
 }
 
 function safeResponseBody(raw) {
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { classification: "UNKNOWN", exactBody: null, message: null };
-  }
-  const keys = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed) : [];
-  const message = keys.length === 1 && keys[0] === "message" ? parsed.message : null;
-  const allowedMessages = new Set([
-    "ORIGIN_REJECTED",
-    "Could not create your account. Check your details.",
-  ]);
-  if (typeof message !== "string" || !allowedMessages.has(message)
-    || /stack|exception|token|secret|authorization|cookie/i.test(raw)
-    || raw.length > 2048) {
-    return { classification: "UNKNOWN", exactBody: null, message: null };
-  }
-  return { classification: "SAFE_JSON", exactBody: raw, message };
+  return safeMatrixBody(raw);
 }
 
 function classifyRegistrationMatrix(originState, csrfState, status, body) {
-  if (status === null || body.classification !== "SAFE_JSON") return "UNKNOWN";
-  const expected = originState !== "valid"
-    ? { status: 400, message: "ORIGIN_REJECTED" }
-    : csrfState === "valid"
-      ? { status: 400, message: "Could not create your account. Check your details." }
-      : { status: 403, message: "Could not create your account. Check your details." };
-  return status === expected.status && body.message === expected.message ? "PASS" : "FAIL";
+  return classifyMatrixCore(originState, csrfState, status, body);
 }
 
 async function registrationMatrixAttempt({ originState, csrfState, csrfToken, csrfCookie, email, password }) {
@@ -273,118 +593,250 @@ async function registrationMatrixAttempt({ originState, csrfState, csrfToken, cs
   if (csrfState === "invalid") headers["X-CSRF-Token"] = "invalid-task12r-csrf";
   let status = null;
   let body = { classification: "UNKNOWN", exactBody: null, message: null };
+  const evidence = { fetchStarted: false, responseReceived: false, status: null };
   try {
+    const operationName = `matrix-fetch:${originState}-${csrfState}`;
+    await beforeOperation(operationName);
+    await startFetch(operationName);
+    evidence.fetchStarted = true;
     const response = await fetch(`${product}/api/auth/register`, {
       method: "POST",
       headers,
       body: JSON.stringify({ name: disposableName, email, password }),
       redirect: "manual",
     });
+    await markResponseReceived(operationName, response);
+    evidence.responseReceived = true;
     status = response.status;
-    body = safeResponseBody(await response.text());
-  } catch {
-    // Keep request failures as UNKNOWN without leaking request or credential data.
+    evidence.status = status;
+    evidence.safeHeaders = {
+      cfRay: sanitizeText(response.headers.get("cf-ray") || "", 200),
+      contentType: sanitizeText(response.headers.get("content-type") || "", 200),
+    };
+    const raw = await response.text();
+    const parsed = parseJsonResponse(raw);
+    evidence.rawText = parsed.rawText;
+    body = safeResponseBody(raw);
+    evidence.parsedBody = body.classification === "SAFE_JSON" ? { message: body.message } : null;
+    evidence.parseError = parsed.parseError;
+    await afterOperation(`matrix-fetch:${originState}-${csrfState}`, evidence);
+  } catch (error) {
+    evidence.error = sanitizeError(error);
+    body = { classification: "UNKNOWN", exactBody: evidence.rawText || null, message: null };
+    await persistArtifact();
   }
-  return { status, body };
+  return { status, body, evidence };
 }
 
 async function publicAuthIdentity(page) {
   return page.evaluate(async () => {
     const response = await fetch("/api/auth/me", { credentials: "same-origin", cache: "no-store" });
-    const body = await response.json().catch(() => null);
+    const raw = await response.text();
+    let body = null;
+    try { body = JSON.parse(raw); } catch {}
     return { present: !!body?.id };
   });
 }
 
-async function login(page, email, password, expectedId) {
+async function login(page, email, password) {
+  await beforeOperation("login-page-navigation");
   await page.goto(`${product}/app/login`, { waitUntil: "domcontentloaded" });
+  await afterOperation("login-page-navigation");
   requireCondition(new URL(page.url()).origin === product, "Login navigation left the public product origin");
+  await beforeOperation("login-email-entry");
   await page.locator('[data-testid="input-email"]').fill(email);
+  await afterOperation("login-email-entry");
+  await beforeOperation("login-password-entry");
   await page.locator('[data-testid="input-password"]').fill(password);
+  await afterOperation("login-password-entry");
+  await beforeOperation("login-response-wait-registration");
   const responsePromise = page.waitForResponse(response =>
     response.url().includes("/api/auth/login") && response.request().method() === "POST", { timeout: 30000 });
+  await afterOperation("login-response-wait-registration");
+  await beforeOperation("login-submit-click");
   await page.locator('[data-testid="button-submit"]').click();
-  const response = await responsePromise;
-  requireCondition(response.status() === 200, "Public login did not succeed");
-  await page.waitForFunction(() => location.pathname === "/app" || location.pathname === "/app/", { timeout: 45000 });
+  await afterOperation("login-submit-click");
+  await beforeOperation("login-response-receive");
+  let response = null;
+  let responseError = null;
+  try { response = await responsePromise; } catch (error) { responseError = sanitizeError(error); }
+  await afterOperation("login-response-receive", {
+    status: response?.status() ?? null, responseReceived: !!response,
+    error: responseError,
+  });
+  await beforeOperation("login-dashboard-navigation-wait");
+  const dashboardReached = await page.waitForFunction(() => location.pathname === "/app" || location.pathname === "/app/", {
+    timeout: 45000,
+  }).then(() => true).catch(() => false);
+  await afterOperation("login-dashboard-navigation-wait", { dashboardReached });
   const me = await apiRead(`${product}/api/auth/me`, cookieHeader(await page.cookies(product)));
-  requireCondition(me.status === 200 && me.body?.id && String(me.body.id) === String(expectedId),
-    "Product identity did not match expected user after login");
   const projects = await apiRead(`${product}/api/projects`, cookieHeader(await page.cookies(product)));
-  requireCondition(projects.status === 200 && Array.isArray(projects.body), "Authenticated dashboard failed");
-  return { me: me.body, projects: projects.body };
+  return {
+    loginStatus: response?.status() ?? null,
+    responseError,
+    dashboardReached,
+    me,
+    projects,
+  };
 }
 
 async function logout(page) {
+  await beforeOperation("logout-app-navigation");
   await page.goto(`${product}/app`, { waitUntil: "domcontentloaded" });
+  await afterOperation("logout-app-navigation");
+  await beforeOperation("logout-button-wait");
   await page.waitForSelector('[data-testid="button-logout"]', { timeout: 30000 });
+  await afterOperation("logout-button-wait");
+  await beforeOperation("logout-response-wait-registration");
   const responsePromise = page.waitForResponse(response =>
     response.url().includes("/api/auth/logout") && response.request().method() === "POST", { timeout: 30000 });
+  await afterOperation("logout-response-wait-registration");
+  await beforeOperation("logout-submit-click");
+  await startFetch("logout-submit-click");
   await page.locator('[data-testid="button-logout"]').click();
+  await afterOperation("logout-submit-click", { fetchStarted: true });
+  await beforeOperation("logout-response-receive");
   const response = await responsePromise;
+  const headers = response.headers();
+  await markResponseReceived("logout-response-receive", {
+    status: response.status(), headers: { get: name => headers[name.toLowerCase()] || null },
+  });
+  const responseEvidence = await readBrowserResponseTextFirst("logout-response-receive", response);
+  await beforeOperation("logout-login-redirect-wait");
   await page.waitForFunction(() => location.pathname === "/app/login" || location.pathname === "/app/login/", {
     timeout: 45000,
   }).catch(() => undefined);
-  return { status: response.status(), cookies: await page.cookies(product) };
+  await afterOperation("logout-login-redirect-wait");
+  return { status: response.status(), rawText: responseEvidence.rawText,
+    responseBodyReadable: responseEvidence.responseBodyReadable,
+    parseError: responseEvidence.parseError,
+    contentType: responseEvidence.contentType, cfRay: responseEvidence.cfRay,
+    cookies: await page.cookies(product) };
 }
 
 async function assertLogoutFlow({ label, page, email, password, identity, projectsBefore }) {
+  const logoutDiagnostic = beginDiagnosticCase(`${label}-logout-revocation-and-fresh-login`, ++caseSequence, {
+    requestPath: "/api/auth/logout", method: "POST", fetchStarted: false, responseReceived: false,
+  });
+  await persistArtifact();
   browserNetworkAudit.currentPhase = `${label}-logout-and-old-session-replay`;
-  step = `${label}-login-before-logout`;
-  await login(page, email, password, identity.product[0].id);
+  await transition(`${label}-login-before-logout`, "login-navigation-and-ui");
+  const initialLogin = await login(page, email, password);
   const beforeCookies = await page.cookies(product);
   const oldAccessToken = accessCookie(beforeCookies);
   requireCondition(oldAccessToken, `${label}: runtime credential absent`);
   const oldCookie = cookieHeader(beforeCookies);
-  const productBefore = await apiRead(`${product}/api/auth/me`, oldCookie);
   const runtimeBefore = await runtimeCheck(oldCookie);
   const sessionBefore = await sessionEvidence(runtimeDb, identity.runtime[0].id, oldAccessToken);
   const localSessions = await productLocalSessionCount(productDb, identity.product[0].id);
-  requireCondition(!!productBefore.body?.id && String(productBefore.body.id) === String(identity.product[0].id),
-    `${label}: product identity missing before logout`);
-  requireCondition(runtimeBefore.authenticated && String(runtimeBefore.userId) === String(identity.runtime[0].id),
-    `${label}: runtime authentication missing before logout`);
-  requireCondition(sessionBefore.exists && sessionBefore.ownerMatches && sessionBefore.revoked === false,
-    `${label}: runtime D1 session precondition failed`);
-  requireCondition(localSessions === 0, `${label}: product D1 has local session authority`);
+  const preLogoutEvaluation = evaluateLogoutAcceptance({
+    stage: "pre-logout",
+    loginStatus: initialLogin.loginStatus,
+    dashboardReached: initialLogin.dashboardReached,
+    dashboardStatus: initialLogin.projects.status,
+    projectsArray: Array.isArray(initialLogin.projects.body),
+    productIdentityPresent: initialLogin.me.status === 200 && !!initialLogin.me.body?.id,
+    productIdentityMatches: String(initialLogin.me.body?.id) === String(identity.product[0].id),
+    runtimeAuthenticated: runtimeBefore.authenticated,
+    runtimeIdentityMatches: String(runtimeBefore.userId) === String(identity.runtime[0].id),
+    sessionExists: sessionBefore.exists,
+    sessionOwnerMatches: sessionBefore.ownerMatches,
+    sessionRevoked: sessionBefore.revoked,
+    productLocalSessionCount: localSessions,
+  });
+  logoutDiagnostic.preLogoutEvaluation = preLogoutEvaluation;
+  if (!preLogoutEvaluation.passed) {
+    recordCaseResult(logoutDiagnostic, {
+      classification: "FAIL", status: "FAIL",
+      error: { name: preLogoutEvaluation.errorName, message: preLogoutEvaluation.errorMessage },
+    });
+    await persistArtifact();
+  }
+  requireCondition(preLogoutEvaluation.passed, `${label}: ${preLogoutEvaluation.errorMessage || "logout precondition failed"}`);
 
-  step = `${label}-logout`;
+  await transition(`${label}-logout`, "logout-navigation-and-ui");
+  await beforeOperation(`${label}:logout-request-via-ui`);
   const logoutResult = await logout(page);
+  logoutDiagnostic.fetchStarted = true;
+  logoutDiagnostic.responseReceived = true;
+  logoutDiagnostic.logoutStatus = logoutResult.status;
+  await persistArtifact();
   const browserCredentialCleared = !logoutResult.cookies.some(cookie =>
     cookie.name === "accessToken" && cookie.value === oldAccessToken);
   const sessionAfter = await sessionEvidence(runtimeDb, identity.runtime[0].id, oldAccessToken);
   const oldProduct = await apiRead(`${product}/api/auth/me`, oldCookie);
   const oldRuntime = await runtimeCheck(oldCookie);
-  requireCondition(logoutResult.status === 204 && browserCredentialCleared,
-    `${label}: public logout response or cookie clearing failed`);
-  requireCondition(sessionAfter.exists && sessionAfter.ownerMatches && sessionAfter.revoked === true,
-    `${label}: runtime session was not revoked`);
-  requireCondition(oldProduct.body === null, `${label}: old product credential replay did not return null`);
-  requireCondition(!oldRuntime.authenticated, `${label}: old runtime credential replay remained authenticated`);
+  const oldProductCredentialReturnsNull = oldProduct.status === 200
+    && oldProduct.parseError === null && !oldProduct.responseReadError && oldProduct.body === null;
+  const oldRuntimeCredentialUnauthenticated = oldRuntime.status === 200
+    && oldRuntime.parseError === null && !oldRuntime.responseReadError
+    && oldRuntime.authenticatedValue === false;
+  const postLogoutEvidence = {
+    logoutStatus: logoutResult.status, browserCredentialCleared,
+    responseBodyReadable: logoutResult.responseBodyReadable,
+    sessionExists: sessionAfter.exists, sessionOwnerMatches: sessionAfter.ownerMatches,
+    sessionRevoked: sessionAfter.revoked,
+    oldProductStatus: oldProduct.status,
+    oldProductParseSucceeded: oldProduct.parseError === null && !oldProduct.responseReadError,
+    oldProductBodyIsNull: oldProduct.body === null,
+    oldRuntimeStatus: oldRuntime.status,
+    oldRuntimeParseSucceeded: oldRuntime.parseError === null && !oldRuntime.responseReadError,
+    oldRuntimeAuthenticated: oldRuntime.authenticatedValue,
+  };
+  const postLogoutEvaluation = evaluateLogoutAcceptance({ stage: "after-logout", ...postLogoutEvidence });
+  logoutDiagnostic.postLogoutEvaluation = postLogoutEvaluation;
+  logoutDiagnostic.sessionRevoked = sessionAfter.revoked;
+  logoutDiagnostic.oldProductCredentialReturnsNull = oldProductCredentialReturnsNull;
+  logoutDiagnostic.oldRuntimeCredentialUnauthenticated = oldRuntimeCredentialUnauthenticated;
+  await persistArtifact();
+  if (!postLogoutEvaluation.passed) {
+    recordCaseResult(logoutDiagnostic, {
+      classification: "FAIL", status: "FAIL", httpStatus: logoutResult.status,
+      error: { name: postLogoutEvaluation.errorName, message: postLogoutEvaluation.errorMessage },
+    });
+    await persistArtifact();
+  }
+  requireCondition(postLogoutEvaluation.passed, `${label}: ${postLogoutEvaluation.errorMessage || "logout evaluation failed"}`);
 
   browserNetworkAudit.currentPhase = `${label}-fresh-login`;
-  step = `${label}-fresh-login`;
-  const fresh = await login(page, email, password, identity.product[0].id);
+  await transition(`${label}-fresh-login`, "fresh-login-navigation-and-ui");
+  const fresh = await login(page, email, password);
   const freshRuntime = await runtimeCheck(cookieHeader(await page.cookies(product)));
   const currentCounts = await countEvidence(email);
   let ownershipStable = true;
   if (projectsBefore) {
-    ownershipStable = JSON.stringify(fresh.projects.map(project => Number(project.id)).sort())
+    ownershipStable = JSON.stringify((fresh.projects.body || []).map(project => Number(project.id)).sort())
       === JSON.stringify(projectsBefore.map(project => Number(project.id)).sort());
   }
-  requireCondition(freshRuntime.authenticated
-    && String(freshRuntime.userId) === String(identity.runtime[0].id),
-  `${label}: fresh runtime login failed`);
-  requireCondition(countIsOne(currentCounts), `${label}: identity counts changed after fresh login`);
-  requireCondition(ownershipStable, `${label}: existing project ownership changed`);
+  const freshEvaluation = evaluateLogoutAcceptance({
+    stage: "complete", ...postLogoutEvidence,
+    freshProductIdentityPresent: fresh.me.status === 200 && !!fresh.me.body?.id,
+    freshProductIdentityMatches: String(fresh.me.body?.id) === String(identity.product[0].id),
+    freshDashboardReached: fresh.dashboardReached && fresh.projects.status === 200 && Array.isArray(fresh.projects.body),
+    freshRuntimeAuthenticated: freshRuntime.authenticated
+      && String(freshRuntime.userId) === String(identity.runtime[0].id),
+    countsOne: countIsOne(currentCounts),
+    projectOwnershipStable: ownershipStable,
+  });
+  logoutDiagnostic.freshLoginEvaluation = freshEvaluation;
+  recordCaseResult(logoutDiagnostic, {
+    classification: freshEvaluation.passed ? "PASS" : "FAIL",
+    status: freshEvaluation.passed ? "PASS" : "FAIL",
+    httpStatus: logoutResult.status,
+    error: freshEvaluation.passed ? null : {
+      name: freshEvaluation.errorName, message: freshEvaluation.errorMessage,
+    },
+  });
+  await persistArtifact();
+  requireCondition(freshEvaluation.passed, `${label}: ${freshEvaluation.errorMessage || "fresh login failed"}`);
   check(`${label}-logout-revocation-and-fresh-login`, {
     logoutStatus: logoutResult.status,
     browserCredentialCleared,
     runtimeSessionRevoked: sessionAfter.revoked,
-    oldProductCredentialReturnsNull: oldProduct.body === null,
-    oldRuntimeCredentialUnauthenticated: !oldRuntime.authenticated,
-    freshLogin: true,
-    dashboardLoaded: true,
+    oldProductCredentialReturnsNull,
+    oldRuntimeCredentialUnauthenticated,
+    freshLogin: freshEvaluation.assertions.freshLoginSucceeded,
+    dashboardLoaded: freshEvaluation.assertions.freshLoginSucceeded,
     existingProjectOwnershipStable: ownershipStable,
     identityCounts: currentCounts,
   }, true);
@@ -392,6 +844,8 @@ async function assertLogoutFlow({ label, page, email, password, identity, projec
 }
 
 try {
+  await transition("startup", "puppeteer-module-load");
+  puppeteer = createRequire(path.join(root, "lab/bc-vibesdk-lab-20260925/package.json"))("puppeteer");
   const handoffPath = process.env.TASK12T_CREDENTIAL_HANDOFF_PATH;
   requireCondition(typeof handoffPath === "string" && path.isAbsolute(handoffPath)
     && handoffPath === path.resolve(handoffPath) && path.dirname(handoffPath) === "/tmp",
@@ -400,7 +854,7 @@ try {
   requireCondition(!!process.env.BUILDCUSTOM_CUTOVER_TESTER_PASSWORD,
     "BUILDCUSTOM_CUTOVER_TESTER_PASSWORD is required for existing-user logout regression");
 
-  step = "existing-identity-precondition";
+  await transition("existing-identity-precondition", "existing-identity-counts");
   const existingBefore = await identityRows(existingEmail);
   requireCondition(existingBefore.product.length === 1 && existingBefore.runtime.length === 1
     && existingBefore.product[0].legacy_password_hash == null,
@@ -408,27 +862,43 @@ try {
   requireCondition(String(existingBefore.product[0].id) === String(existingBefore.runtime[0].id),
     "Existing product/runtime identity mapping differs");
 
-  step = "bounded-registration-validation";
+  await transition("bounded-registration-validation", "initial-identity-counts");
   const beforeExisting = await countEvidence(existingEmail);
   const beforeDisposable = await countEvidence(disposableEmail);
   requireCondition(countIsZero(beforeDisposable), "Generated disposable email already exists; refusing signup");
+  await beforeOperation("browser-launch");
   browser = await puppeteer.launch({
     executablePath: "/repl/tools/bin/chromium",
     headless: true,
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
+  await afterOperation("browser-launch", { launched: true });
+  await beforeOperation("browser-new-page");
   const page = await browser.newPage();
+  await afterOperation("browser-new-page", { created: true });
   await attachBrowserNetworkAudit(page);
   page.setDefaultTimeout(30000);
   browserNetworkAudit.currentPhase = "anonymous-signup";
+  await beforeOperation("signup-page-navigation");
   await page.goto(`${product}/app/signup`, { waitUntil: "domcontentloaded" });
+  await afterOperation("signup-page-navigation");
+  await beforeOperation("signup-ui-ready-wait");
   await page.waitForFunction(() =>
     document.querySelector('[data-testid="button-submit"]')?.textContent?.includes("Create Account"),
   { timeout: 20000 });
+  await afterOperation("signup-ui-ready-wait");
+  await beforeOperation("public-capabilities-and-runtime-providers");
   const [productCapabilities, runtimeProviders] = await Promise.all([
     apiRead(`${product}/api/public/capabilities`),
     apiRead(`${runtime}/api/auth/providers`),
   ]);
+  await afterOperation("public-capabilities-and-runtime-providers", {
+    productStatus: productCapabilities.status,
+    runtimeStatus: runtimeProviders.status,
+    productRegistrationEnabled: productCapabilities.body?.registrationEnabled === true,
+    runtimeRegistrationEnabled: runtimeProviders.body?.registrationEnabled === true,
+    runtimeEmailEnabled: runtimeProviders.body?.email === true,
+  });
   requireCondition(productCapabilities.status === 200
     && productCapabilities.body?.registrationEnabled === true
     && runtimeProviders.status === 200
@@ -451,6 +921,9 @@ try {
   await submitBounded(page, "case-variant-duplicate-existing-email", {
     name: disposableName, email: existingEmail.toUpperCase(), password: ephemeralPassword,
   }, 1, true);
+  await submitBounded(page, "invalid-email", {
+    name: disposableName, email: "not-an-email", password: ephemeralPassword,
+  });
   await submitBounded(page, "weak-password", {
     name: disposableName, email: `task12r-weak-${Date.now()}@example.net`, password: "short",
   });
@@ -462,16 +935,27 @@ try {
     password: true,
   });
 
-  step = "origin-csrf-rejections";
+  await transition("origin-csrf-rejections", "matrix-case-start");
   const matrixEmail = "not-an-email";
   const matrixCases = [];
   for (const originState of ["valid", "invalid", "missing"]) {
     for (const csrfState of ["valid", "missing", "invalid"]) {
+      const caseName = `registration-origin-${originState}-csrf-${csrfState}`;
+      const entry = beginDiagnosticCase(caseName, ++caseSequence, {
+        originState, csrfState, request: { method: "POST", path: "/api/auth/register" },
+        cookieState: csrfCookie ? "csrf cookie present" : "csrf cookie missing",
+        payloadCategory: "invalid-email-with-strong-password",
+        fetchStarted: false, responseReceived: false,
+      });
+      await persistArtifact();
+      await beforeOperation(`${caseName}:counts-before`);
       const before = {
         invalidEmail: await countEvidence(matrixEmail),
         existing: await countEvidence(existingEmail),
         disposable: await countEvidence(disposableEmail),
       };
+      entry.countsBefore = before;
+      await persistArtifact();
       const result = await registrationMatrixAttempt({
         originState, csrfState, csrfToken: csrf.token, csrfCookie,
         email: matrixEmail, password: ephemeralPassword,
@@ -481,6 +965,16 @@ try {
         existing: await countEvidence(existingEmail),
         disposable: await countEvidence(disposableEmail),
       };
+      entry.fetchStarted = result.evidence.fetchStarted;
+      entry.responseReceived = result.evidence.responseReceived;
+      entry.httpStatus = result.status;
+      entry.safeHeaders = result.evidence.safeHeaders || null;
+      entry.rawText = result.evidence.rawText || null;
+      entry.parsedBody = result.evidence.parsedBody || null;
+      entry.error = result.evidence.error || null;
+      entry.countsAfter = after;
+      await persistArtifact();
+      await beforeOperation(`${caseName}:evaluation`);
       const classification = classifyRegistrationMatrix(originState, csrfState, result.status, result.body);
       const expectedNextStage = originState !== "valid" ? "control Origin guard stops before runtime"
         : csrfState === "valid" ? "runtime email schema rejects before identity mutation"
@@ -525,6 +1019,19 @@ try {
       };
       matrixCases.push({ name, ...evidence });
       check(name, evidence, passed);
+      const finalClassification = passed ? "PASS" : classification;
+      if (!passed) entry.error ||= {
+        name: "RegistrationMatrixAssertionError",
+        message: `Expected ${originState} Origin / ${csrfState} CSRF response; observed ${result.status ?? "no response"}`,
+        stack: null, cause: null,
+      };
+      recordCaseResult(entry, {
+        classification: finalClassification,
+        status: passed ? "PASS" : "FAIL",
+        httpStatus: result.status,
+      });
+      await persistArtifact();
+      requireCondition(passed, `${caseName} failed (${classification})`);
     }
   }
   const afterRejectedExisting = await countEvidence(existingEmail);
@@ -537,20 +1044,50 @@ try {
     && matrixCases.every(testCase => testCase.classification === "PASS"));
   requireCondition(!failed, "At least one bounded registration validation check failed");
 
-  step = "single-public-ui-signup";
+  await transition("single-public-ui-signup", "signup-ui-navigation");
+  const signupDiagnostic = beginDiagnosticCase("single-public-ui-signup", ++caseSequence, {
+    method: "single-public-ui-submit", requestPath: "/api/auth/register",
+    originState: "same-origin product UI", csrfState: "valid UI-managed",
+    cookieState: "browser-managed same-origin cookies",
+    fetchStarted: false, responseReceived: false, retryPolicy: "never",
+  });
+  signupDiagnostic.countsBefore = beforeDisposable;
+  await persistArtifact();
   browserNetworkAudit.currentPhase = "successful-single-signup";
+  await beforeOperation("signup-page-navigation");
   await page.goto(`${product}/app/signup`, { waitUntil: "domcontentloaded" });
+  await afterOperation("signup-page-navigation");
+  await beforeOperation("signup-ui-ready-wait");
   await page.waitForFunction(() =>
     document.querySelector('[data-testid="button-submit"]')?.textContent?.includes("Create Account"),
   { timeout: 20000 });
+  await afterOperation("signup-ui-ready-wait");
   requireCondition(new URL(page.url()).origin === product, "Signup navigation left the public product origin");
+  await beforeOperation("signup-name-entry");
   await page.locator('[data-testid="input-name"]').fill(disposableName);
+  await afterOperation("signup-name-entry");
+  await beforeOperation("signup-email-entry");
   await page.locator('[data-testid="input-email"]').fill(disposableEmail);
+  await afterOperation("signup-email-entry");
+  await beforeOperation("signup-password-entry");
   await page.locator('[data-testid="input-password"]').fill(ephemeralPassword);
+  await afterOperation("signup-password-entry");
+  await beforeOperation("signup-response-wait-registration");
   const signupResponsePromise = page.waitForResponse(response =>
     new URL(response.url()).origin === product && new URL(response.url()).pathname === "/api/auth/register"
       && response.request().method() === "POST",
-    { timeout: 30000 }).then(response => response.status()).catch(() => null);
+    { timeout: 30000 }).then(async response => {
+      const headers = response.headers();
+      await markResponseReceived("signup-submit-click", {
+        status: response.status(),
+        headers: {
+          get: name => name.toLowerCase() === "content-type" ? headers["content-type"]
+            : name.toLowerCase() === "cf-ray" ? headers["cf-ray"] : null,
+        },
+      });
+      return readBrowserResponseTextFirst("signup-submit-click", response);
+    }).catch(error => ({ responseError: sanitizeError(error) }));
+  await afterOperation("signup-response-wait-registration");
   let signupRequestCount = 0;
   const countSignupRequest = request => {
     try {
@@ -563,32 +1100,124 @@ try {
   page.on("request", countSignupRequest);
   let signupClickCount = 0;
   let signupResponseStatus = null;
+  let signupResponseEvidence = null;
+  let signupClickError = null;
   try {
-    await page.locator('[data-testid="button-submit"]').click();
+    await beforeOperation("signup-submit-click");
+    await startFetch("signup-submit-click");
     signupClickCount += 1;
-    signupResponseStatus = await signupResponsePromise;
+    signupDiagnostic.clickAttempted = true;
+    signupDiagnostic.fetchStarted = true;
+    await persistArtifact();
+    try {
+      await page.locator('[data-testid="button-submit"]').click();
+    } catch (error) {
+      signupClickError = sanitizeError(error);
+      signupDiagnostic.clickError = signupClickError;
+      await afterOperation("signup-submit-click", { fetchStarted: true, error });
+    }
+    signupResponseEvidence = await signupResponsePromise;
+    if (signupResponseEvidence.responseError) {
+      signupDiagnostic.responseError = signupResponseEvidence.responseError;
+      if (!signupClickError) {
+        await afterOperation("signup-submit-click", {
+          fetchStarted: true, error: signupResponseEvidence.responseError,
+        });
+      }
+    } else {
+      signupResponseStatus = signupResponseEvidence.status;
+      signupDiagnostic.rawText = signupResponseEvidence.rawText;
+      signupDiagnostic.parsedBody = signupResponseEvidence.parsedBody;
+      signupDiagnostic.parseError = signupResponseEvidence.parseError;
+      signupDiagnostic.responseReadError = signupResponseEvidence.responseReadError;
+      signupDiagnostic.safeHeaders = {
+        contentType: signupResponseEvidence.contentType, cfRay: signupResponseEvidence.cfRay,
+      };
+      signupDiagnostic.responseReceived = true;
+      signupDiagnostic.httpStatus = signupResponseStatus;
+    }
+    await persistArtifact();
+  } catch (error) {
+    if (signupClickCount !== 1) throw error;
+    signupClickError ||= sanitizeError(error);
+    signupDiagnostic.clickError = signupClickError;
+    signupResponseEvidence ||= await signupResponsePromise;
+    if (signupResponseEvidence.responseError) {
+      signupDiagnostic.responseError = signupResponseEvidence.responseError;
+    } else {
+      signupResponseStatus = signupResponseEvidence.status;
+      signupDiagnostic.rawText = signupResponseEvidence.rawText;
+      signupDiagnostic.parsedBody = signupResponseEvidence.parsedBody;
+      signupDiagnostic.parseError = signupResponseEvidence.parseError;
+      signupDiagnostic.responseReadError = signupResponseEvidence.responseReadError;
+      signupDiagnostic.safeHeaders = {
+        contentType: signupResponseEvidence.contentType, cfRay: signupResponseEvidence.cfRay,
+      };
+      signupDiagnostic.responseReceived = true;
+      signupDiagnostic.httpStatus = signupResponseStatus;
+    }
+    await persistArtifact();
   } finally {
     page.off("request", countSignupRequest);
   }
-  // Never retry an uncertain signup: reconcile the single click against both D1s and auth state.
-  const dashboardReached = await page.waitForFunction(() =>
+  // Never retry an uncertain signup; every attempted click is followed by one reconciliation pass.
+  await beforeOperation("signup-post-submit-dashboard-reconciliation");
+  const dashboardReached = signupClickCount === 1 ? await page.waitForFunction(() =>
     location.pathname === "/app" || location.pathname === "/app/",
-  { timeout: 45000 }).then(() => true).catch(() => false);
-  const newIdentity = await identityRows(disposableEmail);
-  const signupMe = await apiRead(`${product}/api/auth/me`, cookieHeader(await page.cookies(product)));
-  const newCounts = await countEvidence(disposableEmail);
-  const runtimeAfterSignup = await runtimeCheck(cookieHeader(await page.cookies(product)));
-  const productLocalSessions = newIdentity.product.length === 1
-    ? await productLocalSessionCount(productDb, newIdentity.product[0].id) : -1;
-  const signupSuccess = signupClickCount === 1 && signupRequestCount === 1
-    && signupResponseStatus !== null && signupResponseStatus >= 200 && signupResponseStatus < 300
-    && dashboardReached
-    && countIsOne(newCounts)
-    && String(newIdentity.product[0]?.id) === String(newIdentity.runtime[0]?.id)
-    && signupMe.status === 200 && String(signupMe.body?.id) === String(newIdentity.product[0]?.id)
-    && runtimeAfterSignup.authenticated
-    && String(runtimeAfterSignup.userId) === String(newIdentity.runtime[0]?.id)
-    && productLocalSessions === 0;
+  { timeout: 45000 }).then(() => true).catch(() => false) : false;
+  const productRowsRead = await attemptDiagnosticRead(() => d1(productDb,
+    `SELECT id,email,legacy_password_hash FROM users WHERE lower(email)=lower(?)`, [disposableEmail]));
+  const runtimeRowsRead = await attemptDiagnosticRead(() => d1(runtimeDb,
+    `SELECT id,email FROM users WHERE lower(email)=lower(?)`, [disposableEmail]));
+  const authCookies = await attemptDiagnosticRead(() => page.cookies(product));
+  const cookie = authCookies.value ? cookieHeader(authCookies.value) : "";
+  const signupMeRead = await attemptDiagnosticRead(() => apiRead(`${product}/api/auth/me`, cookie));
+  const runtimeCheckRead = await attemptDiagnosticRead(() => runtimeCheck(cookie));
+  const productRows = productRowsRead.value || [];
+  const runtimeRows = runtimeRowsRead.value || [];
+  const newIdentity = { product: productRows, runtime: runtimeRows };
+  const newCounts = {
+    product: {
+      count: productRowsRead.error ? -1 : productRows.length,
+      legacyHashNull: !productRowsRead.error && productRows.every(row => row.legacy_password_hash == null),
+    },
+    runtime: { count: runtimeRowsRead.error ? -1 : runtimeRows.length },
+  };
+  const signupMe = signupMeRead.value || { status: null, body: null, parseError: null, responseReadError: null };
+  const runtimeAfterSignup = runtimeCheckRead.value
+    || { status: null, authenticated: false, authenticatedValue: null, userId: null };
+  const productLocalSessionRead = productRows[0]?.id == null ? { value: null, error: null }
+    : await attemptDiagnosticRead(() => productLocalSessionCount(productDb, productRows[0].id));
+  const productLocalSessions = productLocalSessionRead.value ?? -1;
+  const reconciliationErrors = {
+    productD1: productRowsRead.error,
+    runtimeD1: runtimeRowsRead.error,
+    browserCookies: authCookies.error,
+    productMe: signupMeRead.error,
+    runtimeCheck: runtimeCheckRead.error,
+    productLocalSessionCount: productLocalSessionRead.error,
+  };
+  const reconciliationSucceeded = Object.values(reconciliationErrors).every(error => error === null);
+  signupDiagnostic.countsAfter = newCounts;
+  signupDiagnostic.clickError = signupClickError;
+  signupDiagnostic.responseError = signupResponseEvidence?.responseError || null;
+  signupDiagnostic.reconciliationErrors = reconciliationErrors;
+  await persistArtifact();
+  await beforeOperation("signup-identity-and-authority-evaluation");
+  const signupEvaluation = evaluateSignupAcceptance({
+    clickCount: signupClickCount, requestCount: signupRequestCount,
+    responseStatus: signupResponseStatus, dashboardReached,
+    responseBodyReadable: signupResponseEvidence?.responseBodyReadable,
+    reconciliationSucceeded,
+    productCount: newCounts.product.count, runtimeCount: newCounts.runtime.count,
+    legacyHashNull: newCounts.product.legacyHashNull,
+    productStatus: signupMe.status,
+    productD1Id: newIdentity.product[0]?.id, runtimeD1Id: newIdentity.runtime[0]?.id,
+    productMeId: signupMe.body?.id,
+    runtimeAuthenticated: runtimeAfterSignup.authenticated, runtimeCheckId: runtimeAfterSignup.userId,
+    productLocalSessionCount: productLocalSessions,
+  });
+  const signupSuccess = signupEvaluation.passed;
   check("one-public-ui-signup-and-identity-authority", {
     status: signupResponseStatus,
     uiClickCount: signupClickCount,
@@ -601,17 +1230,32 @@ try {
     productIdentityPresent: signupMe.status === 200 && !!signupMe.body?.id,
     runtimeAuthenticated: runtimeAfterSignup.authenticated,
     productLocalSessionCount: productLocalSessions,
+    evaluation: signupEvaluation,
   }, signupSuccess);
+  signupDiagnostic.countsAfter = newCounts;
+  signupDiagnostic.runtimeIdentityPresent = runtimeAfterSignup.authenticated;
+  signupDiagnostic.productIdentityPresent = signupMe.status === 200 && !!signupMe.body?.id;
+  signupDiagnostic.evaluation = signupEvaluation;
+  recordCaseResult(signupDiagnostic, {
+    classification: signupSuccess ? "PASS" : "FAIL",
+    status: signupSuccess ? "PASS" : "FAIL",
+    httpStatus: signupResponseStatus,
+    error: signupSuccess ? null : {
+      name: signupEvaluation.errorName,
+      message: signupEvaluation.errorMessage,
+    },
+  });
+  await persistArtifact();
   requireCondition(signupSuccess, "Public signup failed its identity/authentication acceptance checks");
 
-  step = "new-user-dashboard";
+  await transition("new-user-dashboard", "authenticated-dashboard");
   browserNetworkAudit.currentPhase = "new-user-dashboard";
   const newDashboard = await apiRead(`${product}/api/projects`, cookieHeader(await page.cookies(product)));
   requireCondition(newDashboard.status === 200 && Array.isArray(newDashboard.body),
     "New user's authenticated dashboard did not load");
   check("new-user-dashboard-loads", { status: newDashboard.status, projectCount: newDashboard.body.length }, true);
 
-  step = "new-user-duplicate-rejection";
+  await transition("new-user-duplicate-rejection", "duplicate-new-user-cases");
   for (const [label, email] of [
     ["duplicate-new-account-exact", disposableEmail],
     ["duplicate-new-account-case-variant", disposableEmail.toUpperCase()],
@@ -624,12 +1268,31 @@ try {
   check("new-account-duplicate-counts", afterDuplicateNew, countIsOne(afterDuplicateNew));
   requireCondition(!failed, "New-account duplicate registration check failed");
 
-  step = "new-user-auth-authority";
+  await transition("new-user-auth-authority", "runtime-session-authority");
+  const authorityDiagnostic = beginDiagnosticCase("new-user-auth-authority", ++caseSequence, {
+    fetchStarted: false, responseReceived: false,
+  });
+  await persistArtifact();
   const newSessionToken = accessCookie(await page.cookies(product));
   requireCondition(newSessionToken, "New user runtime credential unavailable");
   const newSession = await sessionEvidence(runtimeDb, newIdentity.runtime[0].id, newSessionToken);
   const newLocalSessionCount = await productLocalSessionCount(productDb, newIdentity.product[0].id);
   const finalNewCounts = await countEvidence(disposableEmail);
+  const authorityEvaluation = evaluateSignupAcceptance({
+    clickCount: signupClickCount, requestCount: signupRequestCount,
+    responseStatus: signupResponseStatus, dashboardReached,
+    productCount: finalNewCounts.product.count, runtimeCount: finalNewCounts.runtime.count,
+    legacyHashNull: finalNewCounts.product.legacyHashNull,
+    productStatus: signupMe.status,
+    productD1Id: newIdentity.product[0]?.id, runtimeD1Id: newIdentity.runtime[0]?.id,
+    productMeId: signupMe.body?.id,
+    runtimeAuthenticated: runtimeAfterSignup.authenticated, runtimeCheckId: runtimeAfterSignup.userId,
+    productLocalSessionCount: newLocalSessionCount,
+    sessionEvidenceAvailable: true,
+    runtimeSessionExists: newSession.exists,
+    runtimeSessionOwnerMatches: newSession.ownerMatches,
+    runtimeSessionActive: newSession.revoked === false,
+  });
   check("new-user-runtime-session-authority", {
     productCount: finalNewCounts.product.count,
     runtimeCount: finalNewCounts.runtime.count,
@@ -638,11 +1301,24 @@ try {
     runtimeSessionOwnerMatches: newSession.ownerMatches,
     runtimeSessionActive: newSession.revoked === false,
     productLocalSessionCount: newLocalSessionCount,
-  }, countIsOne(finalNewCounts) && newSession.exists && newSession.ownerMatches
-    && newSession.revoked === false && newLocalSessionCount === 0);
-  requireCondition(!failed, "New user authority precondition failed");
+  }, authorityEvaluation.passed);
+  authorityDiagnostic.evidence = {
+    counts: finalNewCounts, sessionExists: newSession.exists,
+    sessionOwnerMatches: newSession.ownerMatches, productLocalSessionCount: newLocalSessionCount,
+    evaluation: authorityEvaluation,
+  };
+  recordCaseResult(authorityDiagnostic, {
+    classification: authorityEvaluation.passed ? "PASS" : "FAIL",
+    status: authorityEvaluation.passed ? "PASS" : "FAIL",
+    httpStatus: signupResponseStatus,
+    error: authorityEvaluation.passed ? null : {
+      name: authorityEvaluation.errorName, message: authorityEvaluation.errorMessage,
+    },
+  });
+  await persistArtifact();
+  requireCondition(authorityEvaluation.passed, authorityEvaluation.errorMessage || "New user authority precondition failed");
 
-  step = "new-user-logout-revocation";
+  await transition("new-user-logout-revocation", "logout-and-revocation");
   await assertLogoutFlow({
     label: "new-user",
     page,
@@ -651,12 +1327,14 @@ try {
     identity: newIdentity,
   });
 
-  step = "existing-user-logout-regression-precondition";
+  await transition("existing-user-logout-regression-precondition", "existing-user-session-and-project-counts");
   const existingProjectsRows = await d1(productDb,
     `SELECT id FROM projects WHERE user_id=? ORDER BY id`, [existingBefore.product[0].id]);
   const existingProjects = existingProjectsRows.map(project => Number(project.id));
   requireCondition(existingProjects.length > 0, "Existing acceptance user has no project ownership evidence");
+  await beforeOperation("existing-user-browser-new-page");
   const existingPage = await browser.newPage();
+  await afterOperation("existing-user-browser-new-page", { created: true });
   await attachBrowserNetworkAudit(existingPage);
   existingPage.setDefaultTimeout(30000);
   browserNetworkAudit.currentPhase = "existing-user";
@@ -677,7 +1355,7 @@ try {
     networkEvidence.forbiddenHostnameCount === 0);
   networkAuditChecked = true;
   requireCondition(!failed, "Acceptance checks failed; credential handoff withheld");
-  step = "credential-handoff";
+  await transition("credential-handoff", "credential-handoff-file-write");
   await writeFile(handoffPath, `${JSON.stringify({
     email: disposableEmail,
     password: ephemeralPassword,
@@ -686,8 +1364,34 @@ try {
 } catch (error) {
   failed = true;
   report.error = safeError(error);
+  const current = report.diagnostics?.at(-1);
+  if (current?.status === "RUNNING") {
+    failDiagnosticCase(current, error);
+    current.phase ||= step;
+    current.substep ||= substep;
+  }
+  const runningOperation = [...(report.operations || [])].reverse()
+    .find(item => item.status === "STARTED");
+  if (runningOperation) {
+    runningOperation.status = "FAIL";
+    runningOperation.completedAt = new Date().toISOString();
+    runningOperation.error = sanitizeError(error);
+  }
+  markRemainingNotRun(caseSequence);
+  await persistArtifact().catch(writeError => {
+    report.error.artifactCheckpointError = sanitizeError(writeError);
+  });
 } finally {
-  if (browser) await browser.close().catch(() => undefined);
+  if (browser) {
+    try {
+      await beforeOperation("browser-cleanup-close");
+      await browser.close();
+      await afterOperation("browser-cleanup-close", { closed: true });
+    } catch (error) {
+      failed = true;
+      report.cleanupError = sanitizeError(error);
+    }
+  }
   if (!networkAuditChecked) {
     const networkEvidence = browserNetworkAudit.evidence();
     check("browser-cdp-forbidden-customer-dependencies", networkEvidence,
@@ -697,11 +1401,13 @@ try {
   report.completedAt = new Date().toISOString();
   report.status = failed ? "FAIL" : "PASS";
   try {
-    await writeFile(artifact, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+    await writeAtomicArtifact(artifact, report);
     console.log(JSON.stringify({ artifact: path.relative(root, artifact), status: report.status }));
-  } catch {
+  } catch (error) {
     console.error(JSON.stringify({ status: "FAIL", artifactWritten: false, reason: "artifact_write_failed" }));
+    report.artifactWriteError = sanitizeError(error);
     failed = true;
   }
   if (failed) process.exitCode = 1;
+}
 }

@@ -1,0 +1,1197 @@
+TASK 12U — DIAGNOSE AND HARDEN THE FINAL REGISTRATION ACCEPTANCE TOOL
+
+Task 12T is NOT accepted.
+
+Production is safely restored CLOSED.
+
+This task is LOCAL TOOLING / DIAGNOSTICS ONLY.
+
+DO NOT perform another signup cutover.
+
+DO NOT activate either candidate.
+
+DO NOT create or deploy Worker code.
+
+==================================================
+WHY THIS TASK EXISTS
+==================================================
+
+Task 12T successfully proved AGAIN:
+
+RUNTIME CANDIDATE OPEN GATE:
+PASS
+
+CONTROL CANDIDATE OPEN GATE:
+PASS
+
+SIGNUP UI OPEN:
+PASS
+
+
+Then the local registration acceptance script failed at:
+
+bounded-registration-validation
+
+
+The preserved failure contained only:
+
+Error
+
+
+It failed BEFORE preserving the individual validation/matrix HTTP exchanges.
+
+Therefore Task 12T does NOT establish:
+
+- a production registration defect
+- an Origin defect
+- a CSRF defect
+- a Task 12L regression
+
+It also does not establish that production was healthy at that exact step.
+
+The failure classification is currently:
+
+UNKNOWN — acceptance tooling vs production response
+
+
+Our job in Task 12U is to eliminate that ambiguity from the LOCAL operator.
+
+==================================================
+CURRENT SAFE PRODUCTION STATE
+==================================================
+
+RUNTIME:
+
+buildcustom-vibesdk-launch
+
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+RUNTIME CANDIDATE:
+
+95da88fe-fe8a-4ce3-9c62-4565d7f279c2
+0%
+
+
+CONTROL:
+
+buildcustom-control-plane-launch
+
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+CONTROL CANDIDATE:
+
+754a3a04-91f9-49e2-b9a8-614aa183a13c
+0%
+
+
+RUNTIME REGISTRATION:
+
+false
+
+
+CONTROL REGISTRATION:
+
+false
+
+
+PUBLIC SIGNUP:
+
+CLOSED
+
+
+PUBLIC_GENERATED_APPS_ENABLED:
+
+true
+
+
+GATEWAY:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+
+CLAIMS:
+
+zero
+
+==================================================
+HARD RULES
+==================================================
+
+DO NOT:
+
+- activate runtime candidate
+- activate control candidate
+- move production traffic
+- open signup
+- create a Worker version
+- create a deployment
+- modify Worker code
+- modify Worker bindings
+- modify gateway
+- modify DNS
+- create a production user
+- generate
+- edit projects
+- Publish
+- move waitlist
+- stop/unpublish public Replit
+
+You MAY:
+
+- inspect Task 12T artifacts
+- inspect the acceptance script
+- inspect local tests
+- modify LOCAL acceptance tooling
+- add LOCAL fixtures/mocks/tests
+- make harmless read-only production requests
+- run closed-state production regression
+
+==================================================
+STEP 1 — VERIFY CLOSED STATE
+==================================================
+
+Before doing anything else verify read-only:
+
+runtime accepted version 100%
+
+runtime candidate 0%
+
+control accepted version 100%
+
+control candidate 0%
+
+runtime registration=false
+
+control registration=false
+
+public apps=true
+
+gateway unchanged
+
+claims zero
+
+signup closed
+
+
+If not:
+
+STOP.
+
+==================================================
+STEP 2 — INSPECT EXACT TASK 12T FAILURE ARTIFACT
+==================================================
+
+Read:
+
+production/vibesdk-launch/task12r-operation-2026-09-29T00-20-18-531Z.json
+
+production/vibesdk-launch/task12r-registration-2026-09-29T00-20-54-885Z.json
+
+production/vibesdk-launch/task12r-rollback-2026-09-29T00-20-57-699Z.json
+
+
+Recover everything available around the failure.
+
+Document:
+
+- exact phase
+- exact sub-step
+- last successfully completed operation
+- next operation attempted
+- exception type if available
+- exception message
+- stack if available
+- HTTP request prepared
+- whether fetch began
+- whether HTTP response was received
+- whether response body was read
+- whether JSON parsing occurred
+- whether assertion occurred
+- whether artifact serialization occurred
+- whether identity-count query occurred
+- whether CSRF acquisition occurred
+- whether cookie handling occurred
+- browser/API context
+- timestamps
+
+
+Do not infer missing evidence.
+
+==================================================
+STEP 3 — INSPECT ACCEPTANCE SCRIPT
+==================================================
+
+Inspect:
+
+scripts/task12r-registration-acceptance.mjs
+
+
+Trace the complete execution path from startup through:
+
+bounded-registration-validation
+
+
+Then through the Origin/CSRF matrix and real signup, even though Task 12T did
+not reach those stages.
+
+
+Identify EVERY location capable of producing an opaque:
+
+Error
+
+
+or otherwise losing the underlying cause.
+
+Look for:
+
+throw new Error()
+
+assertions without context
+
+Promise rejection
+
+fetch failures
+
+response.json() failures
+
+unexpected content type
+
+cookie parsing
+
+CSRF token extraction
+
+browser context errors
+
+identity-count queries
+
+D1 query assumptions
+
+undefined property access
+
+artifact writes
+
+JSON serialization
+
+cleanup/finally behavior
+
+timeouts
+
+AbortController
+
+child process failures
+
+Cloudflare CLI parsing
+
+generic catch blocks
+
+error rethrowing
+
+error coercion
+
+String(error) information loss
+
+==================================================
+STEP 4 — IDENTIFY THE EXACT BOUNDED-VALIDATION FLOW
+==================================================
+
+Document the intended cases and their execution order:
+
+duplicate existing email
+
+case-variant existing email
+
+invalid email
+
+weak password
+
+missing password
+
+invalid request shape
+
+
+For EACH case identify:
+
+- request builder
+- Origin
+- CSRF source
+- cookie state
+- request body
+- expected status category
+- expected response semantics
+- identity counts before
+- identity counts after
+- PASS rule
+- FAIL rule
+- UNKNOWN rule
+
+
+Determine exactly which case Task 12T was attempting when the tool died, if
+the evidence supports that conclusion.
+
+If not:
+
+state UNKNOWN.
+
+==================================================
+STEP 5 — DETERMINE WHETHER A PRODUCTION RESPONSE WAS ACTUALLY CAPTURED
+==================================================
+
+Search all available Task 12T local logs/artifacts for the relevant timestamp.
+
+Look for:
+
+HTTP request URL
+
+method
+
+request marker
+
+CF-Ray
+
+HTTP status
+
+response headers
+
+response body
+
+browser network event
+
+runtime/control logs
+
+tail event
+
+
+If an actual production response can be recovered, classify it.
+
+If not:
+
+DO NOT reconstruct or guess it.
+
+==================================================
+STEP 6 — CLASSIFY CURRENT FAILURE
+==================================================
+
+Based only on preserved evidence classify Task 12T's failure as:
+
+A. confirmed acceptance-script defect
+
+B. confirmed production response violated expectation
+
+C. confirmed environment/operator dependency failure
+
+D. confirmed artifact/logging failure after a valid response
+
+E. other — proven
+
+F. UNKNOWN
+
+
+If UNKNOWN remains correct, that is acceptable.
+
+The purpose of Task 12U is to make UNKNOWN impossible for this class of
+failure next time.
+
+==================================================
+STEP 7 — HARDEN ERROR CAPTURE FIRST
+==================================================
+
+Before changing test behavior, make the LOCAL operator preserve failures.
+
+Every phase and every individual request must have its own diagnostic record.
+
+At minimum record:
+
+phase
+
+case name
+
+case sequence number
+
+startedAt
+
+completedAt
+
+request URL/path
+
+method
+
+Origin state
+
+CSRF state
+
+payload category
+
+safe request metadata
+
+whether fetch started
+
+whether response received
+
+HTTP status
+
+safe response headers
+
+CF-Ray if present
+
+content-type
+
+raw response text
+
+parsed JSON if parseable
+
+JSON parse error if any
+
+identity counts before
+
+identity counts after
+
+expected stage
+
+observed stage
+
+PASS / FAIL / UNKNOWN
+
+exception.name
+
+exception.message
+
+exception.stack
+
+exception.cause if available
+
+
+IMPORTANT:
+
+Read response as TEXT FIRST.
+
+Preserve raw text.
+
+Then optionally parse JSON from the preserved text.
+
+
+A JSON parse failure must NEVER destroy:
+
+HTTP status
+
+headers
+
+raw response body.
+
+==================================================
+STEP 8 — REMOVE OPAQUE ERRORS
+==================================================
+
+Replace LOCAL acceptance-tool throws like:
+
+throw new Error()
+
+or context-free assertion failures
+
+
+with structured diagnostic errors containing:
+
+phase
+
+case
+
+expected
+
+observed
+
+underlying cause
+
+
+The top-level catch must preserve:
+
+name
+
+message
+
+stack
+
+cause
+
+current phase
+
+current case
+
+
+The final artifact must be written even on failure.
+
+Do not change production behavior.
+
+==================================================
+STEP 9 — MAKE EACH CASE ATOMIC
+==================================================
+
+Each bounded validation case must be independently recorded.
+
+For example:
+
+case 1 starts
+→ before counts saved
+→ request saved
+→ response saved
+→ after counts saved
+→ classification saved
+→ case completes
+
+
+Only then proceed to case 2.
+
+
+If case 2 crashes:
+
+case 1 evidence remains complete
+
+case 2 contains exact failure evidence
+
+cases 3+ are explicitly NOT RUN
+
+
+Do the same for:
+
+Origin matrix
+
+CSRF matrix
+
+real signup
+
+duplicate-new-user checks
+
+logout/session checks
+
+==================================================
+STEP 10 — BUILD LOCAL RESPONSE FIXTURES
+==================================================
+
+Create fixtures representing the responses already proven in accepted tasks.
+
+At minimum:
+
+duplicate email bounded 4xx JSON
+
+case-variant duplicate bounded 4xx JSON
+
+invalid email 400 validation JSON
+
+weak password 400 validation JSON
+
+missing password 400 validation JSON
+
+invalid shape 400 validation JSON
+
+ORIGIN_REJECTED 400 JSON
+
+generic public CSRF 403
+
+successful signup response
+
+non-JSON error response
+
+empty response body
+
+malformed JSON response
+
+fetch/network rejection
+
+timeout/abort
+
+
+These are TEST FIXTURES only.
+
+Do not invent production assertions beyond previously established behavior.
+
+==================================================
+STEP 11 — TEST THE BOUNDED VALIDATION OPERATOR
+==================================================
+
+Run the actual acceptance parsing/classification logic against fixtures.
+
+Require:
+
+duplicate existing → correctly classified
+
+case duplicate → correctly classified
+
+invalid email → correctly classified
+
+weak password → correctly classified
+
+missing password → correctly classified
+
+invalid shape → correctly classified
+
+
+Also prove:
+
+unexpected status produces structured FAIL
+
+non-JSON body produces structured FAIL/UNKNOWN with raw body retained
+
+malformed JSON retains raw body
+
+fetch failure retains exact exception
+
+timeout retains exact exception
+
+identity-count mismatch produces structured FAIL
+
+no case can collapse to plain "Error"
+
+==================================================
+STEP 12 — TEST ORIGIN MATRIX OPERATOR
+==================================================
+
+Using local mocks/fixtures prove:
+
+VALID ORIGIN:
+
+downstream invalid-email validation
+→ PASS
+
+
+INVALID ORIGIN:
+
+HTTP 400
+{"message":"ORIGIN_REJECTED"}
+→ PASS
+
+
+MISSING ORIGIN:
+
+same exact Origin rejection
+→ PASS
+
+
+Generic HTTP 400 without ORIGIN_REJECTED:
+
+MUST NOT PASS invalid-Origin case.
+
+
+Duplicate-account 400:
+
+MUST NOT PASS invalid-Origin case.
+
+==================================================
+STEP 13 — TEST CSRF MATRIX OPERATOR
+==================================================
+
+Using local mocks and the accepted Task 12S semantics prove:
+
+valid CSRF:
+
+reaches downstream validation
+
+
+missing CSRF:
+
+generic public 403 plus matched test context
+→ accepted only according to Task 12S rules
+
+
+invalid CSRF:
+
+same
+
+
+Unexpected downstream validation instead of expected 403:
+
+FAIL
+
+
+Origin rejection during CSRF case:
+
+FAIL
+
+
+Again, preserve all raw evidence.
+
+==================================================
+STEP 14 — TEST REAL-SIGNUP OPERATOR LOCALLY
+==================================================
+
+Mock a successful normal public signup.
+
+Prove the operator can record:
+
+signup response
+
+product identity count delta
+
+runtime identity count delta
+
+identity mapping
+
+authenticated product identity
+
+authenticated runtime identity
+
+
+Then test failures:
+
+signup response says success but identity counts wrong
+
+product identity missing
+
+runtime identity missing
+
+mapping mismatch
+
+session missing
+
+
+Each must produce a specific structured failure.
+
+==================================================
+STEP 15 — TEST LOGOUT OPERATOR LOCALLY
+==================================================
+
+Mock:
+
+session valid before logout
+
+logout 204
+
+runtime session revoked
+
+old product credential → null
+
+old runtime credential → authenticated=false
+
+fresh login succeeds
+
+
+Prove each assertion has independent diagnostics.
+
+==================================================
+STEP 16 — DRY-RUN FULL ACCEPTANCE STATE MACHINE
+==================================================
+
+Run the ENTIRE acceptance operator against deterministic local mocks.
+
+Simulate the complete successful path:
+
+bounded validation
+
+→ Origin matrix
+
+→ CSRF matrix
+
+→ one signup
+
+→ duplicate-new-user protection
+
+→ authority checks
+
+→ logout
+
+→ old credential rejection
+
+→ fresh login
+
+
+Require full PASS.
+
+
+Then run at least these injected failures:
+
+1. invalid-email unexpected 502
+
+2. invalid-Origin generic 400
+
+3. missing-CSRF unexpected 400
+
+4. successful signup but runtime identity missing
+
+5. logout 204 but session not revoked
+
+6. network failure during one bounded-validation case
+
+
+For every injected failure require:
+
+correct phase
+
+correct case
+
+raw evidence retained
+
+specific error
+
+subsequent cases NOT RUN
+
+final artifact still written
+
+NO plain "Error"
+
+==================================================
+STEP 17 — DETERMINE WHETHER PRODUCTION CODE CHANGE IS NEEDED
+==================================================
+
+Based on Task 12T preserved evidence plus local diagnosis classify:
+
+A. NO WORKER CHANGE INDICATED
+
+B. WORKER CHANGE REQUIRED
+
+C. UNKNOWN
+
+
+Do NOT infer a Worker defect merely because Task 12T's acceptance tool died.
+
+
+If no production response proving a defect exists and the local operator had
+an observability/error-handling weakness, classification should reflect that
+evidence.
+
+==================================================
+STEP 18 — DO NOT LIVE-TEST OPEN REGISTRATION
+==================================================
+
+Do NOT activate either candidate.
+
+Do NOT open signup.
+
+Do NOT attempt a real signup.
+
+Do NOT attempt to "quickly verify" the repaired acceptance tool against open
+production.
+
+
+That requires separate authorization.
+
+==================================================
+STEP 19 — CLOSED PRODUCTION REGRESSION
+==================================================
+
+Verify read-only:
+
+runtime:
+8e28025f-e415-4405-9b1f-67d93eff7fd8
+100%
+
+
+runtime candidate:
+0%
+
+
+control:
+8d07cbf8-c7ad-423e-b592-268e538e3410
+100%
+
+
+control candidate:
+0%
+
+
+runtime registration=false
+
+control registration=false
+
+public signup CLOSED
+
+public apps=true
+
+claims zero
+
+
+Verify:
+
+user 1 login/ownership
+
+user 2 login/ownership
+
+cross-owner denied
+
+project 2 public app 200
+
+project 3 public app 200
+
+unknown slug 404
+
+marketing 200
+
+
+Gateway remains:
+
+buildcustom-apps-gateway
+
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+100%
+
+==================================================
+TASK 12U ACCEPTANCE
+==================================================
+
+Task 12U passes if:
+
+1. Task 12T failure artifact fully inspected
+
+2. exact failure location narrowed as far as evidence permits
+
+3. production response recovered if actually available
+
+4. no missing evidence invented
+
+5. failure classified accurately
+
+6. every opaque-error path in local acceptance operator identified
+
+7. raw HTTP text preserved before JSON parsing
+
+8. structured per-case diagnostics implemented
+
+9. exception name/message/stack/cause preserved
+
+10. final artifact written on failure
+
+11. bounded-validation fixture tests pass
+
+12. Origin matrix fixture tests pass
+
+13. CSRF matrix fixture tests pass
+
+14. real-signup operator tests pass
+
+15. logout operator tests pass
+
+16. full successful dry run passes
+
+17. injected failure dry runs produce precise diagnostics
+
+18. no injected failure collapses to plain "Error"
+
+19. no Worker code changed
+
+20. no Worker version created
+
+21. no deployment created
+
+22. no production traffic moved
+
+23. signup remains closed
+
+24. closed production regression passes
+
+25. claims remain zero
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. current runtime version/traffic
+
+2. current control version/traffic
+
+3. current registration states
+
+4. Task 12T failure artifact inspected?
+
+5. exact recorded phase
+
+6. exact recorded sub-step
+
+7. last proven successful operation
+
+8. next attempted operation
+
+9. original exception name
+
+10. original exception message
+
+11. original exception stack available?
+
+12. original exception cause available?
+
+13. did fetch begin?
+
+14. was HTTP response proven received?
+
+15. recovered HTTP status if any
+
+16. recovered response headers if any
+
+17. recovered CF-Ray if any
+
+18. recovered raw response if any
+
+19. recovered parsed response if any
+
+20. exact validation case being attempted, if known
+
+21. Task 12T failure classification A/B/C/D/E/F
+
+22. evidence supporting classification
+
+23. opaque-error paths found
+
+24. exact local diagnostic changes
+
+25. raw-text-before-JSON implemented?
+
+26. per-case atomic artifact recording implemented?
+
+27. top-level structured exception capture implemented?
+
+28. final artifact on failure implemented?
+
+29. bounded-validation fixture tests
+
+30. duplicate-email operator result
+
+31. case-duplicate operator result
+
+32. invalid-email operator result
+
+33. weak-password operator result
+
+34. missing-password operator result
+
+35. invalid-shape operator result
+
+36. unexpected-status diagnostic test
+
+37. non-JSON diagnostic test
+
+38. malformed-JSON diagnostic test
+
+39. fetch-failure diagnostic test
+
+40. timeout diagnostic test
+
+41. identity-count mismatch diagnostic test
+
+42. Origin valid-case fixture test
+
+43. invalid-Origin exact-match fixture test
+
+44. missing-Origin exact-match fixture test
+
+45. generic-400 Origin false-positive test
+
+46. duplicate-400 Origin false-positive test
+
+47. valid-CSRF fixture test
+
+48. missing-CSRF fixture test
+
+49. invalid-CSRF fixture test
+
+50. unexpected-CSRF-stage test
+
+51. real-signup success operator test
+
+52. signup identity-count mismatch test
+
+53. signup mapping mismatch test
+
+54. logout success operator test
+
+55. logout non-revocation failure test
+
+56. full successful dry-run result
+
+57. injected invalid-email 502 result
+
+58. injected generic Origin 400 result
+
+59. injected CSRF wrong-status result
+
+60. injected missing runtime identity result
+
+61. injected logout non-revocation result
+
+62. injected network-failure result
+
+63. any plain "Error" remaining?
+
+64. production Worker defect proven?
+
+65. Worker code change indicated?
+
+66. classification A/B/C
+
+67. runtime final version/traffic
+
+68. runtime candidate final traffic
+
+69. control final version/traffic
+
+70. control candidate final traffic
+
+71. final runtime registration
+
+72. final control registration
+
+73. final public signup state
+
+74. user-1 regression
+
+75. user-2 regression
+
+76. ownership isolation
+
+77. project-2 public app
+
+78. project-3 public app
+
+79. unknown slug
+
+80. gateway Worker/version/traffic
+
+81. marketing
+
+82. claims
+
+83. Worker code changed?
+
+84. Worker version created?
+
+85. deployment created?
+
+86. production traffic moved?
+
+87. TASK 12U ACCEPTED?
+
+88. Is the acceptance operator now safe and diagnostic enough for ONE final
+    separately authorized signup cutover?
+
+89. exact NEXT SINGLE IMPLEMENTATION TASK
+
+Then STOP.
+
+DO NOT ACTIVATE RUNTIME.
+
+DO NOT ACTIVATE CONTROL.
+
+DO NOT OPEN SIGNUP.
+
+DO NOT CREATE A WORKER VERSION.
+
+DO NOT CREATE A DEPLOYMENT.
+
+DO NOT MODIFY WORKER CODE.
+
+DO NOT MODIFY GATEWAY.
+
+DO NOT MODIFY DNS.
+
+DO NOT CREATE PRODUCTION USERS.
+
+DO NOT GENERATE.
+
+DO NOT EDIT PROJECTS.
+
+DO NOT PUBLISH.
+
+DO NOT MOVE WAITLIST.
