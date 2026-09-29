@@ -1,0 +1,268 @@
+Yes. Perform a READ-ONLY investigation of the failed control-plane signup
+cutover.
+
+Do NOT deploy anything.
+
+Do NOT activate either inactive candidate.
+
+Do NOT change Worker traffic.
+
+Do NOT change DNS or Custom Domain configuration.
+
+Do NOT change environment variables, bindings, or secrets.
+
+Do NOT change registration state.
+
+Do NOT create users.
+
+Do NOT send email.
+
+Do NOT modify production data.
+
+Do NOT retry the cutover.
+
+Current accepted production state must remain:
+
+Runtime:
+e1dda75e-2082-4f38-a1fc-a16d25542425
+100%, registration CLOSED
+
+Control plane:
+df8f155e-aabf-4b69-98b1-30f704a5689b
+100%, registration CLOSED
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+unchanged
+
+Public generated apps:
+ENABLED
+
+Active publish claims:
+0
+
+FAILED CUTOVER EVIDENCE
+
+Runtime candidate:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+During the attempted cutover:
+- reached 100%
+- normal public runtime capability reported registration enabled
+- existing login worked
+- recovery pages returned 200
+
+Control-plane candidate:
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+
+During the attempted cutover:
+- Cloudflare deployment readback showed it at 100%
+- BUT the normal customer-path request:
+
+https://app.buildcustom.ai/api/public/capabilities
+
+still reported registration CLOSED
+
+We rolled back immediately and did not retry.
+
+INVESTIGATE THE DISCREPANCY READ-ONLY.
+
+I want you to trace the registration capability from source/config all the way
+to the public hostname.
+
+1. CONTROL CANDIDATE CONTENT
+
+Inspect inactive control candidate:
+
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+
+Determine from its actual deployed configuration/bundle whether registration
+SHOULD report true.
+
+Do not rely only on the local source tree.
+
+Establish:
+- exact registration flag/config present in that deployed version
+- whether the flag is compile-time or runtime
+- whether it comes from Worker vars, bindings, source constants, generated
+  frontend config, or another source
+- exact code path used by /api/public/capabilities
+- exact condition producing registrationEnabled
+
+Answer:
+
+If candidate 0114f49c were definitely handling the request, should its
+/api/public/capabilities response have been true or false?
+
+2. COMPARE ACCEPTED VS CANDIDATE
+
+Compare the actual deployed accepted control version:
+
+df8f155e-aabf-4b69-98b1-30f704a5689b
+
+against candidate:
+
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+
+Limit the comparison to anything capable of affecting:
+
+- registrationEnabled
+- /api/public/capabilities
+- environment/config selection
+- Worker bindings/vars
+- launch profile
+- asset/frontend build configuration
+
+Identify the exact intended false -> true difference.
+
+Confirm whether the candidate actually contains that difference.
+
+3. PUBLIC HOSTNAME ROUTING
+
+Inspect current Cloudflare metadata READ-ONLY for:
+
+app.buildcustom.ai
+
+Confirm:
+- Custom Domain association
+- Worker/service name
+- currently serving accepted version
+- relevant routes
+- managed DNS association
+
+Then use retained deployment metadata from the failed operation, if available,
+to determine whether app.buildcustom.ai should have been routed to the
+candidate when Cloudflare reported candidate traffic at 100%.
+
+Specifically determine whether:
+
+- app.buildcustom.ai can point to a different Worker/environment than the
+  Worker whose version traffic was changed
+- there is another production environment/service with a similar name
+- the Custom Domain attaches at service/environment/version level in a way
+  relevant to this failure
+- the 100% deployment readback could have described a Worker that was NOT
+  actually serving app.buildcustom.ai
+
+4. CAPABILITY RESPONSE SOURCE
+
+Trace exactly what happens for:
+
+GET /api/public/capabilities
+
+Determine whether registrationEnabled is obtained from:
+
+- current Worker environment variable
+- compile-time constant
+- runtime binding
+- runtime Worker capability
+- cached value
+- frontend/static asset
+- D1/KV
+- another service
+- or combination of these
+
+If the control plane consults the runtime, determine whether the failed
+response could have reflected runtime state rather than control-plane state.
+
+5. CACHE POSSIBILITY
+
+Determine whether /api/public/capabilities can be cached anywhere in the
+actual path:
+
+browser
+Cloudflare CDN
+Worker cache
+Cache API
+service worker
+application code
+
+Inspect relevant response/cache headers and source behavior.
+
+Do NOT clear caches.
+
+Determine whether a stale CLOSED response is technically possible.
+
+6. REQUEST IDENTITY
+
+Use any retained evidence from the failed request such as:
+- CF-Ray
+- response headers
+- deployment timestamps
+- Worker/version metadata
+- logs already retained
+
+Do NOT depend on missing tail correlation.
+
+If retained evidence cannot identify the exact serving version, say UNKNOWN.
+
+Do not turn missing observability into a product failure.
+
+7. LOCAL FLAG RESET
+
+The local launch flag was returned to false after rollback.
+
+Determine whether there is any possibility that:
+
+- the candidate was built with false despite the intended true setting
+- the true setting existed only in local runtime state rather than the
+  deployed bundle/config
+- deployment configuration overrode it
+- a Wrangler environment/profile supplied false
+- the control candidate reused an artifact built while registration was false
+
+Again, inspect the actual inactive deployed candidate wherever possible rather
+than inferring from today's local checkout.
+
+8. CLASSIFY ROOT CAUSE
+
+Return exactly one classification if evidence supports it:
+
+A. CANDIDATE CONFIGURATION DEFECT
+Candidate 0114f49c itself had registration disabled.
+
+B. HOSTNAME / DEPLOYMENT ROUTING MISMATCH
+Candidate had registration enabled, but app.buildcustom.ai was not actually
+being served by that candidate during the check.
+
+C. STALE/CACHED CAPABILITY RESPONSE
+Candidate was serving and enabled, but the normal request received stale
+closed capability state.
+
+D. CAPABILITY IMPLEMENTATION DEFECT
+Candidate was serving correctly, but /api/public/capabilities derived the
+wrong registration state.
+
+E. TEST/REQUEST DEFECT
+The acceptance request itself did not actually test the intended normal
+customer path/state.
+
+F. OTHER PROVEN ROOT CAUSE
+Explain precisely.
+
+G. INCONCLUSIVE
+Evidence is insufficient to establish one of the above.
+
+9. PROPOSE THE SMALLEST FIX
+
+Only after identifying the root cause, propose the smallest correction needed
+for the next cutover.
+
+Do NOT implement it.
+
+Do NOT create another candidate.
+
+Do NOT retry production.
+
+Do NOT add new infrastructure or observability systems.
+
+We are specifically trying to explain:
+
+Why did Cloudflare report control candidate
+0114f49c-5ecc-4613-b7cf-c9924a6b7ce6
+at 100% while the normal public app.buildcustom.ai capability endpoint still
+reported registration closed?
+
+Return the evidence, root-cause classification, and smallest proposed fix.
+
+Then STOP.
