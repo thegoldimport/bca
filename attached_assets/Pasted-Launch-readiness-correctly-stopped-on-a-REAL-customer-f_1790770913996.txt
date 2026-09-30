@@ -1,0 +1,306 @@
+Launch-readiness correctly stopped on a REAL customer-facing blocker.
+
+DO NOT create another project.
+DO NOT regenerate the roofing CRM.
+DO NOT send an AI edit yet.
+DO NOT publish it.
+DO NOT change the agent/runtime architecture.
+
+Use the existing failing production fixture:
+
+Customer:
+launch-readiness-20260930-8b24321f@buildcustom.ai
+
+User ID:
+41ed9f64-80bf-4a94-ba13-391162483197
+
+Project:
+4
+
+Agent:
+4853b20c-18fa-470e-877d-b3be5d663142
+
+Revision:
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+Files:
+7 authoritative saved files
+
+Observed blocker:
+
+- preview HTML = 200
+- style.css = 200
+- app.js = net::ERR_FAILED
+- browser reports CORS error
+- preview renders blank
+- normal reload reproduces it
+
+GOAL
+
+Find the exact cause of the JavaScript preview failure, make the smallest
+correct fix, deploy only the component that actually owns the defect, and
+resume the SAME customer journey.
+
+PHASE 1 — CAPTURE THE EXACT FAILURE
+
+Using the existing project and normal production preview, capture the exact
+app.js request.
+
+Report:
+
+- iframe document URL/origin
+- exact app.js request URL
+- request method
+- response status if available
+- redirect chain, if any
+- request Origin
+- response Content-Type
+- response Access-Control-Allow-Origin
+- response Access-Control-Allow-Credentials
+- response Cross-Origin-Resource-Policy
+- response Content-Security-Policy if relevant
+- Sec-Fetch-* behavior if useful
+- whether the request reaches the BuildCustom preview proxy
+- whether the proxy successfully retrieves the authoritative app.js
+- whether the browser receives bytes before blocking them
+
+Also inspect the generated authoritative HTML.
+
+Determine exactly HOW app.js is referenced:
+
+- normal <script src>
+- type="module"
+- dynamic import
+- module import from another JS file
+- absolute URL
+- relative URL
+
+Do not assume this is generic CORS merely because Chrome labels it CORS.
+
+PHASE 2 — COMPARE WITH THE PREVIOUS PASSING PREVIEW
+
+We previously proved a production preview where:
+
+- index.html referenced /styles.css
+- browser requested the scoped private-preview CSS URL
+- CSS returned 200 text/css
+- authoritative CSS matched response bytes
+- stylesheet applied successfully
+
+Compare that working preview path with the failing app.js path.
+
+Determine whether the difference is caused by:
+
+A. module-script CORS requirements
+B. preview URL rewriting
+C. redirect behavior
+D. missing/incorrect response headers
+E. content type
+F. private-preview authentication/ticket behavior
+G. generated HTML using an unsupported absolute/root-relative script path
+H. service-binding/proxy response handling
+I. another concrete cause
+
+PHASE 3 — TEST THE HYPOTHESIS BEFORE EDITING
+
+Once you identify the likely cause, prove it with the smallest controlled
+test.
+
+Examples:
+
+- direct authenticated request to the scoped app.js preview URL
+- compare classic-script vs module-script fetch behavior
+- inspect redirect target
+- compare response headers for style.css and app.js
+- verify authoritative app.js bytes can be retrieved server-side
+- verify URL rewriting output
+
+Do not make speculative fixes.
+
+State:
+
+ROOT CAUSE:
+<exact cause>
+
+OWNING COMPONENT:
+<control plane / preview proxy / runtime / generated app / other>
+
+SMALLEST FIX:
+<exact change>
+
+Then implement only if supported by the evidence.
+
+PHASE 4 — FIX
+
+Make the smallest production-safe fix.
+
+Important requirements:
+
+- preserve preview sandbox isolation
+- preserve owner authorization
+- do not make private project files publicly accessible
+- do not weaken authentication
+- do not broadly add permissive CORS headers unless actually required
+- do not use Access-Control-Allow-Origin: * with credentials
+- do not disable browser security
+- do not special-case project 4
+- support generated JavaScript normally for future projects
+- preserve working HTML/CSS preview behavior
+
+If the issue is module scripts/imports, make the preview system correctly
+support them rather than modifying this generated project merely to hide the
+platform defect.
+
+Add focused regression tests reproducing the exact failure.
+
+Tests should cover the minimum relevant combination of:
+
+- preview HTML
+- JavaScript asset
+- module/classic behavior if relevant
+- correct content type
+- required headers
+- owner authorization
+- non-owner denial
+- sandbox isolation
+
+Do not launch another giant test campaign.
+
+PHASE 5 — LOCAL VERIFICATION
+
+Require:
+
+- focused regression tests PASS
+- existing preview tests PASS
+- TypeScript PASS
+- relevant build PASS
+
+Also ensure the fix does not change:
+
+- signup behavior
+- password recovery
+- runtime agent behavior
+- immutable publishing
+- gateway routing
+
+PHASE 6 — DEPLOY ONLY THE OWNER OF THE BUG
+
+If the defect is in the control-plane preview proxy, deploy ONLY the control
+plane.
+
+If it is in another component, deploy ONLY that component.
+
+Do not redeploy unrelated Workers.
+
+Before deployment record the currently serving versions:
+
+runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+control:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+After deployment verify unrelated versions remain unchanged.
+
+PHASE 7 — REVERIFY THE EXISTING BROKEN PROJECT
+
+Do NOT regenerate project 4.
+
+Open the SAME existing project and SAME revision:
+
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+Verify:
+
+- HTML 200
+- style.css 200
+- app.js successfully loads
+- no browser CORS error
+- JavaScript executes
+- visible CRM UI renders
+- navigation works where applicable
+- CSS remains applied
+- no manual refresh/workaround is required
+- authoritative files/revision are unchanged
+
+This is important:
+
+The OLD generated project must begin working solely because the PLATFORM
+preview defect was fixed.
+
+If it does not, STOP and report why.
+
+PHASE 8 — RESUME THE ORIGINAL LAUNCH-READINESS JOURNEY
+
+ONLY after the existing preview passes, continue exactly where the previous
+test stopped.
+
+Send ONE normal conversational edit:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+
+- one edit submitted
+- existing project context retained
+- new revision produced
+- requested changes appear
+- edited preview renders with working JavaScript
+
+Then:
+
+1. leave/reopen project and verify persistence
+2. initial publish
+3. verify public *.apps.buildcustom.ai app
+4. same-revision Publish Updates and verify idempotency
+5. request:
+   "Add a green New Lead button in the top-right of the leads page."
+6. verify new revision and preview
+7. publish updates
+8. verify stable public URL now serves new revision
+9. logout
+10. login again
+11. verify project/conversation/files/latest preview/public URL persist
+12. repeat basic second-account ownership isolation
+13. verify active publish claims = 0
+
+Do not create another customer or project.
+
+PHASE 9 — REPORT
+
+Return:
+
+1. exact preview root cause
+2. evidence proving it
+3. component changed
+4. exact fix
+5. regression tests/results
+6. deployed version ID, if any
+7. existing project 4 pre-edit preview result
+8. conversational edit result
+9. reopen/persistence result
+10. initial publish result
+11. same-revision publish result
+12. second edit + publish-update result
+13. logout/login persistence result
+14. ownership isolation result
+15. public generated-app URL
+16. active publish claims
+17. remaining customer-facing BLOCKERS
+18. important UX issues
+19. GO / NO-GO for real customer use
+
+A NO-GO must be based on a concrete remaining customer-facing failure.
+
+If the entire resumed journey passes, explicitly state:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP after the report.
+
+Do not begin unrelated cleanup, dependency upgrades, billing work, or polish.

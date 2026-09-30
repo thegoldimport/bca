@@ -211,6 +211,80 @@ test("scoped module requests keep the HttpOnly preview cookie and rewrite nested
   assert.equal(calls[0].headers.get("Cookie"), null);
 });
 
+test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS, or cookie-only assets", async () => {
+  const runtime = {
+    async fetch(request: Request) {
+      const url = new URL(request.url);
+      if (url.searchParams.get("t") !== token) return new Response("invalid capability", { status: 401 });
+      const asset = url.pathname.split("/").at(-1);
+      if (asset === "app.js") {
+        return new Response("document.body.textContent = 'CRM ready';", {
+          headers: { "Content-Type": "application/javascript; charset=utf-8", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+      if (asset === "style.css") {
+        return new Response("body{background:navy}", { headers: { "Content-Type": "text/css" } });
+      }
+      return new Response('<html><head><link rel="stylesheet" href="./style.css"></head><body><script type="text/babel" data-type="module" src="./app.js"></script><script type="module" src="./app.js"></script></body></html>', {
+        headers: { "Content-Type": "text/html" },
+      });
+    },
+  } as unknown as Fetcher;
+  const env = launchEnv(runtime);
+  const root = route("agent-1", "main");
+  const previewUrl = `${runtimeOrigin}/space/agent-1/preview/main/?t=${token}`;
+  const cookie = (await launchPreviewCookie(env, "agent-1", previewUrl))!.split(";")[0];
+  const html = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}`, {
+    headers: { Cookie: cookie },
+  }));
+  assert.ok(html);
+  assert.equal(html?.status, 200);
+  assert.equal(html.headers.get("Access-Control-Allow-Origin"), null);
+  assert.match(await html.text(), /type="text\/babel"[^>]*src="[^"]*app\.js\?t=/);
+
+  const script = `${controlOrigin}${root}app.js?t=${token}`;
+  const corsHeaders = { Origin: "null", "Sec-Fetch-Mode": "cors" };
+  const js = await handleLaunchPreviewProxy(env, new Request(script, { headers: corsHeaders }));
+  assert.ok(js);
+  assert.equal(js?.status, 200);
+  assert.match(js.headers.get("Content-Type") || "", /application\/javascript/);
+  assert.equal(js.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(js.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.equal(js.headers.get("Vary"), "Origin");
+  assert.equal(js.headers.get("Set-Cookie"), null);
+  assert.match(await js.text(), /CRM ready/);
+
+  const css = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}style.css?t=${token}`, {
+    headers: corsHeaders,
+  }));
+  assert.ok(css);
+  assert.equal(css?.status, 200);
+  assert.equal(css.headers.get("Access-Control-Allow-Origin"), null);
+  const otherOrigin = await handleLaunchPreviewProxy(env, new Request(script, {
+    headers: { Origin: "https://other.example" },
+  }));
+  assert.ok(otherOrigin);
+  assert.equal(otherOrigin?.headers.get("Access-Control-Allow-Origin"), null);
+  const cookieOnly = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}app.js`, {
+    headers: { ...corsHeaders, Cookie: cookie },
+  }));
+  assert.ok(cookieOnly);
+  assert.equal(cookieOnly?.status, 200);
+  assert.equal(cookieOnly.headers.get("Access-Control-Allow-Origin"), null);
+  const noCapability = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}app.js`, {
+    headers: corsHeaders,
+  }));
+  assert.ok(noCapability);
+  assert.equal(noCapability?.status, 401);
+  assert.equal(noCapability.headers.get("Access-Control-Allow-Origin"), null);
+  const wrongCapability = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}app.js?t=wrong`, {
+    headers: corsHeaders,
+  }));
+  assert.ok(wrongCapability);
+  assert.equal(wrongCapability?.status, 401);
+  assert.equal(wrongCapability.headers.get("Access-Control-Allow-Origin"), null);
+});
+
 test("scoped assets accept a runtime token without cookies and preserve ordinary query parameters", async () => {
   const calls: Request[] = [];
   const runtime = {

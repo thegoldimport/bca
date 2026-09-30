@@ -436,6 +436,14 @@ export async function handleLaunchPreviewProxy(
 
   const outputHeaders = responseHeaders(upstream);
   const contentType = upstream.headers.get("Content-Type")?.toLowerCase() || "";
+  // Sandboxed preview documents have an opaque origin. Babel loaders and module
+  // scripts fetch JavaScript in CORS mode, unlike ordinary stylesheet requests.
+  // Only an explicitly token-scoped JavaScript asset may be read from that origin.
+  if (direct && tokenParameters.length === 1 && request.headers.get("Origin") === "null"
+    && (contentType.includes("javascript") || contentType.includes("ecmascript"))) {
+    outputHeaders.set("Access-Control-Allow-Origin", "null");
+    outputHeaders.set("Vary", "Origin");
+  }
   if (contentType.includes("text/html") || contentType.includes("text/css")
     || contentType.includes("javascript") || contentType.includes("ecmascript")) {
     const length = Number(upstream.headers.get("Content-Length"));
