@@ -1,0 +1,97 @@
+Resume from the existing Task 13 checkpoint.
+
+IMPORTANT: Do not restart Task 13, redo previously accepted work, or broaden the scope.
+
+The current blocker was loss of the private /tmp checkpoint and authenticated browser profile during final acceptance testing. This was a TEST ENVIRONMENT / AUTHENTICATED STATE LOSS, not a demonstrated BuildCustom product failure.
+
+Known checkpoint:
+
+- Local harness changed:
+  scripts/task13-final-launch-acceptance.mjs
+
+- The Estimated Value issue was isolated to the test harness.
+  The old harness cleared the controlled number input, which caused the UI to restore `0`, and then typing `12500` resulted in `012500`.
+
+- The harness now replaces the selected value without performing an intermediate clear.
+
+- Named field checks were also added.
+
+- Syntax and diff checks passed.
+
+- The corrected harness has NOT yet been verified against the live form.
+
+- No product code, runtime code, or generated CRM code was changed for this issue.
+
+- The last intact checkpoint recorded ZERO newly approved Submit clicks.
+
+- No Submit click or other mutation occurred after the checkpoint/browser profile was lost.
+
+DO NOT:
+- create another test user
+- substitute another identity
+- reconstruct the old checkpoint from assumptions
+- modify product/runtime/generated CRM code because of the `012500` result
+- click Submit until the baseline has been safely re-established
+- restart the entire Task 13 acceptance process
+- repeat previously accepted infrastructure or production tests unnecessarily
+
+FIRST:
+
+Determine whether access to the SAME intended test account has now been restored.
+
+If the same account is accessible:
+
+1. Authenticate as that same account.
+
+2. Re-establish the minimum required read-only baseline for the test.
+   Do not assume values from the lost /tmp checkpoint.
+
+3. Compare the current state against whatever durable evidence from the prior run still exists.
+
+4. Confirm there is no evidence of a Submit/mutation occurring after the last intact checkpoint.
+
+5. Record a NEW durable checkpoint before continuing.
+
+6. Run ONLY the corrected form-entry portion of:
+   scripts/task13-final-launch-acceptance.mjs
+
+7. Verify the named field checks, including that Estimated Value is exactly:
+
+   12500
+
+   NOT:
+   012500
+   0
+   or another transformed value.
+
+8. Do not click Submit merely to verify field entry.
+
+If the corrected field-entry harness passes, report that the previous `012500` result was confirmed to be a harness artifact and that the corrected harness now passes live form-entry verification.
+
+ONLY THEN continue from the exact point where the Task 13 final acceptance run previously stopped.
+
+For any mutation/Submit test that remains part of the already-approved acceptance plan:
+
+- establish and record the pre-mutation database baseline first
+- perform only the specifically approved Submit action
+- record exactly how many Submit clicks occur
+- verify the resulting database state against the recorded baseline
+- do not retry a mutation automatically if the expected result is unclear
+
+If the same intended account is NOT accessible:
+
+STOP.
+
+Do not create a replacement account or establish a new test baseline without explicit authorization.
+
+Return only:
+- whether the same account was recovered
+- the new baseline/checkpoint status
+- corrected harness live result
+- Estimated Value observed
+- Submit count
+- mutation/database result if a Submit was actually authorized and performed
+- exact point reached in Task 13
+- PASS / BLOCKED and the specific reason
+
+Keep this narrow. We are finishing the interrupted acceptance run, not starting another audit.
