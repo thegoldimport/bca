@@ -1,0 +1,854 @@
+PAUSE the narrow Task 13 edit1 acceptance work.
+
+We discovered a larger BuildCustom coding-agent architecture issue that needs to be understood before we continue acceptance testing or simply increase maxSteps.
+
+DO NOT IMPLEMENT ANYTHING YET.
+
+Do not:
+- resend edit1
+- commit/discard/reset the existing Project 5 working tree
+- modify Project 5
+- change maxSteps
+- modify ThinkAgent
+- upgrade VibeSDK
+- deploy anything
+- proceed to edit2
+
+Preserve the current failed edit1 workspace exactly as-is.
+
+==================================================
+WHY WE ARE DOING THIS
+==================================================
+
+BuildCustom is supposed to be a full vibe-coding environment comparable in user experience to Replit.
+
+The desired experience is:
+
+USER:
+"Make the dashboard dark navy and show the five newest leads."
+
+BUILDCUSTOM:
+- understands the existing project
+- finds the relevant code efficiently
+- edits it
+- runs whatever validation is appropriate
+- checks the preview/result
+- repairs problems if necessary
+- creates a coherent revision/restore point
+- finishes when the requested task is actually complete
+
+The customer should NOT need to understand:
+- turns
+- maxSteps
+- continuation prompts
+- context windows
+- subagents
+- commits
+- internal recovery
+- tool budgets
+
+Those are implementation details.
+
+A normal coding request should continue until:
+
+A. the requested task is complete,
+B. the agent encounters a real blocking failure,
+C. the user needs to answer a question,
+or
+D. a genuinely exceptional safety/resource boundary is reached.
+
+It should NOT simply terminate because an arbitrary internal counter reached 25 while productive work was still happening.
+
+We also want BuildCustom to handle larger tasks intelligently.
+
+If Cloudflare's natural architecture supports delegation/subagents/specialized workers, context compaction, continuation, or other mechanisms that allow a primary coding agent to stay focused while other work is delegated, investigate those mechanisms.
+
+Do NOT assume subagents are necessarily the answer.
+
+The goal is to determine the natural current Cloudflare architecture for building a persistent, capable vibe-coding product.
+
+==================================================
+THE FAILURE THAT EXPOSED THIS
+==================================================
+
+Task 13 Project 5 edit1 received exactly one valid user instruction.
+
+The builder send path was conclusively verified:
+
+prompt
+→ Send
+→ click
+→ handler
+→ WebSocket
+→ user_suggestion
+→ server/agent turn
+
+All worked correctly.
+
+The agent then consumed its entire configured step budget.
+
+Configured maxSteps:
+25
+
+Observed turn:
+
+- 25 total steps
+- 24 tool-using steps
+- final tool-disabled response
+- no looping
+- no persisted tool errors
+- no failed-tool retry loop
+
+Observable work:
+
+Steps 1–14:
+- located project files
+- read public/index.html
+- sequentially read substantial portions of large public/app.jsx
+- read src/index.ts
+
+Steps 15–16:
+- successfully edited public/index.html
+- successfully edited status styling in public/app.jsx
+
+Steps 17–19:
+- read additional portions of public/app.jsx
+- made an app-shell/theme edit
+
+Steps 20–24:
+- made two larger public/app.jsx edits
+- performed reads between/after edits
+
+All five edit operations reported:
+replaced: true
+
+Step 25:
+- tools were disabled
+- agent returned:
+  "Maximum steps for this agent turn have been reached."
+
+There was:
+
+- NO commit call
+- NO deploy_space call
+- NO new authoritative revision
+- NO database mutation
+- NO publish
+- NO tool failure
+- NO obvious loop
+
+Current authoritative revision remains:
+
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+The failed turn likely left successful uncommitted edits in the persistent SpaceDO workspace.
+
+The current limit comes from:
+
+production/vibesdk-launch/runtime-source/worker/agents/think/ThinkAgent.ts
+
+which sets:
+
+maxSteps = 25
+
+and its beforeStep logic disables tools at:
+
+stepNumber >= maxSteps - 1
+
+This means a coding task can be actively succeeding and still have its tools removed before it can validate/commit its work.
+
+That is the architectural problem we need to understand.
+
+==================================================
+OUR ARCHITECTURE PRINCIPLE
+==================================================
+
+BuildCustom's native coding agent IS VibeSDK/Think.
+
+We do NOT want:
+
+- a second BuildCustom coding agent wrapping VibeSDK
+- a competing orchestration engine
+- custom queues
+- custom operation ledgers
+- duplicate workspace storage
+- duplicate revision systems
+- another deployment engine
+- unnecessary BuildCustom-specific infrastructure
+
+We want to use Cloudflare's natural VibeSDK/Think/Agents architecture correctly.
+
+If current upstream Cloudflare already solves these problems, prefer adopting/removing overrides rather than building our own solution.
+
+==================================================
+PINNED VERSION
+==================================================
+
+Our accepted VibeSDK baseline was pinned to:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Compare that exact implementation with CURRENT official Cloudflare:
+
+- VibeSDK
+- Think
+- Agents SDK
+- SpaceDO/workspace architecture
+- current official docs
+- current upstream source
+
+Do not upgrade anything yet.
+
+This is an architecture investigation only.
+
+==================================================
+PART 1 — HOW SHOULD A NATURAL VIBESDK CODING SESSION WORK?
+==================================================
+
+Trace the current official Cloudflare architecture for a coding session.
+
+Determine how these pieces are intended to interact:
+
+- ThinkAgent
+- VibeSDK
+- SpaceDO
+- persistent workspace
+- conversation history
+- branches
+- revisions
+- Git
+- Cloudflare Artifacts
+- previews
+- deployment
+- context/session configuration
+- compaction
+- continuation
+- recovery
+- tool execution
+- turn lifecycle
+
+Answer:
+
+What persists across user requests?
+
+What persists across model turns?
+
+What project knowledge/context should remain available?
+
+What workspace state remains available?
+
+When is a revision created?
+
+When is work committed?
+
+When is preview/deployment performed?
+
+How is interrupted work expected to continue?
+
+We need to understand whether BuildCustom currently treats individual turns as too disposable compared with the natural Cloudflare model.
+
+==================================================
+PART 2 — WHY DID A SMALL FOLLOW-UP EDIT REQUIRE SO MUCH REDISCOVERY?
+==================================================
+
+The edit1 request was conceptually small:
+
+"Make the dashboard dark navy and show the five newest leads."
+
+Yet the agent spent approximately 14 steps before its first edit and 18 of its 24 tool opportunities performing reads.
+
+Investigate WHY.
+
+Inspect the actual system prompt, context, workspace tools, and project information available to the agent at the start of a follow-up edit.
+
+Determine whether it currently receives or can access:
+
+- project file manifest
+- directory tree
+- current revision
+- current branch
+- changed-file context
+- prior-turn context
+- previous file/tool context
+- file summaries
+- project summaries
+- workspace memory
+- AGENTS/project instructions
+- code search
+- grep/search
+- symbol search
+- targeted file ranges
+- dependency information
+- previous edit locations
+- conversation context
+- compacted context
+
+Determine whether sequentially reading a huge public/app.jsx is:
+
+A. expected current Cloudflare behavior,
+B. caused by our pinned version,
+C. caused by our system prompt,
+D. caused by missing tools,
+E. caused by context being discarded,
+F. caused by generated-app structure,
+or
+G. something else directly supported by evidence.
+
+We want follow-up edits to be targeted.
+
+A coding agent that already built or edited a project should not behave like it has never seen the project before unless context actually requires rediscovery.
+
+==================================================
+PART 3 — FILE SEARCH / CODE NAVIGATION
+==================================================
+
+Inspect current Cloudflare/VibeSDK capabilities for locating code efficiently.
+
+Specifically investigate support for:
+
+- grep
+- search
+- symbol lookup
+- file globbing
+- targeted reads
+- code indexing
+- file summaries
+- project maps
+- dependency maps
+- semantic search if applicable
+- cached project understanding
+
+Compare current upstream with our pinned implementation.
+
+Determine whether our agent is missing a capability that would have let it locate the dashboard and lead code in a few operations rather than sequentially reading app.jsx.
+
+Do not invent a custom code-indexing system if Cloudflare already provides the needed capability.
+
+==================================================
+PART 4 — STEP LIMITS
+==================================================
+
+Trace the exact origin and purpose of:
+
+maxSteps = 25
+
+Determine whether this is:
+
+- stock pinned VibeSDK behavior
+- something BuildCustom introduced
+- an old implementation detail
+- a safety fallback
+- a model-provider constraint
+- a Think constraint
+- a Workers constraint
+- or something else
+
+Compare:
+
+1. our pinned VibeSDK
+2. current upstream VibeSDK
+3. current Think
+4. current Agents SDK
+
+Determine whether current Cloudflare fundamentally requires a small fixed coding-turn ceiling.
+
+If current Think still exposes maxSteps, determine how Cloudflare expects applications to use it for long-running coding tasks.
+
+==================================================
+PART 5 — TASK COMPLETION INSTEAD OF STEP COMPLETION
+==================================================
+
+Investigate current Cloudflare-supported mechanisms for letting an agent continue working until a task reaches a meaningful completion boundary.
+
+Inspect where relevant:
+
+- maxSteps
+- stopWhen
+- beforeTurn
+- beforeStep
+- onStepFinish
+- onChatResponse
+- continueLastTurn
+- durable/programmatic submissions
+- context compaction
+- recoverable execution
+- fibers
+- Workflows
+- resumable execution
+- continuation turns
+- task state
+- agent lifecycle hooks
+
+We do NOT literally require infinite execution.
+
+We want the PRODUCT behavior to be:
+
+"The coding agent continues until the requested task is complete."
+
+Internal resource limits can exist.
+
+But those limits should not become the customer's unit of interaction.
+
+Determine the natural Cloudflare-supported architecture for achieving this.
+
+==================================================
+PART 6 — SUBAGENTS / DELEGATION / SPECIALIZED AGENTS
+==================================================
+
+This is important.
+
+Investigate whether current Cloudflare Think / Agents SDK / VibeSDK provides or naturally supports:
+
+- subagents
+- child agents
+- delegated tasks
+- agent-to-agent calls
+- specialized worker agents
+- parallel agents
+- background agents
+- tool-based delegation
+- durable child tasks
+- isolated context workers
+- manager/worker patterns
+
+Use current official Cloudflare source/docs, not assumptions.
+
+Determine whether a coding request should remain entirely inside one ThinkAgent or whether Cloudflare now supports useful delegation.
+
+Examples:
+
+PRIMARY CODING AGENT
+maintains:
+- user intent
+- project understanding
+- architecture
+- final decision making
+
+Possible delegated work:
+- search/codebase exploration
+- testing
+- debugging
+- dependency research
+- UI inspection
+- verification
+- documentation lookup
+- large-file analysis
+
+The purpose would be to prevent the main agent from burning its entire context/step budget doing mechanical exploration.
+
+BUT:
+
+Do not recommend subagents merely because they sound powerful.
+
+Determine whether they actually fit Cloudflare's natural architecture.
+
+Answer:
+
+- Does current Cloudflare support them?
+- Does current VibeSDK use them?
+- Would they help BuildCustom?
+- Which tasks should be delegated?
+- Which tasks should stay with the primary coding agent?
+- How would shared workspace access work?
+- How would conflicting edits be prevented?
+- How would context/results return to the primary agent?
+- Would delegation increase cost/latency substantially?
+- Is this launch-critical or a later enhancement?
+
+==================================================
+PART 7 — CONTEXT MANAGEMENT
+==================================================
+
+A vibe-coding session may last hours and contain many edits.
+
+Investigate how current Think handles long-lived context.
+
+Specifically:
+
+- conversation persistence
+- token/context limits
+- context compaction
+- summarization
+- workspace state vs conversation state
+- project memory
+- tool-result retention
+- old-turn compression
+- branch/revision awareness
+
+Determine the correct model for BuildCustom:
+
+The model should NOT need the entire historical conversation forever.
+
+The persistent workspace should be authoritative for code.
+
+Useful project understanding should survive enough that every follow-up request does not require rediscovering everything.
+
+Explain how current Cloudflare expects this to work.
+
+==================================================
+PART 8 — COMMIT / CHECKPOINT / REVISION ARCHITECTURE
+==================================================
+
+Our failed turn successfully edited files but reached maxSteps before calling commit.
+
+That stranded potentially useful work outside the authoritative revision.
+
+Investigate whether current upstream VibeSDK behaves the same way.
+
+Determine:
+
+- who decides when to commit
+- whether commit is model-driven
+- whether lifecycle hooks can checkpoint automatically
+- whether intermediate checkpoints exist
+- how revisions are represented
+- how failed/incomplete turns preserve work
+- how restore works
+- whether verification normally occurs before commit
+- whether deploy is tied to commit
+- whether successful edits can survive a turn boundary safely
+
+We want:
+
+edit
+→ verify
+→ repair if needed
+→ coherent restore point
+
+A step boundary should not arbitrarily destroy or strand productive work.
+
+Do not create another revision system.
+
+Use the natural VibeSDK/SpaceDO/Git architecture.
+
+==================================================
+PART 9 — CONTINUATION / RECOVERY
+==================================================
+
+Investigate what should happen if an internal turn reaches a resource boundary while the task is clearly unfinished.
+
+Could BuildCustom automatically continue the SAME user task through another internal model turn without requiring the user to say "continue"?
+
+If yes:
+
+How does current Cloudflare support this?
+
+Determine how to distinguish:
+
+TASK COMPLETE
+
+from:
+
+MODEL TURN ENDED BUT TASK INCOMPLETE
+
+from:
+
+REAL FAILURE
+
+from:
+
+USER INPUT REQUIRED
+
+We want the UI to present one coherent coding operation even if internally multiple model turns are required.
+
+Again:
+
+Prefer Cloudflare-native mechanisms.
+
+Do not build a custom workflow engine unless absolutely necessary.
+
+==================================================
+PART 10 — TEST / PREVIEW / REPAIR LOOP
+==================================================
+
+Investigate current VibeSDK's intended coding loop.
+
+For meaningful changes, determine whether the natural lifecycle is:
+
+understand
+→ edit
+→ test/build
+→ preview
+→ inspect
+→ repair
+→ commit
+→ finish
+
+or another sequence.
+
+Our failed edit1 turn ran no tests before exhausting its budget.
+
+Determine what current upstream does and whether our pinned implementation is missing improvements.
+
+The coding agent should ideally discover its own broken changes before telling the customer it is finished.
+
+==================================================
+PART 11 — CURRENT PROJECT 5 WORKING TREE
+==================================================
+
+While performing this READ-ONLY architecture review, inspect the existing Project 5 SpaceDO working tree.
+
+DO NOT MODIFY IT.
+
+Current authoritative revision:
+
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Determine:
+
+- whether the five successful edit1 changes remain in the working tree
+- modified files
+- diff against committed revision
+- whether edits are syntactically coherent
+- whether dark-navy dashboard work is present
+- whether five-newest-leads work is present
+- whether edit1 appears complete/partial
+- whether there are unrelated changes
+- whether the workspace is safe to continue from
+
+Do not:
+- commit
+- reset
+- restore
+- format
+- repair
+- test in a way that modifies files
+
+Preserve it exactly.
+
+==================================================
+PART 12 — COMPARE PINNED VS CURRENT UPSTREAM
+==================================================
+
+Our pinned VibeSDK commit:
+
+9da158d82c597a0e8f4bf033cdccd1053fb6fb15
+
+Compare it with current upstream specifically around:
+
+- ThinkAgent lifecycle
+- coding-agent behavior
+- maxSteps
+- stop conditions
+- continuation
+- workspace persistence
+- SpaceDO
+- file discovery
+- search tools
+- code navigation
+- context management
+- compaction
+- subagents/delegation
+- tool execution
+- commits
+- checkpoints
+- previews
+- testing
+- repair
+- deploy
+- recovery
+
+Produce a concise list of meaningful upstream changes that could improve BuildCustom.
+
+Do not recommend a wholesale upgrade just because newer code exists.
+
+Identify:
+
+- specific improvements
+- compatibility implications
+- which pieces could be adopted narrowly
+- whether our Task4B immutable publishing patch or Task6A auth patch would conflict
+- whether our accepted BuildCustom adapter boundaries remain valid
+
+==================================================
+PART 13 — WHAT SHOULD BUILDCUSTOM ACTUALLY DO?
+==================================================
+
+Based on the evidence, recommend the smallest architecture that gives BuildCustom the desired experience:
+
+USER REQUEST
+        ↓
+PRIMARY CODING AGENT
+        ↓
+UNDERSTAND EXISTING PROJECT
+        ↓
+TARGETED CODE DISCOVERY
+        ↓
+EDIT
+        ↓
+TEST / PREVIEW
+        ↓
+REPAIR IF NEEDED
+        ↓
+CHECKPOINT / REVISION
+        ↓
+TASK COMPLETE
+
+If delegation is appropriate, show where it belongs:
+
+PRIMARY AGENT
+   ├── code search/exploration subagent?
+   ├── test/debug subagent?
+   ├── research subagent?
+   └── verification subagent?
+
+But only include delegation that current Cloudflare architecture actually supports and that provides meaningful benefit.
+
+The primary agent must remain responsible for the user's overall coding task.
+
+==================================================
+PART 14 — LAUNCH PRIORITY
+==================================================
+
+Separate recommendations into:
+
+A. MUST FIX BEFORE PUBLIC LAUNCH
+
+Only things that would make ordinary coding unreliable or broken.
+
+B. SHOULD IMPROVE SOON AFTER LAUNCH
+
+Meaningful improvements that are not launch blockers.
+
+C. FUTURE / OPTIONAL
+
+More sophisticated capabilities such as extensive parallel subagent systems if they are not necessary yet.
+
+We do NOT want to delay launch building an elaborate agent platform if the natural Cloudflare architecture already gives us a simpler solution.
+
+==================================================
+PART 15 — DO NOT OVERENGINEER
+==================================================
+
+Keep our accepted architecture boundaries.
+
+BuildCustom owns:
+
+- product users/identity mapping
+- projects
+- ownership/permissions
+- project-agent mapping
+- dashboard
+- deployment/release/domain metadata
+- future billing/usage
+
+Cloudflare/VibeSDK owns:
+
+- ThinkAgent
+- runtime
+- workspace
+- files
+- execution
+- previews
+- revisions
+- restore
+- generated-app deployment
+- generated-app resources
+
+Do NOT propose:
+
+- another BuildCustom coding agent
+- duplicate file storage
+- duplicate workspace
+- custom revision system
+- custom deployment engine
+- custom task queue
+- custom operation ledger
+- custom orchestration framework
+
+unless current Cloudflare architecture genuinely cannot provide the required behavior.
+
+==================================================
+RETURN ONE ARCHITECTURE REPORT
+==================================================
+
+Return:
+
+1. CURRENT BUILDCUSTOM BEHAVIOR
+
+2. NATURAL CURRENT CLOUDFLARE/VIBESDK BEHAVIOR
+
+3. WHY EDIT1 CONSUMED ALL 25 STEPS
+
+4. WHY THE AGENT NEEDED 18 READS
+
+5. ORIGIN AND PURPOSE OF maxSteps = 25
+
+6. WHETHER CURRENT CLOUDFLARE REQUIRES A SMALL FIXED CEILING
+
+7. HOW LONG CODING TASKS SHOULD NATURALLY CONTINUE
+
+8. HOW FOLLOW-UP EDITS SHOULD RETAIN/REUSE PROJECT UNDERSTANDING
+
+9. HOW FILE DISCOVERY SHOULD WORK
+
+10. SUBAGENT / DELEGATION SUPPORT
+- what Cloudflare supports
+- whether we should use it
+- where it belongs
+
+11. CONTEXT / COMPACTION MODEL
+
+12. COMMIT / CHECKPOINT / REVISION MODEL
+
+13. TEST / PREVIEW / REPAIR LOOP
+
+14. RECOVERY / CONTINUATION MODEL
+
+15. IMPORTANT UPSTREAM CHANGES SINCE OUR PINNED COMMIT
+
+16. PROJECT 5 WORKING-TREE STATUS
+- modified files
+- whether edit1 changes remain
+- whether they are usable
+- whether edit1 is complete/partial
+
+17. SMALLEST RECOMMENDED BUILDCUSTOM ARCHITECTURE CHANGE
+
+18. MUST FIX BEFORE LAUNCH
+
+19. SHOULD IMPROVE AFTER LAUNCH
+
+20. FUTURE / OPTIONAL
+
+21. WHAT SHOULD REMAIN UNTOUCHED
+
+22. RISKS / COMPATIBILITY CONCERNS
+
+23. RECOMMENDED NEXT TASK 13 ACTION
+
+Be concrete.
+
+Reference exact files/functions/configuration from:
+- our pinned source
+- current upstream source
+
+when relevant.
+
+Do not give generic agent-design advice.
+
+We need to know how BUILDCUSTOM should use CLOUDFLARE'S actual current architecture.
+
+==================================================
+FINAL RULE
+==================================================
+
+THIS IS READ-ONLY.
+
+Do not implement anything.
+
+Do not change maxSteps.
+
+Do not upgrade VibeSDK.
+
+Do not modify Project 5.
+
+Do not commit the existing working tree.
+
+Do not resend edit1.
+
+Do not deploy anything.
+
+Do not proceed to edit2.
+
+Return the architecture report and STOP.
