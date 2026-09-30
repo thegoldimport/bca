@@ -1,0 +1,211 @@
+Proceed with FINAL REPLIT PRODUCTION SHUTDOWN.
+
+The migration gates have passed.
+
+ACCEPTED CURRENT STATE
+
+GitHub main:
+11a8efdefcfc4e3e731222ef52e343f349b3ef83
+
+GitHub Actions deployment:
+36707993688
+PASS
+
+Cloudflare Pages:
+buildcustom.ai live and verified
+
+Production marketing deployment path:
+GitHub main
+→ GitHub Actions
+→ npm ci/build
+→ Wrangler
+→ Cloudflare Pages `bca`
+
+Automatic Cloudflare Pages Git builds:
+DISABLED
+
+Public signup:
+ENABLED
+
+Password recovery:
+AVAILABLE
+
+Public generated apps:
+ENABLED
+
+Serving Workers:
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Control:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Production dependency scan:
+ZERO PRODUCTION REPLIT DEPENDENCIES CONFIRMED
+
+IMPORTANT SOURCE CONTROL NOTE
+
+The Replit workspace local Git branch is divergent from GitHub main.
+
+DO NOT:
+- push the divergent local branch
+- force-push
+- merge it into GitHub main
+- rewrite GitHub history
+- attempt to reconcile it during this task
+
+GitHub main is now the canonical production source.
+
+TASK 1 — RECORD PRE-SHUTDOWN STATE
+
+Before changing Replit, record:
+
+- current public Replit deployment identity/status
+- buildcustom.ai HTTP status
+- app.buildcustom.ai HTTP status
+- current runtime/control/gateway versions
+
+This is rollback/reference information only.
+
+Do not change Cloudflare.
+
+TASK 2 — SHUT DOWN THE PUBLIC REPLIT DEPLOYMENT
+
+Stop/unpublish the public production Replit deployment that previously served:
+
+ai-build-studio.replit.app
+
+The goal is that this Replit-hosted production service is no longer publicly
+serving.
+
+Do NOT delete the Replit project/workspace.
+
+I may still use Replit as an optional development IDE.
+
+Do NOT alter Git history.
+
+Do NOT touch GitHub main.
+
+Do NOT modify Cloudflare.
+
+TASK 3 — PROVE REPLIT IS ACTUALLY UNAVAILABLE
+
+Verify the former public Replit deployment is no longer serving the old
+application.
+
+Record its resulting state/status.
+
+Do not republish it merely for testing.
+
+TASK 4 — POST-SHUTDOWN PRODUCTION SMOKE TEST
+
+With the Replit production deployment OFF, verify:
+
+MARKETING
+
+- https://buildcustom.ai returns 200
+- marketing assets load
+- product/pricing CTAs point to:
+  https://app.buildcustom.ai/signup
+- no Join the Waitlist UI
+- no request to ai-build-studio.replit.app
+- no customer-facing /api/waitlist request
+
+PRODUCT
+
+- https://app.buildcustom.ai is available
+- signup page loads
+- public capabilities report registration enabled
+- Forgot Password UI/form is available
+- do not create another customer
+- do not submit another password reset unless required by an actual failure
+
+EXISTING PRODUCT DATA
+
+Using an existing authorized test account if already available without
+modifying credentials:
+
+- login works
+- dashboard loads
+- existing project can be opened
+- authoritative project files load
+- preview loads
+
+Do not run AI generation.
+
+Do not create another project.
+
+Do not publish another generated app.
+
+GENERATED APPS
+
+- verify at least one existing known public generated app returns 200
+- verify its expected existing content/assets load
+- verify an unknown generated-app slug returns 404
+
+INFRASTRUCTURE
+
+Confirm serving versions remain:
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Control:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Confirm:
+- public signup remains enabled
+- public generated apps remain enabled
+- active publish claims = 0
+- Cloudflare Pages `bca` remains live
+- GitHub Actions remains the intended marketing deployment path
+
+TASK 5 — FINAL REPLIT DEPENDENCY CONFIRMATION
+
+With Replit actually OFF, check the live production paths for any failure
+caused by its absence.
+
+If everything above passes, explicitly confirm:
+
+REPLIT PRODUCTION SHUTDOWN COMPLETE
+
+ZERO PRODUCTION REPLIT DEPENDENCIES
+
+BUILDCUSTOM PRODUCTION IS RUNNING ENTIRELY WITHOUT REPLIT
+
+TASK 6 — DO NOT CLEAN UP LEGACY INFRASTRUCTURE YET
+
+Even after success:
+
+- do not delete the Replit workspace
+- do not delete old Cloudflare resources
+- do not delete rollback/reference resources
+- do not modify Worker deployments
+- do not reconcile the divergent Replit Git branch
+- do not perform dependency upgrades
+- do not make unrelated cleanup commits
+
+Return only:
+
+1. Replit shutdown result
+2. marketing smoke-test result
+3. app/signup/recovery result
+4. existing account/project/files/preview result
+5. generated-app result
+6. runtime/control/gateway versions
+7. active publish claims
+8. any failures observed after Replit was turned off
+9. final production dependency status
+
+If everything passes, finish with:
+
+REPLIT PRODUCTION SHUTDOWN COMPLETE
+ZERO PRODUCTION REPLIT DEPENDENCIES
+BUILDCUSTOM PRODUCTION IS RUNNING ENTIRELY WITHOUT REPLIT
