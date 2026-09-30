@@ -1,0 +1,474 @@
+APPROVED: make the minimum runtime + control-plane change required to safely
+support preview mutations.
+
+The previous instruction prohibiting runtime deployment is superseded ONLY for
+this specific fix.
+
+Do NOT:
+- redesign preview authentication
+- create a second capability/token system
+- let the control plane independently validate runtime tokens
+- change token format
+- change generated project 4
+- regenerate project 4
+- create another project/customer
+- touch the gateway
+- touch marketing
+- send an AI edit before the old project passes
+- publish before the old project passes
+
+CURRENT PRODUCTION
+
+Control:
+3a20a16c-77b2-4f68-a9d3-410c7a5a1f4b
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Gateway:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+Project 4:
+agent 4853b20c-18fa-470e-877d-b3be5d663142
+
+Revision:
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+CURRENT ROOT CAUSE
+
+The private preview now supports authorized JavaScript and JSON GET requests,
+including dynamic URLs/query parameters.
+
+Mutation remains blocked because:
+
+1. browser requires OPTIONS preflight for POST application/json
+2. control preview proxy currently supports GET only
+3. preflight must validate the preview capability WITHOUT executing generated
+   application code
+4. runtime currently has no validation-only operation
+5. HEAD is NOT acceptable because it authenticates and then dispatches to
+   generated-app code
+6. control cannot independently validate runtime token signature/revocation
+
+Therefore add ONE narrow runtime validation-only boundary and use it from the
+control plane.
+
+==================================================
+PHASE 1 — IDENTIFY EXISTING CAPABILITY VALIDATION
+==================================================
+
+Before editing, trace the exact runtime code currently responsible for
+validating the private-preview capability.
+
+Document:
+
+- token extraction
+- signature/authenticity validation
+- expiration validation
+- revocation validation
+- agent/project binding
+- branch binding if applicable
+- user/owner binding if applicable
+- any other scope enforced today
+- point at which successful validation currently transitions into generated
+  app dispatch
+
+Do NOT invent new validation semantics.
+
+The new validation-only operation must reuse the SAME authoritative validation
+logic.
+
+There must not be two implementations that can drift.
+
+==================================================
+PHASE 2 — ADD INTERNAL VALIDATION-ONLY OPERATION
+==================================================
+
+Add the smallest possible runtime operation whose sole purpose is:
+
+VALIDATE THIS EXISTING PREVIEW CAPABILITY
+
+It must:
+
+- accept the existing capability in the same form/scope used by private preview
+- run the existing authoritative validation logic
+- verify all existing expiration/revocation/scope rules
+- return only minimal success/failure information
+- NEVER dispatch to generated application code
+- NEVER execute a generated-app route
+- NEVER invoke a generated-app fetch handler
+- NEVER mutate generated-app data
+- NEVER create a preview/revision/deployment
+- NEVER refresh/extend the capability merely by validating it
+
+Prefer an INTERNAL service-binding operation rather than a new public
+customer-facing endpoint.
+
+If an HTTP-shaped internal endpoint is required by the existing architecture,
+it must be inaccessible through the normal public/generated-app route and
+protected by the existing trusted service boundary.
+
+Do not expose token internals in the response.
+
+Conceptual response is enough:
+
+valid -> success
+invalid/expired/revoked/wrong scope -> denied
+
+Use appropriate status codes consistent with existing runtime conventions.
+
+IMPORTANT:
+
+Refactor/reuse the existing validator if necessary so BOTH:
+
+A. normal preview dispatch
+B. validation-only operation
+
+call the same underlying validation function.
+
+Do not copy/paste the validation logic.
+
+==================================================
+PHASE 3 — PROVE VALIDATION IS SIDE-EFFECT FREE
+==================================================
+
+Add focused runtime tests proving:
+
+1. valid capability -> validation succeeds
+2. missing capability -> denied
+3. malformed capability -> denied
+4. expired capability -> denied
+5. revoked capability -> denied
+6. wrong agent/project scope -> denied
+7. wrong branch scope if applicable -> denied
+8. wrong user/owner scope if applicable -> denied
+9. validation-only call NEVER invokes generated-app dispatch
+10. validation-only call NEVER invokes generated-app code
+11. repeated validation produces no generated-app mutation
+12. validation does not refresh/extend capability lifetime
+13. normal existing preview dispatch still works
+
+Use spies/mocks/counters where appropriate to prove generated code was not
+called.
+
+Do not rely only on “nothing visibly changed.”
+
+==================================================
+PHASE 4 — CONTROL-PLANE PREFLIGHT
+==================================================
+
+Once the runtime validation-only boundary is proven, update the control-plane
+private-preview route.
+
+For OPTIONS preflight from the opaque sandbox:
+
+Origin:
+null
+
+The control plane should:
+
+1. parse the capability-scoped preview URL
+2. identify the intended HTTP method
+3. validate that the requested method is in the supported allowlist
+4. validate requested headers against a narrow allowlist
+5. call the runtime VALIDATION-ONLY operation
+6. only if capability validation succeeds, return the minimum required CORS
+   preflight response
+
+Support intended generated-app methods:
+
+GET
+HEAD
+POST
+PUT
+PATCH
+DELETE
+OPTIONS
+
+Do not support arbitrary methods.
+
+For successful applicable preflight, return the minimum required values such
+as:
+
+Access-Control-Allow-Origin: null
+
+Access-Control-Allow-Methods:
+the appropriate supported/requested method(s)
+
+Access-Control-Allow-Headers:
+only explicitly permitted headers requested by the browser, including
+Content-Type where appropriate
+
+Do NOT:
+
+- execute generated app code during OPTIONS
+- forward OPTIONS to the generated app merely to validate capability
+- use Access-Control-Allow-Origin: *
+- enable credentials
+- reflect arbitrary headers
+- expose BuildCustom cookies/authentication
+
+==================================================
+PHASE 5 — FORWARD AUTHORIZED MUTATIONS
+==================================================
+
+After browser preflight succeeds, support the actual capability-authorized:
+
+POST
+PUT
+PATCH
+DELETE
+
+through the existing private-preview transport.
+
+Preserve:
+
+- method
+- pathname
+- generated-app query parameters
+- request body
+- legitimate content type
+- legitimate application headers
+
+Continue stripping/not forwarding BuildCustom product credentials and cookies.
+
+The actual mutation request must still undergo authoritative capability
+authorization.
+
+Do NOT treat successful OPTIONS as authorization for the subsequent request.
+
+The POST/PUT/PATCH/DELETE request must itself be authenticated normally.
+
+Return the generated application's:
+
+- status
+- body
+- appropriate content type
+
+and the minimum opaque-origin CORS response necessary for the authorized
+sandbox to consume it.
+
+==================================================
+PHASE 6 — SECURITY / REGRESSION TESTS
+==================================================
+
+Test the complete runtime + control contract.
+
+At minimum:
+
+1. valid OPTIONS + POST succeeds
+2. OPTIONS does not execute generated app code
+3. actual POST executes exactly once
+4. JSON body arrives unchanged
+5. query parameters survive
+6. authorized response is browser-readable
+7. PUT works
+8. PATCH works
+9. DELETE works
+10. HEAD behavior is safe/correct
+11. unsupported methods rejected
+12. missing capability denied
+13. malformed capability denied
+14. expired capability denied
+15. revoked capability denied
+16. wrong project/agent capability denied
+17. cross-user/cross-project access denied
+18. cookie-only request cannot bypass capability
+19. product cookies are not forwarded
+20. arbitrary requested headers are not reflected
+21. wildcard credentialed CORS is absent
+22. existing authorized GET JSON still works
+23. existing JavaScript preview still works
+24. CSS/HTML behavior remains unchanged
+25. query/template-literal rewriting remains working
+26. sandbox isolation remains intact
+
+Then run:
+
+- focused runtime tests
+- focused control preview tests
+- relevant TypeScript checks
+- runtime build
+- control build
+- Wrangler dry runs
+
+Do not turn this into a full unrelated dependency/security audit.
+
+==================================================
+PHASE 7 — DEPLOY RUNTIME + CONTROL ONLY
+==================================================
+
+If all focused acceptance tests pass, deploy:
+
+1. runtime containing the validation-only boundary
+2. control plane configured to use that exact runtime boundary
+
+Do NOT deploy gateway.
+
+Do NOT deploy marketing.
+
+Do NOT change dispatch infrastructure.
+
+Record both new version IDs.
+
+Gateway must remain:
+
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+After deployment first verify the existing accepted preview read behavior has
+not regressed.
+
+==================================================
+PHASE 8 — PROJECT 4 OLD-REVISION ACCEPTANCE
+==================================================
+
+Use the SAME existing project.
+
+Do NOT regenerate it.
+
+Do NOT edit its source.
+
+Do NOT send an AI edit yet.
+
+Revision must still initially be:
+
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+Confirm:
+
+- CRM renders
+- metrics = expected current state
+- Leads Directory works
+- GET data requests work
+- no relevant CORS errors
+
+Then use the existing Add Lead UI with clearly disposable data.
+
+Verify through the real browser flow:
+
+- OPTIONS occurs
+- OPTIONS succeeds
+- generated-app mutation code does NOT execute during OPTIONS
+- POST occurs exactly once
+- POST is capability-authorized
+- JSON reaches generated handler unchanged
+- generated handler executes exactly once
+- response is browser-readable
+- UI reports success
+- lead appears
+- subsequent GET shows the lead
+- activity record is created as expected
+- no duplicate lead/activity is created
+- no relevant CORS failure occurs
+
+If the existing generated app provides a normal delete action, test it and
+remove the disposable lead.
+
+If it does not, leave the disposable record for later cleanup rather than
+manufacturing a source/API workaround.
+
+The project SOURCE must still be unchanged:
+
+revision:
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+7 original files
+1 original conversation turn
+
+Data mutation is expected and does NOT count as changing the generated source.
+
+If Add Lead fails, STOP and report.
+
+==================================================
+PHASE 9 — RESUME LAUNCH READINESS
+==================================================
+
+ONLY after the old revision's Add Lead flow passes, resume the original
+customer journey.
+
+First AI edit:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+
+- exactly one edit
+- new revision
+- requested changes
+- working preview
+- GET data still works
+- mutation transport still works
+
+Then:
+
+1. leave/reopen
+2. verify conversation/files/revision/preview persistence
+3. initial Publish
+4. verify public *.apps.buildcustom.ai URL
+5. verify public app HTML/CSS/JS/data behavior
+6. same-revision Publish Updates
+7. prove idempotency/no duplicate deployment
+
+Then second AI edit:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify new revision and working preview.
+
+Publish updates.
+
+Verify:
+
+- new immutable candidate/release
+- stable public URL remains unchanged
+- public URL serves new revision
+
+Then:
+
+- logout
+- login
+- verify project/conversation/files/latest preview/public URL persist
+- basic second-account ownership isolation
+- active publish claims = 0
+
+==================================================
+PHASE 10 — FINAL REPORT
+==================================================
+
+Return:
+
+1. existing runtime validation path identified
+2. validation-only operation implemented
+3. proof it cannot execute generated-app code
+4. control-plane OPTIONS behavior
+5. mutation forwarding behavior
+6. security/regression test results
+7. new runtime version
+8. new control version
+9. unchanged gateway version
+10. project 4 old-revision Add Lead result
+11. disposable lead/activity result
+12. first AI edit result
+13. reopen/persistence result
+14. initial publish result
+15. same-revision publish result
+16. second edit + publish-update result
+17. returning-login result
+18. ownership-isolation result
+19. public generated-app URL
+20. active publish claims
+21. remaining customer-facing BLOCKERS
+22. GO / NO-GO
+
+A NO-GO must be based on a concrete remaining customer-facing failure.
+
+If everything passes:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP.
+
+Do not begin billing, custom domains, dependency upgrades, cleanup, telemetry
+work, or unrelated polish.

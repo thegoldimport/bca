@@ -8,11 +8,19 @@ const TOKEN = /^[A-Za-z0-9._~+=-]+$/;
 const MAX_TOKEN_LENGTH = 2048;
 const MAX_RESOURCE_PATH = 2048;
 const MAX_TEXT_RESPONSE = 2_000_000;
+const MAX_REQUEST_BODY = 2_000_000;
+const PREVIEW_METHODS = new Set(["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]);
+const PREVIEW_REQUEST_HEADERS = new Set(["content-type", "accept", "if-match", "if-none-match"]);
+
+export type PreviewValidatorBinding = {
+  validatePreviewCapability(input: { agentId: string; branch: string; token: string }): Promise<{ valid: boolean }>;
+};
 
 export type LaunchPreviewEnv = {
   ENVIRONMENT?: string;
   CONTROL_PLANE_PROFILE?: string;
   AUTH_RUNTIME?: Fetcher;
+  PREVIEW_VALIDATOR?: PreviewValidatorBinding;
   AUTH_RUNTIME_URL?: string;
   CONTROL_PLANE_ALLOWED_ORIGIN?: string;
   CONTROL_PLANE_CANARY_ORIGIN?: string;
@@ -381,6 +389,48 @@ function responseHeaders(upstream: Response): Headers {
   return headers;
 }
 
+async function boundedRequestBody(request: Request): Promise<Uint8Array | null> {
+  if (!request.body) return new Uint8Array(0);
+  const length = Number(request.headers.get("Content-Length"));
+  if (Number.isFinite(length) && length > MAX_REQUEST_BODY) return null;
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_REQUEST_BODY) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+async function validateScopedCapability(env: LaunchPreviewEnv, capability: PreviewCapability): Promise<"valid" | "invalid" | "unavailable"> {
+  if (!env.PREVIEW_VALIDATOR || !capability.token) return "unavailable";
+  try {
+    const result = await env.PREVIEW_VALIDATOR.validatePreviewCapability({
+      agentId: capability.agentId,
+      branch: capability.branch,
+      token: capability.token,
+    });
+    if (result?.valid === true) return "valid";
+    if (result?.valid === false) return "invalid";
+  } catch {
+    // A broken internal binding is never a reason to forward a mutation.
+  }
+  return "unavailable";
+}
+
 /** Handle branch-scoped preview requests before normal dashboard authentication/assets routing. */
 export async function handleLaunchPreviewProxy(
   env: LaunchPreviewEnv,
@@ -396,13 +446,13 @@ export async function handleLaunchPreviewProxy(
     return simpleResponse(503, "Private preview is unavailable.");
   }
   if (requestUrl.origin !== origin) return null;
-  if (request.method !== "GET") {
-    if (requestUrl.pathname.startsWith(`${PREVIEW_PATH}/`)) return simpleResponse(405, "Preview only supports GET.");
+  const direct = requestUrl.pathname.startsWith(`${PREVIEW_PATH}/`);
+  if (!PREVIEW_METHODS.has(request.method) || (request.method !== "GET" && !direct)) {
+    if (direct) return simpleResponse(405, "Unsupported preview method.");
     if (requestUrl.searchParams.has("t")) return simpleResponse(400, "Invalid preview request.");
     return null;
   }
 
-  const direct = requestUrl.pathname.startsWith(`${PREVIEW_PATH}/`);
   const capability = capabilityForRequest(request, origin);
   const tokenParameters = requestUrl.searchParams.getAll("t");
   // A runtime token may bypass the cookie only for a parsed, non-root asset path.
@@ -414,6 +464,13 @@ export async function handleLaunchPreviewProxy(
     if (direct || capabilityFromReferer(request, origin)) return simpleResponse(404, "Preview resource not found.");
     return null;
   }
+  // Mutations, HEAD, and preflight require an explicit scoped capability, not
+  // the owner's preview cookie or the product session.
+  if (request.method !== "GET") {
+    if (!capability.path) return simpleResponse(405, "Preview root only supports GET.");
+    if (tokenParameters.length !== 1) return simpleResponse(401, "The preview capability is unavailable or expired.");
+    if (request.headers.get("Origin") !== "null") return simpleResponse(403, "Invalid preview origin.");
+  }
   const previewToken = tokenParameters[0] || await requestPreviewToken(request, capability);
   if (!previewToken) return simpleResponse(401, "The preview capability is unavailable or expired.");
   const authorizedCapability = { ...capability, token: previewToken };
@@ -424,15 +481,67 @@ export async function handleLaunchPreviewProxy(
   upstreamUrl.pathname = `/space/${encodeURIComponent(authorizedCapability.agentId)}/preview/${encodeURIComponent(authorizedCapability.branch)}/${assetPath}`;
   upstreamUrl.search = safeQuery.toString();
   upstreamUrl.searchParams.set("t", authorizedCapability.token!);
+
+  let requestedMethod = "";
+  let requestedHeaders: string[] = [];
+  if (request.method === "OPTIONS") {
+    requestedMethod = (request.headers.get("Access-Control-Request-Method") || "").trim().toUpperCase();
+    if (!PREVIEW_METHODS.has(requestedMethod) || requestedMethod === "OPTIONS") {
+      return simpleResponse(405, "Unsupported preview method.");
+    }
+    const rawHeaders = request.headers.get("Access-Control-Request-Headers") || "";
+    if (rawHeaders.length > 512) return simpleResponse(400, "Invalid preview headers.");
+    requestedHeaders = rawHeaders ? rawHeaders.split(",").map((name) => name.trim().toLowerCase()) : [];
+    if (requestedHeaders.some((name) => !PREVIEW_REQUEST_HEADERS.has(name))) {
+      return simpleResponse(400, "Invalid preview headers.");
+    }
+  }
+
+  // This named service-binding RPC validates the same runtime token used by
+  // regular previews, without routing OPTIONS through the generated app.
+  if (request.method !== "GET") {
+    const result = await validateScopedCapability(env, authorizedCapability);
+    if (result === "invalid") return simpleResponse(401, "The preview capability is invalid or expired.");
+    if (result !== "valid") return simpleResponse(503, "Private preview validation is unavailable.");
+  }
+  if (request.method === "OPTIONS") {
+    const preflightHeaders = new Headers({
+      "Access-Control-Allow-Origin": "null",
+      "Access-Control-Allow-Methods": requestedMethod,
+      "Cache-Control": "no-store",
+      "Vary": "Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
+      "X-Content-Type-Options": "nosniff",
+    });
+    if (requestedHeaders.length) preflightHeaders.set("Access-Control-Allow-Headers", [...new Set(requestedHeaders)].join(", "));
+    return new Response(null, { status: 204, headers: preflightHeaders });
+  }
   const headers = new Headers();
   const accept = request.headers.get("Accept");
+  if (request.method !== "GET" && accept && accept.length > 512) return simpleResponse(400, "Invalid preview headers.");
   if (accept && accept.length <= 512) headers.set("Accept", accept);
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    for (const name of ["Content-Type", "If-Match", "If-None-Match"]) {
+      const value = request.headers.get(name);
+      if (value && value.length > 512) return simpleResponse(400, "Invalid preview headers.");
+      if (value) headers.set(name, value);
+    }
+  }
+  let body: Uint8Array | undefined;
+  if (!["GET", "HEAD"].includes(request.method)) {
+    try {
+      body = await boundedRequestBody(request) || undefined;
+    } catch {
+      return simpleResponse(400, "Invalid preview request body.");
+    }
+    if (!body) return simpleResponse(413, "Preview request body is too large.");
+  }
 
   let upstream: Response;
   try {
     upstream = await env.AUTH_RUNTIME!.fetch(new Request(upstreamUrl, {
-      method: "GET",
+      method: request.method,
       headers,
+      body: body?.byteLength ? body : undefined,
       redirect: "manual",
       signal: AbortSignal.timeout(20_000),
     }));
@@ -444,10 +553,14 @@ export async function handleLaunchPreviewProxy(
     return simpleResponse(502, "The preview runtime returned an unexpected redirect.");
   }
   if ([401, 403, 429].includes(upstream.status)) {
-    await upstream.body?.cancel();
-    return simpleResponse(upstream.status, "The preview capability is invalid or expired.");
+    // Runtime auth and generated-app auth may use the same status. Revalidate
+    // without dispatch to distinguish the two before enabling browser CORS.
+    if (request.method === "GET" || await validateScopedCapability(env, authorizedCapability) !== "valid") {
+      await upstream.body?.cancel();
+      return simpleResponse(upstream.status, "The preview capability is invalid or expired.");
+    }
   }
-  if (!upstream.ok) {
+  if (!upstream.ok && request.method === "GET") {
     const status = upstream.status === 404 ? 404 : 502;
     await upstream.body?.cancel();
     return simpleResponse(status, "The preview resource is unavailable.");
@@ -459,13 +572,17 @@ export async function handleLaunchPreviewProxy(
   // JSON use CORS, unlike ordinary stylesheets. Only successfully authorized,
   // explicitly token-scoped resources may be read from that origin.
   if (direct && tokenParameters.length === 1 && request.headers.get("Origin") === "null"
-    && (contentType.includes("javascript") || contentType.includes("ecmascript")
+    && (request.method !== "GET" || contentType.includes("javascript") || contentType.includes("ecmascript")
       || /^(?:application|text)\/(?:[^;\s]+\+)?json(?:\s*;|$)/.test(contentType))) {
     outputHeaders.set("Access-Control-Allow-Origin", "null");
     outputHeaders.set("Vary", "Origin");
   }
-  if (contentType.includes("text/html") || contentType.includes("text/css")
-    || contentType.includes("javascript") || contentType.includes("ecmascript")) {
+  if (request.method === "HEAD" || [204, 205, 304].includes(upstream.status)) {
+    await upstream.body?.cancel();
+    return new Response(null, { status: upstream.status, headers: outputHeaders });
+  }
+  if (request.method === "GET" && (contentType.includes("text/html") || contentType.includes("text/css")
+    || contentType.includes("javascript") || contentType.includes("ecmascript"))) {
     const length = Number(upstream.headers.get("Content-Length"));
     if (Number.isFinite(length) && length > MAX_TEXT_RESPONSE) {
       await upstream.body?.cancel();

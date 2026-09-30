@@ -65,7 +65,7 @@ export function assertControlPlaneEnvironment(env: StagingEnv): void {
       || env.STAGING_DISPATCH_NAMESPACE !== "buildcustom-vibesdk-launch-dispatch"
       || env.CONTROL_PLANE_DISPATCH_NAMESPACE !== "buildcustom-vibesdk-launch-dispatch"
       || env.STAGING_MANAGED_GATEWAY_URL !== "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p"
-      || !env.STAGING_GATEWAY || !env.AUTH_RUNTIME || !env.VIBESDK_RUNTIME
+       || !env.STAGING_GATEWAY || !env.AUTH_RUNTIME || !env.VIBESDK_RUNTIME
        || env.STAGING_LOGIN_ENABLED !== "true" || !["true", "false"].includes(env.STAGING_REGISTRATION_ENABLED || "")
        || !["true", "false"].includes(env.PUBLIC_GENERATED_APPS_ENABLED || "")
       || env.RUNTIME_OPERATIONS_ENABLED !== "true") {

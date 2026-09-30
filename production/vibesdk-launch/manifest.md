@@ -51,9 +51,11 @@ The original pinned stock commit, Task 4B patch, and Task 6A patch above remain 
 
 Task 8D deployed only to `buildcustom-vibesdk-launch`, version `6ff58ba1-83f5-4951-a3b6-022160ea61c5` (100%). Dry-run Worker bundle SHA-256: `fe0a4f18d3747be1f37c15911a561077b8b4d3681553ee6f43bcb7740259ba02`. Typecheck, build, focused auth tests and the full suite (525 passed, one skipped) succeeded. The direct runtime registration endpoint returned HTTP 403 `REGISTRATION_DISABLED`; provider capabilities reported email login enabled and registration disabled. No new tester was created. See `task8d-acceptance-report.md` for the outstanding private bootstrap and authenticated acceptance blocker.
 
-## Reproducible current runtime source baseline (Task 9)
+## Reproducible current runtime source baseline (Task 9 + preview validation)
 
 The pinned upstream commit, stock `bun.lock` SHA-256, and Task 4B/6A/8D patches remain unchanged. Password recovery is the additional, runtime-only patch `production/patches/task9-password-recovery.patch` (SHA-256 `a662e094f9343c4484165c2fbf93ee0d99480348ee49c2c01cb325e3f0007677`). Its source archaeology is BuildCustom commit `d096e4914383a2b1c1676e0d520fab6252a27999`, with the Email binding type adjustment from `829ddf1785ce6c347b5bd4807d1c621264b25cb7`; unrelated control-plane/UI changes from those commits are not included. The patch adds public CSRF/origin-protected forgot/reset endpoints, a non-enumerating reset-request response, rate-limited hashed one-time tokens, Cloudflare EMAIL delivery, and an atomic password update/session revocation. It includes focused service tests. Registration is independently controlled and currently enabled in the tracked launch config; that config declares `EMAIL` with sender `security@buildcustom.ai`.
+
+Preview capability validation is the subsequent runtime-only patch `production/patches/preview-capability-validation.patch` (SHA-256 `0c7a8bdc378cf338e2fb65cca522320eea6dc575cd5857338db249b0e0c62118`). It exports a private service-binding validator that reuses the preview dispatch token and revocation checks without applying the dispatch rate limit or invoking generated-app code; focused validator tests are included.
 
 Reproduce from the stock source without the ignored `runtime-source/` tree:
 
@@ -65,9 +67,10 @@ git apply /path/to/production/patches/task4b-immutable-runtime.patch
 git apply /path/to/production/patches/task6a-logout-revocation.patch
 git apply /path/to/production/patches/task8d-registration-gate.patch
 git apply /path/to/production/patches/task9-password-recovery.patch
+git apply /path/to/production/patches/preview-capability-validation.patch
 cp /path/to/production/vibesdk-launch/wrangler.jsonc ./wrangler.jsonc
 bun install --frozen-lockfile
-bun run test -- worker/database/services/AuthService.password-reset.test.ts worker/database/services/SessionService.password-reset.test.ts worker/database/services/AuthService.test.ts worker/utils/envs.test.ts worker/api/controllers/auth/controller.logout.test.ts worker/api/controllers/auth/controller.test.ts worker/services/deployer/immutable-script-put.test.ts worker/services/deployer/platform-deployment-identity.test.ts worker/services/deployer/think-user-deploy.test.ts worker/agents/core/websocket.test.ts worker/services/deployer/api/cloudflare-api.test.ts
+bun run test -- worker/database/services/AuthService.password-reset.test.ts worker/database/services/SessionService.password-reset.test.ts worker/database/services/AuthService.test.ts worker/utils/envs.test.ts worker/api/controllers/auth/controller.logout.test.ts worker/api/controllers/auth/controller.test.ts worker/services/deployer/immutable-script-put.test.ts worker/services/deployer/platform-deployment-identity.test.ts worker/services/deployer/think-user-deploy.test.ts worker/agents/core/websocket.test.ts worker/services/deployer/api/cloudflare-api.test.ts worker/api/handlers/space-preview.test.ts
 bun run typecheck
 bun run build
 ```

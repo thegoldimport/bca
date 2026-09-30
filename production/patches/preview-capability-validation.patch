@@ -1,0 +1,228 @@
+diff --git a/worker/api/handlers/preview-capability-validator.ts b/worker/api/handlers/preview-capability-validator.ts
+new file mode 100644
+index 0000000..f57f288
+--- /dev/null
++++ b/worker/api/handlers/preview-capability-validator.ts
+@@ -0,0 +1,48 @@
++import { WorkerEntrypoint } from 'cloudflare:workers';
++import { validateSpacePreviewCapability } from './space-preview';
++
++export interface PreviewCapabilityValidationInput {
++	agentId: string;
++	branch: string;
++	token: string;
++}
++
++export interface PreviewCapabilityValidationResult {
++	valid: boolean;
++}
++
++/**
++ * Private service-binding RPC for validating a preview bearer without
++ * dispatching the request to its generated application.
++ */
++export class PreviewCapabilityValidator extends WorkerEntrypoint<Env> {
++	async validatePreviewCapability(
++		input: PreviewCapabilityValidationInput,
++	): Promise<PreviewCapabilityValidationResult> {
++		const candidate = input as unknown as Partial<PreviewCapabilityValidationInput> | null;
++		if (
++			!candidate
++			|| typeof candidate.agentId !== 'string'
++			|| !candidate.agentId
++			|| typeof candidate.branch !== 'string'
++			|| !candidate.branch
++			|| typeof candidate.token !== 'string'
++			|| !candidate.token
++		) {
++			return { valid: false };
++		}
++
++		try {
++			const claims = await validateSpacePreviewCapability(
++				this.env,
++				candidate.token,
++				candidate.agentId,
++				candidate.branch,
++			);
++			return { valid: claims !== null };
++		} catch {
++			// An unavailable validation dependency must never grant preview access.
++			return { valid: false };
++		}
++	}
++}
+\ No newline at end of file
+diff --git a/worker/api/handlers/space-preview.test.ts b/worker/api/handlers/space-preview.test.ts
+index 7b70408..f37b355 100644
+--- a/worker/api/handlers/space-preview.test.ts
++++ b/worker/api/handlers/space-preview.test.ts
+@@ -5,25 +5,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
+ // simulates a visibility toggle). This also avoids loading AppService's heavy
+ // DB dependencies in the worker test isolate.
+ let currentPreviewVersion = 0;
++let previewVersionReads = 0;
++let generatedAppDispatches = 0;
+ vi.mock('../../database/services/AppService', () => ({
+ 	AppService: class {
+ 		async getPreviewVersion() {
++			previewVersionReads += 1;
+ 			return currentPreviewVersion;
+ 		}
+ 	},
+ }));
+ 
+-const { handleSpacePreview } = await import('./space-preview');
++const { handleSpacePreview, validateSpacePreviewCapability } = await import('./space-preview');
++const { PreviewCapabilityValidator } = await import('./preview-capability-validator');
+ const {
+ 	buildPreviewCookie,
+ 	signSpacePreviewToken,
+ 	SPACE_PREVIEW_COOKIE_NAME,
+ } = await import('../../utils/spacePreviewToken');
++const { JWTUtils } = await import('../../utils/jwtUtils');
+ 
+ const JWT_SECRET = 'test-secret-for-space-preview-token-validation-1234567890';
+ 
+ beforeEach(() => {
+ 	currentPreviewVersion = 0;
++	previewVersionReads = 0;
++	generatedAppDispatches = 0;
+ });
+ 
+ type HandlerEnv = Parameters<typeof handleSpacePreview>[1];
+@@ -38,6 +45,7 @@ function makeEnv(
+ ): HandlerEnv {
+ 	const stub = {
+ 		fetch: async (req: Request) => {
++			generatedAppDispatches += 1;
+ 			capture.lastRequest = req;
+ 			return new Response('<html><body><img src="/logo.png"></body></html>', {
+ 				headers: { 'content-type': 'text/html' },
+@@ -168,3 +176,64 @@ describe('handleSpacePreview', () => {
+ 		expect(new URL(capture.lastRequest!.url).searchParams.get('t')).toBeNull();
+ 	});
+ });
++
++describe('preview capability validation-only RPC', () => {
++	it('uses the dispatch validator for missing, malformed, expired, revoked, and incorrectly scoped capabilities', async () => {
++		const env = makeEnv();
++		const validClaims = {
++			spaceName: 'space-a',
++			branch: 'main',
++			userId: 'user-a',
++			previewVersion: 0,
++		};
++		const validToken = await signSpacePreviewToken(env, validClaims);
++		const expiredToken = await JWTUtils.getInstance(env).signPayload(
++			{ ...validClaims, purpose: 'space_preview' },
++			-1,
++		);
++		const emptyOwnerToken = await signSpacePreviewToken(env, { ...validClaims, userId: '' });
++
++		expect(await validateSpacePreviewCapability(env, '', 'space-a', 'main')).toBeNull();
++		expect(await validateSpacePreviewCapability(env, 'malformed', 'space-a', 'main')).toBeNull();
++		expect(await validateSpacePreviewCapability(env, expiredToken, 'space-a', 'main')).toBeNull();
++		expect(await validateSpacePreviewCapability(env, validToken, 'space-b', 'main')).toBeNull();
++		expect(await validateSpacePreviewCapability(env, validToken, 'space-a', 'feature')).toBeNull();
++		expect(await validateSpacePreviewCapability(env, emptyOwnerToken, 'space-a', 'main')).toBeNull();
++
++		currentPreviewVersion = 1;
++		expect(await validateSpacePreviewCapability(env, validToken, 'space-a', 'main')).toBeNull();
++		expect(generatedAppDispatches).toBe(0);
++	});
++
++	it('returns only {valid}, performs repeated read-only validation, and leaves regular dispatch intact', async () => {
++		const env = makeEnv();
++		const token = await signSpacePreviewToken(env, {
++			spaceName: 'space-a',
++			branch: 'main',
++			userId: 'user-a',
++			previewVersion: 0,
++		});
++		const validator = new PreviewCapabilityValidator({} as ExecutionContext, env);
++		const tokenBefore = await JWTUtils.getInstance(env).verifyPayload(token);
++
++		expect(await validator.validatePreviewCapability({
++			agentId: 'space-a',
++			branch: 'main',
++			token,
++		})).toEqual({ valid: true });
++		expect(await validator.validatePreviewCapability({
++			agentId: 'space-a',
++			branch: 'main',
++			token,
++		})).toEqual({ valid: true });
++		expect(generatedAppDispatches).toBe(0);
++		expect(previewVersionReads).toBe(2);
++		expect(await JWTUtils.getInstance(env).verifyPayload(token)).toEqual(tokenBefore);
++		expect(await validator.validatePreviewCapability(null as never)).toEqual({ valid: false });
++		expect(previewVersionReads).toBe(2);
++
++		const regular = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
++		expect(regular.status).toBe(200);
++		expect(generatedAppDispatches).toBe(1);
++	});
++});
+diff --git a/worker/api/handlers/space-preview.ts b/worker/api/handlers/space-preview.ts
+index 1b5f6a6..151c2ae 100644
+--- a/worker/api/handlers/space-preview.ts
++++ b/worker/api/handlers/space-preview.ts
+@@ -96,6 +96,22 @@ async function isPreviewVersionCurrent(
+ 	return current === claims.previewVersion;
+ }
+ 
++/**
++ * Validate the same bearer used by normal dispatch, without consuming request
++ * rate limit or dispatching to generated-app code.
++ */
++export async function validateSpacePreviewCapability(
++	env: Env,
++	token: string,
++	spaceName: string,
++	branch: string,
++): Promise<SpacePreviewClaims | null> {
++	if (!token) return null;
++	const claims = await verifySpacePreviewToken(env, token, spaceName, branch);
++	if (!claims || !(await isPreviewVersionCurrent(env, spaceName, claims))) return null;
++	return claims;
++}
++
+ /**
+  * Enforce a per-preview-token rate limit. SpaceDO previews are dispatched
+  * outside the Hono chain, so the global API limiter does not apply here.
+@@ -140,8 +156,8 @@ export async function handleSpacePreview(
+ 	// 1. Existing preview cookie (covers iframe sub-resources / client fetches).
+ 	const cookieToken = readPreviewCookie(request);
+ 	if (cookieToken) {
+-		const claims = await verifySpacePreviewToken(env, cookieToken, spaceName, branch);
+-		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
++		const claims = await validateSpacePreviewCapability(env, cookieToken, spaceName, branch);
++		if (claims) {
+ 			const limited = await enforcePreviewRateLimit(env, cookieToken, request);
+ 			if (limited) return limited;
+ 			return forwardToSpacePreview(request, env, spaceName);
+@@ -151,8 +167,8 @@ export async function handleSpacePreview(
+ 	// 2. `?t=` token: forward and bootstrap the cookie (serve-in-place).
+ 	const queryToken = url.searchParams.get('t') ?? '';
+ 	if (queryToken) {
+-		const claims = await verifySpacePreviewToken(env, queryToken, spaceName, branch);
+-		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
++		const claims = await validateSpacePreviewCapability(env, queryToken, spaceName, branch);
++		if (claims) {
+ 			const limited = await enforcePreviewRateLimit(env, queryToken, request);
+ 			if (limited) return limited;
+ 			const response = await forwardToSpacePreview(request, env, spaceName);
+diff --git a/worker/index.ts b/worker/index.ts
+index 21b2787..88d915a 100644
+--- a/worker/index.ts
++++ b/worker/index.ts
+@@ -35,6 +35,8 @@ export { SpaceDO } from '@space-do/space';
+ // ThinkAgent (@cloudflare/think) — the agentic loop harness (model ↔ tools).
+ // Bound as THINK_DO in wrangler.
+ export { ThinkAgent } from './agents/think/ThinkAgent';
++// Private service-binding RPC for read-only preview capability validation.
++export { PreviewCapabilityValidator } from './api/handlers/preview-capability-validator';
+ 
+ // export const CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(sentryOptions, CodeGeneratorAgent);
+ // export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);

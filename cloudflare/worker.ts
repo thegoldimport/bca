@@ -13,7 +13,7 @@ import { handleStagingCustomerAuth, resolveRuntimeProductUser, RuntimeIdentityEr
 import { createProductProject, initializeProjectAgent, refreshProjectAgent } from "./staging/project-initialization";
 import { handleThinkRuntime } from "./staging/think-runtime";
 import { customerDeploymentUrl, handleNativeThinkPublish } from "./staging/native-publish";
-import { handleLaunchPreviewProxy, isPreviewProductApiRequest } from "./staging/preview-proxy";
+import { handleLaunchPreviewProxy, isPreviewProductApiRequest, type PreviewValidatorBinding } from "./staging/preview-proxy";
 import { controlOriginForRequest } from "./staging/control-origin";
 
 // Cloudflare requires the historical class export while its staging namespace exists.
@@ -31,6 +31,7 @@ export type Env = {
   VIBESDK_API_KEY?: string;
   VIBESDK_RUNTIME: Fetcher;
   AUTH_RUNTIME?: Fetcher;
+  PREVIEW_VALIDATOR?: PreviewValidatorBinding;
   AUTH_RUNTIME_URL?: string;
   STAGING_ROUTE_KV_ID: string;
   STAGING_DISPATCH_NAMESPACE: string;
@@ -204,11 +205,11 @@ export default {
       assertControlPlaneEnvironment(env);
       assertSafeStagingTarget(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
       const controlOrigin = controlOriginForRequest(env, request);
-      assertOrigin(request, controlOrigin);
       const url = new URL(request.url);
       const launchProfile = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch";
       const previewProxyResponse = await handleLaunchPreviewProxy(env, request);
       if (previewProxyResponse) return previewProxyResponse;
+      assertOrigin(request, controlOrigin);
       if (launchProfile && isPreviewProductApiRequest(request, controlOrigin)) {
         return json({ message: "Not found" }, { status: 404 });
       }

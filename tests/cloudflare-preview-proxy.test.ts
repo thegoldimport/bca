@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import worker from "../cloudflare/worker";
 import {
   handleLaunchPreviewProxy,
   isPreviewProductApiRequest,
@@ -381,6 +382,234 @@ test("scoped assets accept a runtime token without cookies and preserve ordinary
   assert.equal(calls[0].headers.get("Cookie"), null);
   assert.equal(calls[0].headers.get("Authorization"), null);
   assert.equal(response.headers.get("Referrer-Policy"), "no-referrer");
+});
+
+test("preflight uses internal validation only and rejects unsupported, missing, or foreign capabilities", async () => {
+  const forwarded: string[] = [];
+  const validations: string[] = [];
+  const env = {
+    ...launchEnv({ async fetch(request: Request) { forwarded.push(request.method); return Response.json({ unexpected: true }); } } as Fetcher),
+    PREVIEW_VALIDATOR: {
+      async validatePreviewCapability(input: { agentId: string; branch: string; token: string }) {
+        validations.push(`${input.agentId}/${input.branch}`);
+        return { valid: input.agentId === "agent-1" && input.branch === "main" && input.token === token };
+      },
+    },
+  };
+  const path = `${controlOrigin}${route("agent-1", "main", "api/leads")}?t=${token}`;
+  const preflight = (url: string, headers: Record<string, string>) =>
+    handleLaunchPreviewProxy(env, new Request(url, {
+      method: "OPTIONS",
+      headers: { Origin: "null", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type", ...headers },
+    }));
+  const approved = await preflight(path, {});
+  assert.equal(approved?.status, 204);
+  assert.equal(approved.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(approved.headers.get("Access-Control-Allow-Methods"), "POST");
+  assert.equal(approved.headers.get("Access-Control-Allow-Headers"), "content-type");
+  assert.equal(approved.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.equal(approved.headers.get("Set-Cookie"), null);
+  assert.deepEqual(forwarded, []);
+  assert.deepEqual(validations, ["agent-1/main"]);
+
+  const denied = [
+    [path, { "Access-Control-Request-Headers": "authorization" }, 400],
+    [path, { "Access-Control-Request-Method": "PROPFIND" }, 405],
+    [path, { Origin: "https://attacker.example" }, 403],
+    [`${controlOrigin}${route("agent-1", "main", "api/leads")}`, {}, 401],
+    [`${controlOrigin}${route("agent-1", "main", "api/leads")}?t=wrong`, {}, 401],
+    [`${controlOrigin}${route("agent-2", "main", "api/leads")}?t=${token}`, {}, 401],
+    [`${controlOrigin}${route("agent-1", "other", "api/leads")}?t=${token}`, {}, 401],
+    [`${controlOrigin}${route("agent-1", "main", "api/leads")}?t=bad%20token`, {}, 400],
+  ] as const;
+  for (const [url, headers, status] of denied) {
+    const response = await preflight(url, headers);
+    assert.equal(response?.status, status);
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), null);
+  }
+  assert.deepEqual(forwarded, []);
+  assert.deepEqual(validations, ["agent-1/main", "agent-1/main", "agent-2/main", "agent-1/other"]);
+
+  const cookie = (await launchPreviewCookie(env, "agent-1", `${runtimeOrigin}/space/agent-1/preview/main/?t=${token}`))!.split(";")[0];
+  const cookieOnlyPost = await handleLaunchPreviewProxy(env, new Request(
+    `${controlOrigin}${route("agent-1", "main", "api/leads")}`,
+    { method: "POST", headers: { Origin: "null", Cookie: cookie, "Content-Type": "application/json" }, body: "{}" },
+  ));
+  assert.equal(cookieOnlyPost?.status, 401);
+  assert.equal(cookieOnlyPost.headers.get("Access-Control-Allow-Origin"), null);
+  assert.deepEqual(forwarded, []);
+
+  const unavailable = await handleLaunchPreviewProxy(
+    launchEnv({ async fetch() { throw new Error("must not dispatch"); } } as Fetcher),
+    new Request(path, { method: "OPTIONS", headers: { Origin: "null", "Access-Control-Request-Method": "POST" } }),
+  );
+  assert.equal(unavailable?.status, 503);
+  assert.equal(unavailable.headers.get("Access-Control-Allow-Origin"), null);
+});
+
+test("authorized application methods forward original body and filters but no product credentials", async () => {
+  const forwarded: Array<{ method: string; url: URL; headers: Headers; body: string }> = [];
+  let validations = 0;
+  const runtime = {
+    async fetch(request: Request) {
+      const url = new URL(request.url);
+      const body = await request.text();
+      forwarded.push({ method: request.method, url, headers: request.headers, body });
+      if (url.pathname.endsWith("/reject")) return Response.json({ error: "invalid app data" }, { status: 422 });
+      if (url.pathname.endsWith("/forbidden")) return Response.json({ error: "app permission denied" }, { status: 403 });
+      if (url.pathname.endsWith("/unauthorized")) return Response.json({ error: "app login needed" }, { status: 401 });
+      if (url.pathname.endsWith("/limited")) return Response.json({ error: "app rate limit" }, { status: 429 });
+      if (request.method === "DELETE") return new Response(null, { status: 204 });
+      if (request.method === "HEAD") return new Response(null, { status: 200, headers: { "Content-Type": "application/json" } });
+      return Response.json({ method: request.method, body: body ? JSON.parse(body) : null },
+        { status: request.method === "POST" ? 201 : 200, headers: { "Set-Cookie": "generated=secret" } });
+    },
+  } as unknown as Fetcher;
+  const env = {
+    ...launchEnv(runtime),
+    PREVIEW_VALIDATOR: { async validatePreviewCapability() { validations++; return { valid: true }; } },
+  };
+  const path = `${controlOrigin}${route("agent-1", "main", "api/leads")}?status=new&status=won&search=roof%20%26%20tile&t=${token}`;
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    const data = { customer_name: "Disposable test lead", method };
+    const response = await handleLaunchPreviewProxy(env, new Request(path, {
+      method,
+      headers: {
+        Origin: "null", "Content-Type": "application/json", Accept: "application/json",
+        Cookie: "__Host-bc_session=product-secret", Authorization: "Bearer product-secret",
+        "X-CSRF-Token": "product-secret",
+      },
+      body: JSON.stringify(data),
+    }));
+    assert.equal(response?.status, method === "POST" ? 201 : method === "DELETE" ? 204 : 200);
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), "null");
+    assert.equal(response.headers.get("Access-Control-Allow-Credentials"), null);
+    assert.equal(response.headers.get("Set-Cookie"), null);
+    if (method === "DELETE") assert.equal(await response.text(), "");
+    else assert.deepEqual(await response.json(), { method, body: data });
+    const sent = forwarded.at(-1)!;
+    assert.equal(sent.method, method);
+    assert.equal(sent.url.pathname, "/space/agent-1/preview/main/api/leads");
+    assert.deepEqual(sent.url.searchParams.getAll("status"), ["new", "won"]);
+    assert.equal(sent.url.searchParams.get("search"), "roof & tile");
+    assert.equal(sent.url.searchParams.get("t"), token);
+    assert.deepEqual(JSON.parse(sent.body), data);
+    assert.equal(sent.headers.get("Content-Type"), "application/json");
+    assert.equal(sent.headers.get("Accept"), "application/json");
+    for (const unsafe of ["Cookie", "Authorization", "X-CSRF-Token", "Origin"]) {
+      assert.equal(sent.headers.get(unsafe), null);
+    }
+  }
+  const request = (asset: string, method: string) => new Request(
+    `${controlOrigin}${route("agent-1", "main", asset)}?t=${token}`,
+    { method, headers: { Origin: "null", "Content-Type": "application/json" }, ...(method !== "HEAD" && { body: "{}" }) },
+  );
+  const invalid = await handleLaunchPreviewProxy(env, request("api/reject", "POST"));
+  assert.equal(invalid?.status, 422);
+  assert.equal(invalid.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.deepEqual(await invalid.json(), { error: "invalid app data" });
+  const forbidden = await handleLaunchPreviewProxy(env, request("api/forbidden", "POST"));
+  assert.equal(forbidden?.status, 403);
+  assert.equal(forbidden.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.deepEqual(await forbidden.json(), { error: "app permission denied" });
+  for (const [asset, status] of [["api/unauthorized", 401], ["api/limited", 429]] as const) {
+    const response = await handleLaunchPreviewProxy(env, request(asset, "POST"));
+    assert.equal(response?.status, status);
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), "null");
+    assert.match((await response.json() as { error: string }).error, /^app /);
+  }
+  const head = await handleLaunchPreviewProxy(env, request("api/leads", "HEAD"));
+  assert.equal(head?.status, 200);
+  assert.equal(await head.text(), "");
+  assert.equal(head.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(validations, 12);
+
+  let checks = 0;
+  const expired = await handleLaunchPreviewProxy({
+    ...env,
+    PREVIEW_VALIDATOR: {
+      async validatePreviewCapability() { checks++; return { valid: checks === 1 }; },
+    },
+    AUTH_RUNTIME: { async fetch() { return Response.json({ error: "expired runtime capability" }, { status: 401 }); } } as Fetcher,
+  }, request("api/leads", "POST"));
+  assert.equal(expired?.status, 401);
+  assert.equal(expired.headers.get("Access-Control-Allow-Origin"), null);
+  assert.equal(checks, 2);
+});
+
+test("control worker permits only scoped opaque-origin mutations before product Origin enforcement", async () => {
+  const methods: string[] = [];
+  const appOrigin = "https://app.buildcustom.ai";
+  let validatorUnavailable = false;
+  const env = {
+    ...launchEnv({
+      async fetch(request: Request) {
+        methods.push(request.method);
+        return Response.json({ posted: await request.json() }, { status: 201 });
+      },
+    } as Fetcher),
+    PREVIEW_VALIDATOR: {
+      async validatePreviewCapability(input: { agentId: string; branch: string; token: string }) {
+        if (validatorUnavailable) throw new Error("internal RPC unavailable");
+        return { valid: input.agentId === "agent-1" && input.branch === "main" && input.token === token };
+      },
+    },
+    CONTROL_PLANE_ALLOWED_ORIGIN: appOrigin,
+    STAGING_ALLOWED_ORIGIN: appOrigin,
+    CONTROL_PLANE_CANARY_ORIGIN: "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
+    STAGING_RUNTIME_URL: runtimeOrigin,
+    VIBESDK_RUNTIME_URL: runtimeOrigin,
+    VIBESDK_RUNTIME: {},
+    STAGING_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+    CONTROL_PLANE_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+    STAGING_DISPATCH_NAMESPACE: "buildcustom-vibesdk-launch-dispatch",
+    CONTROL_PLANE_DISPATCH_NAMESPACE: "buildcustom-vibesdk-launch-dispatch",
+    STAGING_MANAGED_GATEWAY_URL: "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p",
+    STAGING_GATEWAY: {},
+    STAGING_LOGIN_ENABLED: "true",
+    STAGING_REGISTRATION_ENABLED: "true",
+    PUBLIC_GENERATED_APPS_ENABLED: "true",
+    RUNTIME_OPERATIONS_ENABLED: "true",
+  };
+  const url = `${appOrigin}${route("agent-1", "main", "api/leads")}?t=${token}`;
+  const preflight = await worker.fetch(new Request(url, {
+    method: "OPTIONS",
+    headers: { Origin: "null", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" },
+  }), env as never);
+  assert.equal(preflight.status, 204, await preflight.text());
+  assert.equal(preflight.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.deepEqual(methods, []);
+  const post = await worker.fetch(new Request(url, {
+    method: "POST", headers: { Origin: "null", "Content-Type": "application/json" }, body: '{"customer_name":"Disposable test lead"}',
+  }), env as never);
+  assert.equal(post.status, 201, await post.text());
+  assert.equal(post.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.deepEqual(methods, ["POST"]);
+  for (const method of ["OPTIONS", "POST"]) {
+    const denied = await worker.fetch(new Request(`${appOrigin}${route("agent-1", "main", "api/leads")}?t=wrong`, {
+      method,
+      headers: method === "OPTIONS"
+        ? { Origin: "null", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" }
+        : { Origin: "null", "Content-Type": "application/json" },
+      ...(method === "POST" && { body: "{}" }),
+    }), env as never);
+    assert.equal(denied.status, 401);
+    assert.equal(denied.headers.get("Access-Control-Allow-Origin"), null);
+  }
+  validatorUnavailable = true;
+  const unavailable = await worker.fetch(new Request(url, {
+    method: "OPTIONS", headers: { Origin: "null", "Access-Control-Request-Method": "POST" },
+  }), env as never);
+  assert.equal(unavailable.status, 503);
+  assert.equal(unavailable.headers.get("Access-Control-Allow-Origin"), null);
+  validatorUnavailable = false;
+  assert.deepEqual(methods, ["POST"]);
+  const product = await worker.fetch(new Request(`${appOrigin}/api/auth/register`, {
+    method: "POST", headers: { Origin: "null", "Content-Type": "application/json" }, body: "{}",
+  }), env as never);
+  assert.equal(product.status, 400);
+  assert.deepEqual(await product.json(), { message: "ORIGIN_REJECTED" });
+  assert.deepEqual(methods, ["POST"]);
 });
 
 test("root previews remain cookie-gated and query tokens are rejected off scoped asset paths", async () => {

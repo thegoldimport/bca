@@ -35,6 +35,11 @@
       "service": "buildcustom-vibesdk-launch"
     },
     {
+      "binding": "PREVIEW_VALIDATOR",
+      "service": "buildcustom-vibesdk-launch",
+      "entrypoint": "PreviewCapabilityValidator"
+    },
+    {
       "binding": "STAGING_GATEWAY",
       "service": "buildcustom-apps-gateway-launch"
     }
