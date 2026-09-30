@@ -18,6 +18,8 @@ const PRIVATE_DIR = "/tmp/buildcustom-task13-final-acceptance";
 const CHECKPOINT = path.join(PRIVATE_DIR, "state.json");
 const LOCK = path.join(PRIVATE_DIR, "state.lock");
 const PROFILE = path.join(PRIVATE_DIR, "browser-profile");
+const RECOVERED_PROFILE = "/tmp/buildcustom-task13-recovered-profile";
+const RECOVERY_CHECKPOINT = path.join(ROOT_DIR, "production/vibesdk-launch/task13-project5-recovery-checkpoint.json");
 const LAB_PACKAGE = path.join(ROOT_DIR, "lab/bc-vibesdk-lab-20260925/package.json");
 const PROMPT = "Build me a simple CRM for a roofing company. I need a dashboard showing total leads, estimates sent, jobs won, and revenue. Add a leads page with customer name, phone, email, project type, lead status, estimated value, and notes. Make it clean and professional.";
 const EDIT1_PROMPT = "Change the dashboard to a dark navy theme and add a recent leads section showing the five newest leads.";
@@ -28,7 +30,7 @@ const UI_TIMEOUT = 90_000;
 const GENERATION_TIMEOUT = 8 * 60_000;
 const phase = process.argv[2];
 const EXTENDED_PHASES = [
-  "signup", "generate", "reconcileGeneration", "preview", "approvedLead",
+  "signup", "generate", "reconcileGeneration", "preview", "approvedLead", "verifyRecoveredForm",
   "edit1", "reopen", "publish1", "publishSame", "edit2", "publishUpdate",
   "returning", "isolation",
 ];
@@ -188,13 +190,13 @@ function assertApprovedLeadBaseline(rows, state) {
   return { count: rows.length, highestId: ids.at(-1), ids };
 }
 
-async function launchBrowser() {
-  await mkdir(PROFILE, { recursive: true, mode: 0o700 });
-  await chmod(PROFILE, 0o700);
+async function launchBrowser(profile = PROFILE) {
+  await mkdir(profile, { recursive: true, mode: 0o700 });
+  await chmod(profile, 0o700);
   return puppeteer.launch({
     executablePath: "/repl/tools/bin/chromium",
     headless: true,
-    userDataDir: PROFILE,
+    userDataDir: profile,
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
 }
@@ -1495,7 +1497,9 @@ async function markLeadOutcomeUncertain(state) {
   await saveCheckpoint(state);
 }
 
-async function addLeadIfAvailable(page, frame, state, audit, { approved = false, authoritativeBaseline = null } = {}) {
+async function addLeadIfAvailable(page, frame, state, audit,
+  { approved = false, authoritativeBaseline = null, formOnly = false } = {}) {
+  assert(!(approved && formOnly), "Form-only verification must never use the Submit phase.");
   if (state.stage === "lead-submit-pending") {
     try {
       const found = await markerVisibleInPreview(frame, state.leadMarker);
@@ -1549,10 +1553,31 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
   assert.equal(state.actionCounts.leadSubmit, 0, "Lead action was already attempted; refusing a second POST.");
   const priorOutcome = state.leadOutcome;
   const openerRequestStart = audit.requests.length;
-  state.stage = "lead-submit-pending";
-  state.leadOutcome = "lead-form-opening-pending";
-  await saveCheckpoint(state);
-  await frame.evaluate(() => {
+  if (!formOnly) {
+    state.stage = "lead-submit-pending";
+    state.leadOutcome = "lead-form-opening-pending";
+    await saveCheckpoint(state);
+  }
+  if (formOnly) {
+    let opened = false;
+    for (const element of await frame.$$("button,[role=button],a")) {
+      const safe = await element.evaluate(node => {
+        const box = node.getBoundingClientRect();
+        if (node.closest("form") || node.getAttribute("type")?.toLowerCase() === "submit") return false;
+        if (node instanceof HTMLAnchorElement) {
+          if (node.target && node.target !== "_self") return false;
+          try { if (new URL(node.href).origin !== location.origin) return false; } catch { return false; }
+        }
+        return box.width > 0 && box.height > 0
+          && /\b(?:add|new|create)\s+(?:a\s+)?lead\b/i.test(node.textContent || node.getAttribute("aria-label") || "");
+      });
+      if (!safe) continue;
+      await element.click();
+      opened = true;
+      break;
+    }
+    assert(opened, "The generated Add Lead control was unavailable for normal browser interaction.");
+  } else await frame.evaluate(() => {
     const button = [...document.querySelectorAll("button,[role=button],a")]
       .find(element => {
         const box = element.getBoundingClientRect();
@@ -1579,34 +1604,57 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
   const openerMutations = audit.requests.slice(openerRequestStart)
     .filter(item => /^(?:POST|PUT|PATCH|DELETE)$/i.test(item.method));
   if (openerMutations.length > 0) {
+    if (formOnly) throw new Error("Opening the form unexpectedly issued a mutation; form-only verification stopped.");
     state.actionCounts.leadSubmit = 1;
     await markLeadOutcomeUncertain(state);
     throw new Error("Opening the visible lead control issued a mutation before a unique marker could be attached; no retry was made.");
   }
   if (!formAppeared) {
-    state.stage = "generation-verified";
-    state.leadOutcome = priorOutcome;
-    await saveCheckpoint(state);
+    if (!formOnly) {
+      state.stage = "generation-verified";
+      state.leadOutcome = priorOutcome;
+      await saveCheckpoint(state);
+    }
     return {
       available: true, submitted: false,
       mutationUnexercised: "Visible lead action did not expose a safely identifiable form and submit control.",
     };
   }
-  state.stage = "generation-verified";
-  state.leadOutcome = priorOutcome;
-  await saveCheckpoint(state);
+  if (!formOnly) {
+    state.stage = "generation-verified";
+    state.leadOutcome = priorOutcome;
+    await saveCheckpoint(state);
+  }
 
   const email = `lead-${state.leadMarker.replace(/\W/g, "").toLowerCase()}@example.com`;
   const phone = "+1-202-555-0144";
   const notes = "Disposable Task 13 acceptance record";
   async function typeVisible(selector, text, { numeric = false } = {}) {
-    const matches = await frame.$$(selector);
+    let matches = await frame.$$(selector);
+    if (numeric) {
+      const estimateFields = [];
+      for (const candidate of matches) {
+        const label = await candidate.evaluate(element =>
+          element.parentElement?.querySelector("label")?.textContent?.trim() || "");
+        if (label === "Estimated Value ($)") estimateFields.push(candidate);
+      }
+      matches = estimateFields;
+    }
     assert.equal(matches.length, 1, `Expected one visible generated form field for ${selector}.`);
     const element = matches[0];
     await element.click({ clickCount: 3 });
     // Controlled numeric fields convert an empty input to 0. Replacing the
     // selection without an intermediate Backspace avoids appending to that 0.
-    await element.press(numeric ? "Control+A" : "Backspace");
+    if (numeric) {
+      await page.keyboard.down("Control");
+      try {
+        await page.keyboard.press("a");
+      } finally {
+        await page.keyboard.up("Control");
+      }
+    } else {
+      await element.press("Backspace");
+    }
     await element.type(text, { delay: 12 });
   }
   await typeVisible('form input[placeholder="e.g. John Smith"]', state.leadMarker);
@@ -1625,7 +1673,9 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
     const phoneValue = form.querySelector('input[placeholder="(555) 000-0000"]')?.value;
     const emailValue = form.querySelector('input[type="email"]')?.value;
     const address = form.querySelector('input[placeholder="123 Main St, Austin TX"]')?.value;
-    const estimate = form.querySelector('input[type="number"]')?.value;
+    const estimate = [...form.querySelectorAll('input[type="number"]')]
+      .find(element => element.parentElement?.querySelector("label")?.textContent?.trim()
+        === "Estimated Value ($)")?.value;
     const notesValue = form.querySelector("textarea")?.value;
     const selects = [...form.querySelectorAll("select")];
     const project = selects[0];
@@ -1669,15 +1719,19 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
       observed: { count: populated.submitCount ?? 0, disabled: populated.submitDisabled ?? null },
       pass: populated.submitCount === 1 && populated.submitDisabled === false },
   ];
-  if (approved) {
+  if (approved || formOnly) {
     const gate = { projectId: state.projectId, newSubmitClicks: state.actionCounts.leadSubmit,
       formPopulatedByBrowserTyping: true, checks };
-    await saveLeadEvidence(gate, "approved-lead-form-checks.json");
-    report("approved-lead-field-checks", gate);
+    if (approved) await saveLeadEvidence(gate, "approved-lead-form-checks.json");
+    report(formOnly ? "recovered-form-field-checks" : "approved-lead-field-checks", gate);
   }
   const failed = checks.filter(check => !check.pass);
   assert.equal(failed.length, 0,
     `Pre-submit field gate failed: ${failed.map(check => check.field).join(", ")}. No Submit click.`);
+  if (formOnly) {
+    return { available: true, submitted: false, formOnly: true, checks,
+      formValues: populated, newSubmitClicks: state.actionCounts.leadSubmit };
+  }
   const submit = await frame.$('form button[type="submit"],form input[type="submit"]');
   assert(submit, "Generated Add Lead Submit control disappeared; no mutation was made.");
   if (approved) {
@@ -1782,6 +1836,76 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
       });
     }
     await cdp.close();
+  }
+}
+
+async function recoveredFormPhase() {
+  const checkpoint = JSON.parse(await readFile(RECOVERY_CHECKPOINT, "utf8"));
+  assert.equal(checkpoint.schema, 1);
+  assert.equal(checkpoint.stage, "same-owner-recovered-baseline-verified-form-pending");
+  assert.equal(checkpoint.ownerUserId, "4d91ebb1-c2fc-4906-81fe-8b305761b8a2");
+  assert.equal(checkpoint.projectId, 5);
+  assert.equal(checkpoint.agentId, "ccac2618-5f92-4d2f-b68f-ca9d2116325e");
+  assert.equal(checkpoint.revision, "d4bc4b85d03cfaf55326d078f08b9446b98e68b1");
+  assert.equal(checkpoint.recoveryRequests, 1);
+  assert.equal(checkpoint.historicalLeadSubmitClicks, 1);
+  assert.equal(checkpoint.newlyApprovedLeadSubmitClicks, 0);
+  assert.deepEqual(checkpoint.baseline?.ids, Array.from({ length: 12 }, (_, index) => index + 1));
+  assert.equal(checkpoint.ownerPasswordSecretName, "BUILDCUSTOM_TASK13_PROJECT5_PASSWORD");
+  const password = process.env.BUILDCUSTOM_TASK13_PROJECT5_PASSWORD;
+  assert(password, "The same owner's durable password secret is unavailable.");
+  const state = {
+    projectId: checkpoint.projectId, agentId: checkpoint.agentId,
+    userId: checkpoint.ownerUserId, initialRevision: checkpoint.revision,
+    identity: { email: checkpoint.ownerEmail, password },
+    leadMarker: `Task13 form-only ${randomBytes(8).toString("hex")}`,
+    actionCounts: { leadSubmit: 0 }, stage: "recovered-form-only", leadOutcome: null,
+  };
+  let browser;
+  try {
+    browser = await launchBrowser(RECOVERED_PROFILE);
+    const page = await browser.newPage();
+    page.setDefaultTimeout(UI_TIMEOUT);
+    page.setDefaultNavigationTimeout(UI_TIMEOUT);
+    await ensureIdentity(page, state);
+    const projects = projectsArray(await apiGet(page, "/api/projects", "Recovered owner project list"));
+    assert.equal(projects?.length, 1);
+    assert.equal(String(projects[0]?.id), String(state.projectId));
+    const project = await apiGet(page, `/api/projects/${state.projectId}`, "Recovered owner project");
+    assert.equal(String(project?.userId), state.userId);
+    assert.equal(project?.agentId, state.agentId);
+    const revision = await runtimeGet(page, state.projectId, "revision");
+    assert.equal((revision?.commitHash || revision?.revision?.commitHash || "").toLowerCase(),
+      state.initialRevision);
+    const baseline = assertApprovedLeadBaseline(await authoritativeLeadRows(page, state), state);
+    assert.deepEqual(baseline.ids, checkpoint.baseline.ids);
+    const status = await runtimeGet(page, state.projectId, "status");
+    const previewUrl = status.previewUrl || status.previewURL
+      || status.state?.previewUrl || status.state?.previewURL;
+    assert(previewUrl, "Same-owner project has no preview.");
+    const audit = attachPreviewRequestAudit(page, previewUrl);
+    await openEditor(page, state.projectId);
+    const frame = await previewFrame(page, previewUrl);
+    await frame.waitForFunction(() => {
+      const text = document.body?.innerText || "";
+      return text.includes("Roofing Dashboard") && text.includes("Leads Directory")
+        && (document.querySelector("#root")?.childElementCount || 0) > 0;
+    }, { timeout: UI_TIMEOUT });
+    await exercisePreviewNavigation(frame, audit);
+    const result = await addLeadIfAvailable(page, frame, state, audit, { formOnly: true });
+    assert.equal(result.formOnly, true, "Form-only verification did not reach its field gate.");
+    assert.equal(result.submitted, false);
+    assert.equal(result.formValues.estimate, "12500");
+    const after = assertApprovedLeadBaseline(await authoritativeLeadRows(page, state), state);
+    assert.deepEqual(after.ids, baseline.ids);
+    assert.equal(state.actionCounts.leadSubmit, 0);
+    report("recovered-form-only-verified", {
+      projectId: state.projectId, ownerIdConfirmed: true, agentIdConfirmed: true,
+      revision: state.initialRevision, baseline, estimatedValue: result.formValues.estimate,
+      checks: result.checks, newSubmitClicks: 0, authoritativeAfter: after,
+    });
+  } finally {
+    if (browser) await browser.close();
   }
 }
 
@@ -3103,6 +3227,7 @@ try {
   else if (phase === "reconcileGeneration") await reconcileGenerationPhase();
   else if (phase === "preview") await previewPhase();
   else if (phase === "approvedLead") await previewPhase({ approved: true });
+  else if (phase === "verifyRecoveredForm") await recoveredFormPhase();
   else if (phase === "edit1") await runEditPhase(1);
   else if (phase === "reopen") await reopenPhase();
   else if (phase === "publish1") await publish1Phase();

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "purpose": "Task 13 same-account access recovery and form-only verification",
+  "ownerUserId": "4d91ebb1-c2fc-4906-81fe-8b305761b8a2",
+  "ownerEmail": "thegoldimport+buildcustom-launch-task13-1790778045941-0a32dfb2c1@gmail.com",
+  "ownerPasswordSecretName": "BUILDCUSTOM_TASK13_PROJECT5_PASSWORD",
+  "projectId": 5,
+  "agentId": "ccac2618-5f92-4d2f-b68f-ca9d2116325e",
+  "revision": "d4bc4b85d03cfaf55326d078f08b9446b98e68b1",
+  "recoveryRequests": 1,
+  "passwordResetSubmissions": 1,
+  "recoveredOwnerLoginClicks": 1,
+  "historicalLeadSubmitClicks": 1,
+  "newlyApprovedLeadSubmitClicks": 0,
+  "baseline": {
+    "source": "same-owner authenticated runtime App Facet main branch",
+    "table": "leads",
+    "count": 12,
+    "ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  },
+  "stage": "same-owner-recovered-baseline-verified-form-pass-no-submit",
+  "formVerification": {
+    "result": "PASS",
+    "method": "browser-typed fields in the live same-owner generated-app preview",
+    "fieldsPassed": [
+      "NAME",
+      "PROJECT TYPE",
+      "STATUS",
+      "PHONE",
+      "EMAIL",
+      "ADDRESS",
+      "ESTIMATED VALUE",
+      "NOTES",
+      "FORM VALIDITY",
+      "SUBMIT CONTROL"
+    ],
+    "estimatedValueObserved": "12500",
+    "submitControlEnabled": true,
+    "submitClicked": false,
+    "authoritativeLeadCountAfter": 12,
+    "authoritativeLeadIdsAfter": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  }
+}
