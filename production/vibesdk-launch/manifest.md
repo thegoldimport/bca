@@ -68,6 +68,7 @@ git apply /path/to/production/patches/task6a-logout-revocation.patch
 git apply /path/to/production/patches/task8d-registration-gate.patch
 git apply /path/to/production/patches/task9-password-recovery.patch
 git apply /path/to/production/patches/preview-capability-validation.patch
+git apply /path/to/production/patches/continuous-coding-lifecycle.patch
 cp /path/to/production/vibesdk-launch/wrangler.jsonc ./wrangler.jsonc
 bun install --frozen-lockfile
 bun run test -- worker/database/services/AuthService.password-reset.test.ts worker/database/services/SessionService.password-reset.test.ts worker/database/services/AuthService.test.ts worker/utils/envs.test.ts worker/api/controllers/auth/controller.logout.test.ts worker/api/controllers/auth/controller.test.ts worker/services/deployer/immutable-script-put.test.ts worker/services/deployer/platform-deployment-identity.test.ts worker/services/deployer/think-user-deploy.test.ts worker/agents/core/websocket.test.ts worker/services/deployer/api/cloudflare-api.test.ts worker/api/handlers/space-preview.test.ts
@@ -76,6 +77,16 @@ bun run build
 ```
 
 Local checks against that reconstruction passed: 68 focused tests across eleven files, `bun run typecheck`, and `bun run build` with the launch config copied into the source root. The generated `dist/buildcustom_vibesdk_launch/wrangler.json` retained `REGISTRATION_ENABLED=true` and `EMAIL` with `security@buildcustom.ai`. The locked `bun.lock` hash remained `b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f`; pre-existing dependencies from the ignored runtime tree were used only as a local test/build cache after confirming the matching lock hash. They are not part of the recipe or source baseline.
+
+## Continuous coding lifecycle candidate (local only)
+
+The separate `production/patches/continuous-coding-lifecycle.patch` applies after the five accepted patches above. SHA-256: `3fe4d720abd59991574d5462a2b7340f1b65ada01beb3475a453c4dbdfab057e`. Its applicability was checked against the pinned upstream revision plus those five patches in an isolated temporary checkout. It preserves the original patches and lockfile.
+
+This candidate implements durable customer-operation state, bounded native Think chat continuations, structured completion intent/evidence, read-only working-tree preflight, revision-bound preview verification, and continuation-aware context/transcript presentation. The ignored runtime checkout contains the implementation; the tracked patch is its durable release input. Evidence and limitations are recorded in `continuous-coding-lifecycle-evidence.md`.
+
+Final local checks passed: 163 tests across 23 runtime test files, 60 BuildCustom adapter/gateway regression tests, `bun run typecheck`, and `bun run build`. The candidate has **not** been deployed. Project 5 has not been read, modified, repaired, committed, reset, or published during this implementation.
+
+Operation limits are configurable through `ThinkAgentConfig.operationLimits` and the optional `THINK_OPERATION_MAX_*` host variables. No production values were set. The built-in fallbacks are explicitly uncalibrated development safeguards, not an approved production policy. Review production thresholds and separately authorize deployment before using this candidate on the live runtime.
 
 `bun audit --json` reports high advisories in locked production imports, including Hono 4.12.19, Drizzle ORM 0.44.7, React Router 7.15.1, nanoid 5.1.11, and ws 8.20.1; the Vite/Cloudflare build graph also includes high-advisory Browserslist 4.28.2 and Undici 7.24.8. Vitest 3.2.4 is reported critical but is a dev/test-only dependency, not a serving dependency. No dependency was upgraded in this runtime-preparation task; these findings require separate triage before a public launch.
 

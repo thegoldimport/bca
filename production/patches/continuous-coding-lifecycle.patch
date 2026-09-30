@@ -1,0 +1,4689 @@
+diff --git a/space/src/space/deploy-engine.test.ts b/space/src/space/deploy-engine.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..29f9f83629b3946096271bba823aea9c9c7533bb
+--- /dev/null
++++ b/space/src/space/deploy-engine.test.ts
+@@ -0,0 +1,658 @@
++import { describe, expect, it, vi } from "vitest"
++import * as deployEngine from "./deploy-engine"
++import * as gitObjects from "./git-objects"
++import type { BranchDeploymentBundle, DeployContext } from "./deploy-engine"
++import { SpaceDO } from "./durable-object"
++import { ArtifactsBackend } from "./fs-backend"
++
++function workspaceContext(source: string): DeployContext {
++  const files: Record<string, string> = {
++    "/wrangler.json": JSON.stringify({ main: "src/index.tsx", compatibility_date: "2025-04-01" }),
++    "/src/index.tsx": source,
++  }
++  const git = {
++    checkout: vi.fn(async () => {
++      throw new Error("preflight must not checkout")
++    }),
++    log: vi.fn(async () => {
++      throw new Error("preflight must not read branch history")
++    }),
++  }
++  const fs = {
++    glob: vi.fn(async () => Object.keys(files)),
++    stat: vi.fn(async () => ({ type: "file", size: 1, mtime: new Date() })),
++    readFile: vi.fn(async (path: string) => {
++      const content = files[path]
++      if (content === undefined) throw new Error(`missing ${path}`)
++      return content
++    }),
++  }
++  return {
++    git: git as never,
++    fs: fs as never,
++    sql: {} as never,
++    readWorkspaceSnapshot: async () =>
++      Object.fromEntries(Object.entries(files).map(([path, content]) => [path.slice(1), content])),
++  }
++}
++
++function workspaceSnapshot(files: Record<string, string>) {
++  const encoder = new TextEncoder()
++  return {
++    files,
++    bytes: Object.fromEntries(
++      Object.entries(files).map(([path, content]) => [path, encoder.encode(content)]),
++    ),
++  }
++}
++
++describe("workspace deployment preflight", () => {
++  it("fails closed when no read-only workspace snapshot is provided", async () => {
++    const ctx = workspaceContext("export default { fetch() { return new Response('ok') } }")
++    ctx.readWorkspaceSnapshot = undefined
++
++    await expect(deployEngine.buildWorkspaceDeployment(ctx, "main")).rejects.toThrow(/Read-only workspace snapshot/)
++    expect(ctx.fs.glob).not.toHaveBeenCalled()
++  })
++
++  it("builds a committed branch tree without checking it out", async () => {
++    const ctx = workspaceContext("")
++    const checkout = vi.fn()
++    ctx.git = {
++      log: vi.fn(async () => [{ oid: "commit-1" }]),
++      checkout,
++    } as never
++    const walkSpy = vi.spyOn(gitObjects, "walkTreeFiles").mockResolvedValue(
++      new Map([["/wrangler.json", { oid: "invalid-config", mode: 0o100644 }]]),
++    )
++    const blobSpy = vi.spyOn(gitObjects, "readBlobBytes").mockResolvedValue(
++      new TextEncoder().encode("{"),
++    )
++
++    await expect(deployEngine.buildBranchDeployment(ctx, "main")).rejects.toThrow()
++    expect(ctx.git.checkout).not.toHaveBeenCalled()
++    expect(walkSpy).toHaveBeenCalledOnce()
++    expect(blobSpy).toHaveBeenCalledOnce()
++    vi.restoreAllMocks()
++  })
++
++  it("rejects malformed JSX from the uncommitted working tree without checking out a branch", async () => {
++    const ctx = workspaceContext(
++      "export default { fetch() { return <main>missing close } }",
++    )
++
++    await expect(deployEngine.buildWorkspaceDeployment(ctx, "main")).rejects.toThrow(/Build failed/)
++    expect(ctx.git.checkout).not.toHaveBeenCalled()
++    expect(ctx.git.log).not.toHaveBeenCalled()
++  })
++
++  it("rejects malformed JSX served from the configured static assets directory", async () => {
++    const files: Record<string, string> = {
++      "/wrangler.json": JSON.stringify({
++        main: "src/index.ts",
++        compatibility_date: "2025-04-01",
++        assets: { directory: "public" },
++      }),
++      "/src/index.ts": "export default { fetch() { return new Response('ok') } }",
++      "/public/index.html": "<!doctype html><html><body><div id=\"root\"></div></body></html>",
++      "/public/vendor.min.jsx": "const vendor = <main>malformed ignored minified bundle",
++      "/public/vendor/broken.js": "const = ;",
++      "/public/app.jsx": "const App = () => <main>missing close",
++    }
++    const ctx = workspaceContext("")
++    const readWorkspaceSnapshot = vi.fn(async () => Object.fromEntries(
++      Object.entries(files).map(([path, content]) => [path.slice(1), content]),
++    ))
++    ctx.readWorkspaceSnapshot = readWorkspaceSnapshot
++    ctx.fs.glob = vi.fn(async () => {
++      throw new Error("read-only snapshot callback should be used")
++    }) as never
++
++    await expect(deployEngine.buildWorkspaceDeployment(ctx, "main")).rejects.toThrow(/public\/app\.jsx/)
++    expect(readWorkspaceSnapshot).toHaveBeenCalledOnce()
++    expect(ctx.fs.glob).not.toHaveBeenCalled()
++    expect(ctx.git.checkout).not.toHaveBeenCalled()
++  })
++
++  it("also syntax-checks authored static .mjs while excluding vendor trees", async () => {
++    const files: Record<string, string> = {
++      "/wrangler.json": JSON.stringify({
++        main: "src/index.ts",
++        compatibility_date: "2025-04-01",
++        assets: { directory: "public" },
++      }),
++      "/src/index.ts": "export default { fetch() { return new Response('ok') } }",
++      "/public/vendor/broken.mjs": "const = ;",
++      "/public/app.mjs": "export const App = (",
++    }
++    const ctx = workspaceContext("")
++    ctx.readWorkspaceSnapshot = async () =>
++      Object.fromEntries(Object.entries(files).map(([path, content]) => [path.slice(1), content]))
++
++    await expect(deployEngine.buildWorkspaceDeployment(ctx, "main")).rejects.toThrow(/public\/app\.mjs/)
++  })
++
++  it("keeps an Artifacts-backed preflight read-only on static JSX failure", async () => {
++    const baseFiles: Record<string, string> = {
++      "/wrangler.json": JSON.stringify({
++        main: "src/index.ts",
++        compatibility_date: "2025-04-01",
++        assets: { directory: "public" },
++      }),
++      "/src/index.ts": "export default { fetch() { return new Response('ok') } }",
++      "/public/index.html": "<!doctype html><html><body></body></html>",
++      "/public/app.jsx": "const Original = () => <main>valid</main>",
++    }
++    const overlayFiles: Record<string, string> = {
++      "/public/app.jsx": "const App = () => <main>missing close",
++      "/public/image.bin": "binary placeholder",
++    }
++    const invalidImageBytes = new Uint8Array([0xff, 0x00, 0x81, 0x7f])
++    const materializeAll = vi.fn()
++    const flushCheckpoint = vi.fn()
++    const overlay = {
++      glob: vi.fn(async () => Object.keys(overlayFiles)),
++      stat: vi.fn(async (path: string) => {
++        if (!(path in overlayFiles)) throw new Error(`missing overlay path ${path}`)
++        return { type: "file", size: overlayFiles[path].length, mtime: new Date() }
++      }),
++      readFile: vi.fn(async (path: string) => overlayFiles[path]),
++      readFileBytes: vi.fn(async (path: string) =>
++        path === "/public/image.bin"
++          ? invalidImageBytes
++          : new TextEncoder().encode(overlayFiles[path]),
++      ),
++      writeFile: vi.fn(),
++      writeFileBytes: vi.fn(),
++    }
++    const readBlob = vi.fn(async (oid: string) => new TextEncoder().encode(baseFiles[oid]))
++    const fs = {
++      overlay,
++      base: new Map(
++        Object.entries(baseFiles).map(([path, content]) => [
++          path,
++          { oid: path, content },
++        ]),
++      ),
++      source: { readBlob },
++      whiteouts: new Set<string>(["/public"]),
++      readyPromise: Promise.resolve(),
++    }
++    const git = {
++      checkout: vi.fn(),
++      commit: vi.fn(),
++      deploy: vi.fn(),
++      reset: vi.fn(),
++      log: vi.fn(),
++      status: vi.fn(),
++    }
++    // Exercise the Artifacts branch without invoking its binding-dependent
++    // constructor, while preserving the production instanceof check.
++    const backend = Object.assign(Object.create(ArtifactsBackend.prototype), {
++      fs,
++      git,
++      materializeAll,
++      flushCheckpoint,
++    })
++    const space = Object.create(SpaceDO.prototype) as {
++      preflightCommitDeploy: (branch: string) => Promise<unknown>
++    } & Record<string, unknown>
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: {} } },
++      ensureInit: async () => {},
++      currentBranch: async () => "main",
++    })
++
++    const result = await space.preflightCommitDeploy("main") as { ok: boolean; error: string }
++    expect(result.ok).toBe(false)
++    expect(result.error).toContain("public/app.jsx")
++    expect(materializeAll).not.toHaveBeenCalled()
++    expect(flushCheckpoint).not.toHaveBeenCalled()
++    expect(overlay.writeFile).not.toHaveBeenCalled()
++    expect(overlay.writeFileBytes).not.toHaveBeenCalled()
++    expect(overlay.readFileBytes).toHaveBeenCalledWith("/public/image.bin")
++    expect(overlay.glob).toHaveBeenCalledOnce()
++    expect(readBlob).toHaveBeenCalledTimes(2)
++    expect(git.checkout).not.toHaveBeenCalled()
++    expect(git.commit).not.toHaveBeenCalled()
++    expect(git.deploy).not.toHaveBeenCalled()
++    expect(git.reset).not.toHaveBeenCalled()
++    expect(git.log).not.toHaveBeenCalled()
++    expect(git.status).not.toHaveBeenCalled()
++  })
++
++  it("fails cold preflight without initializing or replaying workspace state", async () => {
++    const initializeBackend = vi.fn()
++    const backendReady = vi.fn()
++    const materializeAll = vi.fn()
++    const flushCheckpoint = vi.fn()
++    const writeFile = vi.fn()
++    const sqlExec = vi.fn()
++    const backend = {
++      fs: { writeFile },
++      ready: backendReady,
++      materializeAll,
++      flushCheckpoint,
++    }
++    const ensureInit = vi.fn()
++    const readOnlyWorkspaceSnapshot = vi.fn()
++    const currentBranch = vi.fn()
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<unknown>
++      preflightDeploy: (branch: string) => Promise<unknown>
++    }
++    Object.assign(space, {
++      initialized: false,
++      initializationPromise: null,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } } },
++      initializeBackend,
++      ensureInit,
++      currentBranch,
++      readOnlyWorkspaceSnapshot,
++    })
++
++    const atomicResult = await space.preflightCommitDeploy("main") as {
++      ok: boolean
++      phase: string
++      error: string
++    }
++    expect(atomicResult).toMatchObject({ ok: false, phase: "preflight" })
++    expect(atomicResult.error).toContain("Workspace is not initialized")
++    await expect(space.preflightDeploy("main")).rejects.toThrow(/Workspace is not initialized/)
++
++    expect(ensureInit).not.toHaveBeenCalled()
++    expect(initializeBackend).not.toHaveBeenCalled()
++    expect(backendReady).not.toHaveBeenCalled()
++    expect(materializeAll).not.toHaveBeenCalled()
++    expect(flushCheckpoint).not.toHaveBeenCalled()
++    expect(writeFile).not.toHaveBeenCalled()
++    expect(sqlExec).not.toHaveBeenCalled()
++    expect(currentBranch).not.toHaveBeenCalled()
++    expect(readOnlyWorkspaceSnapshot).not.toHaveBeenCalled()
++  })
++
++  it("refuses a branch mismatch before building, committing, or deploying", async () => {
++    const buildSpy = vi.spyOn(deployEngine, "buildWorkspaceDeployment")
++    const git = { status: vi.fn(), commit: vi.fn() }
++    const sqlExec = vi.fn()
++    const backend = { fs: {}, git, push: vi.fn() }
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<unknown>
++    }
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ensureInit: vi.fn(async () => {}),
++      currentBranch: vi.fn(async () => "feature"),
++      readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({})),
++    })
++
++    const result = await space.preflightCommitDeploy("main") as {
++      ok: boolean
++      phase: string
++      error: string
++    }
++    expect(result).toMatchObject({ ok: false, phase: "preflight" })
++    expect(result.error).toContain('not requested branch "main"')
++    expect(buildSpy).not.toHaveBeenCalled()
++    expect(git.status).not.toHaveBeenCalled()
++    expect(git.commit).not.toHaveBeenCalled()
++    expect(sqlExec).not.toHaveBeenCalled()
++    expect(backend.push).not.toHaveBeenCalled()
++    vi.restoreAllMocks()
++  })
++
++  it("refuses a branch change detected after build and before commit", async () => {
++    const bundle: BranchDeploymentBundle = {
++      branch: "main",
++      commitHash: "",
++      mainModule: "src/index.js",
++      modules: {},
++      assets: {},
++      assetConfig: undefined,
++      compatibilityDate: "2025-04-01",
++    }
++    const buildSpy = vi
++      .spyOn(deployEngine, "buildWorkspaceDeployment")
++      .mockResolvedValue(bundle)
++    const git = { commit: vi.fn() }
++    const sqlExec = vi.fn()
++    const backend = { fs: {}, git, push: vi.fn() }
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<unknown>
++    }
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ensureInit: vi.fn(async () => {}),
++      currentBranch: vi.fn().mockResolvedValueOnce("main").mockResolvedValueOnce("feature"),
++      readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({ "src/index.ts": "same source" })),
++      workspaceDiffersFromHead: vi.fn(async () => true),
++    })
++
++    const result = await space.preflightCommitDeploy("main") as {
++      ok: boolean
++      phase: string
++      error: string
++    }
++    expect(result).toMatchObject({ ok: false, phase: "preflight" })
++    expect(result.error).toContain('changed during preflight to "feature"')
++    expect(buildSpy).toHaveBeenCalledOnce()
++    expect(git.commit).not.toHaveBeenCalled()
++    expect(sqlExec).not.toHaveBeenCalled()
++    expect(backend.push).not.toHaveBeenCalled()
++    vi.restoreAllMocks()
++  })
++
++  it("commits and records the validated bundle without checking out the branch", async () => {
++    const bundle: BranchDeploymentBundle = {
++      branch: "main",
++      commitHash: "",
++      mainModule: "src/index.js",
++      modules: { "src/index.js": "module" },
++      assets: { "/app.jsx": "const App = () => <main />" },
++      assetConfig: undefined,
++      compatibilityDate: "2025-04-01",
++    }
++    let buildStarted!: () => void
++    let finishBuild!: () => void
++    const buildStartedPromise = new Promise<void>((resolve) => {
++      buildStarted = resolve
++    })
++    const buildGate = new Promise<void>((resolve) => {
++      finishBuild = resolve
++    })
++    const buildSpy = vi.spyOn(deployEngine, "buildWorkspaceDeployment").mockImplementation(
++      async () => {
++        buildStarted()
++        await buildGate
++        return bundle
++      },
++    )
++    const events: string[] = []
++    const git = {
++      checkout: vi.fn(),
++    }
++    const sqlExec = vi.fn()
++    const fsWrite = vi.fn(async () => {
++      events.push("write")
++    })
++    const backend = {
++      fs: { writeFile: fsWrite },
++      git,
++      push: vi.fn(async () => {
++        events.push("push")
++        return true
++      }),
++    }
++    Object.setPrototypeOf(backend, ArtifactsBackend.prototype)
++    const snapshot = workspaceSnapshot({ "public/app.jsx": "const App = () => <main />" })
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<Record<string, unknown>>
++      writeFile: (path: string, content: string) => Promise<unknown>
++    }
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ensureInit: vi.fn(async () => {}),
++      currentBranch: vi.fn(async () => "main"),
++      readOnlyWorkspaceSnapshot: vi.fn(async () => snapshot),
++      workspaceDiffersFromHead: vi.fn(async () => true),
++      workspaceMatchesCommit: vi.fn(async () => true),
++      gitCommitUnlocked: vi.fn(async () => {
++        events.push("commit")
++        return { sha: "commit-1", message: "snapshot" }
++      }),
++    })
++
++    const deployPromise = space.preflightCommitDeploy("main")
++    await buildStartedPromise
++    const editPromise = space.writeFile("public/app.jsx", "edited after deploy")
++    expect(fsWrite).not.toHaveBeenCalled()
++    finishBuild()
++    const result = await deployPromise
++    await editPromise
++    expect(result).toMatchObject({
++      ok: true,
++      branch: "main",
++      commit_hash: "commit-1",
++      preview_url: "/space/test-space/preview/main/",
++    })
++    expect(buildSpy).toHaveBeenCalledOnce()
++    expect(space.workspaceDiffersFromHead).toHaveBeenCalledOnce()
++    expect(space.gitCommitUnlocked).toHaveBeenCalledOnce()
++    expect(sqlExec).toHaveBeenCalledOnce()
++    expect(backend.push).toHaveBeenCalledOnce()
++    expect(git.checkout).not.toHaveBeenCalled()
++    expect(events).toEqual(["commit", "push", "write"])
++    expect(fsWrite).toHaveBeenCalledOnce()
++    vi.restoreAllMocks()
++  })
++
++  it("refuses to deploy ignored files omitted from a clean/no-op committed tree", async () => {
++    const bundle: BranchDeploymentBundle = {
++      branch: "main",
++      commitHash: "",
++      mainModule: "src/index.js",
++      modules: {},
++      assets: { "/ignored.log": "not staged" },
++      assetConfig: undefined,
++      compatibilityDate: "2025-04-01",
++    }
++    const buildSpy = vi
++      .spyOn(deployEngine, "buildWorkspaceDeployment")
++      .mockResolvedValue(bundle)
++    const committedTree = vi.spyOn(gitObjects, "walkTreeFiles").mockResolvedValue(
++      new Map([
++        ["/.gitignore", { oid: "gitignore-blob", mode: 0o100644 }],
++        ["/src/index.ts", { oid: "tracked-blob", mode: 0o100644 }],
++      ]),
++    )
++    vi.spyOn(gitObjects, "readBlobBytes").mockResolvedValue(
++      new TextEncoder().encode("unchanged tracked source"),
++    )
++    const push = vi.fn(async () => true)
++    const backend = Object.assign(Object.create(ArtifactsBackend.prototype), {
++      fs: {},
++      git: { commit: vi.fn() },
++      push,
++    })
++    const sqlExec = vi.fn()
++    const snapshot = workspaceSnapshot({
++      ".gitignore": "ignored.log\n",
++      "src/index.ts": "unchanged tracked source",
++      "ignored.log": "not staged",
++    })
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<unknown>
++    }
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ensureInit: vi.fn(async () => {}),
++      currentBranch: vi.fn(async () => "main"),
++      readOnlyWorkspaceSnapshot: vi.fn(async () => snapshot),
++      workspaceDiffersFromHead: vi.fn(async () => true),
++      gitCommitUnlocked: vi.fn(async () => ({ sha: "existing-head", message: "no-op" })),
++    })
++
++    const result = await space.preflightCommitDeploy("main") as {
++      ok: boolean
++      phase: string
++      error: string
++    }
++    expect(result).toMatchObject({ ok: false, phase: "commit" })
++    expect(result.error).toContain("does not match the validated workspace snapshot")
++    expect(buildSpy).toHaveBeenCalledOnce()
++    expect(committedTree).toHaveBeenCalledWith(backend.fs, "existing-head")
++    expect(space.gitCommitUnlocked).toHaveBeenCalledOnce()
++    expect(sqlExec).not.toHaveBeenCalled()
++    expect(push).not.toHaveBeenCalled()
++    vi.restoreAllMocks()
++  })
++
++  it("preserves invalid UTF-8 bytes when comparing a snapshot with its committed blob", async () => {
++    const invalidUtf8 = new Uint8Array([0xff, 0x00, 0x81, 0x7f])
++    vi.spyOn(gitObjects, "walkTreeFiles").mockResolvedValue(
++      new Map([["/public/image.bin", { oid: "image-blob", mode: 0o100644 }]]),
++    )
++    vi.spyOn(gitObjects, "readBlobBytes").mockResolvedValue(invalidUtf8)
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      workspaceMatchesCommit: (
++        files: Record<string, Uint8Array>,
++        commit: string,
++      ) => Promise<boolean>
++    }
++    Object.assign(space, { backend: { fs: {} } })
++
++    await expect(
++      space.workspaceMatchesCommit({ "public/image.bin": invalidUtf8 }, "commit-1"),
++    ).resolves.toBe(true)
++    vi.restoreAllMocks()
++  })
++
++  it("keeps a clean no-op deployment successful when the Artifacts push succeeds", async () => {
++    const bundle: BranchDeploymentBundle = {
++      branch: "main",
++      commitHash: "",
++      mainModule: "src/index.js",
++      modules: {},
++      assets: {},
++      assetConfig: undefined,
++      compatibilityDate: "2025-04-01",
++    }
++    vi.spyOn(deployEngine, "buildWorkspaceDeployment").mockResolvedValue(bundle)
++    vi.spyOn(gitObjects, "resolveHead").mockResolvedValue("existing-head")
++    const push = vi.fn(async () => true)
++    const backend = Object.assign(Object.create(ArtifactsBackend.prototype), {
++      fs: {},
++      git: { commit: vi.fn() },
++      push,
++    })
++    const sqlExec = vi.fn()
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<Record<string, unknown>>
++    }
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ensureInit: vi.fn(async () => {}),
++      currentBranch: vi.fn(async () => "main"),
++      readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({ "src/index.ts": "unchanged" })),
++      workspaceDiffersFromHead: vi.fn(async () => false),
++      workspaceMatchesCommit: vi.fn(async () => true),
++      gitCommitUnlocked: vi.fn(),
++    })
++
++    const result = await space.preflightCommitDeploy("main")
++    expect(result).toMatchObject({ ok: true, commit_hash: "existing-head" })
++    expect(space.gitCommitUnlocked).not.toHaveBeenCalled()
++    expect(push).toHaveBeenCalledOnce()
++    expect(sqlExec).toHaveBeenCalledOnce()
++    vi.restoreAllMocks()
++  })
++
++  it("does not report success when the Artifacts push refuses a clean no-op deploy", async () => {
++    const bundle: BranchDeploymentBundle = {
++      branch: "main",
++      commitHash: "",
++      mainModule: "src/index.js",
++      modules: {},
++      assets: {},
++      assetConfig: undefined,
++      compatibilityDate: "2025-04-01",
++    }
++    vi.spyOn(deployEngine, "buildWorkspaceDeployment").mockResolvedValue(bundle)
++    vi.spyOn(gitObjects, "resolveHead").mockResolvedValue("existing-head")
++    const push = vi.fn(async () => false)
++    const backend = Object.assign(Object.create(ArtifactsBackend.prototype), {
++      fs: {},
++      git: { commit: vi.fn() },
++      push,
++    })
++    const sqlExec = vi.fn()
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<unknown>
++    }
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ensureInit: vi.fn(async () => {}),
++      currentBranch: vi.fn(async () => "main"),
++      readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({ "src/index.ts": "unchanged" })),
++      workspaceDiffersFromHead: vi.fn(async () => false),
++      workspaceMatchesCommit: vi.fn(async () => true),
++      gitCommitUnlocked: vi.fn(),
++    })
++
++    const result = await space.preflightCommitDeploy("main") as {
++      ok: boolean
++      phase: string
++      error: string
++    }
++    expect(result).toMatchObject({ ok: false, phase: "deploy" })
++    expect(result.error).toContain("Artifacts push failed or was refused")
++    expect(space.gitCommitUnlocked).not.toHaveBeenCalled()
++    expect(push).toHaveBeenCalledOnce()
++    expect(sqlExec).not.toHaveBeenCalled()
++    vi.restoreAllMocks()
++  })
++
++  it("detects an intervening snapshot edit immediately before commit", async () => {
++    const bundle: BranchDeploymentBundle = {
++      branch: "main",
++      commitHash: "",
++      mainModule: "src/index.js",
++      modules: {},
++      assets: {},
++      assetConfig: undefined,
++      compatibilityDate: "2025-04-01",
++    }
++    const buildSpy = vi
++      .spyOn(deployEngine, "buildWorkspaceDeployment")
++      .mockResolvedValue(bundle)
++    const git = { commit: vi.fn() }
++    const sqlExec = vi.fn()
++    const backend = { fs: {}, git, push: vi.fn() }
++    const snapshots = [
++      workspaceSnapshot({ "public/app.jsx": "const App = () => <main>valid</main>" }),
++      workspaceSnapshot({ "public/app.jsx": "const App = () => <main>changed during build" }),
++    ]
++    const readOnlyWorkspaceSnapshot = vi.fn(async () => snapshots.shift() ?? workspaceSnapshot({}))
++    const space = Object.create(SpaceDO.prototype) as Record<string, unknown> & {
++      preflightCommitDeploy: (branch: string) => Promise<unknown>
++    }
++    Object.assign(space, {
++      initialized: true,
++      backend,
++      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ensureInit: vi.fn(async () => {}),
++      currentBranch: vi.fn(async () => "main"),
++      readOnlyWorkspaceSnapshot,
++      workspaceDiffersFromHead: vi.fn(async () => true),
++    })
++
++    const result = await space.preflightCommitDeploy("main") as {
++      ok: boolean
++      phase: string
++      error: string
++    }
++    expect(result).toMatchObject({ ok: false, phase: "preflight" })
++    expect(result.error).toContain("Workspace changed during preflight")
++    expect(buildSpy).toHaveBeenCalledOnce()
++    expect(readOnlyWorkspaceSnapshot).toHaveBeenCalledTimes(2)
++    expect(git.commit).not.toHaveBeenCalled()
++    expect(sqlExec).not.toHaveBeenCalled()
++    expect(backend.push).not.toHaveBeenCalled()
++    vi.restoreAllMocks()
++  })
++})
+\ No newline at end of file
+diff --git a/space/src/space/deploy-engine.ts b/space/src/space/deploy-engine.ts
+index c19dc02f68e0c63c9e36a79c173b849c8b393726..a852cecaba884b20b7d35c05dd8570538bf3a0aa 100644
+--- a/space/src/space/deploy-engine.ts
++++ b/space/src/space/deploy-engine.ts
+@@ -1,8 +1,9 @@
+ import type { Git } from "@cloudflare/shell/git"
+ import type { FileSystem } from "@cloudflare/shell"
++import { parse } from "@babel/parser"
+ import { createApp, createWorker, type AssetConfig, type Modules } from "@cloudflare/worker-bundler"
+ import { parseWranglerConfig, WranglerConfigError } from "./wrangler-config"
+-import { globInfos } from "./fileinfo"
++import { readBlobBytes, walkTreeFiles } from "./git-objects"
+ 
+ // ─── Deploy Engine ──────────────────────────────────────────────────────────
+ 
+@@ -18,6 +19,8 @@ export interface DeployContext {
+   sql: SqlStorage
+   git: Git
+   fs: FileSystem
++  /** Optional non-mutating view of the current workspace for preflight builds. */
++  readWorkspaceSnapshot?: () => Promise<Record<string, string>>
+ }
+ 
+ export interface BranchDeploymentBundle {
+@@ -59,35 +62,28 @@ async function readBranchFiles(
+   ctx: DeployContext,
+   branch: string
+ ): Promise<{ commitHash: string; files: Record<string, string> }> {
+-  // Get commit log for the branch to find the commit hash
++  // Read the committed tree directly. Checking out a branch here could discard
++  // an unvalidated dirty working tree, so branch deploys never mutate checkout.
+   const log = await ctx.git.log({ ref: branch, depth: 1 })
+   if (log.length === 0) {
+     throw new Error(`No commits found on branch "${branch}"`)
+   }
+   const commitHash = log[0].oid
+-
+-  // Checkout the branch to populate working tree
+-  await ctx.git.checkout({ ref: branch, force: true })
+-
+-  // Read all files recursively (readDir is non-recursive, glob is)
+-  const allFiles = await globInfos(ctx.fs, "**/*")
++  const tree = await walkTreeFiles(ctx.fs, commitHash)
+   const files: Record<string, string> = {}
+ 
+-  for (const fileInfo of allFiles) {
+-    if (fileInfo.type !== "file") continue
+-    // Skip git's object store and the ArtifactsFileSystem bookkeeping dir —
+-    // neither is part of the app and must never ship in a deploy bundle.
+-    if (fileInfo.path.startsWith("/.git/") || fileInfo.path === "/.git") continue
+-    if (fileInfo.path.startsWith("/.afs/") || fileInfo.path === "/.afs") continue
+-
+-    let content: string
+-    try {
+-      content = await ctx.fs.readFile(fileInfo.path)
+-    } catch {
++  for (const [absolutePath, entry] of tree) {
++    if (
++      absolutePath === "/.git" ||
++      absolutePath.startsWith("/.git/") ||
++      absolutePath === "/.afs" ||
++      absolutePath.startsWith("/.afs/")
++    ) {
+       continue
+     }
+-    const path = fileInfo.path.startsWith("/") ? fileInfo.path.slice(1) : fileInfo.path
+-    files[path] = content
++    files[absolutePath.replace(/^\/+/, "")] = new TextDecoder().decode(
++      await readBlobBytes(ctx.fs, entry.oid),
++    )
+   }
+ 
+   return { commitHash, files }
+@@ -117,37 +113,35 @@ async function deployBranch(
+     }, 400)
+   }
+ 
+-  const {
+-    commitHash,
+-    mainModule,
+-    modules: serializedModules,
+-    assets: serializedAssets,
+-    assetConfig,
+-    compatibilityDate: compatDate,
+-  } = bundle
++  return jsonResponse(persistDeploymentBundle(ctx, bundle))
++}
+ 
++/** Persist an already-built bundle without checking out or rebuilding a branch. */
++export function persistDeploymentBundle(
++  ctx: DeployContext,
++  bundle: BranchDeploymentBundle,
++): Record<string, unknown> {
+   const now = Date.now()
+   ctx.sql.exec(
+     `INSERT OR REPLACE INTO deployments
+      (branch, commit_hash, main_module, modules, assets, asset_config, deployed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+-    branch,
+-    commitHash,
+-    mainModule,
+-    JSON.stringify(serializedModules),
+-    JSON.stringify(serializedAssets),
+-    assetConfig ? JSON.stringify(assetConfig) : "{}",
+-    now
++    bundle.branch,
++    bundle.commitHash,
++    bundle.mainModule,
++    JSON.stringify(bundle.modules),
++    JSON.stringify(bundle.assets),
++    bundle.assetConfig ? JSON.stringify(bundle.assetConfig) : "{}",
++    now,
+   )
+-
+-  return jsonResponse({
+-    branch,
+-    commit_hash: commitHash,
+-    main_module: mainModule,
+-    has_assets: Object.keys(serializedAssets).length > 0,
+-    compatibility_date: compatDate,
++  return {
++    branch: bundle.branch,
++    commit_hash: bundle.commitHash,
++    main_module: bundle.mainModule,
++    has_assets: Object.keys(bundle.assets).length > 0,
++    compatibility_date: bundle.compatibilityDate,
+     deployed_at: new Date(now).toISOString(),
+-  })
++  }
+ }
+ 
+ export async function buildBranchDeployment(
+@@ -155,6 +149,30 @@ export async function buildBranchDeployment(
+   branch: string
+ ): Promise<BranchDeploymentBundle> {
+   const { commitHash, files } = await readBranchFiles(ctx, branch)
++  return buildDeploymentFromFiles(branch, commitHash, files)
++}
++
++/**
++ * Build the current working tree without consulting git history or checking out
++ * a branch. This is used as a deploy preflight before the working tree is
++ * committed, so compile errors cannot move HEAD or discard uncommitted files.
++ */
++export async function buildWorkspaceDeployment(
++  ctx: DeployContext,
++  branch: string
++): Promise<BranchDeploymentBundle> {
++  if (!ctx.readWorkspaceSnapshot) {
++    throw new Error("Read-only workspace snapshot is required for deploy preflight")
++  }
++  const files = await ctx.readWorkspaceSnapshot()
++  return buildDeploymentFromFiles(branch, "", files)
++}
++
++async function buildDeploymentFromFiles(
++  branch: string,
++  commitHash: string,
++  files: Record<string, string>
++): Promise<BranchDeploymentBundle> {
+   if (Object.keys(files).length === 0) {
+     throw new Error(`No files found in branch "${branch}"`)
+   }
+@@ -175,8 +193,10 @@ export async function buildBranchDeployment(
+     )
+   }
+ 
++  const assetsDir = wranglerCfg.assets?.directory?.replace(/^\.?\//, "").replace(/\/$/, "")
++  if (assetsDir) validateStaticScriptAssets(files, assetsDir)
++
+   try {
+-    const assetsDir = wranglerCfg.assets?.directory?.replace(/^\.?\//, "").replace(/\/$/, "")
+     const collectedAssets = assetsDir
+       ? Object.fromEntries(
+           Object.entries(files)
+@@ -230,6 +250,40 @@ export async function buildBranchDeployment(
+   }
+ }
+ 
++/**
++ * Static assets are served as-is and therefore are not visited by the worker
++ * bundler. This is syntax-only validation for authored JavaScript/JSX/TSX in
++ * the configured assets directory; it does not resolve imports or type-check.
++ * Skip dependency/vendor trees and minified files to avoid false positives from
++ * generated third-party bundles.
++ */
++function validateStaticScriptAssets(files: Record<string, string>, assetsDir: string): void {
++  const prefix = `${assetsDir}/`
++  for (const [path, source] of Object.entries(files)) {
++    if (!path.startsWith(prefix) || !/\.(?:jsx|tsx|mjs|cjs|js)$/i.test(path)) continue
++    const relativePath = path.slice(prefix.length)
++    if (
++      relativePath.split("/").some((part) =>
++        ["node_modules", "vendor", "vendors", "third_party", "third-party"].includes(part.toLowerCase()),
++      ) ||
++      /(?:^|[.-])min\.(?:jsx|tsx|mjs|cjs|js)$/i.test(relativePath)
++    ) {
++      continue
++    }
++
++    try {
++      parse(source, {
++        sourceType: "unambiguous",
++        plugins: path.toLowerCase().endsWith(".tsx") ? ["typescript", "jsx"] : ["jsx"],
++      })
++    } catch (e) {
++      throw new Error(
++        `Invalid static JavaScript/JSX/TSX in ${path}: ${e instanceof Error ? e.message : String(e)}`,
++      )
++    }
++  }
++}
++
+ // ─── Get a deployment ───────────────────────────────────────────────────────
+ 
+ async function getDeployment(
+diff --git a/space/src/space/durable-object.ts b/space/src/space/durable-object.ts
+index 3be479095080edd47b2df7c6d877b5db6a14ef03..4b9eb05658b02e7684095aa21d2a8cedba433371 100644
+--- a/space/src/space/durable-object.ts
++++ b/space/src/space/durable-object.ts
+@@ -4,7 +4,9 @@ import { type Git, type GitLogEntry, type GitStatusEntry } from "@cloudflare/she
+ import type { Env } from "../env"
+ import {
+   buildBranchDeployment,
++  buildWorkspaceDeployment,
+   handleDeployCommand,
++  persistDeploymentBundle,
+   type BranchDeploymentBundle,
+   type DeployContext,
+ } from "./deploy-engine"
+@@ -15,7 +17,13 @@ import {
+   VIBE_APP_MODULE,
+ } from "./inspector-wrapper"
+ import { ArtifactsBackend, resolveSpaceFsBackendMode, SqlBackend, type SpaceFsBackend } from "./fs-backend"
+-import { stageWorkdir, stagedTreeMatchesHead, resolveHead } from "./git-objects"
++import {
++  readBlobBytes,
++  resolveHead,
++  stageWorkdir,
++  stagedTreeMatchesHead,
++  walkTreeFiles,
++} from "./git-objects"
+ import { stripPreviewSecurityHeaders } from "./preview-headers"
+ 
+ // ─── Inspector result types ────────────────────────────────────────────────
+@@ -67,6 +75,28 @@ function isReservedPath(path: string): boolean {
+   )
+ }
+ 
++interface WorkspaceSnapshot {
++  files: Record<string, string>
++  bytes: Record<string, Uint8Array>
++}
++
++function workspaceSnapshotsEqual(a: WorkspaceSnapshot, b: WorkspaceSnapshot): boolean {
++  const aPaths = Object.keys(a.bytes).sort()
++  const bPaths = Object.keys(b.bytes).sort()
++  if (aPaths.length !== bPaths.length) return false
++  for (let pathIndex = 0; pathIndex < aPaths.length; pathIndex++) {
++    const path = aPaths[pathIndex]
++    if (path !== bPaths[pathIndex]) return false
++    const aBytes = a.bytes[path]
++    const bBytes = b.bytes[path]
++    if (aBytes.length !== bBytes.length) return false
++    for (let byteIndex = 0; byteIndex < aBytes.length; byteIndex++) {
++      if (aBytes[byteIndex] !== bBytes[byteIndex]) return false
++    }
++  }
++  return true
++}
++
+ // ─── SpaceDO ────────────────────────────────────────────────────────────────
+ // Agent space Durable Object backed by @cloudflare/shell.
+ //
+@@ -89,7 +119,9 @@ const ASSET_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+ export class SpaceDO extends DurableObject<Env> {
+   private backend!: SpaceFsBackend
+   private initializationPromise: Promise<void> | null = null
++  private initialized = false
+   private assetCache = new Map<string, CachedAssets>()
++  private workspaceOperationTail: Promise<void> = Promise.resolve()
+ 
+   private get overlay(): FileSystem { return this.backend.overlay }
+   private get fs(): FileSystem { return this.backend.fs }
+@@ -104,6 +136,21 @@ export class SpaceDO extends DurableObject<Env> {
+     await this.backend.flushCheckpoint()
+   }
+ 
++  /** Serialize workspace mutations and validated deploy snapshots. */
++  private async withWorkspaceOperation<T>(operation: () => Promise<T>): Promise<T> {
++    const previous = this.workspaceOperationTail
++    let release!: () => void
++    this.workspaceOperationTail = new Promise<void>((resolve) => {
++      release = resolve
++    })
++    await previous
++    try {
++      return await operation()
++    } finally {
++      release()
++    }
++  }
++
+   // ── ArtifactsFileSystem hydration helpers ──
+ 
+   private async hydrate(path: string): Promise<void> {
+@@ -114,6 +161,99 @@ export class SpaceDO extends DurableObject<Env> {
+     await this.backend.materializeAll()
+   }
+ 
++  /**
++   * Read a stable workspace view without hydrating Artifacts base files into
++   * the writable overlay. ArtifactsFileSystem intentionally exposes only a
++   * materializing glob API, so preflight reads its loaded immutable base index
++   * and blob reader alongside the raw overlay instead.
++   */
++  private async readOnlyWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
++    if (this.backend instanceof ArtifactsBackend) {
++      const layers = this.fs as unknown as {
++        overlay: FileSystem
++        base: Map<string, { oid: string }> | null
++        source: { readBlob(oid: string): Promise<Uint8Array> }
++        whiteouts: Set<string>
++        readyPromise: Promise<void> | null
++      }
++      if (layers.base === null && layers.readyPromise === null) {
++        throw new Error("Cannot preflight: Artifacts workspace base snapshot is unavailable")
++      }
++
++      const files = new Map<string, string>()
++      const bytesByPath = new Map<string, Uint8Array>()
++      const isWhiteouted = (path: string): boolean => {
++        if (layers.whiteouts.has(path)) return true
++        let slash = path.indexOf("/", 1)
++        while (slash > 0) {
++          if (layers.whiteouts.has(path.slice(0, slash))) return true
++          slash = path.indexOf("/", slash + 1)
++        }
++        return false
++      }
++      const paths = new Set<string>(layers.base?.keys() ?? [])
++      const overlayPaths = new Set(await layers.overlay.glob("/**/*"))
++      for (const path of overlayPaths) paths.add(path)
++
++      for (const rawPath of paths) {
++        const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`
++        const overlayPath = overlayPaths.has(rawPath) || overlayPaths.has(path)
++        if (isReservedPath(path) || (!overlayPath && isWhiteouted(path))) continue
++        let stat
++        try {
++          stat = await layers.overlay.stat(path)
++        } catch {
++          // A base entry need not be present in the overlay; its blob is read
++          // directly below. Overlay-only paths that disappeared are skipped.
++        }
++        if (stat?.type === "directory") continue
++        try {
++          if (stat?.type === "file") {
++            const bytes = await layers.overlay.readFileBytes(path)
++            if (!bytes) throw new Error("overlay file disappeared while snapshotting")
++            const relativePath = path.slice(1)
++            bytesByPath.set(relativePath, bytes)
++            files.set(relativePath, new TextDecoder().decode(bytes))
++            continue
++          }
++          const baseEntry = layers.base?.get(path)
++          if (baseEntry) {
++            const bytes = await layers.source.readBlob(baseEntry.oid)
++            const relativePath = path.slice(1)
++            bytesByPath.set(relativePath, bytes)
++            files.set(relativePath, new TextDecoder().decode(bytes))
++          }
++        } catch (error) {
++          throw new Error(
++            `Cannot preflight workspace file ${path}: ${error instanceof Error ? error.message : String(error)}`,
++          )
++        }
++      }
++      return { files: Object.fromEntries(files), bytes: Object.fromEntries(bytesByPath) }
++    }
++
++    // The SQL Workspace filesystem has no lazy base layer: its normal reads
++    // are observational and do not hydrate or checkpoint files.
++    const files: Record<string, string> = {}
++    const bytesByPath: Record<string, Uint8Array> = {}
++    const allFiles = await globInfos(this.fs, "**/*")
++    for (const fileInfo of allFiles) {
++      if (fileInfo.type !== "file" || isReservedPath(fileInfo.path)) continue
++      try {
++        const bytes = await this.fs.readFileBytes(fileInfo.path)
++        if (!bytes) throw new Error("file disappeared while snapshotting")
++        const path = fileInfo.path.startsWith("/") ? fileInfo.path.slice(1) : fileInfo.path
++        bytesByPath[path] = bytes
++        files[path] = new TextDecoder().decode(bytes)
++      } catch (error) {
++        throw new Error(
++          `Cannot preflight workspace file ${fileInfo.path}: ${error instanceof Error ? error.message : String(error)}`,
++        )
++      }
++    }
++    return { files, bytes: bytesByPath }
++  }
++
+   private async ensureInit(): Promise<void> {
+     if (!this.initializationPromise) {
+       this.initializationPromise = this.initializeSpace().catch((error) => {
+@@ -124,6 +264,12 @@ export class SpaceDO extends DurableObject<Env> {
+     await this.initializationPromise
+   }
+ 
++  private assertInitializedForPreflight(): void {
++    if (!this.initialized) {
++      throw new Error("Workspace is not initialized; initialize it with a workspace operation before preflight")
++    }
++  }
++
+   private async initializeSpace(): Promise<void> {
+     await this.initializeBackend()
+ 
+@@ -154,6 +300,7 @@ export class SpaceDO extends DurableObject<Env> {
+     }
+ 
+     await this.backend.ready()
++    this.initialized = true
+   }
+ 
+   private async initializeBackend(): Promise<void> {
+@@ -191,30 +338,33 @@ export class SpaceDO extends DurableObject<Env> {
+   }
+ 
+   async writeFile(path: string, content: string): Promise<{ path: string; size: number }> {
+-    await this.ensureInit()
+-    // Route through the overlay FS so a write to a previously-deleted base path
+-    // clears its whiteout tombstone and makes the file visible again.
+-    await this.fs.writeFile(path, content)
+-    return { path, size: content.length }
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      // Route through the overlay FS so a write to a previously-deleted base path
++      // clears its whiteout tombstone and makes the file visible again.
++      await this.fs.writeFile(path, content)
++      return { path, size: content.length }
++    })
+   }
+ 
+   async editFile(path: string, oldString: string, newString: string): Promise<{ path: string; size: number }> {
+-    await this.ensureInit()
+-    await this.hydrate(path)
+-    const result = await this.stateBackend.replaceInFile(path, oldString, newString)
+-    if (result.replaced === 0) {
+-      throw new Error(`old_string not found in ${path}`)
+-    }
+-    // Read back size
+-    const content = await this.fs.readFile(path)
+-    return { path, size: content.length }
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.hydrate(path)
++      const result = await this.stateBackend.replaceInFile(path, oldString, newString)
++      if (result.replaced === 0) {
++        throw new Error(`old_string not found in ${path}`)
++      }
++      const content = await this.fs.readFile(path)
++      return { path, size: content.length }
++    })
+   }
+ 
+   async deleteFile(path: string): Promise<void> {
+-    await this.ensureInit()
+-    // Route through the overlay-aware FS so a base file is tombstoned
+-    // (whiteout), not silently resurrected by later hydration.
+-    await this.fs.rm(path, { force: true })
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.fs.rm(path, { force: true })
++    })
+   }
+ 
+   async glob(pattern: string): Promise<string[]> {
+@@ -287,32 +437,35 @@ export class SpaceDO extends DurableObject<Env> {
+   }
+ 
+   async mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
+-    await this.ensureInit()
+-    await this.fs.mkdir(path, opts)
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.fs.mkdir(path, opts)
++    })
+   }
+ 
+   async rm(path: string, opts?: { recursive?: boolean; force?: boolean }): Promise<void> {
+-    await this.ensureInit()
+-    // Route through the overlay-aware FS so base files are tombstoned.
+-    await this.fs.rm(path, opts)
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.fs.rm(path, opts)
++    })
+   }
+ 
+   async patch(diff: string): Promise<{ applied: string[]; failed: string[] }> {
+-    await this.ensureInit()
+-    const edits = parseUnifiedDiffToEdits(diff)
+-    const applied: string[] = []
+-    const failed: string[] = []
+-
+-    for (const edit of edits) {
+-      try {
+-        await this.fs.writeFile(edit.path, edit.content)
+-        applied.push(edit.path)
+-      } catch {
+-        failed.push(edit.path)
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      const edits = parseUnifiedDiffToEdits(diff)
++      const applied: string[] = []
++      const failed: string[] = []
++      for (const edit of edits) {
++        try {
++          await this.fs.writeFile(edit.path, edit.content)
++          applied.push(edit.path)
++        } catch {
++          failed.push(edit.path)
++        }
+       }
+-    }
+-
+-    return { applied, failed }
++      return { applied, failed }
++    })
+   }
+ 
+   /** Resolve the branch HEAD currently points at (best-effort). */
+@@ -331,6 +484,13 @@ export class SpaceDO extends DurableObject<Env> {
+   async gitCommitLocal(
+     message: string,
+     author?: { name: string; email: string }
++  ): Promise<{ sha: string; message: string }> {
++    return this.withWorkspaceOperation(() => this.gitCommitLocalUnlocked(message, author))
++  }
++
++  private async gitCommitLocalUnlocked(
++    message: string,
++    author?: { name: string; email: string }
+   ): Promise<{ sha: string; message: string }> {
+     await this.ensureInit()
+     // Persist pending overlay writes before the commit captures the tree.
+@@ -354,6 +514,14 @@ export class SpaceDO extends DurableObject<Env> {
+   async gitCommit(
+     message: string,
+     author?: { name: string; email: string }
++  ): Promise<{ sha: string; message: string }> {
++    return this.withWorkspaceOperation(() => this.gitCommitUnlocked(message, author))
++  }
++
++  private async gitCommitUnlocked(
++    message: string,
++    author?: { name: string; email: string },
++    pushAfterCommit = true,
+   ): Promise<{ sha: string; message: string }> {
+     await this.ensureInit()
+     // Staging walks the whole tree; ensure the Artifacts base is materialized
+@@ -374,12 +542,14 @@ export class SpaceDO extends DurableObject<Env> {
+       author: author ?? { name: "Agent", email: "agent@vibesdk.local" },
+     })
+ 
+-    this.ctx.waitUntil(
+-      (async () => {
+-        const branch = await this.currentBranch()
+-        if (branch) await this.backend.push(branch)
+-      })(),
+-    )
++    if (pushAfterCommit) {
++      this.ctx.waitUntil(
++        (async () => {
++          const branch = await this.currentBranch()
++          if (branch) await this.backend.push(branch)
++        })(),
++      )
++    }
+ 
+     return { sha: result.oid, message: result.message }
+   }
+@@ -395,13 +565,17 @@ export class SpaceDO extends DurableObject<Env> {
+   }
+ 
+   async gitCheckout(ref: string): Promise<void> {
+-    await this.ensureInit()
+-    await this.git.checkout({ ref })
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.git.checkout({ ref })
++    })
+   }
+ 
+   async gitBranch(opts?: { name?: string; list?: boolean; delete?: string }) {
+-    await this.ensureInit()
+-    return this.git.branch(opts)
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      return this.git.branch(opts)
++    })
+   }
+ 
+   async gitDiff(): Promise<Array<{ filepath: string; status: string }>> {
+@@ -466,6 +640,10 @@ export class SpaceDO extends DurableObject<Env> {
+    * preview rebuilds from the restored files.
+    */
+   async rollbackToCommit(branch: string, commitHash: string): Promise<unknown> {
++    return this.withWorkspaceOperation(() => this.rollbackToCommitUnlocked(branch, commitHash))
++  }
++
++  private async rollbackToCommitUnlocked(branch: string, commitHash: string): Promise<unknown> {
+     await this.ensureInit()
+     // Reads/walks the whole working tree below, so the Artifacts base must be
+     // fully materialized into the overlay first.
+@@ -514,16 +692,20 @@ export class SpaceDO extends DurableObject<Env> {
+ 
+     // Commit the restored tree (no-op if nothing changed) and redeploy.
+     try {
+-      await this.gitCommit(`rollback: restore ${target.oid.slice(0, 8)}`)
++      await this.gitCommitUnlocked(`rollback: restore ${target.oid.slice(0, 8)}`)
+     } catch {
+       // Clean tree (already at target) — proceed to redeploy existing HEAD.
+     }
+-    return this.deploy(branch)
++    return this.deployUnlocked(branch)
+   }
+ 
+   // ── Deploy RPC methods ──────────────────────────────────────────
+ 
+   async deploy(branch: string): Promise<unknown> {
++    return this.withWorkspaceOperation(() => this.deployUnlocked(branch))
++  }
++
++  private async deployUnlocked(branch: string): Promise<unknown> {
+     await this.ensureInit()
+     // The deploy engine reads the full branch tree, so ensure the Artifacts
+     // base is materialized into the overlay first.
+@@ -544,14 +726,183 @@ export class SpaceDO extends DurableObject<Env> {
+     const spaceName = this.ctx.id.name ?? "space"
+     data.preview_url = `/space/${spaceName}/preview/${encodeURIComponent(branch)}/`
+ 
+-    if (!data.error) await this.backend.push(branch)
++    if (!data.error && this.backend instanceof ArtifactsBackend) {
++      const pushed = await this.backend.push(branch)
++      if (!pushed) {
++        delete data.preview_url
++        data.error = `Artifacts push failed or was refused for branch "${branch}"`
++      }
++    }
+ 
+     return data
+   }
+ 
++  async preflightCommitDeploy(branch: string): Promise<
++    | { ok: true; [key: string]: unknown }
++    | { ok: false; phase: "preflight" | "commit" | "deploy"; error: string }
++  > {
++    return this.withWorkspaceOperation(async () => {
++      try {
++        // Validation is strictly read-only: a cold DO must not initialize,
++        // replay backend state, or mutate storage as a side effect of preflight.
++        this.assertInitializedForPreflight()
++        const current = await this.currentBranch()
++        if (current !== branch) {
++          throw new Error(`Current branch is "${current ?? "unknown"}", not requested branch "${branch}"`)
++        }
++
++        const snapshot = await this.readOnlyWorkspaceSnapshot()
++        const ctx: DeployContext = {
++          sql: this.ctx.storage.sql,
++          git: this.git,
++          fs: this.fs,
++          readWorkspaceSnapshot: async () => snapshot.files,
++        }
++        const bundle = await buildWorkspaceDeployment(ctx, branch)
++
++        let hasChanges: boolean
++        try {
++          hasChanges = await this.workspaceDiffersFromHead(snapshot.bytes)
++        } catch (error) {
++          return {
++            ok: false,
++            phase: "commit",
++            error: error instanceof Error ? error.message : String(error),
++          }
++        }
++
++        // Recheck the exact tree and branch last, immediately before commit.
++        // Workspace mutation RPCs are serialized behind this operation.
++        const snapshotAgain = await this.readOnlyWorkspaceSnapshot()
++        const currentAgain = await this.currentBranch()
++        if (currentAgain !== branch) {
++          throw new Error(`Current branch changed during preflight to "${currentAgain ?? "unknown"}"`)
++        }
++        if (!workspaceSnapshotsEqual(snapshotAgain, snapshot)) {
++          throw new Error("Workspace changed during preflight; nothing was committed or deployed")
++        }
++
++        let commitHash: string
++        try {
++          if (hasChanges) {
++            const commit = await this.gitCommitUnlocked("deploy: snapshot working tree", undefined, false)
++            commitHash = commit.sha
++          } else {
++            commitHash = (await resolveHead(this.fs, "HEAD")) ?? ""
++          }
++          if (!(await this.workspaceMatchesCommit(snapshot.bytes, commitHash))) {
++            return {
++              ok: false,
++              phase: "commit",
++              error: "Committed Git tree does not match the validated workspace snapshot; deployment refused",
++            }
++          }
++        } catch (error) {
++          return {
++            ok: false,
++            phase: "commit",
++            error: error instanceof Error ? error.message : String(error),
++          }
++        }
++
++        try {
++          // ArtifactsSync resolves true for both updated and already-current
++          // refs; false means a refusal or exhausted/failed push. SQL mode's
++          // push method is intentionally unsupported and therefore skipped.
++          if (this.backend instanceof ArtifactsBackend && !(await this.backend.push(branch))) {
++            return {
++              ok: false,
++              phase: "deploy",
++              error: `Artifacts push failed or was refused for branch "${branch}"`,
++            }
++          }
++          const result = persistDeploymentBundle(this.ctxForDeploy(), { ...bundle, commitHash })
++          const spaceName = this.ctx.id.name ?? "space"
++          result.preview_url = `/space/${spaceName}/preview/${encodeURIComponent(branch)}/`
++          return { ok: true, ...result }
++        } catch (error) {
++          return {
++            ok: false,
++            phase: "deploy",
++            error: error instanceof Error ? error.message : String(error),
++          }
++        }
++      } catch (error) {
++        return {
++          ok: false,
++          phase: "preflight",
++          error: error instanceof Error ? error.message : String(error),
++        }
++      }
++    })
++  }
++
++  private ctxForDeploy(): DeployContext {
++    return {
++      sql: this.ctx.storage.sql,
++      git: this.git,
++      fs: this.fs,
++    }
++  }
++
++  /** Compare a read-only snapshot with HEAD without invoking mutating git status. */
++  private async workspaceDiffersFromHead(bytesByPath: Record<string, Uint8Array>): Promise<boolean> {
++    const head = await resolveHead(this.fs, "HEAD")
++    if (!head) return Object.keys(bytesByPath).length > 0
++    return !(await this.workspaceMatchesCommit(bytesByPath, head))
++  }
++
++  /** Compare every validated path and byte against a specific committed tree. */
++  private async workspaceMatchesCommit(
++    bytesByPath: Record<string, Uint8Array>,
++    commitHash: string,
++  ): Promise<boolean> {
++    if (!commitHash) return false
++    const tree = await walkTreeFiles(this.fs, commitHash)
++    const committedPaths = [...tree.keys()].filter((path) => !isReservedPath(path))
++    if (committedPaths.length !== Object.keys(bytesByPath).length) return false
++
++    for (const absolutePath of committedPaths) {
++      const path = absolutePath.replace(/^\/+/, "")
++      if (!Object.prototype.hasOwnProperty.call(bytesByPath, path)) return false
++      const expected = bytesByPath[path]
++      const actual = await readBlobBytes(this.fs, tree.get(absolutePath)!.oid)
++      if (expected.length !== actual.length) return false
++      for (let i = 0; i < expected.length; i++) {
++        if (expected[i] !== actual[i]) return false
++      }
++    }
++    return true
++  }
++
++  /** Read-only validation retained for ThinkAgent's post-deploy evidence gate. */
++  async preflightDeploy(branch: string): Promise<{ ok: true }> {
++    return this.withWorkspaceOperation(async () => {
++      this.assertInitializedForPreflight()
++      const current = await this.currentBranch()
++      if (current !== branch) {
++        throw new Error(`Current branch is "${current ?? "unknown"}", not requested branch "${branch}"`)
++      }
++      const snapshot = await this.readOnlyWorkspaceSnapshot()
++      await buildWorkspaceDeployment(
++        {
++          ...this.ctxForDeploy(),
++          readWorkspaceSnapshot: async () => snapshot.files,
++        },
++        branch,
++      )
++      if (
++        (await this.currentBranch()) !== branch ||
++        !workspaceSnapshotsEqual(await this.readOnlyWorkspaceSnapshot(), snapshot)
++      ) {
++        throw new Error("Workspace changed during preflight validation")
++      }
++      return { ok: true }
++    })
++  }
++
+   async getDeploymentBundle(branch: string): Promise<BranchDeploymentBundle> {
+     await this.ensureInit()
+-    await this.materializeAll()
+     return buildBranchDeployment(
+       {
+         sql: this.ctx.storage.sql,
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index 6c25feecbdf0662fe57a45d5a8318adbc9fcda57..0f5fa921ac48f47b56110d28c199f3dd4d847922 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -26,6 +26,15 @@ import { signSpacePreviewToken } from 'worker/utils/spacePreviewToken';
+ import { AppService } from 'worker/database/services/AppService';
+ import { getConfigurationForModel } from '../../inferutils/core';
+ import type { ThinkAgentConfig } from '../../think/ThinkAgent';
++import {
++	createThinkTaskQueueIdentity,
++	driveThinkTaskOperation,
++	parseThinkOperationLimits,
++	type ThinkTaskLifecycle,
++	type ThinkTaskOperation,
++	type ThinkPendingChatRecovery,
++} from '../../think/finish-task-tool';
++import { THINK_INTERNAL_CONTINUATION_PREFIX } from '../../think/context-selector';
+ import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
+ import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
+ import type { BranchDeploymentBundle } from '@space-do/space';
+@@ -42,6 +51,14 @@ import { InFlightLock, isCommitRevision } from '../../../services/deployer/platf
+ type ThinkAgentStub = {
+ 	configureVibe: (config: ThinkAgentConfig) => Promise<void>;
+ 	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
++	beginTask: (taskId: string, candidateConversationId: string) => Promise<ThinkTaskOperation>;
++	getTaskLifecycle: () => Promise<ThinkTaskLifecycle>;
++	getTaskOperation: () => Promise<ThinkTaskOperation | undefined>;
++	advanceTaskOperation: () => Promise<ThinkTaskOperation>;
++	markTaskChatStarted: () => Promise<ThinkTaskOperation>;
++	markTaskChatResolved: () => Promise<ThinkTaskOperation>;
++	recoverPendingTaskChat: (prompt: string) => Promise<ThinkPendingChatRecovery>;
++	stopTask: (status: ThinkTaskLifecycle['status'], summary: string, reason?: string) => Promise<void>;
+ 	getMessages: () => Promise<UIMessage[]>;
+ 	clearMessages: () => Promise<void>;
+ };
+@@ -84,6 +101,7 @@ class ThinkStreamForwarder extends RpcTarget {
+ 	constructor(
+ 		private readonly onChunkJson: (json: string) => void | Promise<void>,
+ 		private readonly onErrorCb: (message: string) => void,
++		private readonly onDoneCb: () => Promise<void>,
+ 	) {
+ 		super();
+ 	}
+@@ -91,13 +109,17 @@ class ThinkStreamForwarder extends RpcTarget {
+ 	async onEvent(json: string): Promise<void> {
+ 		await this.onChunkJson(json);
+ 	}
+-	onDone(): void {}
++	async onDone(): Promise<void> {
++		await this.onDoneCb();
++	}
+ 	onError(error: string): void {
+ 		this.onErrorCb(error);
+ 	}
+ 	onInterrupted(): void {}
+ }
+ 
++type ThinkStateWithQueueIds = ThinkState & { thinkPendingOperationIds?: string[] };
++
+ /**
+  * ThinkCodingBehavior — agentic coding harness built on `@cloudflare/think`.
+  *
+@@ -282,6 +304,19 @@ export class ThinkCodingBehavior
+ 			systemPrompt: this.buildSystemPrompt(modelName, aiModelConfig.provider),
+ 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
+ 		};
++		const operationLimitEnv = this.env as unknown as Record<string, unknown>;
++		try {
++			const operationLimits = parseThinkOperationLimits({
++				maxContinuations: operationLimitEnv.THINK_OPERATION_MAX_CONTINUATIONS,
++				maxModelCalls: operationLimitEnv.THINK_OPERATION_MAX_MODEL_CALLS,
++				maxToolCalls: operationLimitEnv.THINK_OPERATION_MAX_TOOL_CALLS,
++				maxElapsedMs: operationLimitEnv.THINK_OPERATION_MAX_ELAPSED_MS,
++				maxCredits: operationLimitEnv.THINK_OPERATION_MAX_CREDITS,
++			});
++			if (Object.keys(operationLimits).length > 0) config.operationLimits = operationLimits;
++		} catch (error) {
++			this.logger.warn('Ignoring invalid Think operation-limit environment configuration', error);
++		}
+ 
+ 		try {
+ 			const stub = await this.getThinkStub();
+@@ -328,6 +363,9 @@ export class ThinkCodingBehavior
+ 			'3. If the deploy reports build errors or the console shows errors, fix the code and repeat from step 1 until the deploy succeeds and the console is clean.',
+ 			'A building turn should finish with a successful `deploy_space` and a clean `get_browser_console_logs` check.',
+ 			'',
++			'## Task lifecycle',
++			'At the end of every model pass, call `finish_task` with exactly one status: RUNNING, COMPLETE, BLOCKED, USER_INPUT_REQUIRED, or INCOMPLETE_RESOURCE_LIMIT. Use COMPLETE only after preflight passed, deploy succeeded, the deployed commit matches the clean current branch HEAD, and browser logs verified that exact preview revision; the platform checks each operation record independently. If more work remains, report RUNNING and make concrete progress. Do not report completion merely because the response budget is nearly exhausted.',
++			'',
+ 			'## Commits & restore points',
+ 			'Each commit is a restore point the user can roll back to, and YOU decide when to create them. Use the `commit` tool to snapshot a coherent unit of work with a short, descriptive message (e.g. before a risky refactor, or after finishing a feature). You do not need to `commit` right before `deploy_space` — deploying already commits. Do not commit after every tiny edit; group related changes into meaningful restore points.',
+ 		].join('\n');
+@@ -447,7 +485,14 @@ export class ThinkCodingBehavior
+ 				images.map((image) => uploadImage(this.env, image, ImageType.UPLOADS)),
+ 			);
+ 		}
+-		await this.queueUserRequest(userMessage, processedImages);
++		const queueIds = this.getPendingTaskQueueIds();
++		this.setThinkPendingInputs(
++			[...this.state.pendingUserInputs, userMessage],
++			[...queueIds, IdGenerator.generateConversationId()],
++		);
++		if (processedImages && processedImages.length > 0) {
++			this.pendingUserImages = [...this.pendingUserImages, ...processedImages];
++		}
+ 
+ 		if (this.isCodeGenerating()) {
+ 			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+@@ -466,16 +511,20 @@ export class ThinkCodingBehavior
+ 	/** Main loop: drain pendingUserInputs by driving the ThinkAgent. */
+ 	async build(): Promise<void> {
+ 		if (!this.isMVPGenerated() && this.state.query && this.state.pendingUserInputs.length === 0) {
+-			this.setState({ ...this.state, pendingUserInputs: [this.state.query] });
++			this.setThinkPendingInputs([this.state.query], [IdGenerator.generateConversationId()]);
+ 		}
+ 
+ 		while (this.state.pendingUserInputs.length > 0) {
+-			const pending = this.state.pendingUserInputs.slice();
+-			this.setState({ ...this.state, pendingUserInputs: [] });
+-
+-			const compiled = pending.join('\n');
++			// Each durable queue item has one stable Think operation identity.
++			// Processing one item at a time keeps later submissions from changing
++			// the id/prompt of a chat that may be recovered after a worker restart.
++			const pending = this.state.pendingUserInputs.slice(0, 1);
++			const queueIds = this.getPendingTaskQueueIds();
++			const taskId = createThinkTaskQueueIdentity(queueIds.slice(0, pending.length));
++
++			const compiled = pending[0];
+ 			try {
+-				await this.runPrompt(compiled);
++				await this.runPrompt(compiled, taskId);
+ 			} catch (e) {
+ 				this.logger.error('Think prompt failed', e);
+ 				this.broadcast(WebSocketMessageResponses.ERROR, {
+@@ -484,6 +533,15 @@ export class ThinkCodingBehavior
+ 				break;
+ 			}
+ 
++			// Keep the durable host queue populated until the Think task has
++			// reached a terminal lifecycle state. If this behavior is reconstructed
++			// while a DO call is in flight, build() can safely retry the same input
++			// and ThinkAgent.beginTask() resumes its persisted operation identity.
++			this.setThinkPendingInputs(
++				this.state.pendingUserInputs.slice(pending.length),
++				this.getPendingTaskQueueIds().slice(pending.length),
++			);
++
+ 			if (!this.isMVPGenerated()) {
+ 				this.setMVPGenerated();
+ 			}
+@@ -498,15 +556,19 @@ export class ThinkCodingBehavior
+ 	 * Submit a prompt to the ThinkAgent and translate its streamed
+ 	 * `UIMessageChunk`s into VibeSDK WebSocket events.
+ 	 */
+-	private async runPrompt(text: string): Promise<void> {
+-		const conversationId = IdGenerator.generateConversationId();
++	private async runPrompt(text: string, taskId: string): Promise<void> {
++		const stub = await this.getThinkStub();
++		const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId());
++		const initialLifecycle = await stub.getTaskLifecycle();
++		if (initialLifecycle.status !== 'RUNNING') return;
++		const conversationId = operation.conversationId;
+ 		this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+ 			message: '',
+ 			conversationId,
+ 			isStreaming: true,
+ 		});
+ 
+-		const accumulated = { text: '' };
++		const accumulated = { text: '', bufferText: false, bufferedText: '' };
+ 		const seenWrittenFiles = new Set<string>();
+ 		const toolNames = new Map<string, string>();
+ 		const toolInputs = new Map<string, Record<string, unknown>>();
+@@ -522,11 +584,29 @@ export class ThinkCodingBehavior
+ 				return this.translateChunk(chunk, conversationId, accumulated, seenWrittenFiles, toolNames, toolInputs);
+ 			},
+ 			(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err }),
++			async () => { await stub.markTaskChatResolved(); },
+ 		);
+ 
+-		const stub = await this.getThinkStub();
+ 		try {
+-			await stub.chat(text, forwarder);
++			await driveThinkTaskOperation({
++				stub,
++				initialOperation: operation,
++				initialPrompt: text,
++				continuationPrompt: (summary) => this.buildContinuationPrompt(summary),
++				chat: (prompt) => stub.chat(prompt, forwarder),
++				onPassStart: (kind) => {
++					accumulated.bufferText = kind === 'CONTINUATION';
++					accumulated.bufferedText = '';
++				},
++				onPassEnd: (decision) => {
++					if (decision === 'CONTINUE') {
++						accumulated.bufferText = false;
++						accumulated.bufferedText = '';
++					} else {
++						this.flushThinkText(accumulated, conversationId);
++					}
++				},
++			});
+ 		} finally {
+ 			this.broadcast(WebSocketMessageResponses.USAGE_UPDATED, {
+ 				message: 'Usage data updated',
+@@ -548,10 +628,58 @@ export class ThinkCodingBehavior
+ 		}
+ 	}
+ 
++	private flushThinkText(
++		accumulated: { text: string; bufferText: boolean; bufferedText: string },
++		conversationId: string,
++	): void {
++		if (!accumulated.bufferedText) {
++			accumulated.bufferText = false;
++			return;
++		}
++		const text = accumulated.bufferedText.replaceAll(THINK_INTERNAL_CONTINUATION_PREFIX, '').trim();
++		accumulated.bufferedText = '';
++		accumulated.bufferText = false;
++		if (!text) return;
++		accumulated.text += text;
++		this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
++			message: text,
++			conversationId,
++			isStreaming: true,
++			isDelta: true,
++		});
++	}
++
++	private buildContinuationPrompt(message: string): string {
++		return [
++			THINK_INTERNAL_CONTINUATION_PREFIX,
++			`${message} Make concrete progress without repeating completed work. Verify recent changes, then call finish_task with an accurate structured status and summary.`,
++		].join('\n');
++	}
++
++	private getPendingTaskQueueIds(): string[] {
++		const state = this.state as ThinkStateWithQueueIds;
++		const ids = (state.thinkPendingOperationIds ?? []).slice(0, this.state.pendingUserInputs.length);
++		while (ids.length < this.state.pendingUserInputs.length) {
++			ids.push(IdGenerator.generateConversationId());
++		}
++		if (ids.length !== (state.thinkPendingOperationIds ?? []).length) {
++			this.setState({ ...this.state, thinkPendingOperationIds: ids } as ThinkState);
++		}
++		return ids;
++	}
++
++	private setThinkPendingInputs(inputs: string[], queueIds: string[]): void {
++		this.setState({
++			...this.state,
++			pendingUserInputs: inputs,
++			thinkPendingOperationIds: queueIds.slice(0, inputs.length),
++		} as ThinkState);
++	}
++
+ 	private async translateChunk(
+ 		chunk: ThinkChunk,
+ 		conversationId: string,
+-		accumulated: { text: string },
++		accumulated: { text: string; bufferText: boolean; bufferedText: string },
+ 		seenWrittenFiles: Set<string>,
+ 		toolNames: Map<string, string>,
+ 		toolInputs: Map<string, Record<string, unknown>>,
+@@ -560,6 +688,10 @@ export class ThinkCodingBehavior
+ 			case 'text-delta': {
+ 				const delta = (chunk as { delta?: string }).delta;
+ 				if (typeof delta === 'string' && delta.length > 0) {
++					if (accumulated.bufferText) {
++						accumulated.bufferedText += delta;
++						return;
++					}
+ 					accumulated.text += delta;
+ 					this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+ 						message: delta,
+diff --git a/worker/agents/core/conversation/MessageLoader.test.ts b/worker/agents/core/conversation/MessageLoader.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..20b0fa0d609c7476bcdaa23175518499c119fae0
+--- /dev/null
++++ b/worker/agents/core/conversation/MessageLoader.test.ts
+@@ -0,0 +1,66 @@
++import type { UIMessage } from 'ai';
++import { describe, expect, it } from 'vitest';
++import { ThinkMessageLoader } from './MessageLoader';
++
++describe('ThinkMessageLoader', () => {
++	it('does not expose programmatic continuation instructions in loaded chat history', async () => {
++		const messages = [
++			{
++				id: 'request',
++				role: 'user',
++				parts: [{ type: 'text', text: 'Build a dashboard' }],
++			},
++			{
++				id: 'continuation',
++				role: 'user',
++				parts: [{ type: 'text', text: '__THINK_INTERNAL_CONTINUATION__:\nContinue the same task.' }],
++			},
++		] as UIMessage[];
++		const loader = new ThinkMessageLoader(async () => ({
++			getMessages: async () => messages,
++			clearMessages: async () => {},
++		}));
++
++		const state = await loader.load();
++
++		expect(state.fullHistory).toEqual([
++			{ role: 'user', content: 'Build a dashboard', conversationId: 'request' },
++		]);
++	});
++
++	it('hides text from intermediate continuation wrap-ups but keeps final text and live-visible progress', async () => {
++		const messages = [
++			{ id: 'request', role: 'user', parts: [{ type: 'text', text: 'Build a dashboard' }] },
++			{ id: 'continuation-1', role: 'user', parts: [{ type: 'text', text: '__THINK_INTERNAL_CONTINUATION__: Continue.' }] },
++			{
++				id: 'intermediate',
++				role: 'assistant',
++				parts: [
++					{ type: 'text', text: 'Hidden forced wrap-up text.' },
++					{ type: 'reasoning', text: 'Reasoning streamed live.' },
++				],
++			},
++			{ id: 'continuation-2', role: 'user', parts: [{ type: 'text', text: '__THINK_INTERNAL_CONTINUATION__: Continue again.' }] },
++			{ id: 'final', role: 'assistant', parts: [{ type: 'text', text: 'Final user-facing result.' }] },
++		] as UIMessage[];
++		const loader = new ThinkMessageLoader(async () => ({
++			getMessages: async () => messages,
++			clearMessages: async () => {},
++		}));
++
++		const state = await loader.load();
++
++		expect(state.fullHistory.some((message) =>
++			typeof message.content === 'string' && message.content.includes('Hidden forced wrap-up text.'),
++		)).toBe(false);
++		expect(state.fullHistory).toContainEqual(expect.objectContaining({
++			role: 'assistant',
++			content: '',
++			reasoning: 'Reasoning streamed live.',
++		}));
++		expect(state.fullHistory).toContainEqual(expect.objectContaining({
++			role: 'assistant',
++			content: 'Final user-facing result.',
++		}));
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/core/conversation/MessageLoader.ts b/worker/agents/core/conversation/MessageLoader.ts
+index 3b79deb8c5ca7907c3eff0cc9fb61bfc76562bca..2bd87efc8a3f56514e0350437aea8f226e8d633f 100644
+--- a/worker/agents/core/conversation/MessageLoader.ts
++++ b/worker/agents/core/conversation/MessageLoader.ts
+@@ -13,6 +13,7 @@
+  */
+ import type { ConversationMessage, ConversationState, ToolCall } from '../../inferutils/common';
+ import type { UIMessage } from 'ai';
++import { THINK_INTERNAL_CONTINUATION_PREFIX } from '../../think/context-selector';
+ 
+ export abstract class ConversationMessageLoader {
+ 	abstract load(): Promise<ConversationState>;
+@@ -58,6 +59,40 @@ interface ThinkAgentLike {
+ 	clearMessages(): Promise<void> | void;
+ }
+ 
++function isInternalContinuationMessage(message: UIMessage): boolean {
++	return message.role === 'user' && collectText(message).startsWith(THINK_INTERNAL_CONTINUATION_PREFIX);
++}
++
++/**
++ * Live streaming withholds assistant text from a continuation pass when another
++ * pass follows. Think persists the streamed UIMessage regardless, so remove
++ * that intermediate text on reload. Keep reasoning and tool parts, which are
++ * still emitted live as progress events; retain text from the final pass.
++ */
++export function hideIntermediateThinkWrapUpText(messages: UIMessage[]): UIMessage[] {
++	const hiddenTextMessageIndices = new Set<number>();
++	for (let index = 0; index < messages.length; index++) {
++		if (!isInternalContinuationMessage(messages[index])) continue;
++		let nextUserIndex = -1;
++		for (let candidate = index + 1; candidate < messages.length; candidate++) {
++			if (messages[candidate].role === 'user') {
++				nextUserIndex = candidate;
++				break;
++			}
++		}
++		if (nextUserIndex < 0 || !isInternalContinuationMessage(messages[nextUserIndex])) continue;
++		for (let candidate = index + 1; candidate < nextUserIndex; candidate++) {
++			if (messages[candidate].role === 'assistant') hiddenTextMessageIndices.add(candidate);
++		}
++	}
++
++	return messages.flatMap((message, index) => {
++		if (!hiddenTextMessageIndices.has(index)) return [message];
++		const parts = message.parts.filter((part) => part.type !== 'text');
++		return parts.length > 0 ? [{ ...message, parts }] : [];
++	});
++}
++
+ /**
+  * Reads chat history from `ThinkAgent.getMessages()` and expands each AI-SDK
+  * `UIMessage` into one or more VibeSDK `ConversationMessage` entries, matching
+@@ -84,7 +119,8 @@ export class ThinkMessageLoader extends ConversationMessageLoader {
+ 		} catch {
+ 			messages = [];
+ 		}
+-		const history = messages.flatMap((m) => uiMessageToConversations(m));
++		const visibleMessages = hideIntermediateThinkWrapUpText(messages);
++		const history = visibleMessages.flatMap((m) => uiMessageToConversations(m));
+ 		return { id: 'default', runningHistory: history, fullHistory: history };
+ 	}
+ 
+@@ -156,6 +192,7 @@ function toolReplyContent(part: AnyUIPart): string | null {
+ function uiMessageToConversations(message: UIMessage): ConversationMessage[] {
+ 	if (message.role === 'user') {
+ 		const text = collectText(message);
++		if (text.startsWith(THINK_INTERNAL_CONTINUATION_PREFIX)) return [];
+ 		return text ? [{ role: 'user', content: text, conversationId: message.id }] : [];
+ 	}
+ 	if (message.role !== 'assistant') return [];
+diff --git a/worker/agents/think/ThinkAgent.browser-evidence.test.ts b/worker/agents/think/ThinkAgent.browser-evidence.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..28ad750f68835618ecc536a144bce18c524ea896
+--- /dev/null
++++ b/worker/agents/think/ThinkAgent.browser-evidence.test.ts
+@@ -0,0 +1,61 @@
++import { describe, expect, it } from 'vitest';
++import { isThinkBrowserCaptureClean } from './browser-evidence';
++
++const configuredUrl = 'https://preview.example/space/app/preview/main/?token=signed';
++
++function capture(overrides: Record<string, unknown> = {}) {
++	return {
++		url: configuredUrl,
++		final_url: 'https://preview.example/space/app/preview/main/',
++		truncated: false,
++		logs: [{ level: 'info', text: 'App loaded.' }],
++		page_errors: [],
++		request_failures: [],
++		totals: { logs: 1, page_errors: 0, request_failures: 0 },
++		...overrides,
++	};
++}
++
++describe('Think browser evidence integrity', () => {
++	it('accepts the exact signed request when the final navigation stays on the same protocol, origin, and path', () => {
++		expect(isThinkBrowserCaptureClean(capture(), configuredUrl)).toBe(true);
++	});
++
++	it.each([
++		['different origin', 'https://attacker.example/space/app/preview/main/'],
++		['different protocol', 'http://preview.example/space/app/preview/main/'],
++		['different path', 'https://preview.example/space/app/preview/staging/'],
++	])('rejects a final navigation with a %s', (_label, finalUrl) => {
++		expect(isThinkBrowserCaptureClean(capture({ final_url: finalUrl }), configuredUrl)).toBe(false);
++	});
++
++	it('rejects truncated diagnostics even when the returned arrays contain no errors', () => {
++		expect(isThinkBrowserCaptureClean(capture({
++			truncated: true,
++			totals: { logs: 100, page_errors: 0, request_failures: 0 },
++		}), configuredUrl)).toBe(false);
++	});
++
++	it('rejects full error counts even when capped diagnostic arrays are empty', () => {
++		expect(isThinkBrowserCaptureClean(capture({
++			page_errors: [],
++			totals: { logs: 1, page_errors: 2, request_failures: 0 },
++		}), configuredUrl)).toBe(false);
++		expect(isThinkBrowserCaptureClean(capture({
++			request_failures: [],
++			totals: { logs: 1, page_errors: 0, request_failures: 1 },
++		}), configuredUrl)).toBe(false);
++	});
++
++	it('rejects console errors, mismatched signed request URLs, and missing full-count evidence', () => {
++		expect(isThinkBrowserCaptureClean(capture({
++			logs: [{ level: 'error', text: 'Runtime error.' }],
++			totals: { logs: 1, page_errors: 0, request_failures: 0 },
++		}), configuredUrl)).toBe(false);
++		expect(isThinkBrowserCaptureClean(capture({
++			url: 'https://preview.example/space/app/preview/main/?token=other',
++		}), configuredUrl)).toBe(false);
++		expect(isThinkBrowserCaptureClean(capture({ totals: undefined }), configuredUrl)).toBe(false);
++		expect(isThinkBrowserCaptureClean(capture({ final_url: undefined }), configuredUrl)).toBe(false);
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/ThinkAgent.ts b/worker/agents/think/ThinkAgent.ts
+index b97ec557086079277f50514316d0168616f406f2..d400dc4f11fbba68ed4fbf45bf7d6dfd908edd4b 100644
+--- a/worker/agents/think/ThinkAgent.ts
++++ b/worker/agents/think/ThinkAgent.ts
+@@ -12,15 +12,41 @@ import {
+ 	createDeleteTool,
+ } from '@cloudflare/think/tools/workspace';
+ import type { SkillSource } from 'agents/skills';
+-import { createSpaceWorkspaceOps, type SpaceWorkspaceStub } from './space-workspace-ops';
++import { createSpaceWorkspaceOps, withDurableObjectResetRetry, type SpaceWorkspaceStub } from './space-workspace-ops';
+ import { selectSystemPrompt, PROMPT_MAX_STEPS } from './prompts';
+ import { createThinkSkillSource } from './skills';
+ import { createAskQuestionsTool } from './ask-questions-tool';
+ import { createBrowserConsoleLogsTool } from './browser-logs-tool';
++import { isThinkBrowserCaptureClean } from './browser-evidence';
+ import { createDeploySpaceTool } from './deploy-tool';
+ import { createCommitTool } from './commit-tool';
+ import { createSetTitleTool } from './set-title-tool';
+ import { selectThinkContextMessages } from './context-selector';
++import {
++	advanceThinkTaskOperation,
++	createFinishTaskTool,
++	createThinkTaskOperation,
++	createThinkOperationFingerprint,
++	createThinkDiscoveryFingerprint,
++	recordThinkDiscoveryOperation,
++	classifyThinkPendingChatRecovery,
++	markThinkTaskChatResolved,
++	markThinkTaskChatStarted,
++	recordThinkOperation,
++	resolveThinkTaskStart,
++	reserveThinkTaskResource,
++	recoverThinkTaskOperation,
++	readThinkCurrentRevisionEvidence,
++	sameSignedPreviewUrl,
++	type ThinkTaskEvidence,
++	type ThinkTaskLifecycle,
++	type ThinkTaskOperation,
++	type ThinkTaskStatus,
++	type ThinkPendingChatRecovery,
++	type ThinkRevisionRpcName,
++	type ThinkOperationLimits,
++	type ThinkResourceLimitReason,
++} from './finish-task-tool';
+ import { getUserConfigurableSettings } from '../../config';
+ import { RateLimitService } from '../../services/rate-limit/rateLimits';
+ import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
+@@ -64,6 +90,8 @@ export interface ThinkAgentConfig {
+ 	 * as the default target for the `get_browser_console_logs` tool.
+ 	 */
+ 	previewUrl?: string;
++	/** Per-task cumulative caps, snapshotted into the durable operation at start. */
++	operationLimits?: Partial<ThinkOperationLimits>;
+ }
+ 
+ const DEFAULT_SYSTEM_PROMPT =
+@@ -170,6 +198,458 @@ export class ThinkAgent extends Think<Env> {
+ 	 */
+ 	private readonly thoughtSignatures = new Map<string, string>();
+ 	private turnUsage: { config: RateLimitSettings; hasCloudflareConfigured: boolean } | null = null;
++	private readonly taskLifecycleKey = 'think_task_lifecycle';
++	private readonly taskEvidenceKey = 'think_task_evidence';
++	private readonly taskOperationKey = 'think_task_operation';
++	private readonly taskForcedStatusKey = 'think_task_forced_status';
++	private readonly taskStartIntentKey = 'think_task_start_intent';
++
++	private async getTaskEvidence(): Promise<ThinkTaskEvidence> {
++		return this.ctx.storage.kv.get<ThinkTaskEvidence>(this.taskEvidenceKey) ?? {
++			preflightSucceeded: false,
++			deploySucceeded: false,
++			deployedCommitHash: null,
++			headCommitHash: null,
++			headBranch: null,
++			workingTreeClean: false,
++			previewCommitHash: null,
++			previewBranch: null,
++			browserClean: false,
++			browserCommitHash: null,
++			browserBranch: null,
++			browserPreviewUrl: null,
++			configuredPreviewUrl: this.getConfig<ThinkAgentConfig>()?.previewUrl ?? null,
++			deployedPreviewUrl: null,
++			deployedBranch: null,
++		};
++	}
++
++	private async saveTaskEvidence(patch: Partial<ThinkTaskEvidence>): Promise<void> {
++		const evidence = { ...(await this.getTaskEvidence()), ...patch };
++		this.ctx.storage.kv.put(this.taskEvidenceKey, evidence);
++	}
++
++	private async saveTaskLifecycle(lifecycle: ThinkTaskLifecycle): Promise<void> {
++		this.ctx.storage.kv.put(this.taskLifecycleKey, lifecycle);
++	}
++
++	private resourceLimitSummary(reason: ThinkResourceLimitReason, operation: ThinkTaskOperation): string {
++		switch (reason) {
++			case 'model_call_limit':
++				return `Think stopped before another model request because the configured cumulative limit of ${operation.limits.maxModelCalls} model calls was reached.`;
++			case 'tool_call_limit':
++				return `Think stopped before another tool execution because the configured cumulative limit of ${operation.limits.maxToolCalls} tool calls was reached.`;
++			case 'elapsed_time_limit':
++				return `Think stopped because the configured elapsed-time limit of ${operation.limits.maxElapsedMs} ms was reached.`;
++			case 'credit_limit':
++				return `Think stopped before another model request because the configured cumulative credit limit of ${operation.limits.maxCredits} credits would be exceeded.`;
++			case 'available_credits_limit':
++				return 'Think stopped before another model request because the available metered credits are insufficient for that request.';
++		}
++	}
++
++	private stopForResourceLimit(reason: ThinkResourceLimitReason, operation: ThinkTaskOperation): void {
++		const summary = this.resourceLimitSummary(reason, operation);
++		const lifecycle: ThinkTaskLifecycle = {
++			status: 'INCOMPLETE_RESOURCE_LIMIT',
++			summary,
++			reason,
++			updatedAt: Date.now(),
++		};
++		this.ctx.storage.kv.put(this.taskForcedStatusKey, 'INCOMPLETE_RESOURCE_LIMIT');
++		this.ctx.storage.kv.put(this.taskLifecycleKey, lifecycle);
++	}
++
++	private async refreshMeteredCredits(operation: ThinkTaskOperation): Promise<ThinkTaskOperation> {
++		const usage = this.turnUsage;
++		const config = this.getConfig<ThinkAgentConfig>();
++		if (!usage || !config) return operation;
++		const llmConfig = usage.config.llmCalls;
++		const metered = !(usage.hasCloudflareConfigured && llmConfig.excludeCloudflareConnected);
++		if (!metered) {
++			if (operation.meteredCreditsInitialized) return operation;
++			return { ...operation, meteredCreditsInitialized: true, availableMeteredCredits: null };
++		}
++		try {
++			const { remaining } = await RateLimitService.getRemainingCredits(this.env, usage.config, config.userId);
++			const latest = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey) ?? operation;
++			const previousAvailable = latest.meteredCreditsInitialized
++				? latest.availableMeteredCredits
++				: null;
++			return {
++				...latest,
++				meteredCreditsInitialized: true,
++				availableMeteredCredits: previousAvailable === null
++					? remaining
++					: Math.min(previousAvailable, remaining),
++			};
++		} catch {
++			return operation;
++		}
++	}
++
++	private async reserveOperationResource(
++		resource: 'model' | 'tool' | 'checkpoint',
++	): Promise<void> {
++		let operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++		if (!operation) return;
++		if (resource === 'model') operation = await this.refreshMeteredCredits(operation);
++		const now = Date.now();
++		const reservation = reserveThinkTaskResource(
++			operation,
++			resource,
++			now,
++			resource === 'model' ? THINK_MODEL_CONFIG.creditCost : 0,
++		);
++		if (reservation.limitExceeded) {
++			this.ctx.storage.kv.put(this.taskOperationKey, reservation.operation);
++			this.stopForResourceLimit(reservation.limitExceeded, reservation.operation);
++			throw new Error(`Think operation stopped: ${reservation.limitExceeded}`);
++		}
++		this.ctx.storage.kv.put(this.taskOperationKey, reservation.operation);
++	}
++
++	private async recordOperationFingerprint(fingerprint: string): Promise<void> {
++		const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++		if (!operation) return;
++		this.ctx.storage.kv.put(
++			this.taskOperationKey,
++			recordThinkOperation(operation, fingerprint),
++		);
++	}
++
++	private async recordDiscoveryOperationFingerprint(
++		discoveryFingerprint: string,
++		operationFingerprint: string,
++	): Promise<void> {
++		const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++		if (!operation) return;
++		this.ctx.storage.kv.put(
++			this.taskOperationKey,
++			recordThinkDiscoveryOperation(operation, discoveryFingerprint, operationFingerprint),
++		);
++	}
++
++	private trackTool<T>(
++		target: T,
++		onOutput?: (output: unknown, input: unknown) => Promise<void>,
++	): T {
++		const execute = (target as { execute?: (...args: never[]) => unknown }).execute;
++		if (!execute) return target;
++		return {
++			...(target as object),
++			execute: async (input: unknown, options: unknown) => {
++				await this.reserveOperationResource('tool');
++				const output = await Reflect.apply(execute, target, [input, options]);
++				await onOutput?.(output, input);
++				return output;
++			},
++		} as T;
++	}
++
++	private parseToolOutput(output: unknown): Record<string, unknown> | undefined {
++		if (output && typeof output === 'object') return output as Record<string, unknown>;
++		if (typeof output !== 'string') return undefined;
++		try {
++			const parsed = JSON.parse(output) as unknown;
++			return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : undefined;
++		} catch {
++			return undefined;
++		}
++	}
++
++	private getRevisionStub(): SpaceWorkspaceStub & {
++		gitLog: (limit?: number) => Promise<Array<{ oid: string }>>;
++		gitBranch: (opts?: { list?: boolean }) => Promise<unknown>;
++		getDeployment: (branch: string) => Promise<unknown>;
++	} {
++		return this.getSpaceStub() as SpaceWorkspaceStub & {
++			gitLog: (limit?: number) => Promise<Array<{ oid: string }>>;
++			gitBranch: (opts?: { list?: boolean }) => Promise<unknown>;
++			getDeployment: (branch: string) => Promise<unknown>;
++		};
++	}
++
++	private async readCurrentRevisionEvidence(branch: string) {
++		const getStub = () => this.getRevisionStub();
++		const read = (method: ThinkRevisionRpcName, argument?: unknown): Promise<unknown> =>
++			withDurableObjectResetRetry(getStub, (stub) => {
++				switch (method) {
++					case 'gitStatus':
++						return stub.gitStatus();
++					case 'gitLog':
++						return stub.gitLog(argument as number);
++					case 'gitBranch':
++						return stub.gitBranch(argument as { list?: boolean });
++					case 'getDeployment':
++						return stub.getDeployment(argument as string);
++				}
++			});
++		return readThinkCurrentRevisionEvidence(read, branch);
++	}
++
++	private async refreshTaskEvidence(): Promise<ThinkTaskEvidence> {
++		const evidence = await this.getTaskEvidence();
++		if (!evidence.deployedBranch || !evidence.deployedCommitHash) return evidence;
++		try {
++			const current = await this.readCurrentRevisionEvidence(evidence.deployedBranch);
++			const { workspaceStatusFingerprint: _statusFingerprint, ...taskEvidence } = current;
++			await this.saveTaskEvidence(taskEvidence);
++		} catch {
++			await this.saveTaskEvidence({
++				headCommitHash: null,
++				headBranch: null,
++				workingTreeClean: false,
++				previewCommitHash: null,
++				previewBranch: null,
++			});
++		}
++		return this.getTaskEvidence();
++	}
++
++	private async recordWorkspaceOperation(name: string, input: unknown, output: unknown): Promise<void> {
++		const args = input && typeof input === 'object' ? input as Record<string, unknown> : {};
++		const path = [args.path, args.filePath, args.file].find((value) => typeof value === 'string') as string | undefined;
++		const outputRecord = this.parseToolOutput(output);
++		if (outputRecord?.error) return;
++		let fileState = 'not-applicable';
++		let contentFingerprint: string | null = null;
++		if (path && ['read', 'write', 'edit', 'delete'].includes(name)) {
++			try {
++				const stub = this.getSpaceStub();
++				if (name === 'delete') {
++					fileState = (await stub.stat(path)) === null ? 'absent' : 'present';
++				} else {
++					const contents = await stub.readFile(path);
++					fileState = 'present';
++					contentFingerprint = createThinkOperationFingerprint('file-content', contents);
++				}
++			} catch {
++				fileState = 'unavailable';
++			}
++		}
++		const branch = (await this.getTaskEvidence()).deployedBranch ?? 'main';
++		let current: Awaited<ReturnType<ThinkAgent['readCurrentRevisionEvidence']>> | undefined;
++		try {
++			current = await this.readCurrentRevisionEvidence(branch);
++		} catch {
++			current = undefined;
++		}
++		const discoveryFingerprint = ['read', 'list', 'find', 'grep'].includes(name) && current
++			? createThinkDiscoveryFingerprint({
++					toolName: name,
++					query: args,
++					result: output,
++					workspaceRevision: current.headCommitHash,
++					workspaceStatusFingerprint: current.workspaceStatusFingerprint,
++				})
++			: null;
++		const operationFingerprint = createThinkOperationFingerprint('workspace-operation', {
++			path,
++			fileState,
++			contentFingerprint,
++			headCommitHash: current?.headCommitHash ?? null,
++			workingTreeClean: current?.workingTreeClean ?? false,
++			workspaceStatusFingerprint: current?.workspaceStatusFingerprint ?? 'unknown',
++			discoveryFingerprint,
++		});
++		if (discoveryFingerprint) {
++			await this.recordDiscoveryOperationFingerprint(discoveryFingerprint, operationFingerprint);
++		} else {
++			await this.recordOperationFingerprint(operationFingerprint);
++		}
++	}
++
++	private bindBrowserToPreview<T>(target: T, configuredPreviewUrl?: string): T {
++		const execute = (target as { execute?: (...args: never[]) => unknown }).execute;
++		if (!execute) return target;
++		return {
++			...(target as object),
++			execute: async (input: unknown, options: unknown) => {
++				if (!configuredPreviewUrl) {
++					return JSON.stringify({ error: 'No configured signed preview URL is available for verification.' });
++				}
++				const args = input && typeof input === 'object' ? input as Record<string, unknown> : {};
++				if (typeof args.url === 'string' && !sameSignedPreviewUrl(args.url, configuredPreviewUrl)) {
++					return JSON.stringify({ error: 'Browser verification is restricted to the configured signed preview URL.' });
++				}
++				return Reflect.apply(execute, target, [{ ...args, url: configuredPreviewUrl }, options]);
++			},
++		} as T;
++	}
++
++	private async captureDeployEvidence(output: unknown): Promise<void> {
++		const result = this.parseToolOutput(output);
++		const branch = typeof result?.branch === 'string' ? result.branch : 'main';
++		const deployedCommitHash =
++			typeof result?.commit_hash === 'string'
++				? result.commit_hash
++				: typeof result?.commitHash === 'string'
++					? result.commitHash
++					: null;
++		const previewUrl =
++			typeof result?.preview_url === 'string'
++				? result.preview_url
++				: typeof result?.previewUrl === 'string'
++					? result.previewUrl
++					: null;
++		if (!result || result.error || !deployedCommitHash || !previewUrl) {
++			await this.saveTaskEvidence({
++				preflightSucceeded: false,
++				deploySucceeded: false,
++				deployedCommitHash,
++				headCommitHash: null,
++				headBranch: null,
++				workingTreeClean: false,
++				previewCommitHash: null,
++				previewBranch: null,
++				browserClean: false,
++				browserCommitHash: null,
++				browserBranch: null,
++				browserPreviewUrl: null,
++				deployedPreviewUrl: previewUrl,
++				deployedBranch: branch,
++			});
++			await this.recordOperationFingerprint(createThinkOperationFingerprint('deploy-validation', {
++				branch,
++				passed: false,
++				reason: result?.error ?? 'missing_deployment_identity',
++			}));
++			return;
++		}
++
++		try {
++			await withDurableObjectResetRetry(() => this.getSpaceStub(), (stub) => stub.preflightDeploy(branch));
++			const current = await this.readCurrentRevisionEvidence(branch);
++			const { workspaceStatusFingerprint: _statusFingerprint, ...taskEvidence } = current;
++			const deploySucceeded =
++				current.workingTreeClean &&
++				current.headCommitHash === deployedCommitHash &&
++				current.previewCommitHash === deployedCommitHash &&
++				current.headBranch === branch &&
++				current.previewBranch === branch;
++			await this.saveTaskEvidence({
++				preflightSucceeded: true,
++				deploySucceeded,
++				deployedCommitHash,
++				...taskEvidence,
++				browserClean: false,
++				browserCommitHash: null,
++				browserBranch: null,
++				browserPreviewUrl: null,
++				deployedPreviewUrl: previewUrl,
++				deployedBranch: branch,
++			});
++			await this.recordOperationFingerprint(createThinkOperationFingerprint('deploy-validation', {
++				branch,
++				passed: deploySucceeded,
++				deployedCommitHash,
++				...current,
++			}));
++		} catch {
++			await this.saveTaskEvidence({
++				preflightSucceeded: false,
++				deploySucceeded: false,
++				deployedCommitHash,
++				headCommitHash: null,
++				headBranch: null,
++				workingTreeClean: false,
++				previewCommitHash: null,
++				previewBranch: null,
++				browserClean: false,
++				browserCommitHash: null,
++				browserBranch: null,
++				browserPreviewUrl: null,
++				deployedPreviewUrl: previewUrl,
++				deployedBranch: branch,
++			});
++			await this.recordOperationFingerprint(createThinkOperationFingerprint('deploy-validation', {
++				branch,
++				passed: false,
++			}));
++		}
++	}
++
++	private async captureBrowserEvidence(output: unknown): Promise<void> {
++		const result = this.parseToolOutput(output);
++		let evidence = await this.getTaskEvidence();
++		const configuredPreviewUrl = this.getConfig<ThinkAgentConfig>()?.previewUrl ?? undefined;
++		const cleanLogs = isThinkBrowserCaptureClean(result, configuredPreviewUrl);
++		let browserMatchesRevision = false;
++		const browserUrl = typeof result?.url === 'string' ? result.url : null;
++		if (
++			cleanLogs &&
++			sameSignedPreviewUrl(browserUrl ?? undefined, configuredPreviewUrl) &&
++			evidence.deployedCommitHash &&
++			evidence.deployedCommitHash === evidence.headCommitHash &&
++			evidence.workingTreeClean &&
++			evidence.preflightSucceeded &&
++			evidence.deployedPreviewUrl
++		) {
++			try {
++				const expectedPath = new URL(evidence.deployedPreviewUrl, 'https://preview.local').pathname;
++				const actualPath = new URL(configuredPreviewUrl as string).pathname;
++				const current = await this.readCurrentRevisionEvidence(evidence.deployedBranch ?? 'main');
++				const { workspaceStatusFingerprint: _statusFingerprint, ...taskEvidence } = current;
++				await this.saveTaskEvidence(taskEvidence);
++				evidence = await this.getTaskEvidence();
++				browserMatchesRevision =
++					actualPath === expectedPath &&
++					current.workingTreeClean &&
++					current.headCommitHash === evidence.deployedCommitHash &&
++					current.previewCommitHash === evidence.deployedCommitHash &&
++					current.headBranch === evidence.deployedBranch &&
++					current.previewBranch === evidence.deployedBranch;
++			} catch {
++				browserMatchesRevision = false;
++			}
++		}
++		await this.saveTaskEvidence({
++			browserClean: cleanLogs && browserMatchesRevision,
++			browserCommitHash: browserMatchesRevision ? evidence.deployedCommitHash : null,
++			browserBranch: browserMatchesRevision ? evidence.deployedBranch : null,
++			browserPreviewUrl: browserMatchesRevision ? browserUrl : null,
++			configuredPreviewUrl: configuredPreviewUrl ?? null,
++		});
++		const logs = Array.isArray(result?.logs)
++			? result.logs as Array<{ level?: unknown; text?: unknown }>
++			: [];
++		const pageErrors = Array.isArray(result?.page_errors)
++			? result.page_errors as Array<{ message?: unknown }>
++			: [];
++		const requestFailures = Array.isArray(result?.request_failures)
++			? result.request_failures as Array<{ url?: unknown; failure?: unknown; status?: unknown }>
++			: [];
++		const validationErrors = [
++			...logs.filter((entry) => entry.level === 'error').map((entry) => entry.text),
++			...pageErrors.map((entry) => entry.message),
++			...requestFailures.map((entry) => {
++				let path: unknown = entry.url;
++				if (typeof entry.url === 'string') {
++					try {
++						path = new URL(entry.url).pathname;
++					} catch {
++						path = 'invalid-url';
++					}
++				}
++				return [entry.failure, entry.status, path];
++			}),
++			result?.error,
++			result?.warning,
++		]
++			.filter((value) => value !== undefined && value !== null)
++			.map((value) => createThinkOperationFingerprint('browser-diagnostic', value))
++			.sort();
++		await this.recordOperationFingerprint(createThinkOperationFingerprint('browser-validation', {
++			branch: evidence.deployedBranch,
++			commitHash: evidence.deployedCommitHash,
++			passed: cleanLogs && browserMatchesRevision,
++			finalUrl: result?.final_url ?? null,
++			truncated: result?.truncated ?? null,
++			totals: result?.totals ?? null,
++			validationErrors,
++		}));
++	}
+ 
+ 	/**
+ 	 * Re-attach harvested Gemini `thought_signature`s to the `tool_calls` in an
+@@ -322,32 +802,231 @@ export class ThinkAgent extends Think<Env> {
+ 	override getTools(): ToolSet {
+ 		const ops = createSpaceWorkspaceOps(() => this.getSpaceStub());
+ 		const previewUrl = this.getConfig<ThinkAgentConfig>()?.previewUrl;
++		const deployTool = this.trackTool(
++			createDeploySpaceTool({ getStub: () => this.getSpaceStub() }),
++			(output) => this.captureDeployEvidence(output),
++		);
++		const browserTool = this.trackTool(
++			this.bindBrowserToPreview(
++				createBrowserConsoleLogsTool({ env: this.env, defaultUrl: previewUrl }),
++				previewUrl,
++			),
++			(output) => this.captureBrowserEvidence(output),
++		);
++		const finishTaskTool = this.trackTool(createFinishTaskTool({
++			getEvidence: () => this.refreshTaskEvidence(),
++			saveStatus: (status) => this.saveTaskLifecycle(status),
++			getForcedStatus: async () =>
++				this.ctx.storage.kv.get<ThinkTaskStatus>(this.taskForcedStatusKey),
++			getForcedLifecycle: () => this.getTaskLifecycle(),
++		}));
++		const invalidateVerification = async (): Promise<void> => {
++			await this.saveTaskEvidence({
++				preflightSucceeded: false,
++				deploySucceeded: false,
++				deployedCommitHash: null,
++				headCommitHash: null,
++				headBranch: null,
++				workingTreeClean: false,
++				previewCommitHash: null,
++				previewBranch: null,
++				browserClean: false,
++				browserCommitHash: null,
++				browserBranch: null,
++				browserPreviewUrl: null,
++			});
++		};
++		const captureWorkspaceTool = (name: string) =>
++			(output: unknown, input: unknown): Promise<void> =>
++				this.recordWorkspaceOperation(name, input, output);
++		const markUserInputRequired = async (_output: unknown, input: unknown): Promise<void> => {
++			this.ctx.storage.kv.put(this.taskForcedStatusKey, 'USER_INPUT_REQUIRED');
++			await this.saveTaskLifecycle({
++				status: 'USER_INPUT_REQUIRED',
++				summary: 'Waiting for answers to clarifying questions.',
++				updatedAt: Date.now(),
++			});
++			await this.recordOperationFingerprint(createThinkOperationFingerprint('clarification-request', input));
++		};
+ 		// Same names as Think's built-in workspace tools, so these SpaceDO-backed
+ 		// versions win the tool-merge. Bash is disabled via `workspaceBash`.
+ 		return {
+-			read: createReadTool({ ops }),
+-			write: createWriteTool({ ops }),
+-			edit: createEditTool({ ops }),
+-			list: createListTool({ ops }),
+-			find: createFindTool({ ops }),
+-			grep: createGrepTool({ ops }),
+-			delete: createDeleteTool({ ops }),
++			read: this.trackTool(createReadTool({ ops }), captureWorkspaceTool('read')),
++			write: this.trackTool(createWriteTool({ ops }), async (output, input) => {
++				await invalidateVerification();
++				await this.recordWorkspaceOperation('write', input, output);
++			}),
++			edit: this.trackTool(createEditTool({ ops }), async (output, input) => {
++				await invalidateVerification();
++				await this.recordWorkspaceOperation('edit', input, output);
++			}),
++			list: this.trackTool(createListTool({ ops }), captureWorkspaceTool('list')),
++			find: this.trackTool(createFindTool({ ops }), captureWorkspaceTool('find')),
++			grep: this.trackTool(createGrepTool({ ops }), captureWorkspaceTool('grep')),
++			delete: this.trackTool(createDeleteTool({ ops }), async (output, input) => {
++				await invalidateVerification();
++				await this.recordWorkspaceOperation('delete', input, output);
++			}),
+ 			// Save a restore point without deploying. The model decides when.
+-			commit: createCommitTool({ getStub: () => this.getSpaceStub() }),
++			commit: this.trackTool(createCommitTool({ getStub: () => this.getSpaceStub() }), async (output) => {
++				await invalidateVerification();
++				await this.recordWorkspaceOperation('commit', {}, output);
++			}),
+ 			// Commit + deploy the SpaceDO branch so the preview rebuilds.
+-			deploy_space: createDeploySpaceTool({ getStub: () => this.getSpaceStub() }),
++			deploy_space: deployTool,
+ 			// Set the project's short display title (host observes the output).
+-			set_title: createSetTitleTool(),
++			set_title: this.trackTool(createSetTitleTool()),
+ 			// Ask the user clarifying questions via a frontend popup.
+-			ask_questions: createAskQuestionsTool(),
++			ask_questions: this.trackTool(createAskQuestionsTool(), markUserInputRequired),
+ 			// Client-side debugging via a real headless browser.
+-			get_browser_console_logs: createBrowserConsoleLogsTool({
+-				env: this.env,
+-				defaultUrl: previewUrl,
+-			}),
++			get_browser_console_logs: browserTool,
++			finish_task: finishTaskTool,
+ 		} as unknown as ToolSet;
+ 	}
+ 
++	async beginTask(taskId: string, candidateConversationId: string): Promise<ThinkTaskOperation> {
++		const existingOperation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++		const existingLifecycle = await this.getTaskLifecycle();
++		const pendingStartIntent = this.ctx.storage.kv.get<string>(this.taskStartIntentKey);
++		const startDecision = resolveThinkTaskStart(
++			taskId,
++			existingLifecycle.status,
++			existingOperation,
++			pendingStartIntent,
++		);
++		if (startDecision !== 'START_NEW' && existingOperation) {
++			const normalizedOperation = recoverThinkTaskOperation(
++				existingOperation,
++				this.getConfig<ThinkAgentConfig>()?.operationLimits,
++			);
++			if (pendingStartIntent === taskId) {
++				this.ctx.storage.kv.put(this.taskLifecycleKey, {
++					status: 'RUNNING',
++					summary: 'Task is in progress.',
++					updatedAt: Date.now(),
++				} satisfies ThinkTaskLifecycle);
++				this.ctx.storage.kv.put(this.taskForcedStatusKey, 'RUNNING');
++				this.ctx.storage.kv.put(this.taskStartIntentKey, '');
++			}
++			this.ctx.storage.kv.put(this.taskOperationKey, normalizedOperation);
++			return normalizedOperation;
++		}
++		let operation = {
++			...createThinkTaskOperation(
++				taskId,
++				candidateConversationId,
++				this.getConfig<ThinkAgentConfig>()?.operationLimits,
++			),
++			messageCountAtPassStart: (await this.getMessages()).length,
++		};
++		try {
++			const current = await this.readCurrentRevisionEvidence('main');
++			operation.startingHead = current.headCommitHash;
++			operation = recordThinkOperation(operation, createThinkOperationFingerprint('workspace-operation', {
++				path: undefined,
++				fileState: 'not-applicable',
++				contentFingerprint: null,
++				headCommitHash: current.headCommitHash,
++				workingTreeClean: current.workingTreeClean,
++				workspaceStatusFingerprint: current.workspaceStatusFingerprint,
++				discoveryFingerprint: null,
++			}));
++		} catch {
++			// A missing workspace during initialization must not prevent Think from
++			// starting; later concrete tool outcomes establish the progress state.
++		}
++		// Persist an explicit start intent before changing the terminal lifecycle.
++		// On recovery, a matching intent prevents an old terminal status from
++		// acknowledging this new queue item if the worker stopped mid-initialization.
++		this.ctx.storage.kv.put(this.taskStartIntentKey, taskId);
++		this.ctx.storage.kv.put(this.taskLifecycleKey, {
++			status: 'RUNNING',
++			summary: 'Task is in progress.',
++			updatedAt: Date.now(),
++		} satisfies ThinkTaskLifecycle);
++		this.ctx.storage.kv.put(this.taskForcedStatusKey, 'RUNNING');
++		this.ctx.storage.kv.put(this.taskEvidenceKey, {
++			preflightSucceeded: false,
++			deploySucceeded: false,
++			deployedCommitHash: null,
++			headCommitHash: null,
++			headBranch: null,
++			workingTreeClean: false,
++			previewCommitHash: null,
++			previewBranch: null,
++			browserClean: false,
++			browserCommitHash: null,
++			browserBranch: null,
++			browserPreviewUrl: null,
++			configuredPreviewUrl: this.getConfig<ThinkAgentConfig>()?.previewUrl ?? null,
++			deployedPreviewUrl: null,
++			deployedBranch: null,
++		} satisfies ThinkTaskEvidence);
++		this.ctx.storage.kv.put(this.taskOperationKey, operation);
++		this.ctx.storage.kv.put(this.taskStartIntentKey, '');
++		return operation;
++	}
++
++	async getTaskLifecycle(): Promise<ThinkTaskLifecycle> {
++		return this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey) ?? {
++			status: 'RUNNING',
++			summary: 'Task is in progress.',
++			updatedAt: Date.now(),
++		};
++	}
++
++	async getTaskOperation(): Promise<ThinkTaskOperation | undefined> {
++		return this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++	}
++
++	async advanceTaskOperation(): Promise<ThinkTaskOperation> {
++		const operation = await this.getTaskOperation();
++		if (!operation) throw new Error('Cannot continue a Think task before beginTask');
++		const advanced = advanceThinkTaskOperation(operation);
++		this.ctx.storage.kv.put(this.taskOperationKey, advanced);
++		return advanced;
++	}
++
++	async markTaskChatStarted(): Promise<ThinkTaskOperation> {
++		const operation = await this.getTaskOperation();
++		if (!operation) throw new Error('Cannot start a Think chat before beginTask');
++		const messages = await this.getMessages();
++		const started = markThinkTaskChatStarted(operation, messages.length);
++		this.ctx.storage.kv.put(this.taskOperationKey, started);
++		return started;
++	}
++
++	async recoverPendingTaskChat(prompt: string): Promise<ThinkPendingChatRecovery> {
++		const operation = await this.getTaskOperation();
++		if (!operation) return 'NOT_PERSISTED';
++		const messages = await this.getMessages();
++		const recovery = classifyThinkPendingChatRecovery(
++			messages as unknown as Array<{ role: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }>,
++			operation.messageCountAtPassStart,
++			prompt,
++			operation.pendingPromptKind === null && operation.completedPassCount > 0,
++		);
++		return recovery;
++	}
++
++	async markTaskChatResolved(): Promise<ThinkTaskOperation> {
++		const operation = await this.getTaskOperation();
++		if (!operation) throw new Error('Cannot resolve a Think chat before beginTask');
++		const checkpoint = reserveThinkTaskResource(operation, 'checkpoint', Date.now());
++		if (checkpoint.limitExceeded) {
++			this.stopForResourceLimit(checkpoint.limitExceeded, checkpoint.operation);
++			this.ctx.storage.kv.put(this.taskOperationKey, checkpoint.operation);
++			return checkpoint.operation;
++		}
++		const resolved = markThinkTaskChatResolved(checkpoint.operation);
++		this.ctx.storage.kv.put(this.taskOperationKey, resolved);
++		return resolved;
++	}
++
++	async stopTask(status: ThinkTaskStatus, summary: string, reason?: string): Promise<void> {
++		await this.saveTaskLifecycle({ status, summary, reason, updatedAt: Date.now() });
++	}
++
+ 	/**
+ 	 * On the final allowed step, disable tools and prime a text-only wrap-up so
+ 	 * the turn ends with a summary instead of a truncated tool call (see
+@@ -361,6 +1040,10 @@ export class ThinkAgent extends Think<Env> {
+ 	 */
+ 	override async beforeStep(ctx: PrepareStepContext): Promise<StepConfig | void> {
+ 		const config = this.getConfig<ThinkAgentConfig>();
++		if ((await this.getTaskLifecycle()).status === 'INCOMPLETE_RESOURCE_LIMIT') {
++			throw new Error('Think operation stopped at its cumulative resource limit.');
++		}
++		await this.reserveOperationResource('model');
+ 		if (this.turnUsage && config) {
+ 			await RateLimitService.enforceLLMCallsRateLimit(
+ 				this.env,
+@@ -373,6 +1056,7 @@ export class ThinkAgent extends Think<Env> {
+ 				{ creditCost: THINK_MODEL_CONFIG.creditCost, throwOnExceeded: false },
+ 			);
+ 		}
++		await this.reserveOperationResource('checkpoint');
+ 		if (ctx.stepNumber >= this.maxSteps - 1) {
+ 			return {
+ 				activeTools: [],
+diff --git a/worker/agents/think/browser-evidence.ts b/worker/agents/think/browser-evidence.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..836662dd7edd6c6d83f14bc0d1b632000985f1f5
+--- /dev/null
++++ b/worker/agents/think/browser-evidence.ts
+@@ -0,0 +1,84 @@
++function sameThinkPreviewNavigationUrl(actual: string, configured: string): boolean {
++	try {
++		const actualUrl = new URL(actual);
++		const configuredUrl = new URL(configured);
++		return (
++			actualUrl.protocol === configuredUrl.protocol &&
++			actualUrl.origin === configuredUrl.origin &&
++			actualUrl.pathname === configuredUrl.pathname &&
++			actualUrl.username === configuredUrl.username &&
++			actualUrl.password === configuredUrl.password
++		);
++	} catch {
++		return false;
++	}
++}
++
++function hasExactSignedPreviewRequest(actual: string, configured: string): boolean {
++	try {
++		const actualUrl = new URL(actual);
++		const configuredUrl = new URL(configured);
++		return (
++			actualUrl.protocol === configuredUrl.protocol &&
++			actualUrl.origin === configuredUrl.origin &&
++			actualUrl.pathname === configuredUrl.pathname &&
++			actualUrl.search === configuredUrl.search &&
++			actualUrl.hash === configuredUrl.hash &&
++			actualUrl.username === configuredUrl.username &&
++			actualUrl.password === configuredUrl.password
++		);
++	} catch {
++		return false;
++	}
++}
++
++export function isThinkBrowserCaptureClean(
++	value: unknown,
++	configuredPreviewUrl?: string,
++): boolean {
++	if (!configuredPreviewUrl || !value || typeof value !== 'object') return false;
++	const result = value as Record<string, unknown>;
++	const logs = result.logs;
++	const pageErrors = result.page_errors;
++	const requestFailures = result.request_failures;
++	const totals = result.totals;
++	if (
++		result.error ||
++		result.warning ||
++		result.truncated !== false ||
++		typeof result.url !== 'string' ||
++		!hasExactSignedPreviewRequest(result.url, configuredPreviewUrl) ||
++		typeof result.final_url !== 'string' ||
++		!sameThinkPreviewNavigationUrl(result.final_url, configuredPreviewUrl) ||
++		!Array.isArray(logs) ||
++		!Array.isArray(pageErrors) ||
++		!Array.isArray(requestFailures) ||
++		!totals ||
++		typeof totals !== 'object'
++	) return false;
++
++	const fullTotals = totals as Record<string, unknown>;
++	const isCount = (count: unknown): count is number =>
++		typeof count === 'number' && Number.isSafeInteger(count) && count >= 0;
++	if (
++		!isCount(fullTotals.logs) ||
++		!isCount(fullTotals.page_errors) ||
++		!isCount(fullTotals.request_failures) ||
++		fullTotals.logs !== logs.length ||
++		fullTotals.page_errors !== pageErrors.length ||
++		fullTotals.request_failures !== requestFailures.length ||
++		fullTotals.page_errors !== 0 ||
++		fullTotals.request_failures !== 0
++	) return false;
++
++	return (
++		pageErrors.length === 0 &&
++		requestFailures.length === 0 &&
++		!logs.some((entry) =>
++			!entry ||
++			typeof entry !== 'object' ||
++			typeof (entry as { level?: unknown }).level !== 'string' ||
++			(entry as { level?: unknown }).level === 'error',
++		)
++	);
++}
+\ No newline at end of file
+diff --git a/worker/agents/think/browser-logs-tool.test.ts b/worker/agents/think/browser-logs-tool.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..20963eaa7e8246d27ac3e3540f43ff8fba3e36c6
+--- /dev/null
++++ b/worker/agents/think/browser-logs-tool.test.ts
+@@ -0,0 +1,60 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { createBrowserConsoleLogsTool } from './browser-logs-tool';
++
++const captureConsoleLogs = vi.fn();
++
++vi.mock('../../services/browser-capture/factory', () => ({
++	getBrowserCaptureClient: () => ({ captureConsoleLogs }),
++}));
++
++describe('get_browser_console_logs output', () => {
++	beforeEach(() => captureConsoleLogs.mockReset());
++
++	it('exposes a cross-origin final URL so a redirect cannot be mistaken for the preview', async () => {
++		captureConsoleLogs.mockResolvedValue({
++			url: 'https://preview.example/app',
++			finalUrl: 'https://attacker.example/phishing',
++			capturedAt: '2025-01-01T00:00:00.000Z',
++			logs: [],
++			pageErrors: [],
++			requestFailures: [],
++		});
++		const tool = createBrowserConsoleLogsTool({ env: {} as Env, defaultUrl: 'https://preview.example/app' });
++
++		const output = JSON.parse(String(await tool.execute!({}, {
++			toolCallId: 'browser-redirect',
++			messages: [],
++			abortSignal: new AbortController().signal,
++		})));
++
++		expect(output).toMatchObject({
++			url: 'https://preview.example/app',
++			final_url: 'https://attacker.example/phishing',
++		});
++	});
++
++	it('marks truncated diagnostics and retains the early console error and full count', async () => {
++		captureConsoleLogs.mockResolvedValue({
++			url: 'https://preview.example/app',
++			finalUrl: 'https://preview.example/app',
++			capturedAt: '2025-01-01T00:00:00.000Z',
++			logs: [
++				{ level: 'error', text: 'early render failure' },
++				...Array.from({ length: 100 }, (_, i) => ({ level: 'log', text: `message ${i}` })),
++			],
++			pageErrors: [],
++			requestFailures: [],
++		});
++		const tool = createBrowserConsoleLogsTool({ env: {} as Env, defaultUrl: 'https://preview.example/app' });
++
++		const output = JSON.parse(String(await tool.execute!({ max_lines: 100 }, {
++			toolCallId: 'browser-truncated',
++			messages: [],
++			abortSignal: new AbortController().signal,
++		})));
++
++		expect(output.truncated).toBe(true);
++		expect(output.logs[0]).toMatchObject({ level: 'error', text: 'early render failure' });
++		expect(output.totals.logs).toBe(101);
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/browser-logs-tool.ts b/worker/agents/think/browser-logs-tool.ts
+index c4f460ba955170d257843ac1f02a915eb35de5e2..a2a8c6b3a6c2a41b899e40f437f2e989b8e21ea9 100644
+--- a/worker/agents/think/browser-logs-tool.ts
++++ b/worker/agents/think/browser-logs-tool.ts
+@@ -20,7 +20,7 @@ const DESCRIPTION = [
+ 	'',
+ 	"DEFAULTS to the current preview URL. Pass 'url' to inspect a specific route. Pass 'wait_seconds' (default 5, max 25) to allow late-firing logs/network calls after page load. Optional 'interact_script' is a JS string evaluated in the page after load (e.g. 'document.querySelector(\"button\").click()') to trigger interactions before logs are collected.",
+ 	'',
+-	"OUTPUT is JSON: { url, captured_at, logs:[{level,text,location}], page_errors:[{message,stack}], request_failures:[{url,failure,status}], truncated, totals, warning? }. If 'warning' is set in dev, the browser sidecar wasn't reachable — instruct the user to run 'npm run dev:browser' and retry. Each category is independently capped at max_lines (default 100, -1 = no limit).",
++	"OUTPUT is JSON: { url, final_url, captured_at, logs:[{level,text,location}], page_errors:[{message,stack}], request_failures:[{url,failure,status}], truncated, totals, warning? }. 'final_url' reports the actual browser URL after redirects; totals count all captured diagnostics even when returned lists are capped. If 'warning' is set in dev, the browser sidecar wasn't reachable — instruct the user to run 'npm run dev:browser' and retry. Each category is independently capped at max_lines (default 100, -1 = no limit).",
+ ].join('\n');
+ 
+ export function createBrowserConsoleLogsTool(opts: { env: Env; defaultUrl?: string }): Tool {
+@@ -78,16 +78,20 @@ export function createBrowserConsoleLogsTool(opts: { env: Env; defaultUrl?: stri
+ 			}
+ 
+ 			const cap = args.max_lines ?? 100;
+-			const trunc = <T>(arr: T[]): T[] => (cap === -1 ? arr : arr.slice(-cap));
++			const effectiveCap = cap === -1 ? -1 : Math.max(0, Math.floor(cap));
++			const trunc = <T>(arr: T[]): T[] =>
++				(effectiveCap === -1 ? arr : arr.slice(0, effectiveCap));
+ 			const truncated =
+-				cap !== -1 &&
+-				(result.logs.length > cap ||
+-					result.pageErrors.length > cap ||
+-					result.requestFailures.length > cap);
++				result.truncated === true ||
++				(effectiveCap !== -1 &&
++					(result.logs.length > effectiveCap ||
++						result.pageErrors.length > effectiveCap ||
++						result.requestFailures.length > effectiveCap));
+ 
+ 			return JSON.stringify(
+ 				{
+ 					url: result.url,
++					final_url: result.finalUrl ?? result.url,
+ 					captured_at: result.capturedAt,
+ 					logs: trunc(result.logs),
+ 					page_errors: trunc(result.pageErrors),
+diff --git a/worker/agents/think/context-selector.test.ts b/worker/agents/think/context-selector.test.ts
+index 27e5142c4abbcdf851c57a00ea75a82d41de2e38..253ba7668f3a7d18265f8a525c9cf328edb6e46b 100644
+--- a/worker/agents/think/context-selector.test.ts
++++ b/worker/agents/think/context-selector.test.ts
+@@ -43,6 +43,49 @@ function result(id: string, toolName = 'ask_questions'): ModelMessage {
+ }
+ 
+ describe('selectThinkContextMessages', () => {
++	it('retains the continuation directive and latest user intent with bounded diagnostics', () => {
++		const internal = user('__THINK_INTERNAL_CONTINUATION__: continue the task');
++		const followUp = user('Also keep the existing sign-in flow intact.');
++		const discoveryCall = toolCall('read-last', 'read');
++		const discoveryResult = result('read-last', 'read');
++		const messages = [
++			user('first'),
++			followUp,
++			toolCall('read-old', 'read'),
++			result('read-old', 'read'),
++			discoveryCall,
++			discoveryResult,
++			assistant('Found the relevant implementation.'),
++			internal,
++		];
++		const selected = selectThinkContextMessages(messages);
++		expect(selected).toContain(internal);
++		expect(selected).toContain(followUp);
++		expect(selected).toContain(discoveryCall);
++		expect(selected).toContain(discoveryResult);
++		expect(selected.length).toBeLessThanOrEqual(7);
++	});
++
++	it('bounds retained clarification and skill history across a continuation', () => {
++		const oldHistory: ModelMessage[] = [user('original request')];
++		for (let index = 0; index < 20; index++) {
++			oldHistory.push(
++				toolCall(`skill-${index}`, 'activate_skill'),
++				result(`skill-${index}`, 'activate_skill'),
++				ask(`ask-${index}`),
++				result(`ask-${index}`),
++				user(`answer-${index}`),
++			);
++		}
++		oldHistory.push(user('__THINK_INTERNAL_CONTINUATION__: continue'));
++
++		const selected = selectThinkContextMessages(oldHistory);
++		expect(selected).toHaveLength(8);
++		expect(selected).toContain(oldHistory[oldHistory.length - 1]);
++		expect(selected).toContain(oldHistory[oldHistory.length - 2]);
++		expect(selected).not.toContain(oldHistory[1]);
++	});
++
+ 	it('returns short histories unchanged', () => {
+ 		const messages = [user('first'), assistant('one'), user('two')];
+ 		expect(selectThinkContextMessages(messages)).toEqual(messages);
+diff --git a/worker/agents/think/context-selector.ts b/worker/agents/think/context-selector.ts
+index 158032283d20f6574a6457ffe24a2e713be14b75..d72536258317214aad930c2263954a16380ff4ba 100644
+--- a/worker/agents/think/context-selector.ts
++++ b/worker/agents/think/context-selector.ts
+@@ -1,6 +1,9 @@
+ import type { ModelMessage } from 'ai';
+ 
+ const RECENT_MESSAGE_COUNT = 5;
++const CONTINUATION_RECENT_MESSAGE_COUNT = 2;
++export const THINK_INTERNAL_CONTINUATION_PREFIX = '__THINK_INTERNAL_CONTINUATION__:';
++const CONTINUATION_DISCOVERY_TOOL_COUNT = 1;
+ 
+ type MessagePart = {
+ 	type?: string;
+@@ -68,18 +71,57 @@ function includeNamedToolPair(
+ 
+ export function selectThinkContextMessages(messages: ModelMessage[]): ModelMessage[] {
+ 	if (messages.length === 0) return [];
++	const isInternalContinuation = (message: ModelMessage): boolean =>
++		message.role === 'user' &&
++		typeof message.content === 'string' &&
++		message.content.startsWith(THINK_INTERNAL_CONTINUATION_PREFIX);
++	const continuationContext = messages.some(isInternalContinuation);
++	let latestContinuationIndex = -1;
++	if (continuationContext) {
++		for (let index = messages.length - 1; index >= 0; index--) {
++			if (isInternalContinuation(messages[index])) {
++				latestContinuationIndex = index;
++				break;
++			}
++		}
++	}
+ 
+ 	const selected = new Set<number>([0]);
+ 	const protectedToolMessages = new Set<number>();
++	const latestSpecialCall = new Map<string, number>();
++	if (continuationContext) {
++		for (let index = messages.length - 1; index >= 0; index--) {
++			for (const toolName of ['ask_questions', 'activate_skill', 'set_title']) {
++				if (containsToolCall(messages[index], toolName) && !latestSpecialCall.has(toolName)) {
++					latestSpecialCall.set(toolName, index);
++				}
++			}
++		}
++	}
+ 	let recentTextCount = 0;
+-	for (let index = messages.length - 1; index >= 0 && recentTextCount < RECENT_MESSAGE_COUNT; index--) {
++	const recentMessageLimit = continuationContext ? CONTINUATION_RECENT_MESSAGE_COUNT : RECENT_MESSAGE_COUNT;
++	for (let index = messages.length - 1; index >= 0; index--) {
++		if (isInternalContinuation(messages[index])) {
++			if (index === latestContinuationIndex) selected.add(index);
++			continue;
++		}
+ 		if (!hasText(messages[index])) continue;
+ 		selected.add(index);
+ 		recentTextCount++;
++		if (recentTextCount >= recentMessageLimit) break;
++	}
++	if (continuationContext) {
++		for (let index = messages.length - 1; index >= 0; index--) {
++			if (messages[index].role === 'user' && !isInternalContinuation(messages[index])) {
++				selected.add(index);
++				break;
++			}
++		}
+ 	}
+ 
+ 	for (let index = 0; index < messages.length; index++) {
+ 		if (containsToolCall(messages[index], 'ask_questions')) {
++			if (continuationContext && latestSpecialCall.get('ask_questions') !== index) continue;
+ 			includeNamedToolPair(messages, selected, protectedToolMessages, index);
+ 			for (let candidate = index + 1; candidate < messages.length; candidate++) {
+ 				if (messages[candidate].role === 'user') {
+@@ -92,7 +134,32 @@ export function selectThinkContextMessages(messages: ModelMessage[]): ModelMessa
+ 			containsToolCall(messages[index], 'activate_skill') ||
+ 			containsToolCall(messages[index], 'set_title')
+ 		) {
++			if (
++				continuationContext &&
++				((containsToolCall(messages[index], 'activate_skill') && latestSpecialCall.get('activate_skill') !== index) ||
++					(containsToolCall(messages[index], 'set_title') && latestSpecialCall.get('set_title') !== index))
++			) continue;
++			includeNamedToolPair(messages, selected, protectedToolMessages, index);
++		}
++	}
++
++	// A continuation should retain only the latest few targeted discovery calls,
++	// with their corresponding results. This avoids replaying the entire tool
++	// transcript while preserving recent evidence needed to make progress.
++	if (continuationContext) {
++		let discoveryCalls = 0;
++		for (let index = messages.length - 1; index >= 0 && discoveryCalls < CONTINUATION_DISCOVERY_TOOL_COUNT; index--) {
++			const message = messages[index];
++			if (
++				message.role !== 'assistant' ||
++				!partsOf(message).some(
++					(part) => part.type === 'tool-call' &&
++						typeof part.toolName === 'string' &&
++						['read', 'find', 'grep', 'list'].includes(part.toolName),
++				)
++			) continue;
+ 			includeNamedToolPair(messages, selected, protectedToolMessages, index);
++			discoveryCalls++;
+ 		}
+ 	}
+ 
+diff --git a/worker/agents/think/deploy-tool.test.ts b/worker/agents/think/deploy-tool.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5e4bbda1d52a03d6399feb13a2063b7e82d33f4c
+--- /dev/null
++++ b/worker/agents/think/deploy-tool.test.ts
+@@ -0,0 +1,82 @@
++import { describe, expect, it, vi } from 'vitest';
++import { createDeploySpaceTool } from './deploy-tool';
++import type { SpaceWorkspaceStub } from './space-workspace-ops';
++
++function invokeDeploy(stub: Partial<SpaceWorkspaceStub>) {
++	const getStub = vi.fn(() => stub as SpaceWorkspaceStub);
++	const deployTool = createDeploySpaceTool({ getStub });
++	return {
++		getStub,
++		run: (deployTool as unknown as {
++			execute: (args: { branch?: string }) => Promise<string>;
++		}).execute({ branch: 'main' }),
++	};
++}
++
++describe('deploy_space preflight ordering', () => {
++	it('does not commit or deploy when working-tree preflight rejects malformed JSX', async () => {
++		const preflightCommitDeploy = vi.fn(async () => ({
++			ok: false as const,
++			phase: 'preflight' as const,
++			error: 'Invalid static JSX/TSX in public/app.jsx',
++		}));
++		const { getStub, run } = invokeDeploy({ preflightCommitDeploy });
++
++		const result = JSON.parse(await run);
++		expect(result.error).toContain('Preflight failed');
++		expect(result.error).toContain('public/app.jsx');
++		expect(preflightCommitDeploy).toHaveBeenCalledOnce();
++		expect(getStub).toHaveBeenCalledOnce();
++	});
++
++	it('commits and deploys repaired source through one atomic RPC', async () => {
++		let malformedSource = true;
++		const preflightCommitDeploy = vi.fn(async () => {
++			if (malformedSource) {
++				return {
++					ok: false as const,
++					phase: 'preflight' as const,
++					error: 'Invalid static JSX/TSX in public/app.jsx',
++				};
++			}
++			return { ok: true as const, preview_url: '/preview', commit_hash: 'commit-1' };
++		});
++		const { run } = invokeDeploy({ preflightCommitDeploy });
++
++		const firstResult = JSON.parse(await run);
++		expect(firstResult.error).toContain('Preflight failed');
++
++		// Repair the working-tree source and invoke deploy again.
++		malformedSource = false;
++		const result = JSON.parse(await invokeDeploy({ preflightCommitDeploy }).run);
++		expect(result.preview_url).toBe('/preview');
++		expect(preflightCommitDeploy).toHaveBeenCalledTimes(2);
++	});
++
++	it('does not treat a real gitCommit failure as a clean tree', async () => {
++		const preflightCommitDeploy = vi.fn(async () => ({
++			ok: false as const,
++			phase: 'commit' as const,
++			error: 'disk write failed',
++		}));
++		const { run } = invokeDeploy({ preflightCommitDeploy });
++
++		const result = JSON.parse(await run);
++		expect(result.error).toContain('Commit failed');
++		expect(result.error).toContain('disk write failed');
++	});
++
++	it('keeps clean-tree deploy behavior without creating an empty commit', async () => {
++		const preflightCommitDeploy = vi.fn(async () => ({
++			ok: true as const,
++			preview_url: '/preview',
++			commit_hash: 'existing-head',
++		}));
++		const { run } = invokeDeploy({ preflightCommitDeploy });
++
++		const result = JSON.parse(await run);
++		expect(result.preview_url).toBe('/preview');
++		expect(result.commit_hash).toBe('existing-head');
++		expect(preflightCommitDeploy).toHaveBeenCalledOnce();
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/deploy-tool.ts b/worker/agents/think/deploy-tool.ts
+index af36fe540db26542374941d0e66afa0f2c1325e5..6717c43e5482a13ffd6589425d33b0a5bddfaaed 100644
+--- a/worker/agents/think/deploy-tool.ts
++++ b/worker/agents/think/deploy-tool.ts
+@@ -33,15 +33,16 @@ export function createDeploySpaceTool(opts: { getStub: () => SpaceWorkspaceStub
+ 		execute: async (args: { branch?: string }) => {
+ 			const branch = args.branch && args.branch.length > 0 ? args.branch : 'main';
+ 			try {
+-				await withDurableObjectResetRetry(getStub, (stub) =>
+-					stub.gitCommit('deploy: snapshot working tree'),
++				const result = await withDurableObjectResetRetry(getStub, (stub) =>
++					stub.preflightCommitDeploy(branch),
+ 				);
+-			} catch {
+-				// No changes to commit (clean tree) — proceed to deploy the existing HEAD.
+-			}
+-			try {
+-				const result = await withDurableObjectResetRetry(getStub, (stub) => stub.deploy(branch));
+-				return JSON.stringify({ branch, ...(result as Record<string, unknown>) }, null, 2);
++				if (!result.ok) {
++					return JSON.stringify({
++						branch,
++						error: `${result.phase === 'preflight' ? 'Preflight' : result.phase === 'commit' ? 'Commit' : 'Deploy'} failed: ${result.error}`,
++					});
++				}
++				return JSON.stringify({ branch, ...result }, null, 2);
+ 			} catch (e) {
+ 				return JSON.stringify({
+ 					branch,
+diff --git a/worker/agents/think/finish-task-tool.test.ts b/worker/agents/think/finish-task-tool.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..bea4833090b5c2f1cbd5efa68772c3d8dd64756a
+--- /dev/null
++++ b/worker/agents/think/finish-task-tool.test.ts
+@@ -0,0 +1,224 @@
++import { describe, expect, it } from 'vitest';
++import {
++	createFinishTaskTool,
++	hasCompleteThinkTaskEvidence,
++	sameSignedPreviewUrl,
++} from './finish-task-tool';
++
++describe('finish_task lifecycle gate', () => {
++	it('requires the exact configured signed preview URL, not a matching pathname on another origin', () => {
++		const configured = 'https://preview.example/space/app/preview/main/?token=signed';
++		expect(sameSignedPreviewUrl(configured, configured)).toBe(true);
++		expect(sameSignedPreviewUrl('https://attacker.example/space/app/preview/main/?token=signed', configured)).toBe(false);
++		expect(sameSignedPreviewUrl('http://preview.example/space/app/preview/main/?token=signed', configured)).toBe(false);
++		expect(sameSignedPreviewUrl('https://preview.example/space/app/preview/main/', configured)).toBe(false);
++	});
++
++	it('requires every authoritative deployment and browser evidence component', () => {
++		const complete = {
++			preflightSucceeded: true,
++			deploySucceeded: true,
++			deployedCommitHash: 'same-sha',
++			headCommitHash: 'same-sha',
++			headBranch: 'main',
++			workingTreeClean: true,
++			previewCommitHash: 'same-sha',
++			previewBranch: 'main',
++			browserClean: true,
++			browserCommitHash: 'same-sha',
++			browserBranch: 'main',
++			browserPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++			configuredPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++			deployedPreviewUrl: '/space/a/preview/main/',
++			deployedBranch: 'main',
++		};
++		for (const invalid of [
++			{ preflightSucceeded: false },
++			{ deploySucceeded: false },
++			{ headCommitHash: 'different-sha' },
++			{ workingTreeClean: false },
++			{ browserClean: false },
++			{ browserCommitHash: 'different-sha' },
++			{ previewCommitHash: 'newer-deployment-sha' },
++			{ previewBranch: 'staging' },
++			{ browserBranch: 'staging' },
++			{ browserPreviewUrl: 'https://attacker.example/space/a/preview/main/?token=signed' },
++			{ deployedPreviewUrl: '/space/a/preview/staging/' },
++		]) {
++			expect(hasCompleteThinkTaskEvidence({ ...complete, ...invalid })).toBe(false);
++		}
++		expect(hasCompleteThinkTaskEvidence(complete)).toBe(true);
++	});
++
++	it('does not mark a task COMPLETE without successful deploy and clean browser evidence', async () => {
++		let stored: unknown;
++		const finishTask = createFinishTaskTool({
++			getEvidence: async () => ({
++				preflightSucceeded: false,
++				deploySucceeded: false,
++				deployedCommitHash: null,
++				headCommitHash: null,
++				headBranch: null,
++				workingTreeClean: false,
++				previewCommitHash: null,
++				previewBranch: null,
++				browserClean: false,
++				browserCommitHash: null,
++				browserBranch: null,
++				browserPreviewUrl: null,
++				configuredPreviewUrl: null,
++				deployedPreviewUrl: null,
++				deployedBranch: null,
++			}),
++			saveStatus: async (status) => { stored = status; },
++		});
++
++		const output = await finishTask.execute!({
++			status: 'COMPLETE',
++			summary: 'Implemented the requested app.',
++			evidence: 'The app works.',
++		}, { toolCallId: 'finish-1', messages: [], abortSignal: new AbortController().signal });
++
++		expect(JSON.parse(String(output))).toMatchObject({
++			status: 'RUNNING',
++			reason: 'missing_verification_evidence',
++		});
++		expect(stored).toMatchObject({ status: 'RUNNING' });
++	});
++
++	it('requires successful preflight, clean tree, matching authoritative hashes, and matching browser evidence', async () => {
++		let stored: unknown;
++		const finishTask = createFinishTaskTool({
++			getEvidence: async () => ({
++				preflightSucceeded: true,
++				deploySucceeded: true,
++				deployedCommitHash: 'deployed-sha',
++				headCommitHash: 'different-head',
++				headBranch: 'main',
++				workingTreeClean: false,
++				previewCommitHash: 'deployed-sha',
++				previewBranch: 'main',
++				browserClean: true,
++				browserCommitHash: 'deployed-sha',
++				browserBranch: 'main',
++				browserPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++				configuredPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++				deployedPreviewUrl: '/space/a/preview/main/',
++				deployedBranch: 'main',
++			}),
++			saveStatus: async (status) => { stored = status; },
++		});
++
++		const output = await finishTask.execute!({
++			status: 'COMPLETE',
++			summary: 'Implemented and verified.',
++			evidence: 'Deploy succeeded and the browser console is clean.',
++		}, { toolCallId: 'finish-2', messages: [], abortSignal: new AbortController().signal });
++
++		expect(JSON.parse(String(output))).toMatchObject({
++			status: 'RUNNING',
++			reason: 'missing_verification_evidence',
++		});
++		expect(stored).toMatchObject({ status: 'RUNNING' });
++	});
++
++	it('accepts completion only for the clean, preflighted deployed HEAD inspected by the browser', async () => {
++		const finishTask = createFinishTaskTool({
++			getEvidence: async () => ({
++				preflightSucceeded: true,
++				deploySucceeded: true,
++				deployedCommitHash: 'same-sha',
++				headCommitHash: 'same-sha',
++				headBranch: 'main',
++				workingTreeClean: true,
++				previewCommitHash: 'same-sha',
++				previewBranch: 'main',
++				browserClean: true,
++				browserCommitHash: 'same-sha',
++				browserBranch: 'main',
++				browserPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++				configuredPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++				deployedPreviewUrl: '/space/a/preview/main/',
++				deployedBranch: 'main',
++			}),
++			saveStatus: async () => {},
++		});
++
++		const output = await finishTask.execute!({
++			status: 'COMPLETE',
++			summary: 'Implemented and verified.',
++			evidence: 'Deploy succeeded and the browser console is clean.',
++		}, { toolCallId: 'finish-3', messages: [], abortSignal: new AbortController().signal });
++
++		expect(JSON.parse(String(output))).toMatchObject({ status: 'COMPLETE' });
++	});
++
++	it('preserves USER_INPUT_REQUIRED set by ask_questions even if the model reports RUNNING', async () => {
++		const finishTask = createFinishTaskTool({
++			getEvidence: async () => ({
++				preflightSucceeded: false,
++				deploySucceeded: false,
++				deployedCommitHash: null,
++				headCommitHash: null,
++				headBranch: null,
++				workingTreeClean: false,
++				previewCommitHash: null,
++				previewBranch: null,
++				browserClean: false,
++				browserCommitHash: null,
++				browserBranch: null,
++				browserPreviewUrl: null,
++				configuredPreviewUrl: null,
++				deployedPreviewUrl: null,
++				deployedBranch: null,
++			}),
++			getForcedStatus: async () => 'USER_INPUT_REQUIRED',
++			saveStatus: async () => {},
++		});
++
++		const output = await finishTask.execute!({
++			status: 'RUNNING',
++			summary: 'I have asked clarifying questions.',
++		}, { toolCallId: 'finish-4', messages: [], abortSignal: new AbortController().signal });
++
++		expect(JSON.parse(String(output))).toMatchObject({ status: 'USER_INPUT_REQUIRED' });
++	});
++
++	it('does not accept a model-reported resource limit unless the durable operation reached one', async () => {
++		const finishTask = createFinishTaskTool({
++			getEvidence: async () => ({} as never),
++			getForcedStatus: async () => 'RUNNING',
++			saveStatus: async () => {},
++		});
++		const output = await finishTask.execute!({
++			status: 'INCOMPLETE_RESOURCE_LIMIT',
++			summary: 'I have used enough resources.',
++		}, { toolCallId: 'finish-resource-unverified', messages: [], abortSignal: new AbortController().signal });
++		expect(JSON.parse(String(output))).toMatchObject({
++			status: 'RUNNING',
++			reason: 'resource_limit_not_reached',
++		});
++	});
++
++	it('returns the durable resource-limit result without allowing the model to rewrite its reason', async () => {
++		const forcedLifecycle = {
++			status: 'INCOMPLETE_RESOURCE_LIMIT' as const,
++			summary: 'Think stopped before another model request because the cumulative limit was reached.',
++			reason: 'model_call_limit',
++			updatedAt: 10,
++		};
++		let saved = false;
++		const finishTask = createFinishTaskTool({
++			getEvidence: async () => ({} as never),
++			getForcedStatus: async () => 'INCOMPLETE_RESOURCE_LIMIT',
++			getForcedLifecycle: async () => forcedLifecycle,
++			saveStatus: async () => { saved = true; },
++		});
++		const output = await finishTask.execute!({
++			status: 'RUNNING',
++			summary: 'The task is complete.',
++		}, { toolCallId: 'finish-resource-forced', messages: [], abortSignal: new AbortController().signal });
++		expect(JSON.parse(String(output))).toEqual(forcedLifecycle);
++		expect(saved).toBe(false);
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/finish-task-tool.ts b/worker/agents/think/finish-task-tool.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..473c15df3d3faf8a9099207e68b702636113c68a
+--- /dev/null
++++ b/worker/agents/think/finish-task-tool.ts
+@@ -0,0 +1,674 @@
++import { tool, type Tool } from 'ai';
++import { z } from 'zod';
++import { THINK_INTERNAL_CONTINUATION_PREFIX } from './context-selector';
++
++export type ThinkTaskStatus =
++	| 'RUNNING'
++	| 'COMPLETE'
++	| 'BLOCKED'
++	| 'USER_INPUT_REQUIRED'
++	| 'INCOMPLETE_RESOURCE_LIMIT';
++
++export interface ThinkTaskLifecycle {
++	status: ThinkTaskStatus;
++	summary: string;
++	reason?: string;
++	updatedAt: number;
++}
++
++export interface ThinkTaskEvidence {
++	preflightSucceeded: boolean;
++	deploySucceeded: boolean;
++	deployedCommitHash: string | null;
++	headCommitHash: string | null;
++	headBranch: string | null;
++	workingTreeClean: boolean;
++	previewCommitHash: string | null;
++	previewBranch: string | null;
++	browserClean: boolean;
++	browserCommitHash: string | null;
++	browserBranch: string | null;
++	browserPreviewUrl: string | null;
++	configuredPreviewUrl: string | null;
++	deployedPreviewUrl: string | null;
++	deployedBranch: string | null;
++}
++
++export interface ThinkTaskOperation {
++	taskId: string;
++	conversationId: string;
++	continuationCount: number;
++	continuationBudget: number;
++	limits: ThinkOperationLimits;
++	lastOperationFingerprint: string;
++	lastPassStartFingerprint: string;
++	completedPassCount: number;
++	pendingPromptKind: 'INITIAL' | 'CONTINUATION' | null;
++	messageCountAtPassStart: number;
++	discoveryFingerprints?: string[];
++	startedAt: number;
++	startingHead: string | null;
++	modelCalls: number;
++	toolCalls: number;
++	creditsConsumed: number;
++	availableMeteredCredits: number | null;
++	meteredCreditsInitialized: boolean;
++	lastWorkspaceFingerprint: string | null;
++	lastValidationFingerprint: string | null;
++}
++
++export interface ThinkOperationLimits {
++	maxContinuations: number;
++	maxModelCalls: number;
++	maxToolCalls: number;
++	maxElapsedMs: number;
++	maxCredits: number;
++}
++
++/**
++ * Uncalibrated fallback guardrails for environments that do not pass explicit
++ * operation limits. These values are not a selected production policy.
++ */
++export const THINK_UNCALIBRATED_OPERATION_LIMITS: Readonly<ThinkOperationLimits> = {
++	maxContinuations: 25,
++	maxModelCalls: 650,
++	maxToolCalls: 1300,
++	maxElapsedMs: 60 * 60 * 1000,
++	maxCredits: 100,
++};
++export const THINK_CONTINUATION_BUDGET = THINK_UNCALIBRATED_OPERATION_LIMITS.maxContinuations;
++const THINK_DISCOVERY_FINGERPRINT_HISTORY_LIMIT = 256;
++
++const THINK_OPERATION_LIMIT_KEYS: Array<keyof ThinkOperationLimits> = [
++	'maxContinuations',
++	'maxModelCalls',
++	'maxToolCalls',
++	'maxElapsedMs',
++	'maxCredits',
++];
++
++export function parseThinkOperationLimits(source: Record<string, unknown>): Partial<ThinkOperationLimits> {
++	const parsed: Partial<ThinkOperationLimits> = {};
++	for (const key of THINK_OPERATION_LIMIT_KEYS) {
++		const value = source[key];
++		if (value === undefined || value === null || value === '') continue;
++		const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : NaN;
++		const mustBeInteger = key !== 'maxCredits';
++		if (
++			!Number.isFinite(numeric) ||
++			numeric <= 0 ||
++			(mustBeInteger && !Number.isSafeInteger(numeric))
++		) {
++			throw new Error(`Think operation limit ${key} must be a positive ${mustBeInteger ? 'integer' : 'number'}.`);
++		}
++		parsed[key] = numeric;
++	}
++	return parsed;
++}
++
++export function resolveThinkOperationLimits(
++	overrides?: Partial<ThinkOperationLimits>,
++): ThinkOperationLimits {
++	return {
++		...THINK_UNCALIBRATED_OPERATION_LIMITS,
++		...parseThinkOperationLimits(overrides ?? {}),
++	};
++}
++
++export function createThinkTaskOperation(
++	taskId: string,
++	conversationId: string,
++	limitsOrContinuationBudget: number | Partial<ThinkOperationLimits> = {},
++	additionalLimits?: Partial<ThinkOperationLimits>,
++): ThinkTaskOperation {
++	const limits = resolveThinkOperationLimits(
++		typeof limitsOrContinuationBudget === 'number'
++			? { ...additionalLimits, maxContinuations: limitsOrContinuationBudget }
++			: limitsOrContinuationBudget,
++	);
++	return {
++		taskId,
++		conversationId,
++		continuationCount: 0,
++		continuationBudget: limits.maxContinuations,
++		limits,
++		lastOperationFingerprint: '',
++		lastPassStartFingerprint: '',
++		completedPassCount: 0,
++		pendingPromptKind: 'INITIAL',
++		messageCountAtPassStart: 0,
++		discoveryFingerprints: [],
++		startedAt: Date.now(),
++		startingHead: null,
++		modelCalls: 0,
++		toolCalls: 0,
++		creditsConsumed: 0,
++		availableMeteredCredits: null,
++		meteredCreditsInitialized: false,
++		lastWorkspaceFingerprint: null,
++		lastValidationFingerprint: null,
++	};
++}
++
++export function createThinkTaskQueueIdentity(queueItemIds: string[]): string {
++	if (queueItemIds.length === 0 || queueItemIds.some((id) => !id)) {
++		throw new Error('Think task identity requires queued input IDs');
++	}
++	return `think-queue:${queueItemIds.join(':')}`;
++}
++
++export function resolveThinkTaskStart(
++	taskId: string,
++	status: ThinkTaskStatus,
++	existing: ThinkTaskOperation | undefined,
++	pendingStartIntent?: string,
++): 'START_NEW' | 'RESUME' | 'ACK_TERMINAL' {
++	if (existing?.taskId !== taskId) return 'START_NEW';
++	if (pendingStartIntent === taskId) return 'RESUME';
++	return status === 'RUNNING' ? 'RESUME' : 'ACK_TERMINAL';
++}
++
++export function isThinkPromptPersistedAfterBoundary(
++	messages: Array<{
++		role: string;
++		content?: unknown;
++		parts?: Array<{ type?: string; text?: string }>;
++	}>,
++	messageCountAtPassStart: number,
++	prompt: string,
++): boolean {
++	return messages.slice(Math.max(0, messageCountAtPassStart)).some((message) => {
++		if (message.role !== 'user') return false;
++		const text = typeof message.content === 'string'
++			? message.content
++			: (message.parts ?? [])
++					.filter((part) => part.type === 'text' && typeof part.text === 'string')
++					.map((part) => part.text)
++					.join('\n');
++		return prompt.startsWith(THINK_INTERNAL_CONTINUATION_PREFIX)
++			? text.startsWith(THINK_INTERNAL_CONTINUATION_PREFIX)
++			: text === prompt;
++	});
++}
++
++export type ThinkPendingChatRecovery = 'NOT_PERSISTED' | 'PERSISTED_INCOMPLETE' | 'PERSISTED_COMPLETE';
++
++export function classifyThinkPendingChatRecovery(
++	messages: Array<{
++		role: string;
++		content?: unknown;
++		parts?: Array<{ type?: string; text?: string }>;
++	}>,
++	messageCountAtPassStart: number,
++	prompt: string,
++	hasDurableCompletionCheckpoint = false,
++): ThinkPendingChatRecovery {
++	if (!isThinkPromptPersistedAfterBoundary(messages, messageCountAtPassStart, prompt)) return 'NOT_PERSISTED';
++	return hasDurableCompletionCheckpoint ? 'PERSISTED_COMPLETE' : 'PERSISTED_INCOMPLETE';
++}
++
++export type ThinkRevisionRpcName = 'gitStatus' | 'gitLog' | 'gitBranch' | 'getDeployment';
++
++export interface ThinkCurrentRevisionEvidence {
++	headCommitHash: string | null;
++	headBranch: string | null;
++	workingTreeClean: boolean;
++	workspaceStatusFingerprint: string;
++	previewCommitHash: string | null;
++	previewBranch: string | null;
++}
++
++function recordFromUnknown(value: unknown): Record<string, unknown> | undefined {
++	if (value && typeof value === 'object') return value as Record<string, unknown>;
++	if (typeof value !== 'string') return undefined;
++	try {
++		const parsed: unknown = JSON.parse(value);
++		return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : undefined;
++	} catch {
++		return undefined;
++	}
++}
++
++export async function readThinkCurrentRevisionEvidence(
++	read: (method: ThinkRevisionRpcName, argument?: unknown) => Promise<unknown>,
++	branch: string,
++): Promise<ThinkCurrentRevisionEvidence> {
++	const [status, log, branchState, deploymentValue] = await Promise.all([
++		read('gitStatus'),
++		read('gitLog', 1),
++		read('gitBranch', { list: true }),
++		read('getDeployment', branch).catch(() => null),
++	]);
++	const deployment = recordFromUnknown(deploymentValue);
++	const normalizedStatus = Array.isArray(status)
++		? status.slice().sort((left, right) =>
++			createThinkOperationFingerprint('git-status-entry', left)
++				.localeCompare(createThinkOperationFingerprint('git-status-entry', right)),
++		)
++		: status;
++	const latestCommit = Array.isArray(log) ? log[0] as { oid?: unknown } | undefined : undefined;
++	const activeBranch = recordFromUnknown(branchState)?.current;
++	const deploymentCommitHash = typeof deployment?.commit_hash === 'string'
++		? deployment.commit_hash
++		: typeof deployment?.commitHash === 'string'
++			? deployment.commitHash
++			: null;
++	const deploymentBranch = typeof deployment?.branch === 'string' ? deployment.branch : null;
++	return {
++		headCommitHash: typeof latestCommit?.oid === 'string' ? latestCommit.oid : null,
++		headBranch: typeof activeBranch === 'string'
++			? activeBranch
++			: latestCommit?.oid === deploymentCommitHash ? deploymentBranch : null,
++		workingTreeClean: Array.isArray(status) && status.length === 0,
++		workspaceStatusFingerprint: createThinkOperationFingerprint('git-status', normalizedStatus),
++		previewCommitHash: deploymentCommitHash,
++		previewBranch: deploymentBranch,
++	};
++}
++
++function stableSerialize(value: unknown): string {
++	if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
++	if (value && typeof value === 'object') {
++		const record = value as Record<string, unknown>;
++		return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`).join(',')}}`;
++	}
++	return JSON.stringify(value) ?? String(value);
++}
++
++export function createThinkOperationFingerprint(kind: string, evidence: unknown): string {
++	const serialized = `${kind}:${stableSerialize(evidence)}`;
++	let hash = 2166136261;
++	for (let index = 0; index < serialized.length; index++) {
++		hash ^= serialized.charCodeAt(index);
++		hash = Math.imul(hash, 16777619);
++	}
++	return `${kind}:${(hash >>> 0).toString(16)}`;
++}
++
++export function createThinkDiscoveryFingerprint(evidence: {
++	toolName: string;
++	query: unknown;
++	result: unknown;
++	workspaceRevision: string | null;
++	workspaceStatusFingerprint: string;
++}): string {
++	return createThinkOperationFingerprint('workspace-discovery', {
++		toolName: evidence.toolName,
++		query: evidence.query,
++		resultFingerprint: createThinkOperationFingerprint('discovery-result', evidence.result),
++		workspaceRevision: evidence.workspaceRevision,
++		workspaceStatusFingerprint: evidence.workspaceStatusFingerprint,
++	});
++}
++
++export function sameSignedPreviewUrl(actual: string | undefined, configured: string | undefined): boolean {
++	if (!actual || !configured) return false;
++	try {
++		const actualUrl = new URL(actual);
++		const configuredUrl = new URL(configured);
++		return (
++			actualUrl.protocol === configuredUrl.protocol &&
++			actualUrl.origin === configuredUrl.origin &&
++			actualUrl.pathname === configuredUrl.pathname &&
++			actualUrl.search === configuredUrl.search &&
++			actualUrl.hash === configuredUrl.hash
++		);
++	} catch {
++		return false;
++	}
++}
++
++function previewUrlTargetsDeployment(configured: string | undefined, deployed: string | undefined): boolean {
++	if (!configured || !deployed) return false;
++	try {
++		const configuredUrl = new URL(configured);
++		const deployedUrl = new URL(deployed, configuredUrl);
++		return configuredUrl.origin === deployedUrl.origin && configuredUrl.pathname === deployedUrl.pathname;
++	} catch {
++		return false;
++	}
++}
++
++export function advanceThinkTaskOperation(operation: ThinkTaskOperation): ThinkTaskOperation {
++	return operation.continuationCount >= operation.continuationBudget
++		? operation
++		: {
++				...operation,
++				continuationCount: operation.continuationCount + 1,
++				pendingPromptKind: 'CONTINUATION',
++			};
++}
++
++export function recordThinkOperation(
++	operation: ThinkTaskOperation,
++	fingerprint: string,
++): ThinkTaskOperation {
++	const kind = fingerprint.slice(0, fingerprint.indexOf(':'));
++	return {
++		...operation,
++		lastOperationFingerprint: fingerprint,
++		...(kind === 'workspace-operation' ? { lastWorkspaceFingerprint: fingerprint } : {}),
++		...(kind.includes('validation') ? { lastValidationFingerprint: fingerprint } : {}),
++	};
++}
++
++export function recordThinkDiscoveryOperation(
++	operation: ThinkTaskOperation,
++	discoveryFingerprint: string,
++	operationFingerprint: string,
++): ThinkTaskOperation {
++	const seen = operation.discoveryFingerprints ?? [];
++	if (seen.includes(discoveryFingerprint)) return operation;
++	return {
++		...operation,
++		lastOperationFingerprint: operationFingerprint,
++		lastWorkspaceFingerprint: operationFingerprint,
++		discoveryFingerprints: [...seen, discoveryFingerprint].slice(-THINK_DISCOVERY_FINGERPRINT_HISTORY_LIMIT),
++	};
++}
++
++export type ThinkResourceLimitReason =
++	| 'model_call_limit'
++	| 'tool_call_limit'
++	| 'elapsed_time_limit'
++	| 'credit_limit'
++	| 'available_credits_limit';
++
++export function reserveThinkTaskResource(
++	operation: ThinkTaskOperation,
++	resource: 'model' | 'tool' | 'checkpoint',
++	now: number,
++	creditCost = 0,
++): { operation: ThinkTaskOperation; limitExceeded?: ThinkResourceLimitReason } {
++	const limits = operation.limits ?? resolveThinkOperationLimits({
++		maxContinuations: operation.continuationBudget,
++	});
++	const normalized: ThinkTaskOperation = {
++		...operation,
++		limits,
++		continuationBudget: operation.continuationBudget ?? limits.maxContinuations,
++		startedAt: operation.startedAt ?? now,
++		startingHead: operation.startingHead ?? null,
++		modelCalls: operation.modelCalls ?? 0,
++		toolCalls: operation.toolCalls ?? 0,
++		creditsConsumed: operation.creditsConsumed ?? 0,
++		availableMeteredCredits: operation.availableMeteredCredits ?? null,
++		meteredCreditsInitialized: operation.meteredCreditsInitialized ?? false,
++		lastWorkspaceFingerprint: operation.lastWorkspaceFingerprint ?? null,
++		lastValidationFingerprint: operation.lastValidationFingerprint ?? null,
++	};
++	if (now - normalized.startedAt >= limits.maxElapsedMs) {
++		return { operation: normalized, limitExceeded: 'elapsed_time_limit' };
++	}
++	if (resource === 'checkpoint') return { operation: normalized };
++	if (resource === 'model') {
++		if (normalized.modelCalls >= limits.maxModelCalls) {
++			return { operation: normalized, limitExceeded: 'model_call_limit' };
++		}
++		if (normalized.creditsConsumed + creditCost > limits.maxCredits) {
++			return { operation: normalized, limitExceeded: 'credit_limit' };
++		}
++		if (
++			normalized.meteredCreditsInitialized &&
++			normalized.availableMeteredCredits !== null &&
++			normalized.availableMeteredCredits < creditCost
++		) {
++			return { operation: normalized, limitExceeded: 'available_credits_limit' };
++		}
++		return {
++			operation: {
++				...normalized,
++				modelCalls: normalized.modelCalls + 1,
++				creditsConsumed: normalized.creditsConsumed + creditCost,
++				availableMeteredCredits: normalized.availableMeteredCredits === null
++					? null
++					: Math.max(0, normalized.availableMeteredCredits - creditCost),
++			},
++		};
++	}
++	if (normalized.toolCalls >= limits.maxToolCalls) {
++		return { operation: normalized, limitExceeded: 'tool_call_limit' };
++	}
++	return { operation: { ...normalized, toolCalls: normalized.toolCalls + 1 } };
++}
++
++export function recoverThinkTaskOperation(
++	operation: ThinkTaskOperation,
++	fallbackLimits?: Partial<ThinkOperationLimits>,
++	now = Date.now(),
++): ThinkTaskOperation {
++	const limits = operation.limits ?? resolveThinkOperationLimits({
++		...fallbackLimits,
++		maxContinuations: operation.continuationBudget,
++	});
++	return reserveThinkTaskResource({
++		...operation,
++		limits,
++	}, 'checkpoint', operation.startedAt ?? now).operation;
++}
++
++export function markThinkTaskChatStarted(
++	operation: ThinkTaskOperation,
++	messageCountAtPassStart = operation.messageCountAtPassStart,
++): ThinkTaskOperation {
++	return {
++		...operation,
++		lastPassStartFingerprint: operation.lastOperationFingerprint,
++		messageCountAtPassStart,
++	};
++}
++
++export function markThinkTaskChatResolved(operation: ThinkTaskOperation): ThinkTaskOperation {
++	if (operation.pendingPromptKind === null) return operation;
++	return {
++		...operation,
++		completedPassCount: operation.completedPassCount + 1,
++		pendingPromptKind: null,
++	};
++}
++
++export function decideThinkTaskContinuation(
++	status: ThinkTaskStatus,
++	operation: ThinkTaskOperation | undefined,
++	previousFingerprint?: string,
++): 'STOP' | 'CONTINUE' | 'BLOCKED' | 'INCOMPLETE_RESOURCE_LIMIT' {
++	if (status !== 'RUNNING') return 'STOP';
++	if (
++		!operation ||
++		operation.lastOperationFingerprint === (previousFingerprint ?? operation.lastPassStartFingerprint)
++	) return 'BLOCKED';
++	if (operation.continuationCount >= operation.continuationBudget) return 'INCOMPLETE_RESOURCE_LIMIT';
++	return 'CONTINUE';
++}
++
++export interface ThinkTaskDriverStub {
++	getTaskLifecycle(): Promise<ThinkTaskLifecycle>;
++	getTaskOperation(): Promise<ThinkTaskOperation | undefined>;
++	recoverPendingTaskChat(prompt: string): Promise<ThinkPendingChatRecovery>;
++	markTaskChatStarted(): Promise<ThinkTaskOperation>;
++	markTaskChatResolved(): Promise<ThinkTaskOperation>;
++	advanceTaskOperation(): Promise<ThinkTaskOperation>;
++	stopTask(status: ThinkTaskStatus, summary: string, reason?: string): Promise<void>;
++}
++
++export async function driveThinkTaskOperation(options: {
++	stub: ThinkTaskDriverStub;
++	initialOperation: ThinkTaskOperation;
++	initialPrompt: string;
++	chat(prompt: string): Promise<void>;
++	continuationPrompt(summary: string): string;
++	onPassStart?(kind: 'INITIAL' | 'CONTINUATION'): void;
++	onPassEnd?(decision: 'STOP' | 'CONTINUE' | 'BLOCKED' | 'INCOMPLETE_RESOURCE_LIMIT'): void;
++}): Promise<{ operation: ThinkTaskOperation; lifecycle: ThinkTaskLifecycle }> {
++	const { stub } = options;
++	let operation = options.initialOperation;
++	let lifecycle = await stub.getTaskLifecycle();
++	if (lifecycle.status !== 'RUNNING') return { operation, lifecycle };
++
++	if (operation.pendingPromptKind) {
++		const pendingPrompt = operation.pendingPromptKind === 'INITIAL'
++			? options.initialPrompt
++			: options.continuationPrompt('Resume the interrupted task from its durable operation state.');
++		const recovery = await stub.recoverPendingTaskChat(pendingPrompt);
++		if (recovery !== 'NOT_PERSISTED') {
++			const recovered = await stub.getTaskOperation();
++			if (!recovered) {
++				await stub.stopTask('BLOCKED', 'Think operation state is missing during recovery.', 'operation_state_missing');
++				return { operation, lifecycle: await stub.getTaskLifecycle() };
++			}
++			if (
++				recovery === 'PERSISTED_INCOMPLETE' &&
++				recovered.continuationCount >= recovered.continuationBudget
++			) {
++				await stub.stopTask(
++					'INCOMPLETE_RESOURCE_LIMIT',
++					'The persisted continuation budget was exhausted while recovering an in-flight chat.',
++					'continuation_budget_exhausted',
++				);
++				return { operation: recovered, lifecycle: await stub.getTaskLifecycle() };
++			}
++			operation = recovery === 'PERSISTED_INCOMPLETE'
++				? await stub.advanceTaskOperation()
++				: recovered;
++		}
++	}
++
++	if (operation.pendingPromptKind === null && operation.completedPassCount > 0) {
++		const decision = decideThinkTaskContinuation(lifecycle.status, operation);
++		if (decision !== 'CONTINUE') {
++			if (decision === 'BLOCKED') {
++				await stub.stopTask('BLOCKED', 'The task made no concrete progress before reconnect.', 'no_progress');
++			} else if (decision === 'INCOMPLETE_RESOURCE_LIMIT') {
++				await stub.stopTask(
++					'INCOMPLETE_RESOURCE_LIMIT',
++					'The persisted continuation budget is exhausted.',
++					'continuation_budget_exhausted',
++				);
++			}
++			return { operation, lifecycle: await stub.getTaskLifecycle() };
++		}
++		operation = await stub.advanceTaskOperation();
++	}
++
++	while (true) {
++		const kind = operation.pendingPromptKind;
++		if (!kind) {
++			await stub.stopTask('BLOCKED', 'Think operation has no pending pass to execute.', 'operation_state_invalid');
++			return { operation, lifecycle: await stub.getTaskLifecycle() };
++		}
++		const prompt = kind === 'INITIAL'
++			? options.initialPrompt
++			: options.continuationPrompt(lifecycle.summary);
++		options.onPassStart?.(kind);
++		await stub.markTaskChatStarted();
++		try {
++			await options.chat(prompt);
++		} catch (error) {
++			lifecycle = await stub.getTaskLifecycle();
++			if (lifecycle.status !== 'INCOMPLETE_RESOURCE_LIMIT') throw error;
++			options.onPassEnd?.('INCOMPLETE_RESOURCE_LIMIT');
++			return {
++				operation: (await stub.getTaskOperation()) ?? operation,
++				lifecycle,
++			};
++		}
++		await stub.markTaskChatResolved();
++		lifecycle = await stub.getTaskLifecycle();
++		const afterPass = await stub.getTaskOperation();
++		const decision = decideThinkTaskContinuation(lifecycle.status, afterPass);
++		options.onPassEnd?.(decision);
++		if (decision === 'STOP') return { operation: afterPass ?? operation, lifecycle };
++		if (decision === 'BLOCKED') {
++			await stub.stopTask(
++				'BLOCKED',
++				lifecycle.summary || 'The task is blocked because the latest pass made no concrete operation progress.',
++				'no_progress',
++			);
++			return { operation: afterPass ?? operation, lifecycle: await stub.getTaskLifecycle() };
++		}
++		if (decision === 'INCOMPLETE_RESOURCE_LIMIT') {
++			await stub.stopTask(
++				'INCOMPLETE_RESOURCE_LIMIT',
++				lifecycle.summary || 'The task needs more work than the persisted continuation budget allows.',
++				'continuation_budget_exhausted',
++			);
++			return { operation: afterPass ?? operation, lifecycle: await stub.getTaskLifecycle() };
++		}
++		if (!afterPass) {
++			await stub.stopTask('BLOCKED', 'Think operation state is missing.', 'operation_state_missing');
++			return { operation, lifecycle: await stub.getTaskLifecycle() };
++		}
++		operation = await stub.advanceTaskOperation();
++	}
++}
++
++export function hasCompleteThinkTaskEvidence(evidence: ThinkTaskEvidence): boolean {
++	return (
++		evidence.preflightSucceeded &&
++		evidence.deploySucceeded &&
++		Boolean(evidence.deployedCommitHash) &&
++		evidence.deployedCommitHash === evidence.headCommitHash &&
++		evidence.deployedBranch === evidence.headBranch &&
++		evidence.deployedCommitHash === evidence.previewCommitHash &&
++		evidence.deployedBranch === evidence.previewBranch &&
++		evidence.workingTreeClean &&
++		evidence.browserClean &&
++		evidence.browserCommitHash === evidence.deployedCommitHash &&
++		evidence.browserBranch === evidence.deployedBranch &&
++		sameSignedPreviewUrl(evidence.browserPreviewUrl ?? undefined, evidence.configuredPreviewUrl ?? undefined) &&
++		previewUrlTargetsDeployment(evidence.configuredPreviewUrl ?? undefined, evidence.deployedPreviewUrl ?? undefined) &&
++		Boolean(evidence.deployedPreviewUrl) &&
++		Boolean(evidence.deployedBranch)
++	);
++}
++
++export function createFinishTaskTool(opts: {
++	getEvidence: () => Promise<ThinkTaskEvidence>;
++	saveStatus: (status: ThinkTaskLifecycle) => Promise<void>;
++	getForcedStatus?: () => Promise<ThinkTaskStatus | undefined>;
++	getForcedLifecycle?: () => Promise<ThinkTaskLifecycle>;
++}): Tool {
++	return tool({
++		description: [
++			'Report the structured lifecycle state for the current request.',
++			'Use RUNNING when further implementation or verification is needed, BLOCKED when a concrete blocker prevents progress, USER_INPUT_REQUIRED when clarification is required, and INCOMPLETE_RESOURCE_LIMIT when unable to finish within available resources.',
++			'Only report COMPLETE after deploy_space succeeded, preflight passed, the deployed commit matches the current clean branch HEAD, and get_browser_console_logs checked that exact preview revision without errors. The platform independently checks these operation records; the evidence text you provide is not proof.',
++		].join('\n'),
++		inputSchema: z.object({
++			status: z.enum(['RUNNING', 'COMPLETE', 'BLOCKED', 'USER_INPUT_REQUIRED', 'INCOMPLETE_RESOURCE_LIMIT']),
++			summary: z.string().min(1).max(2000),
++			evidence: z.string().max(2000).optional(),
++		}),
++		execute: async ({ status, summary }) => {
++			let acceptedStatus = status;
++			let reason: string | undefined;
++			if (status === 'COMPLETE') {
++				const evidence = await opts.getEvidence();
++				if (!hasCompleteThinkTaskEvidence(evidence)) {
++					acceptedStatus = 'RUNNING';
++					reason = 'missing_verification_evidence';
++				}
++			}
++			const forcedStatus = await opts.getForcedStatus?.();
++			if (forcedStatus === 'INCOMPLETE_RESOURCE_LIMIT') {
++				const forcedLifecycle = await opts.getForcedLifecycle?.();
++				if (forcedLifecycle?.status === forcedStatus) return JSON.stringify(forcedLifecycle);
++				acceptedStatus = forcedStatus;
++				reason = 'resource_limit_reached';
++			} else if (forcedStatus === 'USER_INPUT_REQUIRED') {
++				acceptedStatus = forcedStatus;
++			} else if (status === 'INCOMPLETE_RESOURCE_LIMIT') {
++				acceptedStatus = 'RUNNING';
++				reason = 'resource_limit_not_reached';
++			}
++			const lifecycle: ThinkTaskLifecycle = {
++				status: acceptedStatus,
++				summary,
++				reason,
++				updatedAt: Date.now(),
++			};
++			await opts.saveStatus(lifecycle);
++			return JSON.stringify(lifecycle);
++		},
++	});
++}
+diff --git a/worker/agents/think/space-workspace-ops.ts b/worker/agents/think/space-workspace-ops.ts
+index 907d92f0567f51efc447785ce335dc2369336160..115e08f3ca07e6bdaf6c39f28058c703aab71c95 100644
+--- a/worker/agents/think/space-workspace-ops.ts
++++ b/worker/agents/think/space-workspace-ops.ts
+@@ -24,10 +24,16 @@ export interface SpaceWorkspaceStub extends DurableObjectStub {
+ 		author?: { name: string; email: string },
+ 	): Promise<{ sha: string; message: string }>;
+ 	gitStatus(): Promise<unknown>;
++	preflightDeploy(branch: string): Promise<{ ok: true }>;
++	preflightCommitDeploy(branch: string): Promise<PreflightCommitDeployResult>;
+ 	deploy(branch: string): Promise<unknown>;
+ 	rollbackToCommit(branch: string, commitHash: string): Promise<unknown>;
+ }
+ 
++export type PreflightCommitDeployResult =
++	| { ok: true; [key: string]: unknown }
++	| { ok: false; phase: 'preflight' | 'commit' | 'deploy'; error: string };
++
+ export type SpaceWorkspaceOps = ReadOperations &
+ 	WriteOperations &
+ 	EditOperations &
+diff --git a/worker/agents/think/task-operation.test.ts b/worker/agents/think/task-operation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..dc5ab45699d7729b1a1252cfae53f63cb06b097b
+--- /dev/null
++++ b/worker/agents/think/task-operation.test.ts
+@@ -0,0 +1,450 @@
++import { describe, expect, it } from 'vitest';
++import {
++	advanceThinkTaskOperation,
++	createThinkTaskQueueIdentity,
++	createThinkOperationFingerprint,
++	createThinkDiscoveryFingerprint,
++	createThinkTaskOperation,
++	decideThinkTaskContinuation,
++	driveThinkTaskOperation,
++	classifyThinkPendingChatRecovery,
++	isThinkPromptPersistedAfterBoundary,
++	readThinkCurrentRevisionEvidence,
++	markThinkTaskChatResolved,
++	markThinkTaskChatStarted,
++	resolveThinkTaskStart,
++	recordThinkOperation,
++	recordThinkDiscoveryOperation,
++	recoverThinkTaskOperation,
++	resolveThinkOperationLimits,
++	parseThinkOperationLimits,
++	reserveThinkTaskResource,
++} from './finish-task-tool';
++
++describe('durable Think task operation state', () => {
++	it('keeps operation identity and continuation budget across serialization/reconnect', () => {
++		const original = createThinkTaskOperation('task-1', 'conversation-1', 25);
++		const afterContinuation = advanceThinkTaskOperation(original);
++		const reconnected = JSON.parse(JSON.stringify(afterContinuation));
++
++		expect(reconnected).toMatchObject({
++			taskId: 'task-1',
++			conversationId: 'conversation-1',
++			continuationCount: 1,
++			continuationBudget: 25,
++			pendingPromptKind: 'CONTINUATION',
++		});
++	});
++
++	it('uses configurable limits and carries resource budgets through continuation recovery', () => {
++		const configured = resolveThinkOperationLimits({
++			maxContinuations: 3,
++			maxModelCalls: 2,
++			maxToolCalls: 4,
++			maxElapsedMs: 5000,
++			maxCredits: 6,
++		});
++		const initial = createThinkTaskOperation('task-limits', 'conversation-1', configured);
++		const used = {
++			...initial,
++			modelCalls: 1,
++			toolCalls: 2,
++			creditsConsumed: 2,
++			startedAt: 1000,
++			startingHead: 'head-at-start',
++			availableMeteredCredits: 8,
++			meteredCreditsInitialized: true,
++			lastWorkspaceFingerprint: 'workspace-operation:before-recovery',
++			lastValidationFingerprint: 'browser-validation:before-recovery',
++		};
++		const recovered = recoverThinkTaskOperation(
++			JSON.parse(JSON.stringify(advanceThinkTaskOperation(used))),
++			{ maxModelCalls: 99, maxToolCalls: 99, maxElapsedMs: 99_000, maxCredits: 99 },
++			4_000,
++		);
++
++		expect(recovered.limits).toEqual(configured);
++		const lastAllowedCall = reserveThinkTaskResource(recovered, 'model', 4000, 2);
++		expect(lastAllowedCall.operation.modelCalls).toBe(2);
++		expect(reserveThinkTaskResource(lastAllowedCall.operation, 'model', 4000, 2).limitExceeded)
++			.toBe('model_call_limit');
++		expect(recovered).toMatchObject({
++			continuationCount: 1,
++			modelCalls: 1,
++			toolCalls: 2,
++			creditsConsumed: 2,
++			startedAt: 1000,
++			startingHead: 'head-at-start',
++			availableMeteredCredits: 8,
++			meteredCreditsInitialized: true,
++			lastWorkspaceFingerprint: 'workspace-operation:before-recovery',
++			lastValidationFingerprint: 'browser-validation:before-recovery',
++		});
++		expect(resolveThinkOperationLimits()).toMatchObject({
++			maxContinuations: 25,
++			maxModelCalls: 650,
++			maxToolCalls: 1300,
++			maxElapsedMs: 3_600_000,
++			maxCredits: 100,
++		});
++	});
++
++	it('parses explicit operation limits and rejects invalid host values', () => {
++		expect(parseThinkOperationLimits({
++			maxModelCalls: '12',
++			maxElapsedMs: '45000',
++			maxCredits: '7.5',
++		})).toEqual({ maxModelCalls: 12, maxElapsedMs: 45000, maxCredits: 7.5 });
++		expect(() => parseThinkOperationLimits({ maxToolCalls: '0' })).toThrow(/maxToolCalls/);
++	});
++
++	it('enforces cumulative model, tool, elapsed-time, and credit boundaries', () => {
++		const operation = createThinkTaskOperation('bounded', 'conversation-1', {
++			maxContinuations: 2,
++			maxModelCalls: 3,
++			maxToolCalls: 1,
++			maxElapsedMs: 1000,
++			maxCredits: 2,
++		});
++		const oneModel = reserveThinkTaskResource(operation, 'model', operation.startedAt, 2);
++		expect(oneModel.limitExceeded).toBeUndefined();
++		expect(oneModel.operation.modelCalls).toBe(1);
++		expect(oneModel.operation.creditsConsumed).toBe(2);
++		expect(reserveThinkTaskResource(oneModel.operation, 'model', operation.startedAt, 2).limitExceeded)
++			.toBe('credit_limit');
++		const modelBound = createThinkTaskOperation('model-bound', 'conversation-1', {
++			maxContinuations: 2,
++			maxModelCalls: 1,
++			maxToolCalls: 3,
++			maxElapsedMs: 1000,
++			maxCredits: 10,
++		});
++		const oneAllowedModel = reserveThinkTaskResource(modelBound, 'model', modelBound.startedAt, 2);
++		expect(reserveThinkTaskResource(oneAllowedModel.operation, 'model', modelBound.startedAt, 2).limitExceeded)
++			.toBe('model_call_limit');
++
++		const oneTool = reserveThinkTaskResource(operation, 'tool', operation.startedAt);
++		expect(reserveThinkTaskResource(oneTool.operation, 'tool', operation.startedAt).limitExceeded)
++			.toBe('tool_call_limit');
++		expect(reserveThinkTaskResource(operation, 'model', operation.startedAt + 1000, 2).limitExceeded)
++			.toBe('elapsed_time_limit');
++		expect(reserveThinkTaskResource({
++			...operation,
++			availableMeteredCredits: 1,
++			meteredCreditsInitialized: true,
++		}, 'model', operation.startedAt, 2).limitExceeded).toBe('available_credits_limit');
++	});
++
++	it('tracks concrete operation fingerprints rather than a counter as progress', () => {
++		const initial = createThinkTaskOperation('task-1', 'conversation-1', 25);
++		const first = recordThinkOperation(initial, 'read:/src/main.ts:hash-a');
++		const repeated = recordThinkOperation(first, 'read:/src/main.ts:hash-a');
++		const changed = recordThinkOperation(repeated, 'write:/src/main.ts:hash-b');
++
++		expect(changed.lastOperationFingerprint).not.toBe(first.lastOperationFingerprint);
++		expect(changed.lastOperationFingerprint).toBe('write:/src/main.ts:hash-b');
++	});
++
++	it('stores the last workspace and validation fingerprints durably', () => {
++		const initial = createThinkTaskOperation('task-fingerprints', 'conversation-1');
++		const workspace = recordThinkOperation(initial, createThinkOperationFingerprint('workspace-operation', {
++			changedPath: 'src/main.ts',
++		}));
++		const validation = recordThinkOperation(workspace, createThinkOperationFingerprint('browser-validation', {
++			passed: true,
++		}));
++
++		expect(validation.lastWorkspaceFingerprint).toBe(workspace.lastOperationFingerprint);
++		expect(validation.lastValidationFingerprint).toBe(validation.lastOperationFingerprint);
++	});
++
++	it('persists an in-flight pass and resolved checkpoint for reconnect recovery', () => {
++		const initial = createThinkTaskOperation('task-1', 'conversation-1', 2);
++		const started = markThinkTaskChatStarted(initial);
++		const resolved = markThinkTaskChatResolved(
++			recordThinkOperation(started, 'write:/src/main.ts:hash-b'),
++		);
++
++		expect(resolved).toMatchObject({
++			completedPassCount: 1,
++			pendingPromptKind: null,
++			lastPassStartFingerprint: '',
++			lastOperationFingerprint: 'write:/src/main.ts:hash-b',
++		});
++		expect(markThinkTaskChatResolved(resolved)).toEqual(resolved);
++	});
++
++	it('uses unique queued submission identity even when request text is identical', () => {
++		expect(createThinkTaskQueueIdentity(['queued-id-1'])).not.toBe(
++			createThinkTaskQueueIdentity(['queued-id-2']),
++		);
++		expect(createThinkTaskQueueIdentity(['queued-id-1', 'queued-id-2'])).not.toBe(
++			createThinkTaskQueueIdentity(['queued-id-1']),
++		);
++	});
++
++	it('does not start a new operation when the same queued input already reached terminal lifecycle', () => {
++		const operation = createThinkTaskOperation('queue-identity', 'conversation-1', 4);
++		expect(resolveThinkTaskStart('queue-identity', 'COMPLETE', operation)).toBe('ACK_TERMINAL');
++		expect(resolveThinkTaskStart('queue-identity', 'COMPLETE', operation, 'queue-identity')).toBe('RESUME');
++		expect(resolveThinkTaskStart('different-queue-identity', 'COMPLETE', operation)).toBe('START_NEW');
++		expect(resolveThinkTaskStart('queue-identity', 'RUNNING', operation)).toBe('RESUME');
++	});
++
++	it('recovers a persisted initial prompt by message boundary without confusing an older identical request', () => {
++		const messages = [
++			{ role: 'user', parts: [{ type: 'text', text: 'same request' }] },
++			{ role: 'assistant', parts: [{ type: 'text', text: 'old response' }] },
++			{ role: 'user', parts: [{ type: 'text', text: 'same request' }] },
++			{ role: 'assistant', parts: [{ type: 'text', text: 'possibly partial response' }] },
++		];
++		expect(isThinkPromptPersistedAfterBoundary(messages, 2, 'same request')).toBe(true);
++		expect(isThinkPromptPersistedAfterBoundary(messages, 0, 'new request')).toBe(false);
++		expect(classifyThinkPendingChatRecovery(messages, 2, 'same request')).toBe('PERSISTED_INCOMPLETE');
++		expect(classifyThinkPendingChatRecovery(messages, 2, 'same request', true)).toBe('PERSISTED_COMPLETE');
++	});
++
++	it('classifies repeated operations as BLOCKED and only exhausts the persisted budget at its limit', () => {
++		const initial = createThinkTaskOperation('task-1', 'conversation-1', 2);
++		const progress = recordThinkOperation(initial, 'read:same-result');
++		expect(decideThinkTaskContinuation('RUNNING', progress, 'read:same-result')).toBe('BLOCKED');
++		expect(decideThinkTaskContinuation('RUNNING', progress, '')).toBe('CONTINUE');
++		const exhausted = advanceThinkTaskOperation(advanceThinkTaskOperation(progress));
++		expect(decideThinkTaskContinuation('RUNNING', exhausted, '')).toBe('INCOMPLETE_RESOURCE_LIMIT');
++		expect(decideThinkTaskContinuation('USER_INPUT_REQUIRED', progress, '')).toBe('STOP');
++	});
++
++	it('fingerprints workspace revision/status and validation outcome, not arbitrary tool bytes', () => {
++		const state = {
++			workspaceRevision: 'head-a',
++			workspaceStatus: [{ path: 'src/app.ts', workdir: 2 }],
++			validationResult: { passed: false, errors: ['build failed'] },
++		};
++		expect(createThinkOperationFingerprint('workspace', state)).toBe(
++			createThinkOperationFingerprint('workspace', state),
++		);
++		expect(createThinkOperationFingerprint('workspace', {
++			...state,
++			validationResult: { passed: true, errors: [] },
++		})).not.toBe(createThinkOperationFingerprint('workspace', state));
++	});
++
++	it('treats novel discovery as bounded progress while identical repeated reads stay stable', () => {
++		const read = (result: string) => createThinkDiscoveryFingerprint({
++			toolName: 'read',
++			query: { path: 'src/app.ts' },
++			result,
++			workspaceRevision: 'head-1',
++			workspaceStatusFingerprint: 'status-1',
++		});
++		expect(read('same file contents')).toBe(read('same file contents'));
++		expect(read('relevant new contents')).not.toBe(read('same file contents'));
++
++		const initial = createThinkTaskOperation('task-1', 'conversation-1', 4);
++		const firstFingerprint = read('same file contents');
++		const first = recordThinkDiscoveryOperation(initial, firstFingerprint, 'operation:first');
++		const nextFingerprint = read('another relevant file');
++		const next = recordThinkDiscoveryOperation(first, nextFingerprint, 'operation:next');
++		const repeated = recordThinkDiscoveryOperation(next, firstFingerprint, 'operation:first');
++		expect(first.lastOperationFingerprint).not.toBe(initial.lastOperationFingerprint);
++		expect(repeated).toEqual(next);
++		expect(decideThinkTaskContinuation('RUNNING', repeated, next.lastOperationFingerprint)).toBe('BLOCKED');
++		let bounded = initial;
++		for (let index = 0; index < 300; index++) {
++			bounded = recordThinkDiscoveryOperation(bounded, `discovery:${index}`, `operation:${index}`);
++		}
++		expect(bounded.discoveryFingerprints?.length).toBe(256);
++	});
++
++	it('reads dirty workspace evidence without invoking checkout or deployment-bundle methods', async () => {
++		const calls: string[] = [];
++		const evidence = await readThinkCurrentRevisionEvidence(async (method, argument) => {
++			calls.push(method);
++			if (method === 'gitStatus') return [{ filepath: 'src/app.ts', workdir: 2 }];
++			if (method === 'gitLog') return [{ oid: 'head-sha' }];
++			if (method === 'gitBranch') return { current: 'main', branches: ['main'] };
++			if (method === 'getDeployment') return { branch: argument, commit_hash: 'deployed-sha' };
++			throw new Error(`Unexpected mutating workspace RPC: ${String(method)}`);
++		}, 'main');
++
++		expect(evidence.headCommitHash).toBe('head-sha');
++		expect(evidence.workingTreeClean).toBe(false);
++		expect(evidence.previewCommitHash).toBe('deployed-sha');
++		expect(calls).toEqual(['gitStatus', 'gitLog', 'gitBranch', 'getDeployment']);
++		expect(calls).not.toContain('getDeploymentBundle');
++		expect(calls).not.toContain('gitCheckout');
++	});
++
++	it('only infers the checked-out branch from a deployment row when its commit is the current HEAD', async () => {
++		const readEvidence = (head: string) => readThinkCurrentRevisionEvidence(async (method) => {
++			if (method === 'gitStatus') return [];
++			if (method === 'gitLog') return [{ oid: head }];
++			if (method === 'gitBranch') return ['main'];
++			return { branch: 'main', commit_hash: 'deployed-sha' };
++		}, 'main');
++
++		expect((await readEvidence('deployed-sha')).headBranch).toBe('main');
++		expect((await readEvidence('newer-head')).headBranch).toBe(null);
++	});
++
++	it('drives mocked edit, repair, deploy, and verification passes sequentially on one operation', async () => {
++		let operation = createThinkTaskOperation('queue-id-1', 'conversation-stable', 5);
++		let lifecycle = {
++			status: 'RUNNING' as const,
++			summary: 'Building.',
++			updatedAt: 1,
++		};
++		const events: string[] = [];
++		const stub = {
++			getTaskLifecycle: async () => lifecycle,
++			getTaskOperation: async () => operation,
++			recoverPendingTaskChat: async () => 'NOT_PERSISTED',
++			markTaskChatStarted: async () => {
++				operation = markThinkTaskChatStarted(operation);
++				return operation;
++			},
++			markTaskChatResolved: async () => {
++				operation = markThinkTaskChatResolved(operation);
++				return operation;
++			},
++			advanceTaskOperation: async () => {
++				operation = advanceThinkTaskOperation(operation);
++				return operation;
++			},
++			stopTask: async (status: typeof lifecycle.status, summary: string) => {
++				lifecycle = { status, summary, updatedAt: 2 };
++			},
++		};
++
++		const result = await driveThinkTaskOperation({
++			stub,
++			initialOperation: operation,
++			initialPrompt: 'Build the requested app.',
++			continuationPrompt: () => '__THINK_INTERNAL_CONTINUATION__: continue work',
++			chat: async (prompt) => {
++				events.push(`start:${prompt}`);
++				await Promise.resolve();
++				if (events.length === 1) operation = recordThinkOperation(operation, 'workspace:edit-v1');
++				else if (events.length === 3) operation = recordThinkOperation(operation, 'validation:repair-v2');
++				else if (events.length === 5) {
++					operation = recordThinkOperation(operation, 'deploy:sha-3');
++					lifecycle = { status: 'COMPLETE', summary: 'Deployed and checked.', updatedAt: 3 };
++				}
++				events.push('resolved');
++			},
++		});
++
++		expect(events).toEqual([
++			'start:Build the requested app.', 'resolved',
++			'start:__THINK_INTERNAL_CONTINUATION__: continue work', 'resolved',
++			'start:__THINK_INTERNAL_CONTINUATION__: continue work', 'resolved',
++		]);
++		expect(result.lifecycle.status).toBe('COMPLETE');
++		expect(result.operation.conversationId).toBe('conversation-stable');
++	});
++
++	it('recovers an already-persisted in-flight prompt without replaying the initial user request', async () => {
++		let operation = markThinkTaskChatStarted(createThinkTaskOperation('queued-id', 'conversation-stable', 4), 0);
++		let lifecycle = { status: 'RUNNING' as const, summary: 'Recover.', updatedAt: 1 };
++		const sent: string[] = [];
++		const stub = {
++			getTaskLifecycle: async () => lifecycle,
++			getTaskOperation: async () => operation,
++			recoverPendingTaskChat: async () => 'PERSISTED_INCOMPLETE',
++			markTaskChatStarted: async () => {
++				operation = markThinkTaskChatStarted(operation, 1);
++				return operation;
++			},
++			markTaskChatResolved: async () => {
++				operation = markThinkTaskChatResolved(recordThinkOperation(operation, 'deploy:verified'));
++				lifecycle = { status: 'COMPLETE', summary: 'Done.', updatedAt: 2 };
++				return operation;
++			},
++			advanceTaskOperation: async () => {
++				operation = advanceThinkTaskOperation(operation);
++				return operation;
++			},
++			stopTask: async (status: typeof lifecycle.status, summary: string) => {
++				lifecycle = { status, summary, updatedAt: 3 };
++			},
++		};
++		const result = await driveThinkTaskOperation({
++			stub,
++			initialOperation: operation,
++			initialPrompt: 'identical user request',
++			continuationPrompt: () => '__THINK_INTERNAL_CONTINUATION__: recover continuation',
++			chat: async (prompt) => { sent.push(prompt); },
++		});
++
++		expect(sent).toEqual(['__THINK_INTERNAL_CONTINUATION__: recover continuation']);
++		expect(result.operation.conversationId).toBe('conversation-stable');
++		expect(result.operation.completedPassCount).toBe(1);
++		expect(result.lifecycle.status).toBe('COMPLETE');
++	});
++
++	it('uses a durable completion checkpoint when recovery races stream completion', async () => {
++		const started = markThinkTaskChatStarted(createThinkTaskOperation('queued-id', 'conversation-stable', 4), 0);
++		const completed = markThinkTaskChatResolved(recordThinkOperation(started, 'workspace:changed'));
++		let operation = completed;
++		let lifecycle = { status: 'RUNNING' as const, summary: 'Continue.', updatedAt: 1 };
++		const sent: string[] = [];
++		const stub = {
++			getTaskLifecycle: async () => lifecycle,
++			getTaskOperation: async () => operation,
++			recoverPendingTaskChat: async () => 'PERSISTED_COMPLETE',
++			markTaskChatStarted: async () => {
++				operation = markThinkTaskChatStarted(operation, 1);
++				return operation;
++			},
++			markTaskChatResolved: async () => {
++				operation = markThinkTaskChatResolved(recordThinkOperation(operation, 'deploy:verified'));
++				lifecycle = { status: 'COMPLETE', summary: 'Done.', updatedAt: 2 };
++				return operation;
++			},
++			advanceTaskOperation: async () => {
++				operation = advanceThinkTaskOperation(operation);
++				return operation;
++			},
++			stopTask: async (status: typeof lifecycle.status, summary: string) => {
++				lifecycle = { status, summary, updatedAt: 3 };
++			},
++		};
++		const result = await driveThinkTaskOperation({
++			stub,
++			initialOperation: started,
++			initialPrompt: 'identical user request',
++			continuationPrompt: () => '__THINK_INTERNAL_CONTINUATION__: finish the task',
++			chat: async (prompt) => { sent.push(prompt); },
++		});
++
++		expect(sent).toEqual(['__THINK_INTERNAL_CONTINUATION__: finish the task']);
++		expect(result.lifecycle.status).toBe('COMPLETE');
++	});
++
++	it('acknowledges a persisted terminal operation without opening another chat', async () => {
++		const operation = createThinkTaskOperation('same-queue-entry', 'conversation-stable');
++		let calls = 0;
++		const stub = {
++			getTaskLifecycle: async () => ({
++				status: 'COMPLETE' as const,
++				summary: 'Already completed.',
++				updatedAt: 1,
++			}),
++			getTaskOperation: async () => operation,
++			recoverPendingTaskChat: async () => 'NOT_PERSISTED',
++			markTaskChatStarted: async () => operation,
++			markTaskChatResolved: async () => operation,
++			advanceTaskOperation: async () => operation,
++			stopTask: async () => {},
++		};
++		const result = await driveThinkTaskOperation({
++			stub,
++			initialOperation: operation,
++			initialPrompt: 'same request',
++			continuationPrompt: () => 'continue',
++			chat: async () => { calls++; },
++		});
++		expect(calls).toBe(0);
++		expect(result.lifecycle.status).toBe('COMPLETE');
++	});
++});
+\ No newline at end of file
+diff --git a/worker/services/browser-capture/capture-core.test.ts b/worker/services/browser-capture/capture-core.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..ed06322eafba240328f4939d5c562508bc1bce11
+--- /dev/null
++++ b/worker/services/browser-capture/capture-core.test.ts
+@@ -0,0 +1,25 @@
++import { describe, expect, it } from 'vitest';
++import { runCapture } from './capture-core';
++import type { CapturePage } from './types';
++
++describe('browser capture core', () => {
++	it('reports the final browser URL after a cross-origin redirect', async () => {
++		const handlers = new Map<string, (...args: unknown[]) => void>();
++		const page = {
++			on: (event: string, callback: (...args: unknown[]) => void) => handlers.set(event, callback),
++			setViewport: async () => {},
++			goto: async () => {},
++			url: () => 'https://attacker.example/redirected',
++			close: async () => {},
++		} as unknown as CapturePage;
++
++		const result = await runCapture(page, {
++			url: 'https://preview.example/app',
++			waitSeconds: 0,
++			viewport: { width: 1280, height: 800 },
++		});
++
++		expect(result.url).toBe('https://preview.example/app');
++		expect(result.finalUrl).toBe('https://attacker.example/redirected');
++	});
++});
+\ No newline at end of file
+diff --git a/worker/services/browser-capture/capture-core.ts b/worker/services/browser-capture/capture-core.ts
+index 479079adebaea57b93b361e3eeb2916646880067..39c84d3187f6665936aac99eb96ca47060dfc7d8 100644
+--- a/worker/services/browser-capture/capture-core.ts
++++ b/worker/services/browser-capture/capture-core.ts
+@@ -26,6 +26,7 @@ export async function runCapture(
+ 	const logs: BrowserConsoleEntry[] = [];
+ 	const pageErrors: BrowserConsolePageError[] = [];
+ 	const requestFailures: BrowserConsoleRequestFailure[] = [];
++	let finalUrl = payload.url;
+ 
+ 	page.on('console', (msg) => {
+ 		try {
+@@ -81,6 +82,11 @@ export async function runCapture(
+ 		if (waitMs > 0) {
+ 			await new Promise((r) => setTimeout(r, waitMs));
+ 		}
++		try {
++			finalUrl = page.url?.() || payload.url;
++		} catch {
++			// Older adapters may not expose the final URL; retain the requested URL.
++		}
+ 	} finally {
+ 		try {
+ 			await page.close();
+@@ -91,6 +97,7 @@ export async function runCapture(
+ 
+ 	return {
+ 		url: payload.url,
++		finalUrl,
+ 		capturedAt: new Date().toISOString(),
+ 		logs,
+ 		pageErrors,

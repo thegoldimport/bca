@@ -1,0 +1,779 @@
+AUTHORIZED: implement the approved BuildCustom continuous coding lifecycle architecture.
+
+This is now an IMPLEMENTATION task.
+
+IMPORTANT:
+
+DO NOT use Project 5 as the development/test workspace yet.
+
+Project 5 currently contains confirmed dirty, malformed, partial edit1 work. Preserve it exactly as-is until the new lifecycle implementation has passed isolated tests.
+
+Do NOT:
+- reset Project 5
+- commit Project 5
+- repair Project 5
+- resend edit1
+- proceed to edit2
+- change Project 5 database state
+- publish Project 5
+- use customer production state as the development fixture
+
+==================================================
+GOAL
+==================================================
+
+Fix the core BuildCustom coding lifecycle so the CUSTOMER'S CODING TASK, not one internal Think turn, is the unit of work.
+
+Desired customer experience:
+
+USER REQUEST
+→ UNDERSTAND
+→ TARGETED DISCOVERY
+→ EDIT
+→ PREFLIGHT
+→ REPAIR IF NEEDED
+→ COMMIT / PREVIEW
+→ BROWSER/RUNTIME VERIFY
+→ COMPLETE
+
+Internally this may require multiple bounded Think turns.
+
+The customer should experience ONE coherent coding operation.
+
+Do not solve this by merely increasing maxSteps.
+
+Do not add a second coding agent.
+
+Do not add a custom Workflow orchestration system.
+
+Do not add subagents yet.
+
+Use the existing:
+- ThinkAgent
+- Think chat RPC
+- SpaceDO
+- Git
+- VibeSDK preview system
+- existing conversation/session state
+- existing BuildCustom adapter
+
+==================================================
+1. WRITE FAILING TESTS FIRST
+==================================================
+
+Before changing runtime behavior, add isolated focused tests for:
+
+A. SMALL EDIT
+
+One internal Think turn completes the task.
+
+Require:
+- working-tree preflight
+- successful preview deployment
+- coherent authoritative revision
+- successful completion state
+
+B. LARGE EDIT / INTERNAL CONTINUATION
+
+Simulate a legitimate coding task crossing the internal Think step boundary while still making progress.
+
+Require:
+
+customer request
+→ internal Think turn 1
+→ boundary reached while incomplete
+→ internal continuation
+→ Think turn 2
+→ validation
+→ revision
+→ COMPLETE
+
+The customer request must NOT be duplicated.
+
+The customer transcript must NOT show the internal continuation as another customer message.
+
+C. MALFORMED INTERMEDIATE EDIT
+
+Create an invalid intermediate JSX/source state.
+
+Require:
+- preflight FAILS
+- invalid state is NOT committed
+- working tree is NOT reset
+- working tree is NOT checked out/discarded
+- diagnostic returns to primary Think agent
+- repair occurs
+- subsequent preflight passes
+- final revision succeeds
+
+D. NO-PROGRESS LOOP
+
+Simulate repeated equivalent operations/errors.
+
+Require:
+- bounded continuation
+- terminates BLOCKED
+- never infinite loops
+- never reports COMPLETE
+
+E. USER INPUT REQUIRED
+
+Trigger existing ask_questions behavior.
+
+Require:
+- operation pauses
+- no internal continuation invents the answer
+- state reports USER_INPUT_REQUIRED
+
+F. RESOURCE CEILING
+
+Exhaust operation-level safety/resource bound.
+
+Require:
+- working tree preserved
+- state = INCOMPLETE_RESOURCE_LIMIT
+- NEVER COMPLETE
+- no automatic reset
+- no production Publish
+
+G. FOLLOW-UP EDIT
+
+Require targeted discovery using existing search capabilities.
+
+Verify the agent is instructed to prefer:
+
+find / grep
+→ targeted range read
+→ edit
+
+rather than sequentially reading a large file unnecessarily.
+
+Do not make a brittle test asserting an exact number of reads.
+
+H. RECOVERY / RECONNECT
+
+Require:
+- browser disconnect does not duplicate customer instruction
+- DO restart/recovery does not duplicate customer instruction
+- internal continuation remains part of same visible customer operation
+- workspace remains coherent
+
+I. COMMIT CONTRACT
+
+A model final response or finish intent alone MUST NOT produce COMPLETE.
+
+Require:
+- valid preflight
+- successful deploy/preview
+- matching authoritative revision
+- required verification
+before COMPLETE.
+
+J. COMMIT FAILURE
+
+A real gitCommit exception must NOT be interpreted as "clean tree."
+
+Require:
+- real failure surfaced
+- stale HEAD not silently deployed
+- operation not marked COMPLETE
+
+K. PUBLISH ISOLATION
+
+Internal preview lifecycle must never invoke BuildCustom immutable production Publish.
+
+==================================================
+2. STRUCTURED OPERATION OUTCOMES
+==================================================
+
+Implement explicit operation states using the existing Think/agent/session architecture.
+
+At minimum:
+
+RUNNING
+COMPLETE
+BLOCKED
+USER_INPUT_REQUIRED
+INCOMPLETE_RESOURCE_LIMIT
+
+If an additional internal state is required for continuation/recovery, keep it internal.
+
+Do NOT create a competing BuildCustom task ledger/database.
+
+Maintain the minimum durable operation information in the existing agent/session state:
+
+- starting HEAD
+- current operation identity
+- cumulative internal-turn/resource usage
+- elapsed operation information where appropriate
+- last working-tree fingerprint
+- last validation result
+- clarification state
+- completion intent/evidence
+
+This state must survive reconnect/recovery sufficiently to prevent duplicate customer submissions or resetting the operation budget.
+
+==================================================
+3. FIX THINK TURN COMPLETION SEMANTICS
+==================================================
+
+Current problem:
+
+ThinkAgent reaches its finite per-turn guard and produces a text wrap-up.
+
+VibeSDK currently allows that final response to effectively terminate the customer operation even if:
+
+- files are dirty
+- code is malformed
+- no validation occurred
+- no commit exists
+- no preview exists
+
+Change this.
+
+A Think turn ending is NOT equivalent to customer task completion.
+
+The host must classify the outcome.
+
+If:
+
+- task incomplete
+- workspace has pending work
+- progress occurred
+- no clarification required
+- overall operation budget remains
+
+then continue the SAME customer operation internally.
+
+==================================================
+4. IMPLEMENT BOUNDED INTERNAL CONTINUATION
+==================================================
+
+Use the architecture established in the approved plan.
+
+Do NOT await continueLastTurn() from onChatResponse.
+
+The installed Think implementation can deadlock there because the queued RPC turn has not released.
+
+Instead:
+
+After the previous stub.chat() resolves, use Think's existing programmatic:
+
+chat(userMessage, callback)
+
+for an INTERNAL continuation.
+
+Reuse:
+
+- SAME ThinkAgent
+- SAME SpaceDO
+- SAME BuildCustom/VibeSDK conversation identity
+- SAME customer operation
+
+The internal continuation instruction must clearly tell the primary coding agent that it is continuing unfinished work, NOT receiving a new customer request.
+
+Do not resend the original user request verbatim.
+
+Internal continuation messages must not appear to the customer as extra customer messages after reconnect.
+
+Update the existing Think message loading/presentation behavior as narrowly as necessary to group/hide marked internal continuation messages.
+
+PROVE this with tests.
+
+==================================================
+5. DO NOT REMOVE ALL LIMITS
+==================================================
+
+Keep a finite internal Think-turn guard.
+
+We are NOT implementing infinite model execution.
+
+Add an operation-level safety/resource model across continuations.
+
+It should be able to consider:
+
+- internal turns
+- model/tool activity
+- elapsed operation time
+- metered usage/cost where available
+- repeated no-progress behavior
+
+Do NOT choose arbitrary production limits merely to make tests pass.
+
+Use conservative development/test values where needed and make production thresholds explicit/configurable.
+
+The important semantic behavior is:
+
+PROGRESS + BUDGET
+→ continue
+
+NO PROGRESS / REPEATED FAILURE
+→ BLOCKED
+
+USER QUESTION
+→ USER_INPUT_REQUIRED
+
+OVERALL RESOURCE LIMIT
+→ INCOMPLETE_RESOURCE_LIMIT
+
+VERIFIED TASK
+→ COMPLETE
+
+==================================================
+6. ADD WORKING-TREE PREFLIGHT
+==================================================
+
+This is launch-critical.
+
+Current deploy_space commits before building.
+
+That is unsafe for malformed intermediate code.
+
+Implement a narrow internal SpaceDO working-tree preflight capability.
+
+It must validate the CURRENT WORKING TREE:
+
+WITHOUT:
+- git checkout
+- commit
+- deploy
+- reset
+- restore
+- mutation
+
+Factor/reuse the existing compilation/build logic where practical.
+
+The preflight must operate on the working-tree snapshot, not merely Git HEAD.
+
+Also validate static source that may not be compiled by the Worker bundler when necessary.
+
+Project 5 proved this matters because malformed public/app.jsx could otherwise survive until after commit.
+
+Return structured diagnostics to Think.
+
+On failure:
+
+- preserve dirty working tree
+- feed diagnostic to primary agent
+- allow repair if progress/budget remains
+
+==================================================
+7. FIX deploy_space ORDERING
+==================================================
+
+Current problematic behavior:
+
+commit
+→ build/deploy
+
+and commit exceptions are caught too broadly.
+
+Change the safe path to:
+
+working-tree preflight
+→ if PASS
+→ commit
+→ branch preview deployment
+→ browser/runtime verification
+
+Do not treat every gitCommit exception as "clean tree."
+
+Distinguish:
+
+- genuinely clean tree
+- successful commit
+- actual commit failure
+
+A real commit failure must surface as a real failure.
+
+Never silently deploy stale HEAD because a commit failed.
+
+==================================================
+8. ADD EXPLICIT COMPLETION INTENT
+==================================================
+
+Prefer a small structured Think tool such as:
+
+finish_task
+
+rather than parsing natural-language claims like:
+
+"Done!"
+"Everything is complete!"
+
+The tool represents PRIMARY AGENT INTENT to finish.
+
+It does NOT itself make the operation COMPLETE.
+
+The host completion gate must still verify required evidence.
+
+For a code-changing task, COMPLETE requires:
+
+- primary agent finish intent
+- requested changes present to the extent mechanically verifiable
+- working-tree preflight success
+- successful deploy_space
+- deployed commit matches current authoritative SpaceDO HEAD
+- BuildCustom sees the matching revision
+- appropriate preview/browser/runtime verification succeeds
+- no uncommitted follow-on edits
+- no unresolved build errors
+- no pending clarification
+- no resource-boundary state
+
+A genuine verified no-op may have a separate completion path.
+
+==================================================
+9. TARGETED FILE DISCOVERY
+==================================================
+
+Update the existing Think coding prompt.
+
+For follow-up edits instruct the primary agent to prefer:
+
+1. find / grep
+2. targeted range reads
+3. edit
+
+before paging through large files sequentially.
+
+The existing tools already support:
+
+- list
+- find
+- grep
+- range read
+
+Use them.
+
+Do NOT add:
+- semantic index
+- vector database
+- symbol service
+- project search service
+
+for this launch fix.
+
+Optionally provide a small workspace-derived turn-start hint containing:
+
+- current branch
+- current revision
+- concise file manifest
+- recent relevant file paths
+
+It is advisory.
+
+SpaceDO remains source of truth.
+
+==================================================
+10. CONTEXT SELECTION
+==================================================
+
+Update selectThinkContextMessages narrowly.
+
+During INTERNAL continuation of the same customer operation, preserve bounded relevant context such as:
+
+- recently edited file paths
+- relevant tool results
+- validation errors
+- unresolved repair state
+
+For a NEW customer request, return to compact context selection.
+
+Do NOT retain unlimited historical tool output.
+
+Do NOT create a separate project-memory database.
+
+Use Think/session/context facilities.
+
+==================================================
+11. VALIDATION / REPAIR LOOP
+==================================================
+
+Implement the native loop:
+
+EDIT
+→ WORKING-TREE PREFLIGHT
+
+IF FAIL:
+→ diagnostics to same primary agent
+→ repair
+→ preflight again
+
+IF PASS:
+→ commit / deploy_space
+→ preview
+→ browser/runtime diagnostics
+
+IF ACTIONABLE FAILURE:
+→ continue same customer operation
+→ repair
+→ validate again
+
+IF VERIFIED:
+→ completion gate
+→ COMPLETE
+
+Production Publish remains completely separate.
+
+Nothing in this lifecycle may automatically invoke BuildCustom's immutable Publish path.
+
+==================================================
+12. SUBAGENTS — NOT NOW
+==================================================
+
+Do NOT implement subagents in this phase.
+
+Preserve the extension point.
+
+Future candidates:
+
+- read-only exploration
+- testing/debugging
+- research
+- independent verification
+
+Primary ThinkAgent retains:
+
+- user intent
+- architecture decisions
+- write authority
+- final validation
+- completion intent
+
+Do not allow concurrent child writers to the same SpaceDO working tree.
+
+==================================================
+13. FILE SCOPE
+==================================================
+
+The approved plan identified likely changes around:
+
+worker/agents/think/ThinkAgent.ts
+- beforeStep
+- onStepFinish
+- onChatResponse
+- beforeTurn
+- getTools
+
+worker/agents/core/behaviors/think.ts
+- runPrompt
+- build
+- buildSystemPrompt
+- deploy output handling
+
+worker/agents/think/deploy-tool.ts
+- createDeploySpaceTool
+
+space/src/space/durable-object.ts
+- narrow internal working-tree preflight RPC
+
+space/src/space/deploy-engine.ts
+- reusable compilation/preflight path without checkout
+
+worker/agents/think/space-workspace-ops.ts
+- narrow typed preflight/status contract
+
+worker/agents/core/conversation/MessageLoader.ts
+- hide/group marked internal continuation messages
+
+worker/agents/think/context-selector.ts
+- continuation-aware bounded context
+
+Tests alongside these components.
+
+This list is guidance, not permission for unrelated refactoring.
+
+Keep the diff narrow.
+
+==================================================
+14. PRESERVE ACCEPTED SECURITY / PLATFORM BOUNDARIES
+==================================================
+
+DO NOT alter the accepted behavior of:
+
+- Task 4B immutable publishing
+- expected-revision checks
+- publish locking
+- Task 6A logout/session revocation
+- authentication
+- ownership isolation
+- owner → project → agent mapping
+- runtime password/session authority
+- preview sandbox
+- generated-app gateway
+- public app routing
+- customer domains
+- production Publish
+
+Run focused regressions proving these remain intact.
+
+==================================================
+15. PROJECT 5 IS OFF LIMITS DURING IMPLEMENTATION
+==================================================
+
+Project 5 currently has:
+
+HEAD:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Dirty:
+- public/app.jsx
+- public/index.html
+
+Live public/app.jsx is malformed.
+
+These pending changes are valuable acceptance evidence.
+
+DO NOT TOUCH THEM.
+
+All implementation development and lifecycle testing must use isolated fixtures/workspaces.
+
+==================================================
+16. IMPLEMENTATION ORDER
+==================================================
+
+Use this order:
+
+1. Add failing isolated lifecycle tests.
+
+2. Add structured operation/turn outcomes.
+
+3. Add one-customer-operation streaming/reconnect semantics.
+
+4. Add non-mutating working-tree preflight.
+
+5. Correct deploy_space preflight/commit/error ordering.
+
+6. Add bounded internal Think continuation after resolved chat RPCs.
+
+7. Add completion gate / finish_task intent.
+
+8. Improve targeted discovery prompt.
+
+9. Make context selection continuation-aware.
+
+10. Run focused lifecycle tests.
+
+11. Run regression tests for:
+    - immutable publishing
+    - authentication/logout
+    - ownership isolation
+    - preview sandbox
+    - gateway/public routing
+
+12. Typecheck/build.
+
+DO NOT deploy to production yet.
+
+==================================================
+17. ACCEPTANCE FOR THIS IMPLEMENTATION PHASE
+==================================================
+
+This phase passes locally/isolated only if:
+
+- small edit completes
+- large edit automatically crosses an internal turn boundary
+- customer request remains one visible operation
+- malformed intermediate code is NOT committed
+- malformed dirty tree is preserved and repairable
+- repair can succeed
+- no-progress loop stops
+- user clarification pauses
+- resource limit reports incomplete
+- reconnect does not duplicate input
+- completion requires validated revision
+- real commit failures surface correctly
+- targeted follow-up discovery works
+- no production Publish occurs
+- accepted security/platform regressions pass
+
+==================================================
+RETURN
+==================================================
+
+When implementation and isolated verification are complete, return:
+
+IMPLEMENTATION STATUS: PASS / BLOCKED
+
+Files changed:
+
+Tests added:
+
+Customer-operation states implemented:
+
+Internal continuation mechanism:
+
+How internal continuation is hidden/grouped from customer transcript:
+
+Working-tree preflight implementation:
+
+Does preflight mutate workspace: YES/NO
+
+deploy_space ordering after change:
+
+Real commit failure handling:
+
+Completion gate:
+
+finish_task behavior:
+
+Resource/no-progress behavior:
+
+User-input behavior:
+
+Context-selection change:
+
+Targeted discovery change:
+
+Subagents added: NO
+
+Small edit test:
+
+Large multi-turn edit test:
+
+Malformed intermediate edit/repair test:
+
+No-progress test:
+
+Clarification test:
+
+Resource-ceiling test:
+
+Recovery/reconnect test:
+
+Commit-contract test:
+
+Commit-failure test:
+
+Publish-isolation test:
+
+Task 4B regression:
+
+Task 6A regression:
+
+Ownership regression:
+
+Preview sandbox regression:
+
+Gateway regression:
+
+Typecheck/build:
+
+Project 5 touched: MUST BE NO
+
+Production deployed: MUST BE NO
+
+Known limitations:
+
+Exact next recommended step:
+
+Then STOP.
+
+Do NOT deploy the lifecycle changes to production.
+
+Do NOT repair Project 5.
+
+Do NOT resume edit1.
+
+We will separately authorize production deployment and Project 5 repair only after reviewing the implementation evidence.
