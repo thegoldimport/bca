@@ -1,0 +1,340 @@
+Continue from the SAME project 5 checkpoint.
+
+IMPORTANT: DO NOT RETRY ADD LEAD.
+
+The acceptance harness recorded:
+
+leadSubmit: 1
+checkpoint: lead-outcome-uncertain
+
+That no-retry guard must remain in place.
+
+Do NOT:
+- click Submit again
+- manufacture another POST
+- create another lead
+- delete any lead
+- send an AI edit
+- publish
+- regenerate project 5
+- change generated source
+- deploy anything
+- create another customer/project
+- print or reproduce any preview capability/token
+
+A diagnostic report previously exposed a short-lived preview capability.
+
+Treat that capability as sensitive.
+
+Do not:
+- print it
+- quote it
+- include it in reports
+- place it in logs
+- reuse it merely for diagnosis
+
+If it has naturally expired, that is fine.
+
+CURRENT FIXTURE
+
+Project:
+5
+
+Agent:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Initial revision:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Last recorded Workers:
+
+Runtime:
+31ca3dce-e6c8-416b-b5e2-995034e2dcac
+
+Control:
+ee6d49fe-5cb2-43f6-9392-003c6fde567b
+
+Gateway:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+KNOWN ACCEPTED STATE
+
+The unchanged project now:
+
+- loads preview document
+- loads app.jsx
+- mounts React
+- applies CSS
+- navigates
+- performs browser-readable stats GET
+- performs browser-readable leads GET
+- supports observed query-bearing reads
+
+The parent product request:
+
+GET /api/projects/5/blog-posts -> 404
+
+is confirmed NOT to originate from the generated preview and is NOT the
+current blocker.
+
+CURRENT UNCERTAINTY
+
+Add Lead Submit was clicked exactly once.
+
+The unique marker did not appear in the UI.
+
+A later leads GET returned 12 records and contained zero exact-marker matches.
+
+However:
+
+- POST was not authoritatively captured
+- mutation execution was not authoritatively captured
+- there was no trusted before/after baseline
+- saved values could theoretically differ from submitted values
+- activity persistence was not checked
+- retrying could create a duplicate
+
+Therefore:
+
+DO NOT RETRY.
+
+==================================================
+PHASE 1 — READ-ONLY FORENSIC RECONSTRUCTION
+==================================================
+
+Reconstruct what happened during the ONE existing Add Lead attempt using only
+already-existing evidence and read-only inspection.
+
+Use, where available:
+
+- captured browser network records
+- browser performance entries
+- acceptance-harness request records
+- control Worker logs already retained
+- runtime logs already retained
+- generated-app/runtime request logs already retained
+- existing D1/data records
+- existing activity records
+- timestamps
+- request IDs/correlation IDs
+- existing structured logs
+
+Do not create new mutation traffic merely to improve observability.
+
+Do not change production logging yet.
+
+Build the request chain if evidence permits:
+
+Submit click
+  ->
+OPTIONS preflight, if required
+  ->
+control preview authorization
+  ->
+runtime validation-only call
+  ->
+POST preview request
+  ->
+control forwarding
+  ->
+runtime/generated-app dispatch
+  ->
+POST /api/leads handler
+  ->
+lead insert
+  ->
+activity insert
+  ->
+response
+  ->
+browser
+  ->
+UI update
+
+For EACH stage classify:
+
+CONFIRMED
+CONFIRMED NOT REACHED
+UNKNOWN
+
+Do not infer a stage merely because a later stage would normally require it.
+
+==================================================
+PHASE 2 — INSPECT THE GENERATED ADD LEAD CODE
+==================================================
+
+Read the authoritative project 5 source without modifying it.
+
+Document:
+
+- submit handler
+- exact endpoint
+- method
+- body construction
+- field names
+- success criteria
+- error handling
+- state update behavior
+- whether form values are transformed before sending
+- whether the UI refreshes leads after success
+- whether it clears the form
+- whether it displays an error
+- generated POST handler
+- generated database insert
+- generated activity insert
+
+This is source inspection only.
+
+Do not edit it.
+
+Use this to determine whether the unique marker could legitimately have been
+stored under another field/value.
+
+==================================================
+PHASE 3 — READ-ONLY DATA INSPECTION
+==================================================
+
+Establish the best possible authoritative database result from the ONE prior
+attempt.
+
+Do not mutate data.
+
+Identify the approximate timestamp window of the Submit click.
+
+Inspect leads created in a narrow window around that attempt.
+
+Compare:
+
+- record IDs
+- created timestamps
+- customer/name fields
+- phone/email if submitted
+- project type
+- status
+- estimated value
+- notes
+- any unique marker or transformed equivalent
+
+Inspect corresponding activity records in the same window.
+
+Determine whether there is:
+
+A. exactly one lead attributable to the attempt
+B. more than one lead attributable to the attempt
+C. no lead attributable to the attempt
+D. insufficient evidence
+
+If a lead exists, determine whether exactly one corresponding activity record
+exists as intended.
+
+Do not rely solely on the 12-record UI GET.
+
+Use the authoritative generated-app data store if it is available read-only.
+
+==================================================
+PHASE 4 — DETERMINE THE FAILURE LAYER
+==================================================
+
+Based only on evidence, classify the ONE attempt into one of these outcomes:
+
+A. REQUEST NEVER LEFT BROWSER
+
+B. PREFLIGHT FAILED
+
+C. PREFLIGHT PASSED BUT POST NEVER OCCURRED
+
+D. POST REACHED CONTROL BUT FAILED AUTHORIZATION/FORWARDING
+
+E. POST REACHED GENERATED APP BUT HANDLER FAILED
+
+F. LEAD INSERT SUCCEEDED BUT ACTIVITY INSERT FAILED
+
+G. SERVER MUTATION SUCCEEDED BUT RESPONSE WAS BLOCKED/FAILED
+
+H. SERVER + RESPONSE SUCCEEDED BUT GENERATED UI FAILED TO REFLECT SUCCESS
+
+I. COMPLETE SUCCESS OCCURRED BUT ACCEPTANCE HARNESS FAILED TO OBSERVE IT
+
+J. INDETERMINATE WITH CURRENT EVIDENCE
+
+Do not choose the most likely option.
+
+Choose only what evidence proves.
+
+==================================================
+PHASE 5 — DECIDE WHETHER A PRODUCTION FIX IS NEEDED
+==================================================
+
+DO NOT implement anything yet.
+
+Return one of:
+
+PLATFORM DEFECT IDENTIFIED
+GENERATED-APP DEFECT IDENTIFIED
+ACCEPTANCE-HARNESS DEFECT IDENTIFIED
+NO DEFECT — PRIOR MUTATION SUCCEEDED
+INSUFFICIENT EVIDENCE
+
+If a defect is identified, provide:
+
+- exact evidence
+- owning component
+- smallest proposed fix
+
+but DO NOT implement/deploy it yet.
+
+If evidence proves the mutation succeeded exactly once and the only problem
+was acceptance observation, say so.
+
+If evidence proves NO mutation occurred, say so.
+
+If evidence remains insufficient, say so.
+
+==================================================
+PHASE 6 — DETERMINE SAFE NEXT ACTION
+==================================================
+
+We need to know whether another mutation can ever be attempted safely.
+
+Return exactly one recommendation:
+
+SAFE TO CONTINUE WITHOUT RETRY
+SAFE TO PERFORM ONE NEW CONTROLLED MUTATION
+FIX REQUIRED BEFORE ANY NEW MUTATION
+CANNOT SAFELY CONTINUE FROM THIS FIXTURE
+
+A new controlled mutation is allowed ONLY if the forensic evidence makes it
+safe and we explicitly approve it after this report.
+
+Do not perform it during this task.
+
+==================================================
+REPORT
+==================================================
+
+Return:
+
+1. Submit-click timestamp/window
+2. generated Add Lead client behavior
+3. generated POST handler behavior
+4. OPTIONS status: confirmed / not reached / unknown
+5. POST status: confirmed / not reached / unknown
+6. control forwarding status
+7. runtime/generated-app dispatch status
+8. lead insert status
+9. activity insert status
+10. response status
+11. UI update status
+12. authoritative records found around the attempt
+13. final classification A-J
+14. defect classification
+15. smallest proposed fix, if any
+16. safe-next-action recommendation
+17. whether project source/revision remained unchanged
+18. whether any production deployment/change occurred
+
+Do NOT include any preview capability/token value in the report.
+
+STOP after the forensic report.
+
+Do not resume AI edits or publishing yet.
