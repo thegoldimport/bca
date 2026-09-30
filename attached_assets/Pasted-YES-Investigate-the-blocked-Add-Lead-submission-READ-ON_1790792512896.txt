@@ -1,0 +1,128 @@
+YES. Investigate the blocked Add Lead submission READ-ONLY.
+
+Do NOT retry Submit.
+Do NOT edit code yet.
+Do NOT modify the database.
+Do NOT change any lead.
+Do NOT proceed to edit1.
+Do NOT create another test account/project.
+Do NOT regenerate the app.
+
+Continue from:
+
+production/vibesdk-launch/task13-project5-recovery-checkpoint.json
+
+Known evidence:
+
+- Corrected Add Lead form-entry verification previously PASSED.
+- Estimated Value displayed exactly `12500`.
+- All named field checks passed.
+- Form was valid.
+- Submit was enabled.
+- Pre-mutation baseline was 12 leads, IDs 1–12.
+- Exactly ONE approved Submit click then occurred.
+- No retry occurred.
+- Lead count remained 12.
+- IDs 1–12 and their values remained unchanged.
+- No new lead exists.
+- Form remained open with the entered marker.
+- Browser/network auditing observed NO lead request after the click.
+- No unintended mutation was observed.
+
+This is now a real blocked acceptance result, but we do NOT yet know whether the cause is generated-app code, browser/runtime behavior, or the acceptance harness.
+
+READ-ONLY investigation only.
+
+Determine what happened between the Submit click and the point where a network request should have been created.
+
+Inspect:
+
+1. The actual rendered Add Lead form and Submit element.
+   - form structure
+   - button type
+   - submit handler
+   - click handler if any
+   - disabled state
+   - validation state
+
+2. The generated CRM source responsible for Add Lead.
+   Trace the exact expected path:
+
+   user click
+   → form event
+   → handler
+   → client validation/state
+   → request construction
+   → fetch/request
+   → API route
+   → database insert
+
+Identify where execution stopped.
+
+3. Browser evidence from the failed attempt:
+   - console errors
+   - uncaught exceptions
+   - React/runtime errors
+   - validation failures
+   - prevented/default events
+   - handler execution if observable
+   - navigation/reload
+   - network activity
+
+4. The acceptance harness interaction.
+   Determine exactly how it clicked Submit and whether that interaction is equivalent to a normal user click.
+
+Specifically check whether the harness:
+- clicked the correct element
+- interacted with a stale/replaced DOM node
+- used an event mechanism that differs from a normal browser click
+- caused blur/change/input timing that affected controlled React state
+- observed the button as enabled immediately before the click
+- waited appropriately for controlled state to settle
+
+5. Inspect the generated app's Add Lead handler statically.
+   Determine whether, given the values present immediately before the approved click, the handler SHOULD have attempted a request.
+
+6. Inspect the API route read-only to confirm the expected endpoint still exists and determine what request the client would normally send.
+
+Do NOT invoke that endpoint manually.
+
+The key question is:
+
+WHY DID THE SINGLE APPROVED CLICK PRODUCE NO NETWORK REQUEST?
+
+Classify the result as one of:
+
+A. TEST HARNESS / AUTOMATION ISSUE
+B. GENERATED APP CLIENT-SIDE BUG
+C. PRODUCT/PLATFORM BUG
+D. INCONCLUSIVE
+
+Do not classify based on assumptions. Cite the concrete evidence that establishes the earliest failure point.
+
+If you find a likely fix, describe it but DO NOT APPLY IT.
+
+Do not treat missing telemetry as proof of a product defect.
+
+Return a concise report:
+
+Classification:
+Earliest confirmed failure point:
+Submit element/handler:
+Was handler invoked: YES / NO / UNKNOWN
+Client validation passed at click: YES / NO / UNKNOWN
+Any console/runtime error:
+Expected API endpoint:
+Was request constructed: YES / NO / UNKNOWN
+Was request sent: NO
+API/database reached: YES / NO / UNKNOWN
+Harness involvement:
+Root cause established: YES / NO
+Evidence:
+Proposed smallest fix, if established:
+Product code change required: YES / NO / UNKNOWN
+Safe next action:
+
+Then STOP.
+
+There is NO authorization for another Submit click in this investigation.
