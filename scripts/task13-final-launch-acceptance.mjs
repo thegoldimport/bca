@@ -3,7 +3,7 @@
 // Separately resumable, one-way customer-journey phases. This runner is
 // intentionally live-capable but is never invoked as part of its creation.
 import assert from "node:assert/strict";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmod, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -30,7 +30,8 @@ const UI_TIMEOUT = 90_000;
 const GENERATION_TIMEOUT = 8 * 60_000;
 const phase = process.argv[2];
 const EXTENDED_PHASES = [
-  "signup", "generate", "reconcileGeneration", "preview", "approvedLead", "verifyRecoveredForm",
+  "signup", "generate", "reconcileGeneration", "preview", "approvedLead",
+  "verifyRecoveredForm", "approvedRecoveredLead",
   "edit1", "reopen", "publish1", "publishSame", "edit2", "publishUpdate",
   "returning", "isolation",
 ];
@@ -124,6 +125,24 @@ async function saveCheckpoint(state) {
     await rename(temporary, CHECKPOINT);
     await chmod(CHECKPOINT, 0o600);
     await chmod(PRIVATE_DIR, 0o700);
+  } catch (error) {
+    await unlink(temporary).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function saveRecoveredCheckpoint(checkpoint) {
+  const temporary = `${RECOVERY_CHECKPOINT}.${process.pid}.${randomUUID()}.tmp`;
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporary, RECOVERY_CHECKPOINT);
+    await chmod(RECOVERY_CHECKPOINT, 0o600);
   } catch (error) {
     await unlink(temporary).catch(() => undefined);
     throw error;
@@ -1491,14 +1510,15 @@ function urlContainsExactMarker(value, marker) {
   catch { return false; }
 }
 
-async function markLeadOutcomeUncertain(state) {
+async function markLeadOutcomeUncertain(state, persist = saveCheckpoint) {
   state.stage = "lead-outcome-uncertain";
   state.leadOutcome = "outcome-uncertain-no-retry";
-  await saveCheckpoint(state);
+  await persist(state);
 }
 
 async function addLeadIfAvailable(page, frame, state, audit,
-  { approved = false, authoritativeBaseline = null, formOnly = false } = {}) {
+  { approved = false, authoritativeBaseline = null, baselineRows = null,
+    formOnly = false, persist = saveCheckpoint, beforeSubmit = null, afterClick = null } = {}) {
   assert(!(approved && formOnly), "Form-only verification must never use the Submit phase.");
   if (state.stage === "lead-submit-pending") {
     try {
@@ -1508,13 +1528,13 @@ async function addLeadIfAvailable(page, frame, state, audit,
       assert.equal(found.stillInForm, false, "Pending lead form still contains the marker after the possible submission.");
       state.leadOutcome = "reconciled-exact-backend-record";
       state.stage = "preview-verified";
-      await saveCheckpoint(state);
+      await persist(state);
       return {
         available: true, submitted: true, reconciled: true,
         transportEvidence: "unavailable-after-resume", backendReadback: backend,
       };
     } catch (error) {
-      await markLeadOutcomeUncertain(state);
+      await markLeadOutcomeUncertain(state, persist);
       throw new Error(`Lead-submit outcome is uncertain; backend/UI did not reconcile exactly and no retry was made: ${safeError(error)}`);
     }
   }
@@ -1556,7 +1576,7 @@ async function addLeadIfAvailable(page, frame, state, audit,
   if (!formOnly) {
     state.stage = "lead-submit-pending";
     state.leadOutcome = "lead-form-opening-pending";
-    await saveCheckpoint(state);
+    await persist(state);
   }
   if (formOnly) {
     let opened = false;
@@ -1606,14 +1626,14 @@ async function addLeadIfAvailable(page, frame, state, audit,
   if (openerMutations.length > 0) {
     if (formOnly) throw new Error("Opening the form unexpectedly issued a mutation; form-only verification stopped.");
     state.actionCounts.leadSubmit = 1;
-    await markLeadOutcomeUncertain(state);
+    await markLeadOutcomeUncertain(state, persist);
     throw new Error("Opening the visible lead control issued a mutation before a unique marker could be attached; no retry was made.");
   }
   if (!formAppeared) {
     if (!formOnly) {
       state.stage = "generation-verified";
       state.leadOutcome = priorOutcome;
-      await saveCheckpoint(state);
+      await persist(state);
     }
     return {
       available: true, submitted: false,
@@ -1623,7 +1643,7 @@ async function addLeadIfAvailable(page, frame, state, audit,
   if (!formOnly) {
     state.stage = "generation-verified";
     state.leadOutcome = priorOutcome;
-    await saveCheckpoint(state);
+    await persist(state);
   }
 
   const email = `lead-${state.leadMarker.replace(/\W/g, "").toLowerCase()}@example.com`;
@@ -1737,8 +1757,12 @@ async function addLeadIfAvailable(page, frame, state, audit,
   if (approved) {
     assert(authoritativeBaseline, "Approved attempt requires an authoritative pre-submit baseline.");
     // Recheck immediately before the one-way boundary, not only at phase start.
-    assertApprovedLeadBaseline(await authoritativeLeadRows(page, state), state);
+    const immediatelyBefore = await authoritativeLeadRows(page, state);
+    assertApprovedLeadBaseline(immediatelyBefore, state);
+    if (baselineRows) assert.deepEqual(immediatelyBefore, baselineRows,
+      "Existing lead values changed before the approved click.");
   }
+  if (beforeSubmit) await beforeSubmit({ populated, checks });
   const networkStart = audit.requests.length;
   const cdp = await attachLeadCdpAudit(page, audit.previewUrl);
   let afterRows = null;
@@ -1749,8 +1773,9 @@ async function addLeadIfAvailable(page, frame, state, audit,
     state.stage = "lead-submit-pending";
     state.actionCounts.leadSubmit = 1;
     state.leadOutcome = "submit-pending";
-    await saveCheckpoint(state);
+    await persist(state);
     await submit.click(); // Exactly one real browser click; never retry on failure.
+    if (afterClick) await afterClick();
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       visible = await markerVisibleInPreview(frame, state.leadMarker);
@@ -1783,6 +1808,10 @@ async function addLeadIfAvailable(page, frame, state, audit,
       assert.equal(afterRows.length, 13, "The authoritative lead count did not advance exactly once.");
       const fresh = afterRows.filter(row => !authoritativeBaseline.ids.includes(Number(row.id)));
       assert.equal(fresh.length, 1, "Expected exactly one new authoritative lead ID.");
+      if (baselineRows) {
+        const original = afterRows.filter(row => authoritativeBaseline.ids.includes(Number(row.id)));
+        assert.deepEqual(original, baselineRows, "Existing leads 1–12 changed after the approved click.");
+      }
       assert.equal(fresh[0].name, state.leadMarker, "The new database lead does not match the visible name.");
       assert.equal(fresh[0].phone, phone);
       assert.equal(fresh[0].email, email);
@@ -1810,7 +1839,7 @@ async function addLeadIfAvailable(page, frame, state, audit,
     }
     state.leadOutcome = "verified-once";
     state.stage = "preview-verified";
-    await saveCheckpoint(state);
+    await persist(state);
     return {
       available: true, submitted: true, reconciled: false, uiMarkerOccurrences: visible.count,
       formPopulatedByBrowserTyping: true, formValues: populated,
@@ -1823,7 +1852,7 @@ async function addLeadIfAvailable(page, frame, state, audit,
     if (approved && !afterRows) {
       try { afterRows = await authoritativeLeadRows(page, state); } catch { /* Keep transport evidence. */ }
     }
-    await markLeadOutcomeUncertain(state);
+    await markLeadOutcomeUncertain(state, persist);
     throw new Error(`Add Lead result could not be verified; no retry will occur: ${safeError(error)}`);
   } finally {
     if (approved && !evidenceSaved) {
@@ -1904,6 +1933,163 @@ async function recoveredFormPhase() {
       revision: state.initialRevision, baseline, estimatedValue: result.formValues.estimate,
       checks: result.checks, newSubmitClicks: 0, authoritativeAfter: after,
     });
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+
+async function recoveredApprovedLeadPhase() {
+  const checkpoint = JSON.parse(await readFile(RECOVERY_CHECKPOINT, "utf8"));
+  assert.equal(checkpoint.schema, 1);
+  assert.equal(checkpoint.stage, "same-owner-recovered-baseline-verified-form-pass-no-submit",
+    "The durable recovery checkpoint is not eligible for another Add Lead attempt.");
+  assert.equal(checkpoint.formVerification?.result, "PASS");
+  assert.equal(checkpoint.formVerification?.estimatedValueObserved, "12500");
+  assert.equal(checkpoint.ownerUserId, "4d91ebb1-c2fc-4906-81fe-8b305761b8a2");
+  assert.equal(checkpoint.projectId, 5);
+  assert.equal(checkpoint.agentId, "ccac2618-5f92-4d2f-b68f-ca9d2116325e");
+  assert.equal(checkpoint.revision, "d4bc4b85d03cfaf55326d078f08b9446b98e68b1");
+  assert.equal(checkpoint.recoveryRequests, 1);
+  assert.equal(checkpoint.historicalLeadSubmitClicks, 1);
+  assert.equal(checkpoint.newlyApprovedLeadSubmitClicks, 0);
+  assert.deepEqual(checkpoint.baseline?.ids, Array.from({ length: 12 }, (_, index) => index + 1));
+  assert.equal(checkpoint.ownerPasswordSecretName, "BUILDCUSTOM_TASK13_PROJECT5_PASSWORD");
+  const password = process.env.BUILDCUSTOM_TASK13_PROJECT5_PASSWORD;
+  assert(password, "The same owner's durable password secret is unavailable.");
+  const state = {
+    projectId: checkpoint.projectId, agentId: checkpoint.agentId,
+    userId: checkpoint.ownerUserId, initialRevision: checkpoint.revision,
+    identity: { email: checkpoint.ownerEmail, password },
+    leadMarker: `Task13 approved lead ${randomBytes(8).toString("hex")}`,
+    actionCounts: { leadSubmit: 0 }, stage: "generation-verified",
+    leadOutcome: "approved-new-attempt-not-clicked",
+  };
+  let browser;
+  let page;
+  try {
+    browser = await launchBrowser(RECOVERED_PROFILE);
+    page = await browser.newPage();
+    page.setDefaultTimeout(UI_TIMEOUT);
+    page.setDefaultNavigationTimeout(UI_TIMEOUT);
+    await ensureIdentity(page, state);
+    const projects = projectsArray(await apiGet(page, "/api/projects", "Recovered owner project list"));
+    assert.equal(projects?.length, 1);
+    assert.equal(String(projects[0]?.id), String(state.projectId));
+    const project = await apiGet(page, `/api/projects/${state.projectId}`, "Recovered owner project");
+    assert.equal(String(project?.userId), state.userId);
+    assert.equal(project?.agentId, state.agentId);
+    const revision = await runtimeGet(page, state.projectId, "revision");
+    assert.equal((revision?.commitHash || revision?.revision?.commitHash || "").toLowerCase(),
+      state.initialRevision);
+    const baselineRows = await authoritativeLeadRows(page, state);
+    const baseline = assertApprovedLeadBaseline(baselineRows, state);
+    assert.deepEqual(baseline.ids, checkpoint.baseline.ids);
+    const originalDigest = createHash("sha256").update(JSON.stringify(baselineRows)).digest("hex");
+    checkpoint.stage = "approved-lead-preparing";
+    checkpoint.leadAttempt = {
+      marker: state.leadMarker, baseline, originalDigest,
+      clickReserved: false, confirmedBrowserClicks: 0,
+      outcome: "preparing-one-approved-click",
+    };
+    await saveRecoveredCheckpoint(checkpoint);
+    const persist = async current => {
+      checkpoint.stage = current.stage;
+      checkpoint.newlyApprovedLeadSubmitClicks = current.actionCounts.leadSubmit;
+      checkpoint.leadAttempt.clickReserved ||= current.actionCounts.leadSubmit === 1;
+      checkpoint.leadAttempt.outcome = current.leadOutcome;
+      await saveRecoveredCheckpoint(checkpoint);
+    };
+    const status = await runtimeGet(page, state.projectId, "status");
+    const previewUrl = status.previewUrl || status.previewURL
+      || status.state?.previewUrl || status.state?.previewURL;
+    assert(previewUrl, "Same-owner project has no preview.");
+    const audit = attachPreviewRequestAudit(page, previewUrl);
+    await openEditor(page, state.projectId);
+    const frame = await previewFrame(page, previewUrl);
+    await frame.waitForFunction(() => {
+      const text = document.body?.innerText || "";
+      return text.includes("Roofing Dashboard") && text.includes("Leads Directory")
+        && (document.querySelector("#root")?.childElementCount || 0) > 0;
+    }, { timeout: UI_TIMEOUT });
+    await exercisePreviewNavigation(frame, audit);
+    const lead = await addLeadIfAvailable(page, frame, state, audit, {
+      approved: true, authoritativeBaseline: baseline, baselineRows, persist,
+      beforeSubmit: async ({ populated, checks }) => {
+        checkpoint.leadAttempt.preSubmitChecks = checks;
+        checkpoint.leadAttempt.expectedValues = {
+          name: populated.name, phone: populated.phoneValue, email: populated.emailValue,
+          address: populated.address, projectType: populated.projectType,
+          status: populated.status, estimatedValue: populated.estimate, notes: populated.notesValue,
+        };
+        await saveRecoveredCheckpoint(checkpoint);
+      },
+      afterClick: async () => {
+        checkpoint.leadAttempt.confirmedBrowserClicks = 1;
+        await saveRecoveredCheckpoint(checkpoint);
+      },
+    });
+    assert.equal(lead.submitted, true, "The approved Add Lead phase did not submit.");
+    assert.equal(lead.reconciled, false, "An earlier pending attempt must not be counted as this click.");
+    assert.equal(checkpoint.leadAttempt.confirmedBrowserClicks, 1);
+    const afterRows = await authoritativeLeadRows(page, state);
+    const original = afterRows.filter(row => baseline.ids.includes(Number(row.id)));
+    const fresh = afterRows.filter(row => !baseline.ids.includes(Number(row.id)));
+    assert.deepEqual(original, baselineRows, "Existing leads 1–12 changed.");
+    assert.equal(afterRows.length, 13);
+    assert.equal(fresh.length, 1);
+    assert.equal(fresh[0].name, state.leadMarker);
+    assert.equal(fresh[0].phone, lead.formValues.phoneValue);
+    assert.equal(fresh[0].email, lead.formValues.emailValue);
+    assert.equal(fresh[0].address, lead.formValues.address);
+    assert.equal(fresh[0].project_type, lead.formValues.projectType);
+    assert.equal(fresh[0].status, lead.formValues.status);
+    assert.equal(fresh[0].notes, lead.formValues.notesValue);
+    assert.equal(Number(fresh[0].estimated_value), 12500);
+    assert(lead.uiMarkerOccurrences >= 1, "The customer UI did not display the new lead.");
+    checkpoint.stage = "approved-lead-verified-once";
+    checkpoint.leadAttempt.outcome = "PASS";
+    checkpoint.leadAttempt.result = {
+      preMutationCount: baseline.count, postMutationCount: afterRows.length,
+      newLeadId: fresh[0].id, originalIdsUnchanged: true,
+      originalRowsUnchanged: true, newLeadValuesCorrect: true,
+      estimatedValueStored: Number(fresh[0].estimated_value),
+      duplicateCreated: false, customerUiVisible: true,
+      generatedPostStatus: 201, databaseVerification: "PASS", unintendedMutation: false,
+    };
+    await saveRecoveredCheckpoint(checkpoint);
+    report("approved-recovered-lead-verified", {
+      projectId: state.projectId, submitClicks: checkpoint.leadAttempt.confirmedBrowserClicks,
+      ...checkpoint.leadAttempt.result,
+      nextTask13Step: "edit1: dark navy dashboard theme and five newest leads",
+    });
+  } catch (error) {
+    if (checkpoint.leadAttempt && checkpoint.stage !== "approved-lead-verified-once") {
+      let after = null;
+      if (page) {
+        try {
+          const rows = await authoritativeLeadRows(page, state);
+          after = {
+            count: rows.length, ids: rows.map(row => row.id),
+            markerIds: rows.filter(row => row.name === state.leadMarker).map(row => row.id),
+            originalDigestMatches: createHash("sha256")
+              .update(JSON.stringify(rows.filter(row => checkpoint.baseline.ids.includes(Number(row.id)))))
+              .digest("hex") === checkpoint.leadAttempt.originalDigest,
+          };
+        } catch { /* Preserve the one-way guard even if read-only reconciliation is unavailable. */ }
+      }
+      checkpoint.stage = "approved-lead-blocked-no-retry";
+      checkpoint.leadAttempt.outcome = checkpoint.leadAttempt.clickReserved
+        ? "post-click-outcome-requires-review-no-retry" : "pre-click-failure-no-submit";
+      checkpoint.leadAttempt.failure = safeError(error);
+      checkpoint.leadAttempt.readOnlyAfterFailure = after;
+      await saveRecoveredCheckpoint(checkpoint);
+      report("approved-recovered-lead-blocked", {
+        submitClickReserved: checkpoint.leadAttempt.clickReserved,
+        confirmedBrowserClicks: checkpoint.leadAttempt.confirmedBrowserClicks,
+        authoritativeAfter: after, error: safeError(error), noRetry: true,
+      });
+    }
+    throw error;
   } finally {
     if (browser) await browser.close();
   }
@@ -3228,6 +3414,7 @@ try {
   else if (phase === "preview") await previewPhase();
   else if (phase === "approvedLead") await previewPhase({ approved: true });
   else if (phase === "verifyRecoveredForm") await recoveredFormPhase();
+  else if (phase === "approvedRecoveredLead") await recoveredApprovedLeadPhase();
   else if (phase === "edit1") await runEditPhase(1);
   else if (phase === "reopen") await reopenPhase();
   else if (phase === "publish1") await publish1Phase();

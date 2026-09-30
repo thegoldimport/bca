@@ -1,0 +1,84 @@
+APPROVED: perform the single controlled Add Lead mutation for the existing Task 13 Project 5 acceptance run.
+
+Continue from the recovered checkpoint:
+
+production/vibesdk-launch/task13-project5-recovery-checkpoint.json
+
+Known accepted state:
+
+- SAME Project 5 owner successfully recovered
+- Same user confirmed
+- Same Project 5 confirmed
+- Same agent and revision confirmed
+- Corrected form-entry harness: PASS
+- Estimated Value observed exactly: 12500
+- All named field checks passed
+- Form valid
+- Submit enabled
+- No Submit click has occurred yet
+- Read-only pre-mutation baseline:
+  - 12 leads
+  - IDs 1–12
+
+AUTHORIZATION:
+
+Perform exactly ONE approved Submit click using the already-corrected Add Lead form/harness.
+
+Do not retry the Submit automatically under any circumstance.
+
+Immediately after the single click:
+
+1. Record that exactly ONE Submit click occurred.
+
+2. Wait for the normal customer-visible result.
+
+3. Perform a READ-ONLY database check.
+
+4. Compare against the recorded baseline of:
+   - 12 leads
+   - IDs 1–12
+
+Expected result:
+
+- exactly one new lead
+- total lead count becomes 13
+- existing leads 1–12 remain unchanged
+- one new lead record exists
+- the new record contains the values entered by the corrected harness
+- Estimated Value is stored as the intended numeric value 12500
+- no duplicate lead was created
+
+5. Verify the customer UI reflects the successful addition normally.
+
+If anything is ambiguous or does not match the expected result:
+
+STOP.
+
+Do NOT:
+- click Submit again
+- delete or repair records
+- modify the database
+- modify product/runtime/generated CRM code
+- rerun the mutation
+- create another account/project
+- restart Task 13
+
+Preserve the evidence and report the discrepancy.
+
+If the single mutation passes, update the durable Task 13 checkpoint with the non-secret result and continue ONLY to the next already-planned acceptance step. Do not broaden the test scope or repeat previously accepted tests.
+
+Report:
+
+Add Lead Submit clicks: 1
+Pre-mutation lead count: 12
+Post-mutation lead count:
+New lead ID:
+Existing IDs 1–12 unchanged: YES/NO
+New lead values correct: YES/NO
+Estimated Value stored:
+Duplicate created: YES/NO
+Customer UI result:
+Database verification: PASS/FAIL
+Unintended mutation: YES/NO
+Exact next Task 13 acceptance step:
+Overall: PASS/BLOCKED
