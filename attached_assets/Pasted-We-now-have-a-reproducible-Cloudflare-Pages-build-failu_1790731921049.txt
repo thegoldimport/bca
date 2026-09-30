@@ -1,0 +1,172 @@
+We now have a reproducible Cloudflare Pages build failure.
+
+GitHub commit:
+264e2b109a522c4dbeb9d8911aa3e51e204775d4
+
+Failed Pages deployment:
+38719d95-ef02-4ce4-bb73-91fb9041e44d
+
+Observed failure:
+
+- Git clone succeeds
+- Pages selects Node 22.22.0
+- Pages runs:
+  npm clean-install --progress=false
+- npm crashes with:
+  "Exit handler never called!"
+- exit code 1
+- deploy stage never starts
+- npm debug file is not exposed in the Pages logs
+
+Meanwhile, clean local installs of the committed source have already succeeded.
+
+Do NOT:
+- change application behavior
+- change runtime/control/gateway
+- stop Replit
+- upgrade dependencies speculatively
+- regenerate package-lock.json speculatively
+- modify the canonical runtime recipe
+- retry the exact same Pages build without changing anything
+
+TASK: diagnose and fix ONLY the Cloudflare Pages install/build path.
+
+1. INSPECT THE ACTUAL PAGES CONFIGURATION
+
+Read the current Cloudflare Pages project configuration for buildcustom.ai.
+
+Report exactly:
+
+- production branch
+- root directory
+- build command
+- build output directory
+- framework preset if any
+- Node version selection mechanism
+- package-manager selection
+- environment variables that affect npm/install behavior, NAMES ONLY
+- whether Pages automatically runs dependency installation before our build
+  command
+- whether any Pages setting or repository file is causing
+  `npm clean-install --progress=false`
+
+We need to know WHO is issuing that command and whether it can be controlled.
+
+2. REPRODUCE THE EXACT COMMAND
+
+From a completely clean checkout of commit:
+
+264e2b109a522c4dbeb9d8911aa3e51e204775d4
+
+using Node 22.22.0 and the same npm version Pages actually used, run exactly:
+
+npm clean-install --progress=false
+
+Do not substitute npm ci for this test.
+
+Capture:
+- npm version
+- exit code
+- whether npm produces a debug log
+- relevant error output
+
+If it succeeds locally, explicitly record that the failure is isolated to the
+Pages build environment.
+
+3. CHECK FOR KNOWN CONFIGURATION CAUSES LOCALLY
+
+Inspect without changing dependencies:
+
+- package.json
+- package-lock.json lockfileVersion
+- packageManager field if present
+- engines
+- .npmrc
+- .nvmrc
+- npm lifecycle scripts
+- prepare/postinstall/preinstall scripts
+- workspaces
+- optional/platform-specific dependencies
+- repository root selection
+- build directory assumptions
+
+Look specifically for anything that would behave differently inside
+Cloudflare Pages.
+
+Do not infer a dependency defect merely from the npm internal error.
+
+4. FIND THE SMALLEST SUPPORTED PAGES FIX
+
+Prefer, in this order:
+
+A. Correct a bad Pages project setting if one exists.
+
+B. Pin/select a known-good npm version for Pages using a supported mechanism.
+
+C. Change the Pages dependency-install behavior using a supported Cloudflare
+   mechanism so installation is deterministic.
+
+D. If Cloudflare Pages' automatic install cannot be made reliable, determine
+   whether we can disable/skip its automatic dependency install and run our
+   own deterministic install + build command.
+
+For example, conceptually:
+
+npm ci && npm run build
+
+but ONLY use the actual supported Cloudflare Pages configuration mechanism.
+Do not invent environment variables or settings.
+
+E. If Git-integrated Pages itself remains unreliable, evaluate the smallest
+   supported alternative:
+
+GitHub source -> deterministic build -> Wrangler/Cloudflare Pages deployment
+
+This is acceptable because our actual requirement is:
+
+GitHub = source of truth
+Cloudflare = production
+
+We do NOT require Cloudflare's automatic Git build system specifically.
+
+Do not implement the fallback yet unless it is clearly the smallest reliable
+solution.
+
+5. DO NOT TOUCH THE APPLICATION
+
+The committed marketing source has already passed:
+
+- clean npm install locally
+- TypeScript
+- production build
+- 263 tests
+- waitlist removal checks
+
+Do not change marketing behavior while diagnosing an npm/Pages infrastructure
+failure.
+
+6. RETURN ONE RECOMMENDATION
+
+Report:
+
+- exact Pages build configuration
+- exact npm version Pages used
+- result of exact local `npm clean-install --progress=false`
+- likely failure layer
+- whether there is a supported way to control/skip Pages automatic install
+- smallest recommended fix
+- exact configuration/source change required
+- whether that change requires a new commit
+- rollback path
+- whether you recommend:
+  A. keep Git-integrated Pages and fix its install configuration
+  OR
+  B. deploy Pages deterministically from GitHub/Wrangler instead
+
+Do not deploy.
+Do not push another commit.
+Do not retry Pages.
+Do not modify Workers.
+Do not stop Replit.
+
+STOP after the diagnosis and recommendation.
