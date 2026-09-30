@@ -1,0 +1,175 @@
+We now have the same npm internal failure in TWO independent Linux CI
+environments:
+
+1. Cloudflare Pages
+2. GitHub Actions
+
+while clean local installs pass.
+
+Therefore stop treating this as specifically a Cloudflare Pages problem.
+
+The immediate goal is to retrieve the npm debug log from GitHub Actions and
+identify the actual failing operation BEFORE changing dependencies,
+package-lock.json, npm versions, or application code.
+
+FAILED WORKFLOW
+
+Commit:
+c66539c7f55db388b8d8c4faf17e998c65ecc7a3
+
+GitHub Actions run:
+36656770393
+
+Failure:
+npm ci
+→ npm error Exit handler never called!
+→ exit code 1
+
+npm reported a debug log under:
+
+/home/runner/.npm/_logs/
+
+TASK
+
+Make ONE diagnostic improvement to the GitHub Actions workflow.
+
+Do not change:
+- application source
+- package.json
+- package-lock.json
+- dependency versions
+- Node version
+- npm version
+- build command
+- Cloudflare configuration
+- runtime
+- control plane
+- gateway
+- Replit production
+
+1. PRESERVE THE FAILED NPM LOG
+
+After the npm install step, add an artifact-upload step that runs even when
+npm ci fails.
+
+Use an `if: always()` or equivalent GitHub Actions mechanism.
+
+Upload:
+
+/home/runner/.npm/_logs/
+
+as a workflow artifact.
+
+The artifact must not include repository secrets or environment dumps.
+
+Do not print GitHub or Cloudflare secret values.
+
+2. ADD MINIMAL ENVIRONMENT DIAGNOSTICS
+
+Before npm ci, log only non-secret diagnostic information useful for comparing
+the CI environment:
+
+- uname / OS information
+- architecture
+- node --version
+- npm --version
+- npm config get cache
+- npm config get registry
+- package-lock lockfileVersion
+- available disk space
+- available memory
+
+Do NOT dump:
+- full environment
+- npm config list
+- GitHub context
+- Cloudflare secrets
+- tokens
+
+3. KEEP THE EXISTING INSTALL EXACTLY THE SAME
+
+Run the same:
+
+npm ci
+
+Do not add flags intended to fix it yet.
+
+We need one clean reproduction with the npm debug log preserved.
+
+4. COMMIT AND PUSH ONLY THIS DIAGNOSTIC WORKFLOW CHANGE
+
+Push normally to main.
+
+This will trigger one new workflow run.
+
+Do not manually retry the old run.
+
+5. AFTER THE RUN FAILS OR SUCCEEDS
+
+If npm ci FAILS again:
+
+Retrieve the uploaded npm log artifact.
+
+Inspect the relevant debug log.
+
+Report:
+
+- npm version
+- Node version
+- Linux/architecture
+- last successful npm operation before failure
+- first actual error/exception in the debug log
+- stack trace if present
+- package/lifecycle operation active when npm exited
+- whether npm itself appears to be crashing
+- whether a child process/lifecycle script failed
+- whether filesystem/cache/resource exhaustion appears involved
+- whether a specific dependency is implicated
+- whether package-lock/package metadata is implicated
+
+Do not reproduce secrets.
+
+Then identify the smallest evidence-backed fix.
+
+DO NOT IMPLEMENT THE FIX YET.
+
+If npm ci unexpectedly SUCCEEDS:
+
+Allow the existing workflow to continue through build and Pages upload.
+
+If the deployment succeeds, continue the previously approved live production
+verification.
+
+Do not disable the old Pages Git integration or stop Replit unless the full
+previous verification gates pass.
+
+6. IMPORTANT
+
+Do not:
+- regenerate package-lock.json
+- upgrade dependencies
+- downgrade dependencies
+- change Node/npm versions
+- replace npm ci
+- add install retries
+- suppress npm errors
+- use --force
+- use --legacy-peer-deps
+- switch package managers
+
+until the captured npm debug log gives us evidence for doing so.
+
+RETURN
+
+If install fails, return:
+
+1. new workflow commit SHA
+2. new run ID
+3. whether npm log artifact was captured
+4. relevant npm debug-log findings
+5. actual failure classification
+6. smallest evidence-backed proposed fix
+
+Then STOP before implementing that fix.
+
+Replit production stays ON.

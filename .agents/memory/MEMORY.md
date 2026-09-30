@@ -57,5 +57,5 @@
 - [Acceptance artifact ordering](acceptance-artifact-ordering.md) — persist PASS only after cleanup and before one-time credential handoff; test production-shaped reconciliation evidence.
 - [Transactional email provider](transactional-email-provider.md) — BuildCustom chose Cloudflare Email Service; wait for verified sending-domain onboarding before recovery implementation.
 - [Marketing Pages release](marketing-pages-release.md) — preserve the live Pages asset baseline for narrow changes; reconcile direct uploads with GitHub builds.
-- [CI npm install diagnosis](pages-install-diagnosis.md) — both Pages and GitHub Actions failed at npm install while clean local installs passed; root cause remains unknown.
+- [External CI npm installs](pages-install-diagnosis.md) — GitHub's npm log traced failed tarball fetches to Replit-internal lockfile URLs; Pages shares symptoms but lacks debug proof.
 - [JSDOM route fixtures](jsdom-route-fixtures.md) — a blank route can be a thrown component error from an underspecified mock, not a routing regression.
