@@ -26,3 +26,9 @@ Read-only preview success does not prove a generated data app is fully usable. A
 **Why:** A CRM's metrics and filtered leads became browser-readable, yet a non-mutating preflight for its existing Add Lead request returned 405 without CORS headers. Testing only dashboard data would have incorrectly classified the preview as ready.
 
 **How to apply:** Before calling a generated CRUD preview fully usable, check its actual API methods and perform a safe preflight probe for at least one JSON mutation. Do not create test records merely to establish that method/CORS routing is blocked.
+
+Strictly validating mutation preflight cannot currently be done safely by the launch control proxy alone. The runtime has no authorization-only preview endpoint: even a `HEAD` sent with a preview capability is authenticated and then dispatched to the generated app. The control plane has neither the runtime signing key nor its revocation state.
+
+**Why:** Treating `HEAD /` as an inert capability probe can execute app-defined code, so an `OPTIONS` preflight could indirectly cause application side effects. A positive `HEAD` in one fixture does not establish a safe generic contract.
+
+**How to apply:** If preflight must reject wrong or expired capabilities before any generated-app invocation, add a runtime validation-only boundary and deploy it deliberately; do not present a control-only HEAD probe as side-effect-free. Keep the product Origin check for ordinary product routes when allowing opaque sandbox methods through a narrowly scoped preview route.

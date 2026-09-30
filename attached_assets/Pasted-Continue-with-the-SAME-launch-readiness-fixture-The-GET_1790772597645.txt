@@ -1,0 +1,380 @@
+Continue with the SAME launch-readiness fixture.
+
+The GET/read preview path is now accepted.
+
+Do NOT:
+- create another customer
+- create another project
+- regenerate project 4
+- send an AI edit yet
+- publish yet
+- modify the generated project to work around the platform
+- investigate /cdn-cgi/rum telemetry right now
+
+CURRENT FIXTURE
+
+Project:
+4
+
+Agent:
+4853b20c-18fa-470e-877d-b3be5d663142
+
+Revision:
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+Files:
+7 unchanged authoritative files
+
+Conversation:
+1 original turn
+
+Serving control:
+3a20a16c-77b2-4f68-a9d3-410c7a5a1f4b
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Gateway:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+ACCEPTED FIXES
+
+- JavaScript loads in opaque sandbox
+- authorized JSON is browser-readable
+- dynamic/template-literal preview URLs retain capability
+- original query parameters survive
+- dashboard metrics render
+- filtered leads render
+- old project works without regeneration
+
+CURRENT BLOCKER
+
+The existing Add Lead action sends JSON to the generated app API.
+
+Its browser preflight reaches the capability-scoped private-preview API but
+returns:
+
+405
+
+The private preview proxy currently supports GET only.
+
+Therefore the generated application's normal mutation API cannot be used in
+preview.
+
+GOAL
+
+Make the private preview transport support normal generated-application HTTP
+requests securely and generically.
+
+This is NOT an Add Lead-specific fix.
+
+PHASE 1 — TRACE THE EXISTING ADD LEAD REQUEST
+
+Inspect the existing generated source without changing it.
+
+Record:
+
+- Add Lead endpoint
+- HTTP method
+- request Content-Type
+- request headers
+- request body shape
+- capability-scoped rewritten URL
+- browser Origin
+- OPTIONS preflight request headers
+- current OPTIONS response
+- intended mutation request after successful preflight
+- underlying generated-app handler that should receive it
+
+Determine exactly which layer returns 405.
+
+Confirm whether the control-plane private-preview route rejects the method
+before forwarding it.
+
+Do not submit the mutation yet.
+
+PHASE 2 — DEFINE THE PRIVATE PREVIEW HTTP CONTRACT
+
+The preview must support normal application HTTP semantics for explicitly
+capability-authorized generated-app requests.
+
+Support as appropriate:
+
+- GET
+- HEAD
+- OPTIONS
+- POST
+- PUT
+- PATCH
+- DELETE
+
+Do NOT automatically support arbitrary methods beyond the intended set.
+
+For capability-authorized mutation requests:
+
+- preserve method
+- preserve pathname
+- preserve original query parameters
+- preserve request body
+- preserve appropriate Content-Type
+- preserve appropriate application headers
+- add/preserve preview capability correctly
+- authorize before forwarding
+- forward to the correct generated-app preview handler
+- return status/body/content type correctly
+
+Do not forward unsafe product/auth headers merely because the browser supplied
+them.
+
+Do not expose BuildCustom cookies or product credentials to the generated app.
+
+PHASE 3 — PREFLIGHT / CORS
+
+Implement correct OPTIONS handling for the opaque sandbox.
+
+The generated preview iframe has opaque:
+
+Origin: null
+
+For a valid capability-scoped preview request, return the minimum CORS
+preflight response required for the intended request.
+
+Evaluate and implement as necessary:
+
+Access-Control-Allow-Origin: null
+
+Access-Control-Allow-Methods:
+only the supported methods
+
+Access-Control-Allow-Headers:
+only headers legitimately required by generated app requests, such as
+Content-Type when requested
+
+Do NOT use:
+
+Access-Control-Allow-Origin: *
+
+with credentials.
+
+Do NOT enable credentialed cross-origin access.
+
+Do NOT reflect arbitrary requested headers without validation.
+
+Preflight itself must not mutate data.
+
+Denied, malformed, unscoped, or wrong-capability requests must not gain access
+through CORS behavior.
+
+PHASE 4 — MUTATION SECURITY
+
+Preserve all existing isolation properties.
+
+Require the same valid preview capability/ownership boundary for mutations as
+for reads.
+
+Prove:
+
+- valid owner-scoped capability can perform allowed preview mutation
+- missing capability denied
+- wrong capability denied
+- capability from another project denied
+- non-owner cannot obtain/use mutation access
+- cookie-only request does not bypass capability
+- OPTIONS cannot mutate
+- BuildCustom product cookies are not forwarded
+- generated preview cannot access parent document/cookies
+
+Do not weaken the existing sandbox.
+
+PHASE 5 — REQUEST/RESPONSE BODY HANDLING
+
+Verify the proxy correctly supports at least:
+
+- application/json request body
+- JSON response
+- empty success response where applicable
+- non-2xx generated-app response propagation
+
+Do not special-case the Add Lead payload.
+
+If the generated app uses another normal content type in this fixture, support
+it only if required by the generic preview contract.
+
+PHASE 6 — FOCUSED REGRESSION TESTS
+
+Add focused tests for:
+
+1. GET remains working
+2. authorized JSON GET remains browser-readable
+3. OPTIONS preflight for authorized POST succeeds
+4. OPTIONS itself does not invoke mutation
+5. authorized POST JSON body reaches generated app unchanged
+6. POST response reaches sandbox correctly
+7. PUT forwarding
+8. PATCH forwarding
+9. DELETE forwarding
+10. query parameters survive mutation requests
+11. Content-Type preserved
+12. missing capability denied
+13. wrong capability denied
+14. cross-project capability denied
+15. unsupported HTTP method rejected
+16. product cookies/auth are not leaked
+17. existing JS/CSS/HTML behavior remains correct
+18. sandbox isolation remains intact
+
+Keep this focused on the preview transport.
+
+Then run:
+
+- focused preview tests
+- TypeScript
+- control-plane build
+- Wrangler dry run
+
+Do not run AI generation suites.
+
+PHASE 7 — DEPLOY ONLY CONTROL IF IT OWNS THE DEFECT
+
+If confirmed as the control-plane preview proxy, deploy ONLY the control
+plane.
+
+Do not redeploy:
+
+- runtime
+- gateway
+- marketing
+
+Record the new control version.
+
+Runtime must remain:
+
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Gateway must remain:
+
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+PHASE 8 — REVERIFY PROJECT 4 WITHOUT SOURCE CHANGES
+
+Open the SAME project/revision normally.
+
+First reconfirm:
+
+- CRM renders
+- metrics render
+- leads render
+- existing read requests remain working
+
+Then test the existing Add Lead UI through the generated application exactly
+as a customer would.
+
+Use clearly disposable test data.
+
+Verify:
+
+- preflight succeeds
+- POST occurs exactly once
+- JSON body reaches generated app
+- response is browser-readable
+- UI reports success appropriately
+- newly added lead appears in the application
+- subsequent GET confirms the new lead exists in preview data
+- no duplicate lead is created
+- no CORS error occurs for the application request
+
+This mutation is authorized for launch-readiness testing.
+
+Do not modify the generated source.
+
+Then, if the generated app exposes an ordinary way to remove that disposable
+lead, remove it through the generated UI/API and verify DELETE as well.
+
+If there is no normal delete action, do NOT manufacture one just for this
+test.
+
+Authoritative project source must remain:
+
+revision:
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+7 files
+1 conversation turn
+
+The old generated app must become functional solely because the platform was
+fixed.
+
+If Add Lead still fails, STOP.
+
+PHASE 9 — RESUME THE ORIGINAL CUSTOMER JOURNEY
+
+ONLY after project 4's existing read + mutation behavior passes:
+
+Send exactly one normal AI edit:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+
+- one edit submitted
+- new revision
+- preview renders
+- read APIs work
+- mutation APIs still work
+- requested visual/data changes appear
+
+Then:
+
+1. leave/reopen and verify persistence
+2. initial Publish
+3. verify public *.apps.buildcustom.ai URL
+4. verify public app HTML/CSS/JS/data behavior
+5. same-revision Publish Updates
+6. verify idempotency/no second deployment
+7. send second edit:
+   "Add a green New Lead button in the top-right of the leads page."
+8. verify new revision and working preview
+9. publish updates
+10. verify stable public URL serves updated revision
+11. logout/login
+12. verify project/conversation/files/latest preview/public URL persist
+13. repeat basic second-account isolation
+14. active publish claims = 0
+
+PHASE 10 — REPORT
+
+Return:
+
+1. exact 405/preflight root cause
+2. owning component
+3. generic preview HTTP/CORS contract implemented
+4. mutation-security behavior
+5. regression test results
+6. new control version
+7. unchanged runtime/gateway versions
+8. project 4 old-revision Add Lead result
+9. whether disposable lead persisted
+10. first AI edit result
+11. reopen result
+12. initial publish result
+13. same-revision publish result
+14. second edit + publish-update result
+15. returning-login result
+16. ownership-isolation result
+17. public generated-app URL
+18. active publish claims
+19. remaining BLOCKERS
+20. GO / NO-GO for real customer use
+
+Ignore the separate /cdn-cgi/rum telemetry CORS console message unless it
+actually breaks generated-app functionality.
+
+If the complete journey passes, explicitly state:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP after the report.
+
+Do not start billing, custom domains, dependency upgrades, cleanup, or polish.
