@@ -21,6 +21,12 @@ Opaque sandbox previews can successfully load JavaScript and render an app while
 
 **How to apply:** Before changing the generated app or its database, inspect the iframe's actual requests in Chromium, including `Origin`, token presence (not its value), response status, and CORS error. Preserve opaque sandbox and owner/capability isolation rather than broadly enabling credentialed CORS.
 
+An opaque-origin preview can serve HTML and styles yet remain on a loading screen when the generated page's browser-side JSX compiler fetches its source with XMLHttpRequest. That request can trigger a CORS preflight from `Origin: null`; allowing the HTML document does not imply that the source request or its preflight is readable.
+
+**Why:** A live generated CRM's private iframe returned 200 and displayed its title and loading text, but the JSX source XHR failed because the preflight response lacked `Access-Control-Allow-Origin`. The React application never mounted.
+
+**How to apply:** Check the iframe's source-script/XHR requests and their preflight responses in Chromium, not just the document and stylesheet. Keep the opaque sandbox; authorize and CORS-enable only the scoped preview asset route after validating its preview capability. Require the actual application UI to render before testing data or mutations.
+
 Read-only preview success does not prove a generated data app is fully usable. A JSON mutation from the opaque iframe needs a CORS preflight; a preview proxy that accepts only GET can show real metrics and rows while its create/update actions remain blocked.
 
 **Why:** A CRM's metrics and filtered leads became browser-readable, yet a non-mutating preflight for its existing Add Lead request returned 405 without CORS headers. Testing only dashboard data would have incorrectly classified the preview as ready.

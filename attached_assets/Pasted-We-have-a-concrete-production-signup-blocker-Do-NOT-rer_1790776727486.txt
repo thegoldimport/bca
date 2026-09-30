@@ -1,0 +1,306 @@
+We have a concrete production signup blocker.
+
+Do NOT rerun the entire launch-readiness test yet.
+Do NOT create projects.
+Do NOT touch preview/publishing.
+Do NOT change gateway.
+Do NOT change registration architecture.
+Do NOT add a new registration system.
+
+CURRENT PRODUCTION
+
+Runtime:
+a0a853d2-b2e4-4899-af46-c4f292fb8edb
+
+Control:
+167eaeb5-2420-41d4-a740-cc0ce04b72d9
+
+Gateway:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+Observed:
+
+- public signup UI is available
+- product/control advertises registration enabled
+- one normal signup POST returned HTTP 403
+- serving runtime reports registration disabled
+- runtime rejected the registration request forwarded by control
+- zero user records were created
+- no duplicate signup attempt was made
+
+This is the ONLY blocker to investigate right now.
+
+==================================================
+PHASE 1 — FIND WHY REGISTRATION BECAME DISABLED
+==================================================
+
+Trace the serving runtime's registration-enabled decision.
+
+Determine exactly:
+
+1. where registrationEnabled is defined/read
+2. whether it comes from:
+   - source default
+   - environment variable
+   - Worker binding
+   - secret
+   - D1/config state
+   - deployment configuration
+   - another existing mechanism
+3. what value the serving runtime currently sees
+4. why version
+   a0a853d2-b2e4-4899-af46-c4f292fb8edb
+   reports registration disabled
+5. whether the previous registration-enabled production runtime had a
+   configuration/binding that was lost during the recent runtime deployment
+6. whether source reconstruction/deployment configuration accidentally
+   restored a default of disabled
+
+Compare against the previously known registration-enabled production state.
+
+The previous known serving runtime before the mutation-preview deployment was:
+
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Do NOT roll back automatically.
+
+Use the old state only to identify the configuration difference.
+
+Report:
+
+ROOT CAUSE:
+<exact reason>
+
+before changing anything.
+
+==================================================
+PHASE 2 — CHECK FOR OTHER LOST RUNTIME CONFIG
+==================================================
+
+Because the runtime was recently redeployed, perform ONE narrow configuration
+comparison between:
+
+previous known-good runtime configuration
+
+and
+
+current runtime configuration.
+
+This is NOT a new security audit.
+
+Specifically verify that the recent runtime deployment did not accidentally
+drop any other required production bindings/configuration related to:
+
+- registration
+- EMAIL/recovery
+- product/control service bindings
+- AI Gateway/model access
+- D1
+- runtime storage
+- generated-app/dispatch functionality
+- private-preview validation binding/operation added in the latest fix
+
+Do not modify anything unrelated.
+
+If registration is the only lost/mismatched setting, say so explicitly.
+
+If another REQUIRED production binding/configuration was lost, STOP and
+report it before deployment rather than silently changing multiple things.
+
+==================================================
+PHASE 3 — RESTORE EXISTING REGISTRATION CONFIG
+==================================================
+
+Restore registration using the EXISTING intended production mechanism.
+
+Do NOT:
+
+- hard-code a signup bypass
+- remove runtime registration enforcement
+- make registration permanently unconditional
+- let control override runtime authorization
+- add a second registration flag
+- special-case the test email
+- manually insert a user
+- modify D1 to fake signup
+
+The runtime should continue enforcing the registration setting.
+
+We simply need production configured to:
+
+registrationEnabled = true
+
+through the mechanism already designed for that purpose.
+
+Preserve all runtime changes from the accepted preview mutation work.
+
+==================================================
+PHASE 4 — TEST BEFORE DEPLOYMENT
+==================================================
+
+Run focused tests proving:
+
+1. registration enabled -> normal signup allowed
+2. registration disabled -> signup rejected
+3. runtime capability reports the actual registration state
+4. control/product capability agrees with runtime
+5. no registration bypass exists
+6. password recovery remains available
+7. preview validation-only operation remains working
+8. invalid preview capability remains denied
+9. existing auth/session behavior remains intact
+
+Then:
+
+- relevant TypeScript
+- runtime build
+- Wrangler dry run
+
+Do not run unrelated generation suites.
+
+==================================================
+PHASE 5 — DEPLOY MINIMUM REQUIRED CHANGE
+==================================================
+
+If this is purely runtime configuration/source configuration, deploy ONLY the
+runtime.
+
+If control genuinely requires a change to stop falsely advertising a
+different state, explain why before deploying it.
+
+Do NOT deploy gateway.
+
+Gateway must remain:
+
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+Record the new runtime version if a deployment occurs.
+
+==================================================
+PHASE 6 — LIVE SIGNUP ACCEPTANCE
+==================================================
+
+Before creating another account, verify LIVE:
+
+- runtime reports registration enabled
+- public/control capability reports registration enabled
+- the two agree
+- signup page loads
+- Forgot Password remains available
+- invalid preview capability still fails closed
+
+THEN perform exactly ONE new signup through the normal public UI.
+
+Use a new disposable email and retain its generated test credential securely
+for the remainder of launch-readiness.
+
+Do not print the password.
+
+Verify:
+
+- signup HTTP succeeds
+- exactly one runtime user created
+- exactly one corresponding product identity created as designed
+- normal session established
+- dashboard loads
+- dashboard shows expected new-user/zero-project state
+
+Record:
+
+- disposable email
+- user ID
+
+If signup fails again:
+
+STOP.
+
+Do not make a second signup attempt.
+
+==================================================
+PHASE 7 — IF SIGNUP PASSES, CONTINUE THE SAME USER
+==================================================
+
+Do NOT stop merely because signup is fixed.
+
+Use that SAME successfully created customer and resume the previously approved
+final customer journey.
+
+Create exactly one project with:
+
+"Build me a simple CRM for a roofing company. I need a dashboard showing
+total leads, estimates sent, jobs won, and revenue. Add a leads page with
+customer name, phone, email, project type, lead status, estimated value, and
+notes. Make it clean and professional."
+
+Then continue the already-approved acceptance journey:
+
+1. generation completes
+2. preview HTML/CSS/JS renders
+3. GET/API data works
+4. dynamic/query URLs work
+5. if Add Lead exists, test OPTIONS + POST through normal UI
+6. verify mutation occurs exactly once
+7. send first AI edit:
+
+   "Change the dashboard to a dark navy theme and add a recent leads section
+   showing the five newest leads."
+
+8. verify new revision and working preview
+9. leave/reopen and verify persistence
+10. initial BuildCustom Publish
+11. verify public *.apps.buildcustom.ai app
+12. same-revision Publish Updates and verify idempotency
+13. send second AI edit:
+
+    "Add a green New Lead button in the top-right of the leads page."
+
+14. verify new revision
+15. publish update
+16. verify stable public URL serves new revision
+17. logout
+18. login normally using retained disposable credential
+19. verify complete persistence
+20. basic second-account ownership isolation
+21. active publish claims = 0
+
+Do NOT use Replit's Publish button.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. signup 403 root cause
+2. whether recent runtime deployment lost configuration
+3. any other configuration mismatch found
+4. exact fix
+5. test results
+6. new runtime version
+7. control version
+8. gateway version
+9. successful disposable user/email if created
+10. project/agent/initial revision
+11. generation result/duration
+12. preview/read/mutation result
+13. first AI edit result
+14. reopen result
+15. initial publish result
+16. same-revision publish result
+17. second edit + publish-update result
+18. returning-login result
+19. ownership-isolation result
+20. public generated-app URL
+21. active publish claims
+22. remaining concrete customer-facing BLOCKERS
+23. GO / NO-GO
+
+If the complete journey passes:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP.
+
+Do not begin billing, custom domains, cleanup, dependency upgrades, telemetry,
+or unrelated polish.

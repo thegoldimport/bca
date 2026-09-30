@@ -44,6 +44,7 @@
 - [Staging D1 ledger drift](staging-d1-ledger-drift.md) — verify live schema against pending migrations before replaying an already-present ALTER.
 - [Stock runtime logout revocation](stock-logout-revocation.md) — a successful logout is not proof that the old session is revoked; test the pre-logout credential.
 - [Registration bypass boundary](registration-bypass-boundary.md) — a closed product signup can still be bypassed through the separately exposed stock runtime registration route.
+- [Launch registration config parity](launch-registration-config-parity.md) — diff ignored runtime checkout config against tracked launch config before deploy; a stale flag can silently close signup.
 - [Local remote D1 bootstrap](local-remote-d1-bootstrap.md) — local Wrangler remote D1 bindings can fail even while remote D1 CLI reads succeed; prove the private path before registration.
 - [Single-use browser acceptance](single-use-browser-acceptance.md) — controlled inputs can show the right DOM value while React state remains stale; reconcile before one-time clicks.
 - [Operator fixture parity](operator-fixture-parity.md) — a passing mocked state machine does not validate live browser orchestration unless both execute the same case runner.
