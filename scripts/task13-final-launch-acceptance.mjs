@@ -588,6 +588,9 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
   page.on("request", request => {
     try {
       const url = new URL(request.url());
+      // Cloudflare's RUM beacon is platform telemetry, not a generated-app
+      // resource. Its optional preflight can return 404 on the product route.
+      if (url.pathname.startsWith("/cdn-cgi/rum")) return;
       let initiatorFrameUrl = "";
       try { initiatorFrameUrl = request.frame()?.url() || ""; } catch { /* Detached frame. */ }
       let initiatorOrigin = "";
@@ -1166,9 +1169,22 @@ async function assertPreviewResourceEvidence(audit, previewUrl, rendered) {
   const documents = requests.filter(item => item.resourceType === "document");
   assert(documents.some(item => item.status >= 200 && item.status < 400 && item.responseBodyReadable === true),
     "Preview document response was not captured/readable through the browser protocol.");
-  assert.equal(audit.failed.length, 0, "Preview HTML/CSS/JS/API has a failed network request.");
-  assert.equal(requests.filter(item => item.status >= 400).length, 0,
-    "Preview-origin HTML/CSS/JS/API request returned an HTTP error.");
+  const diagnostic = item => {
+    const url = new URL(item.url);
+    return {
+      method: item.method,
+      type: item.resourceType,
+      host: url.hostname,
+      path: url.pathname.replace(/^\/_private_preview\/[^/]+\/[^/]+\//, "/<preview>/"),
+      ...(item.status != null ? { status: item.status } : {}),
+      ...(item.failure ? { failure: item.failure } : {}),
+    };
+  };
+  assert.equal(audit.failed.length, 0,
+    `Preview HTML/CSS/JS/API has a failed network request: ${JSON.stringify(audit.failed.slice(0, 3).map(diagnostic))}`);
+  const httpErrors = requests.filter(item => item.status >= 400);
+  assert.equal(httpErrors.length, 0,
+    `Preview-origin HTML/CSS/JS/API request returned an HTTP error: ${JSON.stringify(httpErrors.slice(0, 3).map(diagnostic))}`);
   const linkedStylesheets = rendered.loadedStylesheets;
   assert(linkedStylesheets > 0 || rendered.inlineStylesheets > 0,
     "Preview has no successfully loaded linked stylesheet or inline stylesheet.");

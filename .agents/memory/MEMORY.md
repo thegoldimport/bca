@@ -60,3 +60,4 @@
 - [Marketing Pages release](marketing-pages-release.md) — GitHub Actions plus Wrangler is the marketing release authority; Pages push builds stay disabled.
 - [External CI npm installs](pages-install-diagnosis.md) — GitHub's npm log traced failed tarball fetches to Replit-internal lockfile URLs; Pages shares symptoms but lacks debug proof.
 - [JSDOM route fixtures](jsdom-route-fixtures.md) — a blank route can be a thrown component error from an underspecified mock, not a routing regression.
+- [Same-origin preview audits](same-origin-preview-audits.md) — classify requests by preview path or initiator frame, not origin alone; exclude platform telemetry separately.

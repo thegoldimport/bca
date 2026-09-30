@@ -11,6 +11,9 @@ const MAX_TEXT_RESPONSE = 2_000_000;
 const MAX_REQUEST_BODY = 2_000_000;
 const PREVIEW_METHODS = new Set(["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]);
 const PREVIEW_REQUEST_HEADERS = new Set(["content-type", "accept", "if-match", "if-none-match"]);
+// Internal transport hint for sources referenced by an HTML script tag. It is
+// removed before dispatch, so generated applications never see this parameter.
+const PREVIEW_SOURCE_HINT = "__bc_preview_source";
 
 export type PreviewValidatorBinding = {
   validatePreviewCapability(input: { agentId: string; branch: string; token: string }): Promise<{ valid: boolean }>;
@@ -291,6 +294,18 @@ export function rewritePreviewHtml(
         const includeToken = asset === "src" || asset === "poster" || asset === "xlink:href"
           || (asset === "href" && ["link", "use", "image"].includes(name));
         const rewritten = scopedHtmlUrl(value, requestUrl, origin, capability, includeToken);
+        if (name === "script" && asset === "src" && includeToken) {
+          try {
+            const url = new URL(rewritten);
+            if (url.href.startsWith(capabilityPrefix(origin, capability))
+              && url.searchParams.get("t") === capability.token) {
+              url.searchParams.set(PREVIEW_SOURCE_HINT, "1");
+              return `${prefix}${quote}${url.href}${quote}`;
+            }
+          } catch {
+            // External or unsupported script URLs retain their original value.
+          }
+        }
         return `${prefix}${quote}${rewritten}${quote}`;
       },
     );
@@ -455,9 +470,15 @@ export async function handleLaunchPreviewProxy(
 
   const capability = capabilityForRequest(request, origin);
   const tokenParameters = requestUrl.searchParams.getAll("t");
+  const sourceHints = requestUrl.searchParams.getAll(PREVIEW_SOURCE_HINT);
   // A runtime token may bypass the cookie only for a parsed, non-root asset path.
   if (tokenParameters.length > 0
     && (!direct || !capability?.path || tokenParameters.length !== 1 || !validToken(tokenParameters[0]))) {
+    return simpleResponse(400, "Invalid preview request.");
+  }
+  if (sourceHints.length > 0
+    && (!direct || !capability?.path || tokenParameters.length !== 1
+      || sourceHints.length !== 1 || sourceHints[0] !== "1")) {
     return simpleResponse(400, "Invalid preview request.");
   }
   if (!capability) {
@@ -476,6 +497,7 @@ export async function handleLaunchPreviewProxy(
   const authorizedCapability = { ...capability, token: previewToken };
   const safeQuery = new URLSearchParams(requestUrl.search);
   safeQuery.delete("t");
+  safeQuery.delete(PREVIEW_SOURCE_HINT);
   const upstreamUrl = new URL(runtimeOrigin(env));
   const assetPath = authorizedCapability.path;
   upstreamUrl.pathname = `/space/${encodeURIComponent(authorizedCapability.agentId)}/preview/${encodeURIComponent(authorizedCapability.branch)}/${assetPath}`;
@@ -568,12 +590,12 @@ export async function handleLaunchPreviewProxy(
 
   const outputHeaders = responseHeaders(upstream);
   const contentType = upstream.headers.get("Content-Type")?.toLowerCase() || "";
-  // Sandboxed preview documents have an opaque origin. Scripts and fetch()ed
-  // JSON use CORS, unlike ordinary stylesheets. Only successfully authorized,
-  // explicitly token-scoped resources may be read from that origin.
+  // An opaque sandbox can request *any* resource with XHR/fetch, even source
+  // served as text/plain. MIME and filename cannot decide CORS eligibility.
+  // Ordinary document/stylesheet loads have no opaque Origin header; cookie-
+  // only and denied requests never reach this success response with a token.
   if (direct && tokenParameters.length === 1 && request.headers.get("Origin") === "null"
-    && (request.method !== "GET" || contentType.includes("javascript") || contentType.includes("ecmascript")
-      || /^(?:application|text)\/(?:[^;\s]+\+)?json(?:\s*;|$)/.test(contentType))) {
+    && (request.method !== "GET" || upstream.ok)) {
     outputHeaders.set("Access-Control-Allow-Origin", "null");
     outputHeaders.set("Vary", "Origin");
   }
@@ -581,8 +603,11 @@ export async function handleLaunchPreviewProxy(
     await upstream.body?.cancel();
     return new Response(null, { status: upstream.status, headers: outputHeaders });
   }
+  const scriptSource = sourceHints.length === 1
+    && (contentType.startsWith("text/") || contentType.includes("typescript")
+      || contentType.includes("octet-stream"));
   if (request.method === "GET" && (contentType.includes("text/html") || contentType.includes("text/css")
-    || contentType.includes("javascript") || contentType.includes("ecmascript"))) {
+    || contentType.includes("javascript") || contentType.includes("ecmascript") || scriptSource)) {
     const length = Number(upstream.headers.get("Content-Length"));
     if (Number.isFinite(length) && length > MAX_TEXT_RESPONSE) {
       await upstream.body?.cancel();

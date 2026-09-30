@@ -1,0 +1,428 @@
+Continue the SAME launch-acceptance customer and project.
+
+Do NOT:
+- create another customer
+- create another project
+- regenerate project 5
+- send an AI edit yet
+- publish yet
+- modify generated source to avoid the failure
+- change gateway
+- change registration
+- restart the acceptance journey
+
+CURRENT CUSTOMER
+
+Email:
+thegoldimport+buildcustom-launch-task13-1790778045941-0a32dfb2c1@gmail.com
+
+User ID:
+4d91ebb1-c2fc-4906-81fe-8b305761b8a2
+
+The credential is already retained in the private test checkpoint.
+Use it there. Do not print it.
+
+CURRENT PROJECT
+
+Project:
+5
+
+Agent:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Revision:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Generation:
+completed / native agent idle and ready
+
+CURRENT PRODUCTION
+
+Runtime:
+31ca3dce-e6c8-416b-b5e2-995034e2dcac
+
+Control:
+167eaeb5-2420-41d4-a740-cc0ce04b72d9
+
+Gateway:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+CURRENT BLOCKER
+
+The private preview document returns 200, but the generated application remains:
+
+"Loading ApexRoof CRM..."
+
+The React application does not mount.
+
+Observed browser failure:
+
+- app.jsx is requested by XMLHttpRequest
+- iframe sandbox has opaque Origin: null
+- request is capability-scoped
+- browser performs CORS preflight
+- preflight response does not provide Access-Control-Allow-Origin
+- browser blocks app.jsx
+- React never mounts
+
+This is a real customer-facing preview blocker.
+
+==================================================
+PHASE 1 — TRACE THE EXACT APP.JSX LOAD
+==================================================
+
+Inspect the existing authoritative project 5 source and browser traffic.
+
+Do NOT modify it.
+
+Determine:
+
+1. exact HTML/bootstrap code causing app.jsx to be requested
+2. whether Babel/browser tooling is issuing the XMLHttpRequest
+3. exact app.jsx URL before preview rewriting
+4. exact rewritten capability-scoped URL
+5. request method
+6. request Origin
+7. request headers
+8. exact OPTIONS preflight
+9. Access-Control-Request-Method
+10. Access-Control-Request-Headers
+11. control-plane response status/headers
+12. whether runtime capability validation is invoked
+13. whether generated-app code is invoked during preflight
+14. whether the subsequent GET/XHR occurs at all
+15. app.jsx response Content-Type if reached
+
+Also determine WHY the current preview CORS contract handles the previously
+fixed app.js case but does not handle this app.jsx XHR case.
+
+Report before editing:
+
+ROOT CAUSE:
+<exact cause>
+
+Do not merely say "CORS."
+
+==================================================
+PHASE 2 — FIX THE GENERIC CONTRACT, NOT .JSX
+==================================================
+
+Do NOT special-case:
+
+- app.jsx
+- project 5
+- ApexRoof
+- React
+- Babel
+- a specific filename extension
+
+The private preview transport must support authorized browser requests from
+the opaque sandbox based on REQUEST SEMANTICS, not a hard-coded list of
+generated filenames.
+
+An explicitly capability-scoped resource request from the preview sandbox
+may legitimately be made through:
+
+- normal browser resource loading
+- module loading
+- fetch()
+- XMLHttpRequest
+- generated-app API calls
+
+The browser may therefore require CORS/preflight even for a source/resource
+GET.
+
+The platform should support that generically while preserving the existing
+capability boundary.
+
+==================================================
+PHASE 3 — PREFLIGHT FOR AUTHORIZED RESOURCE GET
+==================================================
+
+Use the runtime validation-only operation already added.
+
+For an OPTIONS preflight targeting a capability-scoped private-preview
+resource:
+
+1. parse the preview capability
+2. validate requested method against supported methods
+3. validate requested headers against the narrow allowlist
+4. call runtime validation-only authorization
+5. NEVER execute generated-app code during OPTIONS
+6. if capability is valid, return the minimum CORS response needed by the
+   opaque sandbox
+
+For the current app.jsx request, if browser requests GET, the response should
+allow that GET.
+
+Use the existing secure opaque-origin model:
+
+Access-Control-Allow-Origin: null
+
+and only the required allowed method/header values.
+
+Do NOT:
+
+- use Access-Control-Allow-Origin: *
+- enable credentials
+- reflect arbitrary requested headers
+- expose BuildCustom cookies
+- bypass capability validation
+- dispatch OPTIONS into generated application code
+
+Invalid/missing/revoked/wrong-scope capabilities must continue to fail closed
+without receiving access-enabling CORS.
+
+==================================================
+PHASE 4 — SUCCESSFUL AUTHORIZED RESOURCE RESPONSE
+==================================================
+
+The actual capability-authorized GET/XHR response must also be consumable by
+the opaque sandbox.
+
+Do not determine CORS eligibility solely from:
+
+- .js extension
+- application/javascript
+- application/json
+
+Instead use the proven private-preview authorization/request context.
+
+If an explicitly capability-authorized request from the opaque sandbox
+requires CORS, return the minimum appropriate:
+
+Access-Control-Allow-Origin: null
+
+while preserving:
+
+- correct response body
+- correct Content-Type
+- project/agent/branch scope
+- owner isolation
+- sandbox isolation
+
+HTML/CSS requests that do not require this behavior should remain unchanged.
+
+Denied/unscoped requests must not gain CORS access.
+
+==================================================
+PHASE 5 — SOURCE TYPES / CONTENT TYPES
+==================================================
+
+Verify the private preview can correctly deliver common generated application
+source/resource types when requested through authorized browser mechanisms.
+
+At minimum cover behavior for representative:
+
+- .js
+- .jsx
+- .ts
+- .tsx
+- JSON/API response
+
+This does NOT mean every extension needs custom CORS logic.
+
+The tests should prove the generic transport does not break merely because a
+builder-generated application uses JSX/TSX or XHR/fetch to retrieve source.
+
+Also verify Content-Type behavior is compatible with the way the generated
+preview bootstrap actually consumes the resource.
+
+Do not change project 5 source just to alter its loading mechanism.
+
+==================================================
+PHASE 6 — FOCUSED REGRESSION TESTS
+==================================================
+
+Add focused tests reproducing THIS failure and protecting previous fixes.
+
+At minimum prove:
+
+1. capability-authorized resource GET without preflight still works
+2. authorized XHR GET preflight succeeds
+3. OPTIONS invokes runtime validation-only authorization
+4. OPTIONS does NOT invoke generated-app code
+5. subsequent authorized XHR GET succeeds
+6. opaque sandbox can consume response
+7. representative JS resource works
+8. representative JSX resource works
+9. representative TS resource works where preview supports it
+10. representative TSX resource works where preview supports it
+11. JSON GET remains working
+12. query parameters remain intact
+13. template-literal/dynamic URL rewriting remains intact
+14. authorized POST preflight remains supported
+15. mutation POST forwarding remains supported
+16. missing capability denied
+17. malformed capability denied
+18. revoked capability denied
+19. wrong project/agent capability denied
+20. cross-user/cross-project access denied
+21. cookie-only request cannot bypass capability
+22. arbitrary requested headers are not reflected
+23. BuildCustom cookies are not forwarded
+24. wildcard credentialed CORS is absent
+25. normal HTML/CSS behavior remains intact
+26. sandbox parent/cookie isolation remains intact
+
+Run:
+
+- focused control preview tests
+- focused runtime validation tests if runtime behavior is implicated
+- relevant TypeScript
+- relevant build
+- Wrangler dry run
+
+==================================================
+PHASE 7 — DEPLOY MINIMUM OWNER OF THE BUG
+==================================================
+
+If runtime validation-only behavior is already correct and this is solely a
+control-plane CORS/preflight policy issue:
+
+DEPLOY ONLY CONTROL.
+
+Do not redeploy runtime unnecessarily.
+
+If evidence proves runtime must change, explain the exact reason before
+deploying it.
+
+Do NOT deploy gateway.
+
+Record resulting serving versions.
+
+==================================================
+PHASE 8 — REVERIFY SAME PROJECT 5
+==================================================
+
+Use the SAME customer and SAME project.
+
+Do NOT regenerate.
+
+Do NOT edit source.
+
+Initial revision must remain:
+
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Open project 5 through the normal customer UI.
+
+Require:
+
+- preview document 200
+- CSS loads
+- app.jsx preflight succeeds if browser requires it
+- app.jsx loads
+- React mounts
+- "Loading ApexRoof CRM..." resolves into the actual application
+- visible CRM UI renders
+- navigation works
+- no application-blocking CORS errors
+- generated data GETs work
+- query/dynamic URLs work
+- browser-readable JSON works
+
+Then, if Add Lead exists, test it through the normal UI.
+
+Verify:
+
+- OPTIONS succeeds
+- OPTIONS is side-effect-free
+- POST occurs once
+- mutation executes once
+- response is readable
+- record persists
+- UI updates
+- no duplicate record
+
+If THIS old revision still cannot function normally:
+
+STOP and report the concrete failure.
+
+==================================================
+PHASE 9 — CONTINUE, DO NOT RESTART
+==================================================
+
+If project 5 passes, continue using THIS SAME CUSTOMER AND PROJECT.
+
+First AI edit:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+
+- exactly one edit
+- new revision
+- requested changes
+- working preview
+- working reads
+- working mutations
+
+Then:
+
+1. leave/reopen
+2. verify persistence
+3. initial BuildCustom Publish
+4. verify public *.apps.buildcustom.ai app
+5. verify public HTML/CSS/JS/data behavior
+6. same-revision Publish Updates
+7. verify idempotency
+
+Second AI edit:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify new revision and working preview.
+
+Publish update.
+
+Verify:
+
+- new immutable candidate/release
+- stable public URL unchanged
+- public URL serves new revision
+
+Then:
+
+- logout
+- login normally using retained credential
+- verify complete project persistence
+- basic second-account ownership isolation
+- measure active publish claims
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact app.jsx/preflight root cause
+2. why previous JS/JSON fixes did not cover it
+3. component changed
+4. generic preview transport fix
+5. regression test results
+6. serving runtime/control/gateway versions
+7. project 5 unchanged-revision preview result
+8. Add Lead/mutation result
+9. first AI edit result
+10. reopen/persistence result
+11. initial publish release/script/public URL
+12. same-revision publish result
+13. second AI edit result
+14. publish-update result
+15. returning-login result
+16. ownership-isolation result
+17. active publish claims
+18. remaining concrete customer-facing BLOCKERS
+19. GO / NO-GO
+
+If the entire remaining journey passes:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP.
+
+Do not begin billing, custom domains, cleanup, dependency upgrades, telemetry,
+or unrelated polish.

@@ -86,6 +86,211 @@ test("HTML and CSS root assets stay under a branch-scoped path with the preview 
   assert.ok(nestedModule.includes(`${controlOrigin}${previewRoute}src/chunk.js?t=${token}`));
 });
 
+test("Babel script resources are capability-scoped and explicitly marked for source rewriting", () => {
+  const previewRoute = route("agent-1", "main");
+  const requestUrl = new URL(`${controlOrigin}${previewRoute}?theme=dark`);
+  const capability = { agentId: "agent-1", branch: "main", token, path: "" };
+  const html = rewritePreviewHtml(
+    '<html><head><link rel="stylesheet" href="./site.css"></head><body>'
+      + '<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>'
+      + '<script type="text/babel" data-type="module" data-presets="react" src="./app.jsx?mode=crm"></script>'
+      + '<script type="module" src="./src/main.js"></script></body></html>',
+    requestUrl,
+    controlOrigin,
+    capability,
+  );
+  const sources = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gi)].map((match) => new URL(match[1]));
+  const babelSource = sources.find((source) => source.pathname.endsWith("/app.jsx"));
+  const moduleSource = sources.find((source) => source.pathname.endsWith("/src/main.js"));
+  const babelLibrary = sources.find((source) => source.hostname === "unpkg.com");
+  assert.ok(babelSource);
+  assert.equal(babelSource.origin, controlOrigin);
+  assert.equal(babelSource.pathname, `${previewRoute}app.jsx`);
+  assert.equal(babelSource.searchParams.get("mode"), "crm");
+  assert.equal(babelSource.searchParams.get("t"), token);
+  assert.equal(babelSource.searchParams.get("__bc_preview_source"), "1");
+  assert.ok(moduleSource);
+  assert.equal(moduleSource.searchParams.get("t"), token);
+  assert.equal(moduleSource.searchParams.get("__bc_preview_source"), "1");
+  assert.equal(babelLibrary?.searchParams.has("__bc_preview_source"), false);
+  assert.match(html, /<link rel="stylesheet" href="[^"]*site\.css\?t=/);
+  assert.doesNotMatch(html, /site\.css[^"]*__bc_preview_source/);
+});
+
+test("Babel-fetched text/plain JSX source receives opaque-origin CORS and rewrites scoped API URLs", async () => {
+  const forwarded: Request[] = [];
+  const runtime = {
+    async fetch(request: Request) {
+      forwarded.push(request);
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/")) {
+        return new Response(
+          '<html><head><link rel="stylesheet" href="./style.css"></head><body>'
+            + '<script type="text/babel" data-type="module" data-presets="react" src="./app.jsx?screen=crm"></script>'
+            + "</body></html>",
+          { headers: { "Content-Type": "text/html; charset=utf-8" } },
+        );
+      }
+      if (url.pathname.endsWith("/app.jsx")) {
+        return new Response(
+          "const leadsUrl = './api/leads?status=new';\n"
+            + "const leadUrl = `./api/leads/${leadId}?status=${encodeURIComponent(status)}`;\n"
+            + "fetch(leadsUrl); fetch(leadUrl);",
+          { headers: { "Content-Type": "text/plain;charset=UTF-8" } },
+        );
+      }
+      if (url.pathname.endsWith("/api/leads")) {
+        return Response.json({ statuses: url.searchParams.getAll("status") });
+      }
+      if (url.pathname.endsWith("/style.css")) {
+        return new Response("body { color: navy }", { headers: { "Content-Type": "text/css" } });
+      }
+      return new Response("unavailable", { status: 404 });
+    },
+  } as unknown as Fetcher;
+  const validatorCalls: Array<{ agentId: string; branch: string }> = [];
+  const env = {
+    ...launchEnv(runtime),
+    PREVIEW_VALIDATOR: {
+      async validatePreviewCapability(input: { agentId: string; branch: string; token: string }) {
+        validatorCalls.push({ agentId: input.agentId, branch: input.branch });
+        return { valid: input.agentId === "agent-1" && input.branch === "main" && input.token === token };
+      },
+    },
+  };
+  const root = route("agent-1", "main");
+  const runtimePreviewUrl = `${runtimeOrigin}/space/agent-1/preview/main/?t=${token}`;
+  const cookie = (await launchPreviewCookie(env, "agent-1", runtimePreviewUrl))!.split(";")[0];
+
+  const html = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}`, {
+    headers: { Cookie: cookie },
+  }));
+  assert.equal(html?.status, 200);
+  assert.equal(html?.headers.get("Access-Control-Allow-Origin"), null);
+  const rewrittenHtml = await html!.text();
+  const appSourceMatch = rewrittenHtml.match(/<script\b[^>]*\bsrc="([^"]*app\.jsx[^"]*)"/i);
+  assert.ok(appSourceMatch, "The actual Babel JSX source tag must survive HTML rewriting.");
+  const appSourceUrl = new URL(appSourceMatch[1]);
+  assert.equal(appSourceUrl.searchParams.get("t"), token);
+  assert.equal(appSourceUrl.searchParams.get("__bc_preview_source"), "1");
+
+  const source = await handleLaunchPreviewProxy(env, new Request(appSourceUrl, {
+    headers: { Origin: "null", Accept: "*/*" },
+  }));
+  assert.equal(source?.status, 200);
+  assert.equal(source?.headers.get("Content-Type"), "text/plain;charset=UTF-8");
+  assert.equal(source?.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(source?.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.equal(source?.headers.get("Set-Cookie"), null);
+  const rewrittenSource = await source!.text();
+  assert.match(rewrittenSource, /const leadsUrl = ['"]https:\/\/buildcustom-control-plane-production\.thegoldimport\.workers\.dev\/_private_preview\/agent-1\/main\/api\/leads\?status=new&t=/);
+  assert.match(rewrittenSource, /new URL\(`\.\/api\/leads\/\$\{leadId\}\?status=\$\{encodeURIComponent\(status\)\}`/);
+  assert.match(rewrittenSource, /fetch\(leadsUrl\); fetch\(leadUrl\);/);
+  const dynamicExpression = rewrittenSource.match(/^const leadUrl = (.+)$/m)?.[1];
+  assert.ok(dynamicExpression);
+  const dynamicUrl = new URL(Function("leadId", "status", `return ${dynamicExpression}`)(42, "won") as string);
+  assert.equal(dynamicUrl.pathname, `${root}api/leads/42`);
+  assert.equal(dynamicUrl.searchParams.get("status"), "won");
+  assert.equal(dynamicUrl.searchParams.get("t"), token);
+  assert.equal(dynamicUrl.searchParams.has("__bc_preview_source"), false);
+  assert.doesNotMatch(rewrittenSource.match(/const leadsUrl = ([^\n]+)/)?.[1] || "", /__bc_preview_source/);
+  const sourceRequest = forwarded.find((request) => new URL(request.url).pathname.endsWith("/app.jsx"));
+  assert.ok(sourceRequest);
+  assert.equal(new URL(sourceRequest.url).searchParams.get("t"), token);
+  assert.equal(new URL(sourceRequest.url).searchParams.get("screen"), "crm");
+  assert.equal(new URL(sourceRequest.url).searchParams.get("__bc_preview_source"), null);
+  assert.equal(sourceRequest.headers.get("Cookie"), null);
+  assert.equal(sourceRequest.headers.get("Authorization"), null);
+
+  const preflightUrl = `${controlOrigin}${root}api/leads?status=won&t=${token}`;
+  const callsBeforePreflight = forwarded.length;
+  const getPreflight = await handleLaunchPreviewProxy(env, new Request(preflightUrl, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "null",
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "accept",
+    },
+  }));
+  assert.equal(getPreflight?.status, 204);
+  assert.equal(getPreflight?.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(getPreflight?.headers.get("Access-Control-Allow-Methods"), "GET");
+  assert.equal(getPreflight?.headers.get("Access-Control-Allow-Headers"), "accept");
+  assert.equal(getPreflight?.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.equal(forwarded.length, callsBeforePreflight, "OPTIONS must never execute generated-app code.");
+  assert.deepEqual(validatorCalls, [{ agentId: "agent-1", branch: "main" }]);
+
+  const data = await handleLaunchPreviewProxy(env, new Request(preflightUrl, {
+    headers: { Origin: "null", Accept: "application/json" },
+  }));
+  assert.equal(data?.status, 200);
+  assert.equal(data?.headers.get("Content-Type"), "application/json");
+  assert.equal(data?.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(data?.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.deepEqual(await data!.json(), { statuses: ["won"] });
+  const dataRequest = forwarded.at(-1)!;
+  assert.deepEqual([...new URL(dataRequest.url).searchParams.entries()], [["status", "won"], ["t", token]]);
+
+  const ordinaryCss = await handleLaunchPreviewProxy(env, new Request(
+    `${controlOrigin}${root}style.css?t=${token}`,
+  ));
+  assert.equal(ordinaryCss?.status, 200);
+  assert.equal(ordinaryCss?.headers.get("Content-Type"), "text/css");
+  assert.equal(ordinaryCss?.headers.get("Access-Control-Allow-Origin"), null);
+  assert.equal(await ordinaryCss!.text(), "body { color: navy }");
+  assert.deepEqual(validatorCalls, [{ agentId: "agent-1", branch: "main" }]);
+});
+
+test("marked JavaScript, JSX, TypeScript, and TSX source share the same content-type-independent transport", async () => {
+  const runtimeRequests: URL[] = [];
+  const mimeByFile = new Map<string, string>([
+    ["app.js", "text/plain;charset=UTF-8"],
+    ["app.jsx", "text/plain;charset=UTF-8"],
+    ["app.ts", "text/plain;charset=UTF-8"],
+    ["app.tsx", "text/plain;charset=UTF-8"],
+  ]);
+  const runtime = {
+    async fetch(request: Request) {
+      const url = new URL(request.url);
+      runtimeRequests.push(url);
+      const name = url.pathname.split("/").at(-1)!;
+      return new Response('fetch("./api/leads?view=recent");', {
+        headers: { "Content-Type": mimeByFile.get(name) || "text/plain;charset=UTF-8" },
+      });
+    },
+  } as unknown as Fetcher;
+  for (const filename of mimeByFile.keys()) {
+    const response = await handleLaunchPreviewProxy(launchEnv(runtime), new Request(
+      `${controlOrigin}${route("agent-1", "main", filename)}?screen=crm&t=${token}&__bc_preview_source=1`,
+      { headers: { Origin: "null" } },
+    ));
+    assert.equal(response?.status, 200, filename);
+    assert.equal(response?.headers.get("Content-Type"), "text/plain;charset=UTF-8", filename);
+    assert.equal(response?.headers.get("Access-Control-Allow-Origin"), "null", filename);
+    assert.ok((await response!.text()).includes(`${route("agent-1", "main")}api/leads?view=recent&t=`), filename);
+    assert.equal(runtimeRequests.at(-1)?.searchParams.get("screen"), "crm", filename);
+    assert.equal(runtimeRequests.at(-1)?.searchParams.get("__bc_preview_source"), null, filename);
+  }
+  assert.equal(runtimeRequests.length, 4);
+});
+
+test("plain-text API responses are readable when scoped but are not rewritten as source", async () => {
+  const body = 'literal source-like text: "./api/leads?view=recent"';
+  const runtime = {
+    async fetch() {
+      return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    },
+  } as unknown as Fetcher;
+  const response = await handleLaunchPreviewProxy(launchEnv(runtime), new Request(
+    `${controlOrigin}${route("agent-1", "main", "api/notes")}?view=recent&t=${token}`,
+    { headers: { Origin: "null" } },
+  ));
+  assert.equal(response?.status, 200);
+  assert.equal(response?.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(response?.headers.get("Content-Type"), "text/plain; charset=utf-8");
+  assert.equal(await response!.text(), body);
+});
+
 test("dynamic preview URLs keep filters, repeated names, encoding, and fragments with their capability", () => {
   const previewRoute = route("agent-1", "main");
   const requestUrl = new URL(`${controlOrigin}${previewRoute}app.js?t=${token}`);
@@ -260,7 +465,7 @@ test("scoped module requests keep the HttpOnly preview cookie and rewrite nested
   assert.equal(calls[0].headers.get("Cookie"), null);
 });
 
-test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS, or cookie-only assets", async () => {
+test("opaque sandbox can read normal JavaScript-MIME modules and JSON, but not HTML, CSS, or cookie-only assets", async () => {
   const runtime = {
     async fetch(request: Request) {
       const url = new URL(request.url);
@@ -279,7 +484,7 @@ test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS
           headers: { "Access-Control-Allow-Origin": "*" },
         });
       }
-      return new Response('<html><head><link rel="stylesheet" href="./style.css"></head><body><script type="text/babel" data-type="module" src="./app.js"></script><script type="module" src="./app.js"></script></body></html>', {
+      return new Response('<html><head><link rel="stylesheet" href="./style.css"></head><body><script type="text/babel" data-type="module" src="./app.jsx"></script><script type="module" src="./app.js"></script></body></html>', {
         headers: { "Content-Type": "text/html" },
       });
     },
@@ -294,7 +499,7 @@ test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS
   assert.ok(html);
   assert.equal(html?.status, 200);
   assert.equal(html.headers.get("Access-Control-Allow-Origin"), null);
-  assert.match(await html.text(), /type="text\/babel"[^>]*src="[^"]*app\.js\?t=/);
+  assert.match(await html.text(), /type="text\/babel"[^>]*src="[^"]*app\.jsx\?t=/);
 
   const script = `${controlOrigin}${root}app.js?t=${token}`;
   const corsHeaders = { Origin: "null", "Sec-Fetch-Mode": "cors" };
@@ -331,7 +536,7 @@ test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS
   }));
   assert.ok(css);
   assert.equal(css?.status, 200);
-  assert.equal(css.headers.get("Access-Control-Allow-Origin"), null);
+  assert.equal(css.headers.get("Access-Control-Allow-Origin"), "null");
   const otherOrigin = await handleLaunchPreviewProxy(env, new Request(script, {
     headers: { Origin: "https://other.example" },
   }));
@@ -412,12 +617,34 @@ test("preflight uses internal validation only and rejects unsupported, missing, 
   assert.deepEqual(forwarded, []);
   assert.deepEqual(validations, ["agent-1/main"]);
 
+  const resourceGet = await handleLaunchPreviewProxy(env, new Request(
+    `${controlOrigin}${route("agent-1", "main", "app.jsx")}?t=${token}`,
+    {
+      method: "OPTIONS",
+      headers: {
+        Origin: "null",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "accept",
+      },
+    },
+  ));
+  assert.equal(resourceGet?.status, 204);
+  assert.equal(resourceGet?.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(resourceGet?.headers.get("Access-Control-Allow-Methods"), "GET");
+  assert.equal(resourceGet?.headers.get("Access-Control-Allow-Headers"), "accept");
+  assert.equal(resourceGet?.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.deepEqual(forwarded, [], "GET OPTIONS preflight must never execute generated-app code.");
+  assert.deepEqual(validations, ["agent-1/main", "agent-1/main"]);
+
+  const revokedToken = `${"d".repeat(32)}.${"e".repeat(32)}.${"f".repeat(32)}`;
   const denied = [
     [path, { "Access-Control-Request-Headers": "authorization" }, 400],
+    [path, { "Access-Control-Request-Headers": "x-unlisted-preview-header" }, 400],
     [path, { "Access-Control-Request-Method": "PROPFIND" }, 405],
     [path, { Origin: "https://attacker.example" }, 403],
     [`${controlOrigin}${route("agent-1", "main", "api/leads")}`, {}, 401],
     [`${controlOrigin}${route("agent-1", "main", "api/leads")}?t=wrong`, {}, 401],
+    [`${controlOrigin}${route("agent-1", "main", "api/leads")}?t=${revokedToken}`, {}, 401],
     [`${controlOrigin}${route("agent-2", "main", "api/leads")}?t=${token}`, {}, 401],
     [`${controlOrigin}${route("agent-1", "other", "api/leads")}?t=${token}`, {}, 401],
     [`${controlOrigin}${route("agent-1", "main", "api/leads")}?t=bad%20token`, {}, 400],
@@ -428,7 +655,10 @@ test("preflight uses internal validation only and rejects unsupported, missing, 
     assert.equal(response.headers.get("Access-Control-Allow-Origin"), null);
   }
   assert.deepEqual(forwarded, []);
-  assert.deepEqual(validations, ["agent-1/main", "agent-1/main", "agent-2/main", "agent-1/other"]);
+  assert.deepEqual(validations, [
+    "agent-1/main", "agent-1/main", "agent-1/main", "agent-1/main",
+    "agent-2/main", "agent-1/other",
+  ]);
 
   const cookie = (await launchPreviewCookie(env, "agent-1", `${runtimeOrigin}/space/agent-1/preview/main/?t=${token}`))!.split(";")[0];
   const cookieOnlyPost = await handleLaunchPreviewProxy(env, new Request(
@@ -610,6 +840,128 @@ test("control worker permits only scoped opaque-origin mutations before product 
   assert.equal(product.status, 400);
   assert.deepEqual(await product.json(), { message: "ORIGIN_REJECTED" });
   assert.deepEqual(methods, ["POST"]);
+});
+
+test("worker serves the marked Babel JSX URL to an opaque-origin GET and validates only its optional preflight", async () => {
+  const appOrigin = "https://app.buildcustom.ai";
+  const runtimeRequests: Request[] = [];
+  const validatorCalls: Array<{ agentId: string; branch: string; token: string }> = [];
+  const runtime = {
+    async fetch(request: Request) {
+      runtimeRequests.push(request);
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/")) {
+        return new Response(
+          '<!doctype html><html><head></head><body><script type="text/babel" src="./app.jsx"></script></body></html>',
+          { headers: { "Content-Type": "text/html; charset=utf-8" } },
+        );
+      }
+      if (url.pathname.endsWith("/app.jsx")) {
+        return new Response('fetch("./api/leads?status=new");', {
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      }
+      return new Response("unavailable", { status: 404 });
+    },
+  } as unknown as Fetcher;
+  const env = {
+    ...launchEnv(runtime),
+    CONTROL_PLANE_ALLOWED_ORIGIN: appOrigin,
+    STAGING_ALLOWED_ORIGIN: appOrigin,
+    PREVIEW_VALIDATOR: {
+      async validatePreviewCapability(input: { agentId: string; branch: string; token: string }) {
+        validatorCalls.push(input);
+        return { valid: input.agentId === "agent-1" && input.branch === "main" && input.token === token };
+      },
+    },
+    CONTROL_PLANE_CANARY_ORIGIN: "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
+    STAGING_RUNTIME_URL: runtimeOrigin,
+    VIBESDK_RUNTIME_URL: runtimeOrigin,
+    VIBESDK_RUNTIME: {},
+    STAGING_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+    CONTROL_PLANE_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+    STAGING_DISPATCH_NAMESPACE: "buildcustom-vibesdk-launch-dispatch",
+    CONTROL_PLANE_DISPATCH_NAMESPACE: "buildcustom-vibesdk-launch-dispatch",
+    STAGING_MANAGED_GATEWAY_URL: "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p",
+    STAGING_GATEWAY: {},
+    STAGING_LOGIN_ENABLED: "true",
+    STAGING_REGISTRATION_ENABLED: "true",
+    PUBLIC_GENERATED_APPS_ENABLED: "true",
+    RUNTIME_OPERATIONS_ENABLED: "true",
+  };
+  const root = route("agent-1", "main");
+  const cookie = (await launchPreviewCookie(
+    env,
+    "agent-1",
+    `${runtimeOrigin}/space/agent-1/preview/main/?t=${token}`,
+  ))!.split(";")[0];
+
+  const html = await worker.fetch(new Request(`${appOrigin}${root}`, {
+    headers: { Cookie: cookie },
+  }), env as never);
+  const htmlText = await html.text();
+  assert.equal(html.status, 200, htmlText);
+  const sourceMatch = htmlText.match(/<script\b[^>]*\bsrc="([^"]*app\.jsx[^"]*)"/i);
+  assert.ok(sourceMatch, "Babel's JSX source URL must be discovered from the worker response.");
+  const sourceUrl = new URL(sourceMatch[1]);
+  assert.equal(sourceUrl.origin, appOrigin);
+  assert.equal(sourceUrl.searchParams.get("t"), token);
+  assert.equal(sourceUrl.searchParams.get("__bc_preview_source"), "1");
+
+  // Babel fetches text/plain source with a simple GET; no OPTIONS request is needed.
+  const source = await worker.fetch(new Request(sourceUrl, {
+    headers: { Origin: "null", Accept: "*/*" },
+  }), env as never);
+  assert.equal(source.status, 200);
+  assert.equal(source.headers.get("Content-Type"), "text/plain; charset=utf-8");
+  assert.equal(source.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(source.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.equal(source.headers.get("Set-Cookie"), null);
+  assert.match(await source.text(), new RegExp(
+    `${appOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${root}api/leads\\?status=new&t=`,
+  ));
+  assert.deepEqual(runtimeRequests.map((request) => request.method), ["GET", "GET"]);
+  assert.ok(runtimeRequests.every((request) => new URL(request.url).searchParams.has("t")));
+  assert.ok(runtimeRequests.every((request) => !new URL(request.url).searchParams.has("__bc_preview_source")));
+  assert.deepEqual(validatorCalls, [], "A simple source GET must not require an OPTIONS validation RPC.");
+
+  const dispatchCountBeforeOptions = runtimeRequests.length;
+  const preflight = await worker.fetch(new Request(sourceUrl, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "null",
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "accept",
+    },
+  }), env as never);
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(preflight.headers.get("Access-Control-Allow-Methods"), "GET");
+  assert.equal(preflight.headers.get("Access-Control-Allow-Headers"), "accept");
+  assert.equal(preflight.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.equal(preflight.headers.get("Access-Control-Expose-Headers"), null);
+  assert.equal(preflight.headers.get("Set-Cookie"), null);
+  assert.equal(await preflight.text(), "");
+  assert.equal(runtimeRequests.length, dispatchCountBeforeOptions, "OPTIONS must not dispatch to the generated app.");
+  assert.deepEqual(validatorCalls, [{ agentId: "agent-1", branch: "main", token }]);
+
+  const wrongTokenUrl = new URL(sourceUrl);
+  wrongTokenUrl.searchParams.set("t", "wrong");
+  const denied = await worker.fetch(new Request(wrongTokenUrl, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "null",
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "accept",
+    },
+  }), env as never);
+  assert.equal(denied.status, 401);
+  assert.equal(denied.headers.get("Access-Control-Allow-Origin"), null);
+  assert.equal(runtimeRequests.length, dispatchCountBeforeOptions);
+  assert.deepEqual(validatorCalls, [
+    { agentId: "agent-1", branch: "main", token },
+    { agentId: "agent-1", branch: "main", token: "wrong" },
+  ]);
 });
 
 test("root previews remain cookie-gated and query tokens are rejected off scoped asset paths", async () => {
