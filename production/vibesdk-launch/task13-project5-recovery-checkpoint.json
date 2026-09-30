@@ -378,5 +378,25 @@
       "retryAllowed": false
     }
   },
-  "additionalApprovedLeadSubmitClicks": 1
+  "additionalApprovedLeadSubmitClicks": 1,
+  "previewSandboxRepair": {
+    "controlPlaneVersion": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+    "location": "client/src/pages/app-dashboard.tsx interactive editor preview iframe",
+    "previousPermissions": "allow-scripts",
+    "newPermissions": "allow-scripts allow-forms",
+    "onlyAllowFormsAdded": true,
+    "iframeStillSandboxed": true,
+    "parentDocumentAccessBlocked": true,
+    "authenticatedProjectApiUnreadableFromPreview": true,
+    "sameOwnerProjectAgentRevision": true,
+    "previewLoaded": true,
+    "leadCountBeforeAndAfter": 12,
+    "originalLeadRowsUnchanged": true,
+    "formOnlyVerification": "PASS",
+    "estimatedValueObserved": "12500",
+    "createLeadEnabled": true,
+    "submitClicksAfterRepair": 0,
+    "leadMutationRequestsAfterRepair": 0,
+    "readyForSeparatelyAuthorizedRetest": true
+  }
 }

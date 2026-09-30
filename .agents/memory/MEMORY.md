@@ -47,6 +47,7 @@
 - [Launch registration config parity](launch-registration-config-parity.md) — diff ignored runtime checkout config against tracked launch config before deploy; a stale flag can silently close signup.
 - [Local remote D1 bootstrap](local-remote-d1-bootstrap.md) — local Wrangler remote D1 bindings can fail even while remote D1 CLI reads succeed; prove the private path before registration.
 - [Single-use browser acceptance](single-use-browser-acceptance.md) — controlled inputs can show the right DOM value while React state remains stale; reconcile before one-time clicks.
+- [Preview form sandbox scope](preview-form-sandbox-scope.md) — only the interactive generated-app preview needs `allow-forms`; keep noninteractive thumbnails more restricted.
 - [Ephemeral acceptance checkpoints](ephemeral-acceptance-checkpoints.md) — /tmp loss can erase a test session; a recreated browser profile is not the same customer.
 - [Operator fixture parity](operator-fixture-parity.md) — a passing mocked state machine does not validate live browser orchestration unless both execute the same case runner.
 - [Stock Think reopen socket](stock-think-reopen-socket.md) — existing-agent reopen uses a no-generation WebSocket; an idle connection is native behavior, not a test-only requirement.

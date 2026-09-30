@@ -4047,7 +4047,7 @@ function EditorPage() {
                  ref={previewFrameRef}
                   src={activePreviewSrc}
                  title={`${previewEnvironment === "development" ? "Development" : "Production"} project preview`}
-                 sandbox="allow-scripts"
+                  sandbox="allow-scripts allow-forms"
                  onLoad={() => previewFrameRef.current?.contentWindow?.postMessage({ type: "buildcustom:selector", enabled: selectorEnabled }, "*")}
                  className="w-full h-full border-0 bg-white"
                />

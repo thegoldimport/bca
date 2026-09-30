@@ -1,0 +1,130 @@
+ROOT CAUSE ESTABLISHED.
+
+The Add Lead failure is caused by the BuildCustom preview iframe sandbox blocking form submission.
+
+Captured Chromium error:
+
+“Blocked form submission to '' because the form's frame is sandboxed and the 'allow-forms' permission is not set.”
+
+Evidence from the instrumented attempt:
+
+- trusted Create Lead click: YES
+- form valid immediately before click: YES
+- button enabled: YES
+- React-controlled values correct: YES
+- Estimated Value: 12500
+- submit event: NO
+- handler execution: NO
+- fetch: NO
+- POST /api/leads: NO
+- database mutation: NO
+- lead count: 12 → 12
+- Chromium explicitly reported missing `allow-forms`
+
+Therefore the earliest confirmed failure is the BuildCustom preview sandbox.
+
+AUTHORIZED CHANGE:
+
+Make the SMALLEST possible BuildCustom product change required to add:
+
+allow-forms
+
+to the sandbox permissions of the iframe used for generated-app previews.
+
+IMPORTANT:
+
+Do NOT remove iframe sandboxing.
+
+Do NOT add:
+- allow-same-origin
+- allow-top-navigation
+- allow-top-navigation-by-user-activation
+- allow-popups
+- allow-popups-to-escape-sandbox
+- allow-modals
+- allow-downloads
+
+unless one of those permissions is ALREADY present.
+
+Preserve every existing sandbox permission exactly as-is and add ONLY `allow-forms`.
+
+Do not modify:
+- generated CRM code
+- Project 5 files
+- VibeSDK runtime
+- generated-app gateway
+- generated-app API
+- database
+- authentication
+- publishing
+- Task 13 harness except if necessary to observe the existing test
+
+FIRST:
+
+1. Locate the exact BuildCustom preview iframe sandbox configuration.
+
+2. Confirm the current sandbox permissions.
+
+3. Make the one-permission change:
+   existing permissions + `allow-forms`
+
+4. Run the smallest relevant local tests/typecheck/build.
+
+5. Verify the security properties of the preview remain intact:
+   - iframe is still sandboxed
+   - existing sandbox restrictions remain
+   - generated preview cannot access the BuildCustom parent document
+   - generated preview cannot access BuildCustom authenticated/control-plane APIs merely because `allow-forms` was added
+
+Do not broaden this into a preview-security redesign.
+
+Then deploy ONLY the minimum BuildCustom control-plane/frontend version required for the preview change.
+
+Use normal Cloudflare deployment readback.
+
+After deployment:
+
+Reopen the SAME Project 5 preview with the SAME account.
+
+Before any mutation, verify:
+
+- Project 5 still opens
+- same agent/revision
+- preview loads
+- existing app data still shows 12 leads
+- Add Lead form works
+- iframe sandbox now includes `allow-forms`
+- no unintended additional sandbox permissions were introduced
+
+Then perform a NON-MUTATING form check:
+- fill the same Add Lead values
+- Estimated Value = 12500
+- form valid
+- Create Lead enabled
+
+STOP BEFORE SUBMIT.
+
+Do NOT perform another Submit yet.
+
+Return:
+
+Preview iframe location:
+Previous sandbox permissions:
+New sandbox permissions:
+Only allow-forms added: YES/NO
+Generated CRM changed: YES/NO
+Runtime changed: YES/NO
+Gateway changed: YES/NO
+Database changed: YES/NO
+Relevant tests/build:
+Control-plane/frontend version deployed:
+Preview still sandboxed: YES/NO
+Parent isolation retained: YES/NO
+Project 5 reopened successfully: YES/NO
+Lead baseline still 12: YES/NO
+Form-only verification: PASS/FAIL
+Estimated Value observed:
+Submit clicks after this change: 0
+Ready for one controlled Add Lead retest: YES/NO
+
+Then STOP.
