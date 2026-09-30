@@ -1,0 +1,147 @@
+Investigate the failed edit1 agent turn READ-ONLY.
+
+Do NOT resend edit1.
+Do NOT increase the step limit yet.
+Do NOT modify agent/runtime/product/generated-app code.
+Do NOT modify Project 5 files or database.
+Do NOT proceed to edit2.
+Do NOT publish or deploy anything.
+
+We now have a confirmed agent-side failure.
+
+AUTHORITATIVE BASELINE
+
+Project: 5
+
+Pre-edit revision:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Post-attempt revision:
+UNCHANGED
+
+Lead count:
+13 → 13
+
+Newest lead IDs:
+13, 12, 11, 10, 9
+
+Release count:
+0
+
+The instrumented edit1 attempt proved:
+
+- prompt DOM/React value correct
+- Send enabled
+- correct Send button
+- WebSocket OPEN
+- trusted click observed
+- Send handler invoked once
+- exactly ONE outgoing edit1 user_suggestion frame
+- exactly ONE server/agent turn
+- generation started
+- turn terminated with:
+  "Maximum steps for this agent turn have been reached."
+- runtime subsequently idle
+- NO new authoritative revision
+- NO lead/database mutation
+- NO retry occurred
+
+Therefore do not investigate the browser send path again.
+
+TASK
+
+Determine why this specific agent turn exhausted its maximum steps without producing a committed revision.
+
+Inspect the existing authoritative turn/conversation/runtime evidence for THIS turn only.
+
+Determine:
+
+1. What step limit applied to this turn?
+
+2. How many steps were actually consumed?
+
+3. What did the agent spend those steps doing?
+
+Provide a concise sequence such as:
+
+step 1 → inspected X
+step 2 → read Y
+step 3 → attempted Z
+...
+
+Do not dump chain-of-thought or hidden reasoning. Report only observable tool/actions/events available in runtime logs or persisted turn data.
+
+4. Determine whether the agent:
+- inspected files repeatedly
+- searched unnecessarily
+- attempted edits
+- wrote any files
+- ran commands/tests
+- encountered tool errors
+- retried failed tools
+- looped on the same operation
+- reached the limit immediately after a legitimate operation
+
+5. Determine whether any uncommitted workspace/file changes exist from the failed turn.
+
+IMPORTANT:
+Do not commit, restore, discard, or alter them.
+
+6. Compare the behavior with the currently configured native ThinkAgent step-budget mechanism.
+
+Identify the exact configuration/code responsible for the maximum-step termination.
+
+7. Determine whether the failure most strongly indicates:
+
+A. edit1 was unusually complex for the configured normal step budget
+
+B. agent wasted steps / looped unexpectedly
+
+C. a tool/runtime failure consumed the step budget
+
+D. the configured step limit is inappropriate for normal BuildCustom editing
+
+E. another directly evidenced cause
+
+F. insufficient evidence
+
+8. Determine the smallest justified next action.
+
+Possible outcomes could include:
+- safely resume/continue the SAME turn if the stock agent supports that
+- allow one continuation instruction
+- adjust an incorrectly low configured limit
+- fix a demonstrated tool/runtime problem
+- discard an uncommitted failed workspace state before retrying
+
+But DO NOT perform any of these actions yet.
+
+Also determine whether the failed turn left Project 5 in a safe state for continuation.
+
+Do not treat the unrelated browser 404 or /cdn-cgi/rum CORS error as causal unless evidence actually connects them to the agent turn.
+
+RETURN:
+
+Configured max steps:
+Steps consumed:
+Observable step/action summary:
+Repeated/looping behavior: YES/NO
+Tool/runtime errors during agent turn:
+Files actually modified during failed turn: YES/NO
+Uncommitted workspace changes present: YES/NO
+Authoritative revision unchanged: YES/NO
+Agent currently idle: YES/NO
+Cause classification: A/B/C/D/E/F
+Evidence for classification:
+Exact step-limit configuration/source:
+Is normal edit complexity likely to hit this limit again: YES/NO/UNKNOWN
+Same turn resumable using existing stock behavior: YES/NO/UNKNOWN
+Project safe to continue: YES/NO
+Smallest recommended next action:
+
+Then STOP.
+
+Do not make the fix.
+Do not resend edit1.
+Do not alter the step limit.
+Do not proceed to edit2.
