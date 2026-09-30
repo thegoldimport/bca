@@ -1,0 +1,57 @@
+STOP HERE. Do not attempt to recreate the lost authenticated state, do not create another test account, do not click Submit, and do not make any production mutation.
+
+What we know:
+
+1. The Estimated Value issue was a TEST HARNESS bug, not a demonstrated product bug.
+   - The controlled number input restored `0` when the harness cleared it.
+   - Typing `12500` after that produced `012500`.
+   - The local harness was changed only so it replaces the selected value without performing an intermediate clear.
+   - Named field checks were also added.
+   - Syntax and diff checks pass.
+
+2. The corrected harness has NOT yet been verified against the live form.
+
+3. The private `/tmp` checkpoint and authenticated browser profile were lost.
+   - The next browser launch created a new empty profile.
+   - We no longer have the authenticated browser state for the same test account.
+
+4. The last intact checkpoint recorded ZERO newly approved Submit clicks.
+
+5. No Submit click or other mutation occurred after that checkpoint was lost.
+
+Therefore:
+
+DO NOT:
+- create another test user
+- manufacture replacement state
+- submit the form
+- modify the database
+- reset or alter the existing test account
+- infer the old database baseline
+- continue the mutation test using a different identity
+- change product code based on the `012500` result
+
+Treat the current blocker as:
+
+TEST ENVIRONMENT / AUTHENTICATED STATE LOST
+
+not:
+
+PRODUCT FAILURE
+
+Preserve the local harness correction, but do not claim it has passed live verification yet.
+
+Return a short checkpoint report containing:
+
+- the exact local harness file(s) changed
+- the exact change made for the controlled number field
+- confirmation that no product/runtime code changed for this issue
+- confirmation that syntax/diff checks pass
+- confirmation that live corrected-form verification remains pending
+- confirmation that the last intact checkpoint recorded zero newly approved Submit clicks
+- confirmation that no mutation occurred after checkpoint/profile loss
+- what authentication/account access is specifically required to resume safely
+
+Then STOP.
+
+Do not resume the broader audit until I restore access to the SAME intended test account or explicitly authorize a new test baseline.
