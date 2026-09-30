@@ -313,9 +313,28 @@ export function rewritePreviewJavaScript(
   origin: string,
   capability: PreviewCapability,
 ): string {
-  return javascript.replace(/(["'])((?:\/(?!\/)|\.{1,2}\/)[^"'\\\r\n]*(?:\\.[^"'\\\r\n]*)*)\1/g, (match, _quote: string, value: string) => {
+  const quoted = javascript.replace(/(["'])((?:\/(?!\/)|\.{1,2}\/)[^"'\\\r\n]*(?:\\.[^"'\\\r\n]*)*)\1/g, (match, _quote: string, value: string) => {
     const rewritten = scopedHtmlUrl(value, requestUrl, origin, capability);
     return rewritten === value ? match : `${_quote}${rewritten}${_quote}`;
+  });
+  // A template literal can construct its path and query only at runtime.
+  // Resolve the complete URL before adding the capability so dynamic filters,
+  // repeated parameters, and fragments cannot swallow or displace it.
+  if (!capability.token || !validToken(capability.token)) return quoted;
+  const prefixPath = new URL(capabilityPrefix(origin, capability)).pathname;
+  return quoted.replace(/`(?:\\[\s\S]|[^`\\])*`/g, (literal: string, offset: number, source: string) => {
+    const value = literal.slice(1, -1);
+    if (!/^(?:\/(?!\/)|\.{1,2}\/)/.test(value)
+      || (offset > 0 && /[\w$.)\]]/.test(source[offset - 1]))) return literal;
+    const rootRelative = value.startsWith("/");
+    return `(()=>{const u=new URL(${literal},${JSON.stringify(requestUrl.href)});`
+      + `if(u.origin!==${JSON.stringify(origin)})return u.href;`
+      + (rootRelative
+        ? `if(u.pathname==="/"||/^\\/(?:api|_private_preview)(?:\\/|$)/.test(u.pathname))return u.href;`
+          + `u.pathname=${JSON.stringify(prefixPath)}+u.pathname.slice(1);`
+        : "")
+      + `if(!u.pathname.startsWith(${JSON.stringify(prefixPath)})||u.pathname.length===${prefixPath.length})return u.href;`
+      + `u.searchParams.delete("t");u.searchParams.set("t",${JSON.stringify(capability.token)});return u.href})()`;
   });
 }
 
@@ -436,11 +455,12 @@ export async function handleLaunchPreviewProxy(
 
   const outputHeaders = responseHeaders(upstream);
   const contentType = upstream.headers.get("Content-Type")?.toLowerCase() || "";
-  // Sandboxed preview documents have an opaque origin. Babel loaders and module
-  // scripts fetch JavaScript in CORS mode, unlike ordinary stylesheet requests.
-  // Only an explicitly token-scoped JavaScript asset may be read from that origin.
+  // Sandboxed preview documents have an opaque origin. Scripts and fetch()ed
+  // JSON use CORS, unlike ordinary stylesheets. Only successfully authorized,
+  // explicitly token-scoped resources may be read from that origin.
   if (direct && tokenParameters.length === 1 && request.headers.get("Origin") === "null"
-    && (contentType.includes("javascript") || contentType.includes("ecmascript"))) {
+    && (contentType.includes("javascript") || contentType.includes("ecmascript")
+      || /^(?:application|text)\/(?:[^;\s]+\+)?json(?:\s*;|$)/.test(contentType))) {
     outputHeaders.set("Access-Control-Allow-Origin", "null");
     outputHeaders.set("Vary", "Origin");
   }

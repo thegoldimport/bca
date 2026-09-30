@@ -85,6 +85,54 @@ test("HTML and CSS root assets stay under a branch-scoped path with the preview 
   assert.ok(nestedModule.includes(`${controlOrigin}${previewRoute}src/chunk.js?t=${token}`));
 });
 
+test("dynamic preview URLs keep filters, repeated names, encoding, and fragments with their capability", () => {
+  const previewRoute = route("agent-1", "main");
+  const requestUrl = new URL(`${controlOrigin}${previewRoute}app.js?t=${token}`);
+  const capability = { agentId: "agent-1", branch: "main", token, path: "app.js" };
+  const evaluate = (expression: string, values: Record<string, unknown> = {}) => {
+    const rewritten = rewritePreviewJavaScript(expression, requestUrl, controlOrigin, capability);
+    return new URL(Function(...Object.keys(values), `return ${rewritten}`)(...Object.values(values)) as string);
+  };
+
+  const noQuery = evaluate("`./api/metrics`");
+  assert.equal(noQuery.pathname, `${previewRoute}api/metrics`);
+  assert.deepEqual([...noQuery.searchParams], [["t", token]]);
+
+  const oneQuery = evaluate("`./api/leads?status=${encodeURIComponent(status)}`", { status: "new lead" });
+  assert.equal(oneQuery.searchParams.get("status"), "new lead");
+  assert.equal(oneQuery.searchParams.get("t"), token);
+
+  const manyQueries = evaluate(
+    "`./api/leads?status=${encodeURIComponent(status)}&status=${encodeURIComponent(other)}&search=${encodeURIComponent(search)}#details`",
+    { status: "new", other: "won", search: "roof & tile / + %" },
+  );
+  assert.equal(manyQueries.pathname, `${previewRoute}api/leads`);
+  assert.deepEqual(manyQueries.searchParams.getAll("status"), ["new", "won"]);
+  assert.equal(manyQueries.searchParams.get("search"), "roof & tile / + %");
+  assert.equal(manyQueries.searchParams.get("t"), token);
+  assert.equal(manyQueries.hash, "#details");
+
+  const rootRelative = evaluate("`/assets/${encodeURIComponent(file)}?size=large&size=small`", { file: "roof 1.png" });
+  assert.equal(rootRelative.pathname, `${previewRoute}assets/roof%201.png`);
+  assert.deepEqual(rootRelative.searchParams.getAll("size"), ["large", "small"]);
+  assert.equal(rootRelative.searchParams.get("t"), token);
+
+  const nested = evaluate("`./api/leads/${id}?note=${encodeURIComponent(note)}`", { id: 2, note: "a+b" });
+  assert.equal(nested.pathname, `${previewRoute}api/leads/2`);
+  assert.equal(nested.searchParams.get("note"), "a+b");
+  assert.equal(nested.searchParams.get("t"), token);
+
+  const existingToken = evaluate("`./api/leads?status=new&t=untrusted&status=won`");
+  assert.deepEqual(existingToken.searchParams.getAll("status"), ["new", "won"]);
+  assert.deepEqual(existingToken.searchParams.getAll("t"), [token]);
+
+  const forbidden = evaluate("`/api/auth/${name}?status=new`", { name: "me" });
+  assert.equal(forbidden.pathname, "/api/auth/me");
+  assert.equal(forbidden.searchParams.has("t"), false);
+  const escaped = evaluate("`../../outside?status=new`");
+  assert.equal(escaped.searchParams.has("t"), false);
+});
+
 test("runtime-rewritten root assets are normalized only for the matching agent and branch", () => {
   const previewRoute = route("agent-1", "main");
   const requestUrl = new URL(`${controlOrigin}${previewRoute}`);
@@ -225,6 +273,11 @@ test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS
       if (asset === "style.css") {
         return new Response("body{background:navy}", { headers: { "Content-Type": "text/css" } });
       }
+      if (asset === "leads") {
+        return Response.json({ filters: [...url.searchParams.getAll("status")], search: url.searchParams.get("search") }, {
+          headers: { "Access-Control-Allow-Origin": "*" },
+        });
+      }
       return new Response('<html><head><link rel="stylesheet" href="./style.css"></head><body><script type="text/babel" data-type="module" src="./app.js"></script><script type="module" src="./app.js"></script></body></html>', {
         headers: { "Content-Type": "text/html" },
       });
@@ -254,6 +307,24 @@ test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS
   assert.equal(js.headers.get("Set-Cookie"), null);
   assert.match(await js.text(), /CRM ready/);
 
+  const filteredExpression = rewritePreviewJavaScript(
+    "`./api/leads?status=${encodeURIComponent(first)}&status=${encodeURIComponent(second)}&search=${encodeURIComponent(search)}`",
+    new URL(`${controlOrigin}${root}app.js?t=${token}`),
+    controlOrigin,
+    { agentId: "agent-1", branch: "main", token, path: "app.js" },
+  );
+  const filteredUrl = Function("first", "second", "search", `return ${filteredExpression}`)("new", "won", "roof & tile") as string;
+  const json = await handleLaunchPreviewProxy(env, new Request(filteredUrl, {
+    headers: corsHeaders,
+  }));
+  assert.ok(json);
+  assert.equal(json.status, 200);
+  assert.match(json.headers.get("Content-Type") || "", /application\/json/);
+  assert.equal(json.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.equal(json.headers.get("Access-Control-Allow-Credentials"), null);
+  assert.equal(json.headers.get("Vary"), "Origin");
+  assert.deepEqual(await json.json(), { filters: ["new", "won"], search: "roof & tile" });
+
   const css = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}style.css?t=${token}`, {
     headers: corsHeaders,
   }));
@@ -271,6 +342,11 @@ test("opaque sandbox can read token-scoped JavaScript without exposing HTML, CSS
   assert.ok(cookieOnly);
   assert.equal(cookieOnly?.status, 200);
   assert.equal(cookieOnly.headers.get("Access-Control-Allow-Origin"), null);
+  const cookieOnlyJson = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}api/leads`, {
+    headers: { ...corsHeaders, Cookie: cookie },
+  }));
+  assert.equal(cookieOnlyJson?.status, 200);
+  assert.equal(cookieOnlyJson.headers.get("Access-Control-Allow-Origin"), null);
   const noCapability = await handleLaunchPreviewProxy(env, new Request(`${controlOrigin}${root}app.js`, {
     headers: corsHeaders,
   }));
@@ -363,9 +439,10 @@ test("runtime rejects a valid preview token used on another agent or branch path
   ]) {
     const response = await handleLaunchPreviewProxy(
       env,
-      new Request(`${controlOrigin}${path}?t=${token}`),
+      new Request(`${controlOrigin}${path}?t=${token}`, { headers: { Origin: "null" } }),
     );
     assert.equal(response?.status, 401);
+    assert.equal(response?.headers.get("Access-Control-Allow-Origin"), null);
   }
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname), [
     "/space/agent-2/preview/main/styles.css",

@@ -20,3 +20,9 @@ Opaque sandbox previews can successfully load JavaScript and render an app while
 **Why:** A browser trace showed a metrics request returning 200 JSON but being hidden by a missing opaque-origin allow header; a leads request built with additional query parameters lacked the preview capability and returned 401. Both appeared to the generated app as network failure despite a working JavaScript preview.
 
 **How to apply:** Before changing the generated app or its database, inspect the iframe's actual requests in Chromium, including `Origin`, token presence (not its value), response status, and CORS error. Preserve opaque sandbox and owner/capability isolation rather than broadly enabling credentialed CORS.
+
+Read-only preview success does not prove a generated data app is fully usable. A JSON mutation from the opaque iframe needs a CORS preflight; a preview proxy that accepts only GET can show real metrics and rows while its create/update actions remain blocked.
+
+**Why:** A CRM's metrics and filtered leads became browser-readable, yet a non-mutating preflight for its existing Add Lead request returned 405 without CORS headers. Testing only dashboard data would have incorrectly classified the preview as ready.
+
+**How to apply:** Before calling a generated CRUD preview fully usable, check its actual API methods and perform a safe preflight probe for at least one JSON mutation. Do not create test records merely to establish that method/CORS routing is blocked.

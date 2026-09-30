@@ -1,0 +1,350 @@
+Continue fixing the SAME production launch-readiness fixture.
+
+Do NOT create another customer.
+Do NOT create another project.
+Do NOT regenerate project 4.
+Do NOT send an AI edit.
+Do NOT publish yet.
+
+CURRENT FIXED STATE
+
+Project:
+4
+
+Agent:
+4853b20c-18fa-470e-877d-b3be5d663142
+
+Revision:
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+The original JavaScript preview blocker is FIXED.
+
+Serving control plane:
+2dbab335-357c-457d-91ba-4b80d98cc8e0
+
+Runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Current gateway:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+Do not roll back the accepted JavaScript CORS fix.
+
+CURRENT BLOCKER
+
+The rendered CRM cannot use its data APIs.
+
+Observed failure A:
+
+- scoped metrics request reaches preview proxy
+- response = 200 JSON
+- browser blocks response because the authorized JSON response does not
+  provide the required opaque-origin CORS header
+
+Observed failure B:
+
+- leads request contains query filters
+- preview capability token is missing from the resulting scoped request
+- request returns 401
+- browser also reports CORS blocking
+
+The browser-visible "Error connecting to database" does NOT prove D1/database
+failure.
+
+GOAL
+
+Fix the preview platform generically so generated apps can make authorized
+API/data requests from the sandbox, including requests containing query
+parameters.
+
+Do not special-case:
+- project 4
+- /metrics
+- /leads
+- this CRM
+
+PHASE 1 — TRACE BOTH REQUESTS
+
+Capture the exact authoritative generated source responsible for:
+
+- metrics fetch
+- filtered leads fetch
+
+For each request capture:
+
+- original URL constructed by generated app
+- URL after preview rewriting
+- final browser request URL
+- original query parameters
+- preview capability token location
+- request Origin
+- response status
+- Content-Type
+- Access-Control-Allow-Origin
+- whether the preview proxy authorized the request
+- whether the underlying app/API handler executed
+
+Determine exactly where the leads capability token disappears.
+
+Specifically inspect whether URL rewriting incorrectly handles:
+
+/path?filter=value
+
+by doing something equivalent to:
+
+/path?filter=value?t=CAPABILITY
+
+or otherwise appending the preview token after an existing query string
+instead of preserving both query parameters correctly.
+
+Do not assume that exact mechanism. Prove it.
+
+PHASE 2 — DEFINE THE GENERIC PREVIEW CONTRACT
+
+The private preview needs one coherent rule.
+
+For an explicitly capability-authorized request originating from the opaque
+sandbox:
+
+- preserve the original pathname
+- preserve ALL original query parameters
+- preserve/add the preview capability correctly
+- authorize server-side
+- return the correct response
+- allow the opaque sandbox to consume authorized script/API responses when
+  CORS mode requires it
+
+The capability must NOT become available to unauthorized requests.
+
+Do not weaken:
+
+- owner authorization
+- capability validation
+- sandbox isolation
+- project isolation
+
+Do not use:
+
+Access-Control-Allow-Origin: *
+
+Do not enable credentialed wildcard CORS.
+
+The existing narrow:
+
+Access-Control-Allow-Origin: null
+
+behavior for authorized opaque-origin resources is the model to evaluate.
+
+Determine whether successful authorized JSON/API responses require the same
+opaque-origin allowance.
+
+If yes, implement it generically for the appropriate authorized preview
+response classes rather than endpoint-specific exceptions.
+
+PHASE 3 — FIX QUERY-PARAMETER CAPABILITY PRESERVATION
+
+Fix preview URL rewriting so an original request such as conceptually:
+
+/api/leads?status=new&limit=5
+
+retains BOTH:
+
+- status=new&limit=5
+- valid preview capability
+
+regardless of parameter order.
+
+Cover at minimum:
+
+- no existing query string
+- one existing query parameter
+- multiple existing query parameters
+- encoded parameter values
+- repeated parameter names if supported
+- fragment handling where relevant
+- relative URLs
+- root-relative URLs
+
+Do not corrupt the generated app's own query parameters.
+
+Do not expose the capability in a way that broadens access outside the
+existing private-preview design.
+
+PHASE 4 — AUTHORIZED API CORS
+
+For successful preview API/data responses that:
+
+- passed preview capability authorization
+- are requested by the opaque sandbox
+- require CORS for browser consumption
+
+return the minimum correct CORS response required by that sandbox.
+
+Verify:
+
+- JSON works
+- JavaScript remains working
+- CSS remains working
+- HTML behavior is unchanged
+- denied requests do NOT receive authorization-enabling CORS behavior
+- cookie-only/unscoped requests remain denied as intended
+- wrong capabilities remain denied
+- another user's capability cannot access the project
+
+Do not broadly add CORS headers to every response.
+
+PHASE 5 — REGRESSION TESTS
+
+Add focused tests for the actual failures.
+
+At minimum prove:
+
+1. authorized JS from opaque preview loads
+2. authorized JSON from opaque preview can be consumed
+3. API URL with no query preserves capability
+4. API URL with existing query preserves original query + capability
+5. multiple query parameters survive
+6. encoded values survive
+7. missing capability denied
+8. wrong capability denied
+9. non-owner denied
+10. HTML/CSS behavior remains unchanged
+11. sandbox isolation remains intact
+
+Run focused preview tests.
+
+Then:
+
+- TypeScript
+- relevant control-plane build
+- Wrangler dry run
+
+Do not run unrelated AI-generation suites.
+
+PHASE 6 — DEPLOY ONLY THE CONTROL PLANE IF IT OWNS THE FIX
+
+If evidence confirms this remains a control-plane/private-preview defect,
+deploy ONLY the control plane.
+
+Do not redeploy:
+
+- runtime
+- gateway
+- marketing
+- generated app infrastructure
+
+Record the new control version.
+
+Verify runtime remains:
+
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+Verify gateway remains:
+
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+PHASE 7 — REVERIFY PROJECT 4 BEFORE ANY AI EDIT
+
+Open the SAME existing project and SAME existing revision.
+
+Do not refresh/work around the application manually.
+
+Require on normal first load:
+
+- HTML loads
+- CSS loads/applies
+- JS loads/executes
+- CRM renders
+- metrics request succeeds AND browser JavaScript can consume the JSON
+- metrics visibly render in the CRM
+- leads request with query filters remains capability-authorized
+- original filters reach the generated app/API correctly
+- leads response succeeds AND browser JavaScript can consume it
+- Leads Directory displays usable data/state
+- no "Error connecting to database"
+- navigation works
+- no CORS errors for these resources
+- authoritative revision remains unchanged
+- seven files remain unchanged
+- conversation still has the original single turn
+
+The key acceptance requirement:
+
+PROJECT 4 REVISION
+f7437cd67df7b5520e7fbfde015590c1afefcd01
+
+MUST become fully usable without regeneration or source edits to the generated
+project.
+
+If it does not, STOP.
+
+PHASE 8 — ONLY THEN RESUME LAUNCH READINESS
+
+Once the old revision is fully usable, continue the previously approved
+journey from the first conversational edit:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Then verify:
+
+- one edit
+- new revision
+- edited preview including working data requests
+- leave/reopen persistence
+- initial publish
+- public app works
+- same-revision publish is idempotent
+
+Then send:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify:
+
+- second new revision
+- preview works
+- data still works
+- publish updates
+- stable public URL serves new revision
+
+Then:
+
+- logout
+- login
+- project/conversation/files/latest preview/public URL persist
+- basic second-account isolation
+- active publish claims = 0
+
+PHASE 9 — REPORT
+
+Return:
+
+1. exact query-token loss root cause
+2. exact JSON CORS root cause
+3. evidence for each
+4. generic platform fix
+5. regression test results
+6. new control-plane version
+7. unchanged runtime/gateway versions
+8. project 4 old-revision data-preview result
+9. first edit result
+10. persistence result
+11. initial publish result
+12. same-revision publish result
+13. second edit + publish-update result
+14. returning-login result
+15. ownership-isolation result
+16. public app URL
+17. active publish claims
+18. remaining BLOCKERS
+19. GO / NO-GO for real customer use
+
+If the complete journey passes:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP after the report.
+
+Do not start billing, custom domains, cleanup, dependency upgrades, or polish.
