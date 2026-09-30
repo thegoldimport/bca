@@ -1,0 +1,150 @@
+Proceed with ONE instrumented edit1 send attempt.
+
+Do not spend more time investigating the previous attempt. Its evidence is insufficient and authoritative state confirms the instruction never reached the agent.
+
+CURRENT BASELINE
+
+Project: 5
+Current revision:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Current state:
+- 13 leads
+- newest IDs: 13, 12, 11, 10, 9
+- previous edit1 attempt produced ZERO confirmed instructions
+- ZERO edit1 turns
+- no revision change
+- agent idle
+- no lead mutation
+- release count 0
+
+The previous UI click does NOT count as an agent instruction.
+
+BEFORE SENDING:
+
+Instrument the complete builder send path:
+
+PROMPT VALUE
+→ SEND BUTTON
+→ CLICK
+→ SEND HANDLER
+→ WEBSOCKET
+→ user_suggestion FRAME
+→ SERVER/AGENT TURN
+
+Capture:
+
+- prompt DOM value immediately before send
+- React-controlled value if observable
+- Send button enabled/disabled state
+- actual click target
+- overlays/interception
+- click event
+- send/composer handler entry
+- WebSocket readyState immediately before send
+- outgoing WebSocket frames
+- incoming frames
+- console errors
+- page errors
+- unhandled rejections
+
+Confirm before proceeding:
+
+1. The intended edit1 prompt is actually present.
+2. Send is enabled.
+3. The correct Send button is targeted.
+4. WebSocket is connected/open.
+5. Project 5 is still on the baseline revision.
+6. Lead count is still 13.
+
+If ANY precondition fails:
+
+STOP WITHOUT CLICKING SEND.
+
+If all preconditions pass:
+
+AUTHORIZED: perform exactly ONE normal browser Send click for the already-planned edit1 instruction:
+
+"the dark-navy dashboard and five newest leads"
+
+Do not automatically retry.
+
+IMPORTANT:
+
+Do NOT increment or record `agentInstructionsSent` merely because the browser click returned.
+
+Count the instruction as SENT only when an outgoing edit1 `user_suggestion` WebSocket frame is actually observed.
+
+After the click:
+
+If no outgoing frame appears:
+- STOP
+- do not resend
+- report the captured click/handler/WS evidence.
+
+If exactly one outgoing edit1 frame appears:
+- record agentInstructionsSent = 1
+- allow the normal agent lifecycle to complete
+- do not send anything else.
+
+Then verify the resulting authoritative state.
+
+EXPECTED EDIT1 PASS:
+
+- exactly one edit1 user_suggestion frame
+- exactly one corresponding edit turn
+- agent completes normally
+- new stable revision differs from:
+  d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+- dark-navy dashboard is actually rendered in preview
+- five newest leads are IDs 13, 12, 11, 10, 9
+- those five reflect the intended edit1 result
+- leads outside those five remain unchanged
+- total lead count remains 13 unless the existing edit1 specification explicitly requires otherwise
+- authoritative files reflect the completed edit
+- reopen resolves to the same new revision
+- no duplicate leads
+- no unexpected publish/deployment
+- no unintended mutation
+
+If the send succeeds but the agent/edit fails:
+
+STOP.
+
+Do not retry.
+Do not repair.
+Do not send another instruction.
+Do not proceed to edit2.
+
+Update the durable Task 13 checkpoint with the captured evidence.
+
+Return:
+
+Pre-send prompt verified:
+Send enabled:
+Correct button:
+WebSocket open:
+Click event observed:
+Send handler invoked:
+Outgoing edit1 user_suggestion frames:
+Agent instructions sent:
+Server/agent edit1 turn:
+Agent lifecycle result:
+Pre-edit revision:
+Post-edit revision:
+Dark-navy dashboard rendered:
+Lead count before → after:
+Five newest lead IDs:
+Five newest leads correct:
+Other leads unchanged:
+Reopen/persistence:
+Unexpected deployment/publish:
+Console/page errors:
+Earliest failure point, if any:
+edit1 acceptance: PASS/FAIL
+Exact next Task 13 step:
+
+Then STOP.
+
+There is authorization for ONE edit1 Send click only.
+There is NO authorization for edit2.

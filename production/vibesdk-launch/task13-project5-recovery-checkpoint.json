@@ -31,7 +31,7 @@
       12
     ]
   },
-  "stage": "edit1-blocked-no-retry",
+  "stage": "instrumented-edit1-blocked-no-retry",
   "formVerification": {
     "result": "PASS",
     "method": "browser-typed fields in the live same-owner generated-app preview",
@@ -664,6 +664,138 @@
       "leadCount": 13,
       "leadDigestMatches": true,
       "releaseCount": 0
+    }
+  },
+  "instrumentedEdit1": {
+    "instruction": "Change the dashboard to a dark navy theme and add a recent leads section showing the five newest leads.",
+    "preRevision": "d4bc4b85d03cfaf55326d078f08b9446b98e68b1",
+    "leadCountBefore": 13,
+    "newestFiveIds": [
+      13,
+      12,
+      11,
+      10,
+      9
+    ],
+    "preClick": {
+      "domPromptMatches": true,
+      "reactPromptMatches": true,
+      "sendPresent": true,
+      "sendConnected": true,
+      "sendDisabled": false,
+      "sendType": "submit",
+      "handlerAvailable": true,
+      "centerTargetsSend": true,
+      "centerTargetTag": "svg",
+      "socketStates": [
+        1
+      ],
+      "probeInstalled": true,
+      "consoleErrors": []
+    },
+    "clickReserved": true,
+    "browserClickCalls": 1,
+    "agentInstructionsSent": 1,
+    "outcome": "post-click-no-retry",
+    "sendEvidence": {
+      "clickEvents": [
+        {
+          "phase": "capture",
+          "trusted": true,
+          "target": "svg",
+          "matchedSend": true
+        }
+      ],
+      "handlerEntries": 1,
+      "outgoingFrames": 1,
+      "cdpOutgoingFrames": 1,
+      "socketEvents": [
+        {
+          "kind": "ws-open"
+        },
+        {
+          "kind": "ws-send",
+          "type": "get_conversation_state",
+          "edit1": false,
+          "readyState": 1
+        },
+        {
+          "kind": "ws-incoming",
+          "type": "agent_connected"
+        },
+        {
+          "kind": "ws-incoming",
+          "type": "conversation_state"
+        },
+        {
+          "kind": "ws-close"
+        },
+        {
+          "kind": "ws-open"
+        },
+        {
+          "kind": "ws-send",
+          "type": "get_conversation_state",
+          "edit1": false,
+          "readyState": 1
+        },
+        {
+          "kind": "ws-incoming",
+          "type": "agent_connected"
+        },
+        {
+          "kind": "ws-send",
+          "type": "user_suggestion",
+          "edit1": true,
+          "readyState": 1
+        },
+        {
+          "kind": "ws-incoming",
+          "type": "conversation_state"
+        },
+        {
+          "kind": "ws-incoming",
+          "type": "generation_started"
+        },
+        {
+          "kind": "ws-incoming",
+          "type": "conversation_response"
+        }
+      ],
+      "cdpIncomingTypes": [
+        "agent_connected",
+        "conversation_state",
+        "agent_connected",
+        "conversation_state",
+        "generation_started",
+        "conversation_response"
+      ],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 ()",
+        "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+        "Failed to load resource: net::ERR_FAILED"
+      ],
+      "pageErrors": [],
+      "unhandledRejections": [],
+      "stopButtonVisible": true
+    },
+    "failure": "Waiting failed",
+    "readOnlyAfterFailure": {
+      "revision": "d4bc4b85d03cfaf55326d078f08b9446b98e68b1",
+      "idle": true,
+      "editTurns": 1,
+      "leadCount": 13,
+      "leadDigestMatches": true,
+      "releaseCount": 0
+    },
+    "authoritativeTurnReconciliation": {
+      "edit1TurnCount": 1,
+      "responseStartsWith": "Maximum steps for this agent turn have been reached.",
+      "runtimeIdle": true,
+      "newStableRevision": false,
+      "revision": "d4bc4b85d03cfaf55326d078f08b9446b98e68b1",
+      "releaseCount": 0,
+      "result": "FAIL-no-committed-edit-no-retry"
     }
   }
 }
