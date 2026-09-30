@@ -31,7 +31,7 @@
       12
     ]
   },
-  "stage": "instrumented-lead-blocked-no-retry",
+  "stage": "post-repair-lead-pass-stop-before-edit1",
   "formVerification": {
     "result": "PASS",
     "method": "browser-typed fields in the live same-owner generated-app preview",
@@ -237,7 +237,7 @@
     },
     "clickReserved": true,
     "confirmedBrowserClicks": 1,
-    "outcome": "post-click-no-retry",
+    "outcome": "PASS-after-read-only-reconciliation-no-retry",
     "originalDigest": "e06940c79d94e45cea00facec6237aa8f59fb2ef0b5ce91ae141f39cbe34d1ca",
     "preClick": {
       "checks": [
@@ -398,5 +398,204 @@
     "submitClicksAfterRepair": 0,
     "leadMutationRequestsAfterRepair": 0,
     "readyForSeparatelyAuthorizedRetest": true
-  }
+  },
+  "postRepairLeadAttempt": {
+    "marker": "Task13 repaired lead ba0bec6ccaaa6196",
+    "baseline": {
+      "count": 12,
+      "highestId": 12,
+      "ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    "clickReserved": true,
+    "confirmedBrowserClicks": 1,
+    "outcome": "post-click-no-retry",
+    "originalDigest": "e06940c79d94e45cea00facec6237aa8f59fb2ef0b5ce91ae141f39cbe34d1ca",
+    "previewFixVersion": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+    "preClick": {
+      "checks": [
+        {
+          "field": "NAME",
+          "required": true,
+          "expected": "Task13 repaired lead ba0bec6ccaaa6196",
+          "observed": "Task13 repaired lead ba0bec6ccaaa6196",
+          "pass": true
+        },
+        {
+          "field": "PROJECT TYPE",
+          "required": true,
+          "expected": "valid selected option",
+          "observed": "Architectural Shingle Replacement",
+          "pass": true
+        },
+        {
+          "field": "STATUS",
+          "required": true,
+          "expected": "valid selected option",
+          "observed": "New Lead",
+          "pass": true
+        },
+        {
+          "field": "PHONE",
+          "required": false,
+          "expected": "+1-202-555-0144",
+          "observed": "+1-202-555-0144",
+          "pass": true
+        },
+        {
+          "field": "EMAIL",
+          "required": false,
+          "expected": "lead-task13repairedleadba0bec6ccaaa6196@example.com",
+          "observed": "lead-task13repairedleadba0bec6ccaaa6196@example.com",
+          "pass": true
+        },
+        {
+          "field": "ADDRESS",
+          "required": false,
+          "expected": "123 Demo Street",
+          "observed": "123 Demo Street",
+          "pass": true
+        },
+        {
+          "field": "ESTIMATED VALUE",
+          "required": false,
+          "expected": "12500",
+          "observed": "12500",
+          "pass": true
+        },
+        {
+          "field": "NOTES",
+          "required": false,
+          "expected": "Disposable Task 13 acceptance record",
+          "observed": "Disposable Task 13 acceptance record",
+          "pass": true
+        },
+        {
+          "field": "FORM VALIDITY",
+          "required": true,
+          "expected": true,
+          "observed": true,
+          "pass": true
+        },
+        {
+          "field": "SUBMIT CONTROL",
+          "required": true,
+          "expected": "one enabled submit button",
+          "observed": {
+            "count": 1,
+            "disabled": false
+          },
+          "pass": true
+        }
+      ],
+      "atClick": {
+        "name": "Task13 repaired lead ba0bec6ccaaa6196",
+        "estimatedValue": "12500",
+        "reactName": "Task13 repaired lead ba0bec6ccaaa6196",
+        "reactEstimatedValue": 12500,
+        "phone": "+1-202-555-0144",
+        "reactPhone": "+1-202-555-0144",
+        "email": "lead-task13repairedleadba0bec6ccaaa6196@example.com",
+        "reactEmail": "lead-task13repairedleadba0bec6ccaaa6196@example.com",
+        "address": "123 Demo Street",
+        "reactAddress": "123 Demo Street",
+        "notes": "Disposable Task 13 acceptance record",
+        "reactNotes": "Disposable Task 13 acceptance record",
+        "projectType": "Architectural Shingle Replacement",
+        "reactProjectType": "Architectural Shingle Replacement",
+        "status": "New Lead",
+        "reactStatus": "New Lead",
+        "roofSize": "25",
+        "reactRoofSize": 25,
+        "pitch": "6/12",
+        "reactPitch": "6/12",
+        "scheduledDate": "2026-09-30",
+        "reactScheduledDate": "2026-09-30",
+        "formValid": true,
+        "buttonText": "Create Lead",
+        "buttonEnabled": true,
+        "buttonConnected": true,
+        "buttonBelongsToForm": true,
+        "submitButtonCount": 1
+      },
+      "leadCount": 12,
+      "originalRowsUnchanged": true,
+      "observationAttached": true
+    },
+    "failure": "Add Lead result could not be verified; no retry will occur: OPTIONS preflight Origin did not match the unique-marker POST Origin. 'null' !== ''",
+    "readOnlyAfterFailure": {
+      "count": 13,
+      "ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "markerIds": [
+        13
+      ],
+      "originalDigestMatches": true
+    },
+    "acceptance": {
+      "status": "PASS",
+      "harnessRunResult": "FAIL at OPTIONS Origin correlation; POST Origin was not present in the captured request headers",
+      "submitClicksThisRetest": 1,
+      "trustedCreateLeadClickObserved": true,
+      "submitEventObserved": true,
+      "handlerFetchObserved": true,
+      "generatedLeadsPostCount": 1,
+      "postStatus": 201,
+      "postResponseBodyReadable": true,
+      "preflightStatus": 204,
+      "postSubmitLeadsAndStatsGetStatus": 200,
+      "consoleErrors": 0,
+      "pageErrors": 0,
+      "leadCountBefore": 12,
+      "leadCountAfter": 13,
+      "newLeadId": 13,
+      "existingLeadRowsUnchanged": true,
+      "newLeadValuesCorrect": true,
+      "verifiedStoredValues": {
+        "name": "Task13 repaired lead ba0bec6ccaaa6196",
+        "phone": "+1-202-555-0144",
+        "email": "lead-task13repairedleadba0bec6ccaaa6196@example.com",
+        "address": "123 Demo Street",
+        "projectType": "Architectural Shingle Replacement",
+        "status": "New Lead",
+        "estimatedValue": 12500,
+        "roofSize": 25,
+        "pitch": "6/12",
+        "scheduledDate": "2026-09-30",
+        "notes": "Disposable Task 13 acceptance record"
+      },
+      "duplicateCreated": false,
+      "customerUiUpdated": true,
+      "unintendedLeadMutationObserved": false,
+      "previewFixVersion": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+      "anotherSubmitAuthorized": false,
+      "nextTask13Step": "edit1: dark navy dashboard and five newest leads, pending separate authorization"
+    }
+  },
+  "postRepairApprovedLeadSubmitClicks": 1
 }

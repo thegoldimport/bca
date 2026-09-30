@@ -1,0 +1,115 @@
+APPROVED: perform ONE controlled Add Lead Submit retest after the deployed preview `allow-forms` fix.
+
+Continue with the SAME:
+
+- Project 5
+- owner account
+- agent/revision
+- corrected Task 13 harness
+- recovery checkpoint
+- deployed control-plane version:
+  0e01f7dc-51c4-4736-9873-ea431abc823c
+
+Current verified state:
+
+- Preview sandbox changed only:
+  `allow-scripts`
+  →
+  `allow-scripts allow-forms`
+
+- Preview remains sandboxed.
+- Parent/control-plane isolation remains intact.
+- Generated CRM was NOT changed.
+- Runtime was NOT changed.
+- Gateway was NOT changed.
+- Database was NOT changed.
+- Project 5 has exactly 12 leads, IDs 1–12.
+- Form-only verification PASSED.
+- Estimated Value = 12500.
+- Form valid.
+- Create Lead enabled.
+- ZERO Submit clicks have occurred since the preview fix.
+
+AUTHORIZATION:
+
+Perform exactly ONE normal Submit click on Create Lead.
+
+Do NOT retry automatically for any reason.
+
+Keep the existing instrumentation active for:
+
+CLICK
+→ SUBMIT EVENT
+→ HANDLER
+→ FETCH
+→ POST /api/leads
+→ RESPONSE
+→ DATABASE
+→ UI
+
+Immediately afterward, perform a READ-ONLY database verification.
+
+Expected PASS:
+
+- click observed
+- submit event observed
+- handler proceeds
+- POST /api/leads occurs
+- successful response
+- lead count changes exactly 12 → 13
+- IDs 1–12 remain unchanged
+- exactly ONE new lead exists
+- new lead values match the form
+- Estimated Value is stored as 12500
+- no duplicate exists
+- UI reflects the new lead normally
+
+If ANY expected step fails:
+
+STOP.
+
+Do not:
+- click Submit again
+- repair/delete/change database records
+- modify code
+- proceed to edit1
+- rerun the mutation
+- broaden the investigation
+
+Preserve the captured evidence and report the earliest failure point.
+
+If everything passes:
+
+Mark the Add Lead acceptance step PASS.
+
+Update the durable non-secret Task 13 checkpoint with:
+- successful single-submit result
+- resulting lead count
+- new lead ID
+- verified stored values
+- preview fix/version responsible for enabling form submission
+
+Then STOP BEFORE edit1.
+
+Return:
+
+Submit clicks:
+Click event observed:
+Submit event observed:
+Handler/fetch observed:
+POST /api/leads:
+HTTP result:
+Lead count before → after:
+New lead ID:
+IDs 1–12 unchanged:
+New lead values correct:
+Estimated Value stored:
+Duplicate created:
+Customer UI updated:
+Console/page errors:
+Database verification:
+Unintended mutation:
+Add Lead acceptance: PASS/FAIL
+Exact next Task 13 step:
+
+Do not perform edit1 without separate authorization.

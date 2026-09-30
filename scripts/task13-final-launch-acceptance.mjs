@@ -32,6 +32,7 @@ const phase = process.argv[2];
 const EXTENDED_PHASES = [
   "signup", "generate", "reconcileGeneration", "preview", "approvedLead",
   "verifyRecoveredForm", "approvedRecoveredLead", "instrumentedRecoveredLead",
+  "postRepairApprovedLead",
   "edit1", "reopen", "publish1", "publishSame", "edit2", "publishUpdate",
   "returning", "isolation",
 ];
@@ -1463,6 +1464,8 @@ async function saveLeadEvidence(evidence, filename = "approved-lead-evidence.jso
     "approved-lead-evidence.json", "approved-lead-form-checks.json",
     "instrumented-lead-evidence.json", "instrumented-lead-form-checks.json",
     "instrumented-lead-preclick.json",
+    "repaired-lead-evidence.json", "repaired-lead-form-checks.json",
+    "repaired-lead-preclick.json",
   ].includes(filename));
   const destination = path.join(PRIVATE_DIR, filename);
   const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
@@ -2175,14 +2178,25 @@ async function instrumentLeadBrowser(page, frame) {
   });
 }
 
-async function instrumentedRecoveredLeadPhase() {
+async function instrumentedRecoveredLeadPhase({ postRepair = false } = {}) {
   const checkpoint = JSON.parse(await readFile(RECOVERY_CHECKPOINT, "utf8"));
-  assert.equal(checkpoint.stage, "approved-lead-blocked-no-retry",
-    "This separately authorized attempt is available only after the prior blocked click.");
+  assert.equal(checkpoint.stage, postRepair
+    ? "instrumented-lead-blocked-no-retry" : "approved-lead-blocked-no-retry",
+  "This separately authorized attempt is available only after the prior blocked click.");
   assert.equal(checkpoint.leadAttempt?.clickReserved, true);
   assert.equal(checkpoint.leadAttempt?.confirmedBrowserClicks, 1);
   assert.equal(checkpoint.newlyApprovedLeadSubmitClicks, 1);
-  assert(!checkpoint.instrumentedLeadAttempt, "Instrumented attempt was already started; no retry.");
+  if (postRepair) {
+    assert.equal(checkpoint.instrumentedLeadAttempt?.confirmedBrowserClicks, 1);
+    assert.equal(checkpoint.additionalApprovedLeadSubmitClicks, 1);
+    assert.equal(checkpoint.previewSandboxRepair?.controlPlaneVersion,
+      "0e01f7dc-51c4-4736-9873-ea431abc823c");
+    assert.equal(checkpoint.previewSandboxRepair?.formOnlyVerification, "PASS");
+    assert.equal(checkpoint.previewSandboxRepair?.submitClicksAfterRepair, 0);
+    assert(!checkpoint.postRepairLeadAttempt, "Post-repair attempt was already started; no retry.");
+  } else {
+    assert(!checkpoint.instrumentedLeadAttempt, "Instrumented attempt was already started; no retry.");
+  }
   assert.equal(checkpoint.projectId, 5);
   assert.equal(checkpoint.ownerPasswordSecretName, "BUILDCUSTOM_TASK13_PROJECT5_PASSWORD");
   const password = process.env.BUILDCUSTOM_TASK13_PROJECT5_PASSWORD;
@@ -2191,13 +2205,16 @@ async function instrumentedRecoveredLeadPhase() {
     projectId: checkpoint.projectId, agentId: checkpoint.agentId,
     userId: checkpoint.ownerUserId, initialRevision: checkpoint.revision,
     identity: { email: checkpoint.ownerEmail, password },
-    leadMarker: `Task13 instrumented lead ${randomBytes(8).toString("hex")}`,
+    leadMarker: `Task13 ${postRepair ? "repaired" : "instrumented"} lead ${randomBytes(8).toString("hex")}`,
     actionCounts: { leadSubmit: 0 }, stage: "generation-verified",
     leadOutcome: "instrumented-attempt-not-clicked",
   };
   let browser;
   let page;
   let baselineRows;
+  let attempt = null;
+  const attemptKey = postRepair ? "postRepairLeadAttempt" : "instrumentedLeadAttempt";
+  const evidencePrefix = postRepair ? "repaired" : "instrumented";
   try {
     browser = await launchBrowser(RECOVERED_PROFILE);
     page = await browser.newPage();
@@ -2216,18 +2233,20 @@ async function instrumentedRecoveredLeadPhase() {
     baselineRows = await authoritativeLeadRows(page, state);
     const baseline = assertApprovedLeadBaseline(baselineRows, state);
     assert.deepEqual(baseline.ids, checkpoint.baseline.ids);
-    checkpoint.stage = "instrumented-lead-preparing";
-    checkpoint.instrumentedLeadAttempt = {
+    checkpoint.stage = postRepair ? "post-repair-lead-preparing" : "instrumented-lead-preparing";
+    attempt = checkpoint[attemptKey] = {
       marker: state.leadMarker, baseline, clickReserved: false,
       confirmedBrowserClicks: 0, outcome: "preparing-one-separately-authorized-click",
       originalDigest: createHash("sha256").update(JSON.stringify(baselineRows)).digest("hex"),
+      ...(postRepair ? { previewFixVersion: checkpoint.previewSandboxRepair.controlPlaneVersion } : {}),
     };
     await saveRecoveredCheckpoint(checkpoint);
     const persist = async current => {
       checkpoint.stage = current.stage;
-      checkpoint.additionalApprovedLeadSubmitClicks = current.actionCounts.leadSubmit;
-      checkpoint.instrumentedLeadAttempt.clickReserved ||= current.actionCounts.leadSubmit === 1;
-      checkpoint.instrumentedLeadAttempt.outcome = current.leadOutcome;
+      checkpoint[postRepair ? "postRepairApprovedLeadSubmitClicks"
+        : "additionalApprovedLeadSubmitClicks"] = current.actionCounts.leadSubmit;
+      attempt.clickReserved ||= current.actionCounts.leadSubmit === 1;
+      attempt.outcome = current.leadOutcome;
       await saveRecoveredCheckpoint(checkpoint);
     };
     const status = await runtimeGet(page, state.projectId, "status");
@@ -2236,6 +2255,11 @@ async function instrumentedRecoveredLeadPhase() {
     assert(previewUrl, "Same-owner project has no preview.");
     const audit = attachPreviewRequestAudit(page, previewUrl);
     await openEditor(page, state.projectId);
+    if (postRepair) {
+      assert.equal(await page.$eval('iframe[title="Development project preview"]',
+        element => element.getAttribute("sandbox")), "allow-scripts allow-forms",
+      "Deployed interactive preview lost the approved sandbox permission.");
+    }
     const frame = await previewFrame(page, previewUrl);
     await frame.waitForFunction(() => {
       const text = document.body?.innerText || "";
@@ -2246,8 +2270,8 @@ async function instrumentedRecoveredLeadPhase() {
     let captureEvents = null;
     const lead = await addLeadIfAvailable(page, frame, state, audit, {
       approved: true, authoritativeBaseline: baseline, baselineRows, persist,
-      evidenceFilename: "instrumented-lead-evidence.json",
-      formEvidenceFilename: "instrumented-lead-form-checks.json",
+      evidenceFilename: `${evidencePrefix}-lead-evidence.json`,
+      formEvidenceFilename: `${evidencePrefix}-lead-form-checks.json`,
       beforeSubmit: async ({ populated, checks }) => {
         captureEvents = await instrumentLeadBrowser(page, frame);
         const atClick = await frame.evaluate(() => {
@@ -2260,8 +2284,12 @@ async function instrumentedRecoveredLeadPhase() {
           const address = form?.querySelector('input[placeholder="123 Main St, Austin TX"]');
           const notes = form?.querySelector("textarea");
           const [projectType, status] = form?.querySelectorAll("select") || [];
+          const pitch = form?.querySelectorAll("select")[2];
+          const scheduledDate = form?.querySelector('input[type="date"]');
           const estimated = [...(form?.querySelectorAll('input[type="number"]') || [])]
             .find(node => node.parentElement?.querySelector("label")?.textContent?.trim() === "Estimated Value ($)");
+          const roofSize = [...(form?.querySelectorAll('input[type="number"]') || [])]
+            .find(node => node !== estimated);
           const reactValue = node => {
             const key = Object.keys(node || {}).find(name => name.startsWith("__reactProps$"));
             return key ? node[key]?.value : undefined;
@@ -2275,6 +2303,9 @@ async function instrumentedRecoveredLeadPhase() {
             notes: notes?.value, reactNotes: reactValue(notes),
             projectType: projectType?.value, reactProjectType: reactValue(projectType),
             status: status?.value, reactStatus: reactValue(status),
+            roofSize: roofSize?.value, reactRoofSize: reactValue(roofSize),
+            pitch: pitch?.value, reactPitch: reactValue(pitch),
+            scheduledDate: scheduledDate?.value, reactScheduledDate: reactValue(scheduledDate),
             formValid: form?.checkValidity() ?? false,
             buttonText: button?.textContent?.trim(), buttonEnabled: button?.disabled === false,
             buttonConnected: button?.isConnected === true, buttonBelongsToForm: button?.form === form,
@@ -2301,15 +2332,23 @@ async function instrumentedRecoveredLeadPhase() {
         assert.equal(atClick.buttonText, "Create Lead");
         assert.equal(atClick.buttonEnabled && atClick.buttonConnected && atClick.buttonBelongsToForm, true);
         assert.equal(atClick.submitButtonCount, 1);
-        checkpoint.instrumentedLeadAttempt.preClick = {
+        if (postRepair) {
+          assert.equal(Number(atClick.roofSize), Number(atClick.reactRoofSize));
+          assert(Number(atClick.roofSize) > 0);
+          assert.equal(atClick.pitch, atClick.reactPitch);
+          assert(atClick.pitch);
+          assert.equal(atClick.scheduledDate, atClick.reactScheduledDate);
+          assert.match(atClick.scheduledDate, /^\d{4}-\d{2}-\d{2}$/);
+        }
+        attempt.preClick = {
           checks, atClick, leadCount: immediatelyBeforeRows.length,
           originalRowsUnchanged: true, observationAttached: true,
         };
-        await saveLeadEvidence(checkpoint.instrumentedLeadAttempt.preClick, "instrumented-lead-preclick.json");
+        await saveLeadEvidence(attempt.preClick, `${evidencePrefix}-lead-preclick.json`);
         await saveRecoveredCheckpoint(checkpoint);
       },
       afterClick: async () => {
-        checkpoint.instrumentedLeadAttempt.confirmedBrowserClicks = 1;
+        attempt.confirmedBrowserClicks = 1;
         await saveRecoveredCheckpoint(checkpoint);
       },
       afterAttempt: async () => captureEvents ? captureEvents() : { captureError: "Observation not attached" },
@@ -2328,18 +2367,34 @@ async function instrumentedRecoveredLeadPhase() {
     assert.equal(fresh[0].status, lead.formValues.status);
     assert.equal(fresh[0].notes, lead.formValues.notesValue);
     assert.equal(Number(fresh[0].estimated_value), 12500);
+    if (postRepair) {
+      assert.equal(Number(fresh[0].roof_size_sq), Number(attempt.preClick.atClick.roofSize));
+      assert.equal(fresh[0].pitch, attempt.preClick.atClick.pitch);
+      assert.equal(fresh[0].scheduled_date, attempt.preClick.atClick.scheduledDate);
+    }
     assert(lead.uiMarkerOccurrences >= 1);
-    checkpoint.stage = "instrumented-lead-pass-stop-before-edit1";
-    checkpoint.instrumentedLeadAttempt.outcome = "PASS";
-    checkpoint.instrumentedLeadAttempt.result = {
+    checkpoint.stage = postRepair
+      ? "post-repair-lead-pass-stop-before-edit1" : "instrumented-lead-pass-stop-before-edit1";
+    attempt.outcome = "PASS";
+    attempt.result = {
       preMutationCount: 12, postMutationCount: 13, newLeadId: fresh[0].id,
       originalRowsUnchanged: true, estimatedValueStored: 12500,
       duplicateCreated: false, customerUiVisible: true,
+      ...(postRepair ? {
+        verifiedStoredValues: {
+          name: fresh[0].name, phone: fresh[0].phone, email: fresh[0].email,
+          address: fresh[0].address, projectType: fresh[0].project_type,
+          status: fresh[0].status, estimatedValue: Number(fresh[0].estimated_value),
+          notes: fresh[0].notes, roofSize: Number(fresh[0].roof_size_sq),
+          pitch: fresh[0].pitch, scheduledDate: fresh[0].scheduled_date,
+        },
+        previewFixVersion: checkpoint.previewSandboxRepair.controlPlaneVersion,
+      } : {}),
     };
     await saveRecoveredCheckpoint(checkpoint);
-    report("instrumented-lead-pass", checkpoint.instrumentedLeadAttempt.result);
+    report(postRepair ? "post-repair-lead-pass" : "instrumented-lead-pass", attempt.result);
   } catch (error) {
-    if (checkpoint.instrumentedLeadAttempt) {
+    if (attempt) {
       let after = null;
       if (page) {
         try {
@@ -2349,19 +2404,20 @@ async function instrumentedRecoveredLeadPhase() {
             markerIds: rows.filter(row => row.name === state.leadMarker).map(row => row.id),
             originalDigestMatches: baselineRows ? createHash("sha256")
               .update(JSON.stringify(rows.filter(row => checkpoint.baseline.ids.includes(Number(row.id)))))
-              .digest("hex") === checkpoint.instrumentedLeadAttempt.originalDigest : null,
+              .digest("hex") === attempt.originalDigest : null,
           };
         } catch { /* Retain the click guard if read-only reconciliation fails. */ }
       }
-      checkpoint.stage = "instrumented-lead-blocked-no-retry";
-      checkpoint.instrumentedLeadAttempt.failure = safeError(error);
-      checkpoint.instrumentedLeadAttempt.readOnlyAfterFailure = after;
-      checkpoint.instrumentedLeadAttempt.outcome = checkpoint.instrumentedLeadAttempt.clickReserved
+      checkpoint.stage = postRepair
+        ? "post-repair-lead-blocked-no-retry" : "instrumented-lead-blocked-no-retry";
+      attempt.failure = safeError(error);
+      attempt.readOnlyAfterFailure = after;
+      attempt.outcome = attempt.clickReserved
         ? "post-click-no-retry" : "pre-click-no-submit";
       await saveRecoveredCheckpoint(checkpoint);
-      report("instrumented-lead-fail", {
-        clickReserved: checkpoint.instrumentedLeadAttempt.clickReserved,
-        confirmedBrowserClicks: checkpoint.instrumentedLeadAttempt.confirmedBrowserClicks,
+      report(postRepair ? "post-repair-lead-fail" : "instrumented-lead-fail", {
+        clickReserved: attempt.clickReserved,
+        confirmedBrowserClicks: attempt.confirmedBrowserClicks,
         after, error: safeError(error), noRetry: true,
       });
     }
@@ -3692,6 +3748,7 @@ try {
   else if (phase === "verifyRecoveredForm") await recoveredFormPhase();
   else if (phase === "approvedRecoveredLead") await recoveredApprovedLeadPhase();
   else if (phase === "instrumentedRecoveredLead") await instrumentedRecoveredLeadPhase();
+  else if (phase === "postRepairApprovedLead") await instrumentedRecoveredLeadPhase({ postRepair: true });
   else if (phase === "edit1") await runEditPhase(1);
   else if (phase === "reopen") await reopenPhase();
   else if (phase === "publish1") await publish1Phase();
