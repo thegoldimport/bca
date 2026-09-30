@@ -31,7 +31,7 @@ const GENERATION_TIMEOUT = 8 * 60_000;
 const phase = process.argv[2];
 const EXTENDED_PHASES = [
   "signup", "generate", "reconcileGeneration", "preview", "approvedLead",
-  "verifyRecoveredForm", "approvedRecoveredLead",
+  "verifyRecoveredForm", "approvedRecoveredLead", "instrumentedRecoveredLead",
   "edit1", "reopen", "publish1", "publishSame", "edit2", "publishUpdate",
   "returning", "isolation",
 ];
@@ -1459,7 +1459,11 @@ function leadAttemptEvidence(audit, from, cdp, marker, baseline, postRows, visib
 }
 
 async function saveLeadEvidence(evidence, filename = "approved-lead-evidence.json") {
-  assert(["approved-lead-evidence.json", "approved-lead-form-checks.json"].includes(filename));
+  assert([
+    "approved-lead-evidence.json", "approved-lead-form-checks.json",
+    "instrumented-lead-evidence.json", "instrumented-lead-form-checks.json",
+    "instrumented-lead-preclick.json",
+  ].includes(filename));
   const destination = path.join(PRIVATE_DIR, filename);
   const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
   const file = await open(temporary, "wx", 0o600);
@@ -1518,7 +1522,9 @@ async function markLeadOutcomeUncertain(state, persist = saveCheckpoint) {
 
 async function addLeadIfAvailable(page, frame, state, audit,
   { approved = false, authoritativeBaseline = null, baselineRows = null,
-    formOnly = false, persist = saveCheckpoint, beforeSubmit = null, afterClick = null } = {}) {
+    formOnly = false, persist = saveCheckpoint, beforeSubmit = null, afterClick = null,
+    afterAttempt = null, evidenceFilename = "approved-lead-evidence.json",
+    formEvidenceFilename = "approved-lead-form-checks.json" } = {}) {
   assert(!(approved && formOnly), "Form-only verification must never use the Submit phase.");
   if (state.stage === "lead-submit-pending") {
     try {
@@ -1742,7 +1748,7 @@ async function addLeadIfAvailable(page, frame, state, audit,
   if (approved || formOnly) {
     const gate = { projectId: state.projectId, newSubmitClicks: state.actionCounts.leadSubmit,
       formPopulatedByBrowserTyping: true, checks };
-    if (approved) await saveLeadEvidence(gate, "approved-lead-form-checks.json");
+    if (approved) await saveLeadEvidence(gate, formEvidenceFilename);
     report(formOnly ? "recovered-form-field-checks" : "approved-lead-field-checks", gate);
   }
   const failed = checks.filter(check => !check.pass);
@@ -1834,7 +1840,8 @@ async function addLeadIfAvailable(page, frame, state, audit,
           authoritativeBaseline, afterRows, visible),
         result: "PASS", failure: null,
         formPopulatedByBrowserTyping: true, formValues: populated,
-      });
+        ...(afterAttempt ? { browserEvents: await afterAttempt() } : {}),
+      }, evidenceFilename);
       evidenceSaved = true;
     }
     state.leadOutcome = "verified-once";
@@ -1862,7 +1869,9 @@ async function addLeadIfAvailable(page, frame, state, audit,
         result: attemptError ? "FAIL" : "PASS",
         failure: attemptError ? safeError(attemptError) : null,
         formPopulatedByBrowserTyping: true, formValues: populated,
-      });
+        ...(afterAttempt ? { browserEvents: await afterAttempt().catch(error =>
+          ({ captureError: safeError(error) })) } : {}),
+      }, evidenceFilename);
     }
     await cdp.close();
   }
@@ -2087,6 +2096,273 @@ async function recoveredApprovedLeadPhase() {
         submitClickReserved: checkpoint.leadAttempt.clickReserved,
         confirmedBrowserClicks: checkpoint.leadAttempt.confirmedBrowserClicks,
         authoritativeAfter: after, error: safeError(error), noRetry: true,
+      });
+    }
+    throw error;
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+
+async function instrumentLeadBrowser(page, frame) {
+  const consoleMessages = [];
+  const pageErrors = [];
+  page.on("console", message => consoleMessages.push({
+    type: message.type(), message: safeError(message.text()),
+    fromPreview: message.location()?.url?.includes("_private_preview") || false,
+  }));
+  page.on("pageerror", error => pageErrors.push(safeError(error)));
+  await frame.evaluate(() => {
+    const events = [];
+    window.__task13LeadObservation = events;
+    const details = event => {
+      const target = event.target;
+      const button = target?.closest?.("button");
+      return {
+        kind: event.type, trusted: event.isTrusted,
+        targetTag: target?.tagName || null,
+        targetText: (target?.textContent || "").trim().slice(0, 60),
+        buttonText: (button?.textContent || "").trim().slice(0, 60),
+        submitButton: button?.type === "submit",
+      };
+    };
+    document.addEventListener("click", event => {
+      if (event.target?.closest?.('form button[type="submit"]'))
+        events.push(details(event));
+    }, true);
+    document.addEventListener("submit", event => {
+      const item = details(event);
+      item.kind = "submit";
+      events.push(item);
+      setTimeout(() => { item.defaultPreventedAfterDispatch = event.defaultPrevented; }, 0);
+    }, true);
+    window.addEventListener("error", event => {
+      events.push({ kind: "window-error", message: String(event.message || "unknown").slice(0, 300) });
+    });
+    window.addEventListener("unhandledrejection", event => {
+      events.push({ kind: "unhandled-rejection", message: String(event.reason || "unknown").slice(0, 300) });
+    });
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      let item = null;
+      try {
+        const url = new URL(args[0]?.url || args[0], location.href);
+        if (url.pathname.endsWith("/api/leads")) {
+          item = { kind: "fetch-called", method: args[1]?.method || args[0]?.method || "GET",
+            endpoint: "/api/leads" };
+          events.push(item);
+        }
+      } catch { /* Do not alter application fetch behavior for unusual inputs. */ }
+      try {
+        const result = originalFetch.apply(this, args);
+        if (item) result.then(response => {
+          events.push({ kind: "fetch-response", status: response.status, endpoint: item.endpoint });
+        }, error => {
+          events.push({ kind: "fetch-rejected", message: String(error).slice(0, 300) });
+        });
+        return result;
+      } catch (error) {
+        if (item) events.push({ kind: "fetch-threw", message: String(error).slice(0, 300) });
+        throw error;
+      }
+    };
+  });
+  return async () => ({
+    events: (await frame.evaluate(() => window.__task13LeadObservation || []))
+      .map(item => item.message ? { ...item, message: safeError(item.message) } : item),
+    console: consoleMessages,
+    pageErrors,
+  });
+}
+
+async function instrumentedRecoveredLeadPhase() {
+  const checkpoint = JSON.parse(await readFile(RECOVERY_CHECKPOINT, "utf8"));
+  assert.equal(checkpoint.stage, "approved-lead-blocked-no-retry",
+    "This separately authorized attempt is available only after the prior blocked click.");
+  assert.equal(checkpoint.leadAttempt?.clickReserved, true);
+  assert.equal(checkpoint.leadAttempt?.confirmedBrowserClicks, 1);
+  assert.equal(checkpoint.newlyApprovedLeadSubmitClicks, 1);
+  assert(!checkpoint.instrumentedLeadAttempt, "Instrumented attempt was already started; no retry.");
+  assert.equal(checkpoint.projectId, 5);
+  assert.equal(checkpoint.ownerPasswordSecretName, "BUILDCUSTOM_TASK13_PROJECT5_PASSWORD");
+  const password = process.env.BUILDCUSTOM_TASK13_PROJECT5_PASSWORD;
+  assert(password, "Recovered owner credential is unavailable.");
+  const state = {
+    projectId: checkpoint.projectId, agentId: checkpoint.agentId,
+    userId: checkpoint.ownerUserId, initialRevision: checkpoint.revision,
+    identity: { email: checkpoint.ownerEmail, password },
+    leadMarker: `Task13 instrumented lead ${randomBytes(8).toString("hex")}`,
+    actionCounts: { leadSubmit: 0 }, stage: "generation-verified",
+    leadOutcome: "instrumented-attempt-not-clicked",
+  };
+  let browser;
+  let page;
+  let baselineRows;
+  try {
+    browser = await launchBrowser(RECOVERED_PROFILE);
+    page = await browser.newPage();
+    page.setDefaultTimeout(UI_TIMEOUT);
+    page.setDefaultNavigationTimeout(UI_TIMEOUT);
+    await ensureIdentity(page, state);
+    const projects = projectsArray(await apiGet(page, "/api/projects", "Recovered owner project list"));
+    assert.equal(projects?.length, 1);
+    assert.equal(String(projects[0]?.id), String(state.projectId));
+    const project = await apiGet(page, `/api/projects/${state.projectId}`, "Recovered owner project");
+    assert.equal(String(project?.userId), state.userId);
+    assert.equal(project?.agentId, state.agentId);
+    const revision = await runtimeGet(page, state.projectId, "revision");
+    assert.equal((revision?.commitHash || revision?.revision?.commitHash || "").toLowerCase(),
+      state.initialRevision);
+    baselineRows = await authoritativeLeadRows(page, state);
+    const baseline = assertApprovedLeadBaseline(baselineRows, state);
+    assert.deepEqual(baseline.ids, checkpoint.baseline.ids);
+    checkpoint.stage = "instrumented-lead-preparing";
+    checkpoint.instrumentedLeadAttempt = {
+      marker: state.leadMarker, baseline, clickReserved: false,
+      confirmedBrowserClicks: 0, outcome: "preparing-one-separately-authorized-click",
+      originalDigest: createHash("sha256").update(JSON.stringify(baselineRows)).digest("hex"),
+    };
+    await saveRecoveredCheckpoint(checkpoint);
+    const persist = async current => {
+      checkpoint.stage = current.stage;
+      checkpoint.additionalApprovedLeadSubmitClicks = current.actionCounts.leadSubmit;
+      checkpoint.instrumentedLeadAttempt.clickReserved ||= current.actionCounts.leadSubmit === 1;
+      checkpoint.instrumentedLeadAttempt.outcome = current.leadOutcome;
+      await saveRecoveredCheckpoint(checkpoint);
+    };
+    const status = await runtimeGet(page, state.projectId, "status");
+    const previewUrl = status.previewUrl || status.previewURL
+      || status.state?.previewUrl || status.state?.previewURL;
+    assert(previewUrl, "Same-owner project has no preview.");
+    const audit = attachPreviewRequestAudit(page, previewUrl);
+    await openEditor(page, state.projectId);
+    const frame = await previewFrame(page, previewUrl);
+    await frame.waitForFunction(() => {
+      const text = document.body?.innerText || "";
+      return text.includes("Roofing Dashboard") && text.includes("Leads Directory")
+        && (document.querySelector("#root")?.childElementCount || 0) > 0;
+    }, { timeout: UI_TIMEOUT });
+    await exercisePreviewNavigation(frame, audit);
+    let captureEvents = null;
+    const lead = await addLeadIfAvailable(page, frame, state, audit, {
+      approved: true, authoritativeBaseline: baseline, baselineRows, persist,
+      evidenceFilename: "instrumented-lead-evidence.json",
+      formEvidenceFilename: "instrumented-lead-form-checks.json",
+      beforeSubmit: async ({ populated, checks }) => {
+        captureEvents = await instrumentLeadBrowser(page, frame);
+        const atClick = await frame.evaluate(() => {
+          const form = [...document.querySelectorAll("form")]
+            .find(node => node.querySelector('input[placeholder="e.g. John Smith"]'));
+          const button = form?.querySelector('button[type="submit"]');
+          const input = form?.querySelector('input[placeholder="e.g. John Smith"]');
+          const phone = form?.querySelector('input[placeholder="(555) 000-0000"]');
+          const email = form?.querySelector('input[type="email"]');
+          const address = form?.querySelector('input[placeholder="123 Main St, Austin TX"]');
+          const notes = form?.querySelector("textarea");
+          const [projectType, status] = form?.querySelectorAll("select") || [];
+          const estimated = [...(form?.querySelectorAll('input[type="number"]') || [])]
+            .find(node => node.parentElement?.querySelector("label")?.textContent?.trim() === "Estimated Value ($)");
+          const reactValue = node => {
+            const key = Object.keys(node || {}).find(name => name.startsWith("__reactProps$"));
+            return key ? node[key]?.value : undefined;
+          };
+          return {
+            name: input?.value, estimatedValue: estimated?.value,
+            reactName: reactValue(input), reactEstimatedValue: reactValue(estimated),
+            phone: phone?.value, reactPhone: reactValue(phone),
+            email: email?.value, reactEmail: reactValue(email),
+            address: address?.value, reactAddress: reactValue(address),
+            notes: notes?.value, reactNotes: reactValue(notes),
+            projectType: projectType?.value, reactProjectType: reactValue(projectType),
+            status: status?.value, reactStatus: reactValue(status),
+            formValid: form?.checkValidity() ?? false,
+            buttonText: button?.textContent?.trim(), buttonEnabled: button?.disabled === false,
+            buttonConnected: button?.isConnected === true, buttonBelongsToForm: button?.form === form,
+            submitButtonCount: form?.querySelectorAll('button[type="submit"]').length ?? 0,
+          };
+        });
+        const immediatelyBeforeRows = await authoritativeLeadRows(page, state);
+        assert.deepEqual(immediatelyBeforeRows, baselineRows, "Pre-click lead rows changed.");
+        assert.equal(atClick.name, state.leadMarker);
+        assert.equal(atClick.reactName, state.leadMarker, "React-controlled name differs from DOM.");
+        assert.equal(atClick.estimatedValue, "12500");
+        assert.equal(Number(atClick.reactEstimatedValue), 12500,
+          "React-controlled estimate differs from DOM.");
+        for (const [field, expected] of [
+          ["phone", populated.phoneValue], ["email", populated.emailValue],
+          ["address", populated.address], ["notes", populated.notesValue],
+          ["projectType", populated.projectType], ["status", populated.status],
+        ]) {
+          assert.equal(atClick[field], expected, `Visible ${field} changed before click.`);
+          assert.equal(atClick[`react${field[0].toUpperCase()}${field.slice(1)}`], expected,
+            `React-controlled ${field} differs from DOM.`);
+        }
+        assert.equal(atClick.formValid, true);
+        assert.equal(atClick.buttonText, "Create Lead");
+        assert.equal(atClick.buttonEnabled && atClick.buttonConnected && atClick.buttonBelongsToForm, true);
+        assert.equal(atClick.submitButtonCount, 1);
+        checkpoint.instrumentedLeadAttempt.preClick = {
+          checks, atClick, leadCount: immediatelyBeforeRows.length,
+          originalRowsUnchanged: true, observationAttached: true,
+        };
+        await saveLeadEvidence(checkpoint.instrumentedLeadAttempt.preClick, "instrumented-lead-preclick.json");
+        await saveRecoveredCheckpoint(checkpoint);
+      },
+      afterClick: async () => {
+        checkpoint.instrumentedLeadAttempt.confirmedBrowserClicks = 1;
+        await saveRecoveredCheckpoint(checkpoint);
+      },
+      afterAttempt: async () => captureEvents ? captureEvents() : { captureError: "Observation not attached" },
+    });
+    const after = await authoritativeLeadRows(page, state);
+    const original = after.filter(row => baseline.ids.includes(Number(row.id)));
+    const fresh = after.filter(row => !baseline.ids.includes(Number(row.id)));
+    assert.deepEqual(original, baselineRows);
+    assert.equal(after.length, 13);
+    assert.equal(fresh.length, 1);
+    assert.equal(fresh[0].name, state.leadMarker);
+    assert.equal(fresh[0].phone, lead.formValues.phoneValue);
+    assert.equal(fresh[0].email, lead.formValues.emailValue);
+    assert.equal(fresh[0].address, lead.formValues.address);
+    assert.equal(fresh[0].project_type, lead.formValues.projectType);
+    assert.equal(fresh[0].status, lead.formValues.status);
+    assert.equal(fresh[0].notes, lead.formValues.notesValue);
+    assert.equal(Number(fresh[0].estimated_value), 12500);
+    assert(lead.uiMarkerOccurrences >= 1);
+    checkpoint.stage = "instrumented-lead-pass-stop-before-edit1";
+    checkpoint.instrumentedLeadAttempt.outcome = "PASS";
+    checkpoint.instrumentedLeadAttempt.result = {
+      preMutationCount: 12, postMutationCount: 13, newLeadId: fresh[0].id,
+      originalRowsUnchanged: true, estimatedValueStored: 12500,
+      duplicateCreated: false, customerUiVisible: true,
+    };
+    await saveRecoveredCheckpoint(checkpoint);
+    report("instrumented-lead-pass", checkpoint.instrumentedLeadAttempt.result);
+  } catch (error) {
+    if (checkpoint.instrumentedLeadAttempt) {
+      let after = null;
+      if (page) {
+        try {
+          const rows = await authoritativeLeadRows(page, state);
+          after = {
+            count: rows.length, ids: rows.map(row => row.id),
+            markerIds: rows.filter(row => row.name === state.leadMarker).map(row => row.id),
+            originalDigestMatches: baselineRows ? createHash("sha256")
+              .update(JSON.stringify(rows.filter(row => checkpoint.baseline.ids.includes(Number(row.id)))))
+              .digest("hex") === checkpoint.instrumentedLeadAttempt.originalDigest : null,
+          };
+        } catch { /* Retain the click guard if read-only reconciliation fails. */ }
+      }
+      checkpoint.stage = "instrumented-lead-blocked-no-retry";
+      checkpoint.instrumentedLeadAttempt.failure = safeError(error);
+      checkpoint.instrumentedLeadAttempt.readOnlyAfterFailure = after;
+      checkpoint.instrumentedLeadAttempt.outcome = checkpoint.instrumentedLeadAttempt.clickReserved
+        ? "post-click-no-retry" : "pre-click-no-submit";
+      await saveRecoveredCheckpoint(checkpoint);
+      report("instrumented-lead-fail", {
+        clickReserved: checkpoint.instrumentedLeadAttempt.clickReserved,
+        confirmedBrowserClicks: checkpoint.instrumentedLeadAttempt.confirmedBrowserClicks,
+        after, error: safeError(error), noRetry: true,
       });
     }
     throw error;
@@ -3415,6 +3691,7 @@ try {
   else if (phase === "approvedLead") await previewPhase({ approved: true });
   else if (phase === "verifyRecoveredForm") await recoveredFormPhase();
   else if (phase === "approvedRecoveredLead") await recoveredApprovedLeadPhase();
+  else if (phase === "instrumentedRecoveredLead") await instrumentedRecoveredLeadPhase();
   else if (phase === "edit1") await runEditPhase(1);
   else if (phase === "reopen") await reopenPhase();
   else if (phase === "publish1") await publish1Phase();

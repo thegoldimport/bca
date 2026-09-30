@@ -31,7 +31,7 @@
       12
     ]
   },
-  "stage": "approved-lead-blocked-no-retry",
+  "stage": "instrumented-lead-blocked-no-retry",
   "formVerification": {
     "result": "PASS",
     "method": "browser-typed fields in the live same-owner generated-app preview",
@@ -214,5 +214,169 @@
       "unintendedMutationObserved": false,
       "retryAllowed": false
     }
-  }
+  },
+  "instrumentedLeadAttempt": {
+    "marker": "Task13 instrumented lead e90fa102e2a2c8e8",
+    "baseline": {
+      "count": 12,
+      "highestId": 12,
+      "ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    },
+    "clickReserved": true,
+    "confirmedBrowserClicks": 1,
+    "outcome": "post-click-no-retry",
+    "originalDigest": "e06940c79d94e45cea00facec6237aa8f59fb2ef0b5ce91ae141f39cbe34d1ca",
+    "preClick": {
+      "checks": [
+        {
+          "field": "NAME",
+          "required": true,
+          "expected": "Task13 instrumented lead e90fa102e2a2c8e8",
+          "observed": "Task13 instrumented lead e90fa102e2a2c8e8",
+          "pass": true
+        },
+        {
+          "field": "PROJECT TYPE",
+          "required": true,
+          "expected": "valid selected option",
+          "observed": "Architectural Shingle Replacement",
+          "pass": true
+        },
+        {
+          "field": "STATUS",
+          "required": true,
+          "expected": "valid selected option",
+          "observed": "New Lead",
+          "pass": true
+        },
+        {
+          "field": "PHONE",
+          "required": false,
+          "expected": "+1-202-555-0144",
+          "observed": "+1-202-555-0144",
+          "pass": true
+        },
+        {
+          "field": "EMAIL",
+          "required": false,
+          "expected": "lead-task13instrumentedleade90fa102e2a2c8e8@example.com",
+          "observed": "lead-task13instrumentedleade90fa102e2a2c8e8@example.com",
+          "pass": true
+        },
+        {
+          "field": "ADDRESS",
+          "required": false,
+          "expected": "123 Demo Street",
+          "observed": "123 Demo Street",
+          "pass": true
+        },
+        {
+          "field": "ESTIMATED VALUE",
+          "required": false,
+          "expected": "12500",
+          "observed": "12500",
+          "pass": true
+        },
+        {
+          "field": "NOTES",
+          "required": false,
+          "expected": "Disposable Task 13 acceptance record",
+          "observed": "Disposable Task 13 acceptance record",
+          "pass": true
+        },
+        {
+          "field": "FORM VALIDITY",
+          "required": true,
+          "expected": true,
+          "observed": true,
+          "pass": true
+        },
+        {
+          "field": "SUBMIT CONTROL",
+          "required": true,
+          "expected": "one enabled submit button",
+          "observed": {
+            "count": 1,
+            "disabled": false
+          },
+          "pass": true
+        }
+      ],
+      "atClick": {
+        "name": "Task13 instrumented lead e90fa102e2a2c8e8",
+        "estimatedValue": "12500",
+        "reactName": "Task13 instrumented lead e90fa102e2a2c8e8",
+        "reactEstimatedValue": 12500,
+        "phone": "+1-202-555-0144",
+        "reactPhone": "+1-202-555-0144",
+        "email": "lead-task13instrumentedleade90fa102e2a2c8e8@example.com",
+        "reactEmail": "lead-task13instrumentedleade90fa102e2a2c8e8@example.com",
+        "address": "123 Demo Street",
+        "reactAddress": "123 Demo Street",
+        "notes": "Disposable Task 13 acceptance record",
+        "reactNotes": "Disposable Task 13 acceptance record",
+        "projectType": "Architectural Shingle Replacement",
+        "reactProjectType": "Architectural Shingle Replacement",
+        "status": "New Lead",
+        "reactStatus": "New Lead",
+        "formValid": true,
+        "buttonText": "Create Lead",
+        "buttonEnabled": true,
+        "buttonConnected": true,
+        "buttonBelongsToForm": true,
+        "submitButtonCount": 1
+      },
+      "leadCount": 12,
+      "originalRowsUnchanged": true,
+      "observationAttached": true
+    },
+    "failure": "Add Lead result could not be verified; no retry will occur: Generated UI did not display the created lead after the single Submit click.",
+    "readOnlyAfterFailure": {
+      "count": 12,
+      "ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "markerIds": [],
+      "originalDigestMatches": true
+    },
+    "postClickEvidence": {
+      "trustedClickOnCreateLeadButton": true,
+      "submitEventObserved": false,
+      "fetchObserved": false,
+      "leadsPostObserved": false,
+      "httpResult": null,
+      "previewConsoleError": "Blocked form submission because the frame is sandboxed without allow-forms.",
+      "pageErrorsObserved": 0,
+      "customerUiMarkerVisible": false,
+      "formStillPopulated": true,
+      "earliestFailurePoint": "Browser blocked form submission at the iframe sandbox before a submit event.",
+      "databaseVerification": "FAIL",
+      "retryAllowed": false
+    }
+  },
+  "additionalApprovedLeadSubmitClicks": 1
 }

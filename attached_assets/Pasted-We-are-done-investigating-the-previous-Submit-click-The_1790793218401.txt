@@ -1,0 +1,95 @@
+We are done investigating the previous Submit click. The evidence needed to determine its cause was not captured, so do not spend more time analyzing that historical attempt.
+
+Authorize ONE additional controlled Add Lead Submit attempt, but instrument the browser BEFORE the click so this attempt is conclusive.
+
+Do not change product code, generated CRM code, database state, or the form before the test.
+
+Use the SAME:
+- Project 5
+- owner account
+- agent/revision
+- corrected form harness
+- durable recovery checkpoint
+
+Current database baseline is still:
+- 12 leads
+- IDs 1–12 unchanged
+
+BEFORE clicking Submit:
+
+1. Attach observation for:
+   - form submit event
+   - button click event and actual event target
+   - full browser console
+   - page errors / uncaught exceptions / unhandled rejections
+   - request creation
+   - request/response/failure for `api/leads`
+
+2. Confirm immediately before the click:
+   - correct Create Lead button
+   - button is enabled
+   - form values are correct
+   - Estimated Value = 12500
+   - required name is nonempty
+   - lead count is still 12
+
+3. Save this pre-click evidence.
+
+THEN:
+
+Perform exactly ONE normal Puppeteer browser click on the visible Create Lead button.
+
+This is authorization for exactly ONE additional Submit click.
+
+Do not automatically retry it.
+
+Capture what happens immediately afterward.
+
+Determine the execution path:
+
+CLICK
+→ SUBMIT EVENT
+→ HANDLER
+→ FETCH
+→ POST ./api/leads
+→ RESPONSE
+→ DATABASE CHANGE
+→ UI UPDATE
+
+Afterward perform a READ-ONLY database check.
+
+Expected successful result:
+- 12 → 13 leads
+- exactly one new lead
+- IDs 1–12 unchanged
+- new values match the form
+- Estimated Value stored as 12500
+- no duplicate
+
+If it fails, STOP immediately and report the EARLIEST observed failure point from this newly instrumented attempt.
+
+Do not perform another Submit.
+Do not fix anything yet.
+Do not proceed to edit1.
+
+I do not want another broad investigation or speculative report. This test exists specifically to capture the missing evidence.
+
+Return:
+
+Submit clicks this attempt:
+Click event observed:
+Submit event observed:
+Handler execution evidence:
+Fetch observed:
+POST /api/leads observed:
+HTTP result:
+Console/page error:
+Lead count before → after:
+New lead ID:
+Estimated Value stored:
+Earliest failure point:
+Result: PASS / FAIL
+Likely cause, only if directly supported by captured evidence:
+Next smallest action:
+
+If the submission succeeds and the database is exactly 13 leads with one correct new record, mark Add Lead PASS and STOP before edit1.
