@@ -1,0 +1,130 @@
+Proceed with the GitHub source-of-truth commit and push.
+
+The final local gate is accepted:
+
+- root tests: 263 passed, 0 failed
+- fresh npm ci passed
+- TypeScript passed
+- production marketing build passed
+- control-plane dry run passed
+- gateway dry run passed
+- runtime reconstruction: 68 focused tests + typecheck + build passed
+- marketing build contains no ai-build-studio.replit.app
+- marketing build contains no customer-facing /api/waitlist call
+- product/pricing CTAs point to https://app.buildcustom.ai/signup
+- obsolete waitlist UI removed
+- retired Replit admin capability remains removed
+- no usable retired admin credential exists in current source
+- 89 unreferenced media attachments removed
+- canonical runtime recipe/patches retained
+- production unsuffixed gateway config retained
+
+TASK
+
+1. Review the pending diff one final time for accidental files/secrets.
+
+Do not reopen previously accepted architecture or historical provenance questions.
+
+Specifically make sure:
+- the untracked instruction attachment is NOT included
+- no secret values are being committed
+- no runtime-source or other ignored working directory is accidentally added
+- no generated dependency/build directories are added
+- no unrelated local files are included
+
+2. Commit the prepared source.
+
+Use a clear commit message such as:
+
+Establish canonical production source and remove legacy waitlist
+
+3. Push the commit to GitHub main normally.
+
+NO force push.
+NO history rewrite.
+
+4. Observe the actual Cloudflare Pages build triggered by this push.
+
+This is now the authoritative test of the GitHub -> Cloudflare Pages path.
+
+If the Pages build FAILS:
+
+- DO NOT modify runtime
+- DO NOT modify control plane
+- DO NOT modify gateway
+- DO NOT stop Replit
+- capture the exact failure/log evidence
+- STOP and report it
+
+Do not guess at a fix or automatically retry.
+
+If the Pages build SUCCEEDS:
+
+Verify the LIVE buildcustom.ai site, not merely local assets.
+
+Confirm:
+
+- buildcustom.ai returns 200
+- normal marketing assets load
+- there is no Join the Waitlist modal/CTA
+- pricing/product CTAs go to https://app.buildcustom.ai/signup
+- live browser/network behavior makes no request to ai-build-studio.replit.app
+- live browser/network behavior makes no request to /api/waitlist
+- signup destination loads
+- app.buildcustom.ai remains on the existing Cloudflare control plane
+- public signup remains enabled
+- Forgot Password page remains available
+
+Also verify the existing Cloudflare product was not changed by the marketing
+deployment:
+
+- current runtime version remains
+  60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+- current control version remains
+  816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+- current gateway version remains
+  9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Do NOT redeploy any of those Workers.
+
+5. If all of the above passes, determine whether ANY real production request,
+asset, API call, Worker binding, DNS route, environment configuration, or
+customer-facing functionality still depends on:
+
+- ai-build-studio.replit.app
+- the public Replit deployment
+- Replit-hosted files/services
+
+Ignore:
+- Git history
+- documentation
+- comments
+- acceptance records
+- optional development use of Replit
+- disposable test data
+
+We only care about actual CURRENT production dependency.
+
+6. RETURN THE RESULT.
+
+Report:
+
+- commit SHA
+- push result
+- Cloudflare Pages build result
+- live marketing verification
+- live signup/recovery verification
+- runtime/control/gateway version verification
+- any remaining REAL production Replit dependency
+- GO / NO-GO for shutting down the public Replit deployment
+
+IMPORTANT:
+
+Even if everything passes, DO NOT shut down Replit in this task.
+
+Stop immediately before that action.
+
+We want one final explicit shutdown step after proving production no longer
+depends on it.
