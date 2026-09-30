@@ -1437,8 +1437,9 @@ function leadAttemptEvidence(audit, from, cdp, marker, baseline, postRows, visib
   };
 }
 
-async function saveLeadEvidence(evidence) {
-  const destination = path.join(PRIVATE_DIR, "approved-lead-evidence.json");
+async function saveLeadEvidence(evidence, filename = "approved-lead-evidence.json") {
+  assert(["approved-lead-evidence.json", "approved-lead-form-checks.json"].includes(filename));
+  const destination = path.join(PRIVATE_DIR, filename);
   const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
   const file = await open(temporary, "wx", 0o600);
   try {
@@ -1598,18 +1599,21 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
   const email = `lead-${state.leadMarker.replace(/\W/g, "").toLowerCase()}@example.com`;
   const phone = "+1-202-555-0144";
   const notes = "Disposable Task 13 acceptance record";
-  async function typeVisible(selector, text) {
-    const element = await frame.$(selector);
-    assert(element, `Missing visible generated form field: ${selector}`);
+  async function typeVisible(selector, text, { numeric = false } = {}) {
+    const matches = await frame.$$(selector);
+    assert.equal(matches.length, 1, `Expected one visible generated form field for ${selector}.`);
+    const element = matches[0];
     await element.click({ clickCount: 3 });
-    await element.press("Backspace");
+    // Controlled numeric fields convert an empty input to 0. Replacing the
+    // selection without an intermediate Backspace avoids appending to that 0.
+    await element.press(numeric ? "Control+A" : "Backspace");
     await element.type(text, { delay: 12 });
   }
   await typeVisible('form input[placeholder="e.g. John Smith"]', state.leadMarker);
   await typeVisible('form input[placeholder="(555) 000-0000"]', phone);
   await typeVisible('form input[type="email"]', email);
   await typeVisible('form input[placeholder="123 Main St, Austin TX"]', "123 Demo Street");
-  await typeVisible('form input[type="number"]', "12500");
+  await typeVisible('form input[type="number"]', "12500", { numeric: true });
   await typeVisible("form textarea", notes);
   const populated = await frame.evaluate(marker => {
     const form = [...document.querySelectorAll("form")].find(element => {
@@ -1629,7 +1633,8 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
     const submitControls = [...form.querySelectorAll('button[type="submit"],input[type="submit"]')]
       .filter(element => /add|save|create|submit/i.test(element.textContent || element.value || ""));
     return {
-      formFound: true, nameMatches: name === marker,
+      formFound: true, name, phoneValue, emailValue, address, estimate, notesValue,
+      nameMatches: name === marker,
       phoneMatches: phoneValue === "+1-202-555-0144",
       emailMatches: emailValue === `lead-${marker.replace(/\W/g, "").toLowerCase()}@example.com`,
       addressMatches: address === "123 Demo Street", estimateMatches: estimate === "12500",
@@ -1641,15 +1646,38 @@ async function addLeadIfAvailable(page, frame, state, audit, { approved = false,
       submitDisabled: submitControls[0]?.disabled ?? true,
     };
   }, state.leadMarker);
-  assert(populated.formFound && populated.nameMatches && populated.phoneMatches
-    && populated.emailMatches && populated.addressMatches && populated.estimateMatches
-    && populated.notesMatches && populated.projectValid && populated.statusValid
-    && populated.requiredFieldsValid && populated.submitCount === 1 && !populated.submitDisabled,
-  "The rendered React form did not retain all intended values after normal browser typing; no Submit click.");
-  if (approved) report("approved-lead-form-ready", {
-    projectId: state.projectId, formPopulatedByBrowserTyping: true, formValues: populated,
-    newlyApprovedSubmitClicks: state.actionCounts.leadSubmit,
-  });
+  const checks = [
+    { field: "NAME", required: true, expected: state.leadMarker,
+      observed: populated.name ?? null, pass: populated.nameMatches === true },
+    { field: "PROJECT TYPE", required: true, expected: "valid selected option",
+      observed: populated.projectType ?? null, pass: populated.projectValid === true },
+    { field: "STATUS", required: true, expected: "valid selected option",
+      observed: populated.status ?? null, pass: populated.statusValid === true },
+    { field: "PHONE", required: false, expected: phone,
+      observed: populated.phoneValue ?? null, pass: populated.phoneMatches === true },
+    { field: "EMAIL", required: false, expected: email,
+      observed: populated.emailValue ?? null, pass: populated.emailMatches === true },
+    { field: "ADDRESS", required: false, expected: "123 Demo Street",
+      observed: populated.address ?? null, pass: populated.addressMatches === true },
+    { field: "ESTIMATED VALUE", required: false, expected: "12500",
+      observed: populated.estimate ?? null, pass: populated.estimateMatches === true },
+    { field: "NOTES", required: false, expected: notes,
+      observed: populated.notesValue ?? null, pass: populated.notesMatches === true },
+    { field: "FORM VALIDITY", required: true, expected: true,
+      observed: populated.requiredFieldsValid ?? null, pass: populated.requiredFieldsValid === true },
+    { field: "SUBMIT CONTROL", required: true, expected: "one enabled submit button",
+      observed: { count: populated.submitCount ?? 0, disabled: populated.submitDisabled ?? null },
+      pass: populated.submitCount === 1 && populated.submitDisabled === false },
+  ];
+  if (approved) {
+    const gate = { projectId: state.projectId, newSubmitClicks: state.actionCounts.leadSubmit,
+      formPopulatedByBrowserTyping: true, checks };
+    await saveLeadEvidence(gate, "approved-lead-form-checks.json");
+    report("approved-lead-field-checks", gate);
+  }
+  const failed = checks.filter(check => !check.pass);
+  assert.equal(failed.length, 0,
+    `Pre-submit field gate failed: ${failed.map(check => check.field).join(", ")}. No Submit click.`);
   const submit = await frame.$('form button[type="submit"],form input[type="submit"]');
   assert(submit, "Generated Add Lead Submit control disappeared; no mutation was made.");
   if (approved) {
@@ -1767,7 +1795,11 @@ async function previewPhase({ approved = false } = {}) {
       (state.stage === "lead-outcome-uncertain" && state.actionCounts.leadSubmit === 1
         && !state.historicalLeadAttempts)
       || (state.stage === "generation-verified" && state.actionCounts.leadSubmit === 0
-        && state.historicalLeadAttempts?.length === 1),
+        && state.historicalLeadAttempts?.length === 1)
+      || (state.stage === "preview-failed" && state.actionCounts.leadSubmit === 0
+        && state.leadOutcome === "approved-new-attempt-not-clicked"
+        && state.historicalLeadAttempts?.length === 1
+        && !state.preSubmitDiagnosticResumeCount),
       "This checkpoint is not eligible for the single newly approved attempt.",
     );
   } else {
@@ -1794,13 +1826,17 @@ async function previewPhase({ approved = false } = {}) {
     let authoritativeBaseline = null;
     if (approved) {
       authoritativeBaseline = assertApprovedLeadBaseline(await authoritativeLeadRows(page, state), state);
-      if (state.stage === "lead-outcome-uncertain") {
-        state.historicalLeadAttempts = [{
-          marker: state.leadMarker, submitClicks: 1,
-          outcome: "no-persisted-lead-authoritatively-verified",
-        }];
+      if (state.stage === "lead-outcome-uncertain" || state.stage === "preview-failed") {
+        if (state.stage === "lead-outcome-uncertain") {
+          state.historicalLeadAttempts = [{
+            marker: state.leadMarker, submitClicks: 1,
+            outcome: "no-persisted-lead-authoritatively-verified",
+          }];
+          state.actionCounts.leadSubmit = 0;
+        } else {
+          state.preSubmitDiagnosticResumeCount = 1;
+        }
         state.leadMarker = `Task13 approved lead ${randomBytes(8).toString("hex")}`;
-        state.actionCounts.leadSubmit = 0;
         state.leadOutcome = "approved-new-attempt-not-clicked";
         state.stage = "generation-verified";
         await saveCheckpoint(state);

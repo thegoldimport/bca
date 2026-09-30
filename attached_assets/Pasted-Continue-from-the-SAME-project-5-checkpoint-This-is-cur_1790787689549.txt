@@ -1,0 +1,363 @@
+Continue from the SAME project 5 checkpoint.
+
+This is currently an ACCEPTANCE-HARNESS diagnosis.
+
+There is NOT yet evidence of a BuildCustom platform failure or generated-app
+failure from this latest run.
+
+CURRENT STATE
+
+Project:
+5
+
+Agent:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Revision:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Authoritative database:
+12 leads
+IDs 1–12
+
+Historical failed Submit click:
+1
+
+New explicitly approved controlled Submit clicks:
+0
+
+No new mutation occurred.
+
+Do NOT:
+- modify production code
+- modify generated project source
+- deploy anything
+- publish
+- send an AI edit
+- click Submit until the inspection below passes
+- print any preview capability/token
+
+==================================================
+PHASE 1 — INSPECT THE ACTUAL RENDERED FORM
+==================================================
+
+Open Add Lead normally through the generated CRM UI.
+
+Do not submit it.
+
+Inspect the actual rendered form and identify every field relevant to the
+generated submit handler.
+
+For each field report:
+
+- visible label
+- element type
+- input/select/textarea
+- name attribute if present
+- current DOM value
+- whether it is required by generated client logic
+- whether it is required by generated server logic
+- available select options if applicable
+- selector currently used by the harness
+- whether that selector resolves to exactly one intended element
+
+Specifically establish the actual UI controls corresponding to:
+
+- name
+- phone
+- email
+- project_type
+- status
+- estimated_value
+- notes
+
+Do not assume labels/selectors from the source match the rendered DOM.
+
+==================================================
+PHASE 2 — IDENTIFY WHY THE HARNESS CHECK FAILED
+==================================================
+
+Inspect the existing local harness validation.
+
+Determine exactly why the previous combined check failed.
+
+Classify it as one of:
+
+A. wrong selector
+B. selector matched wrong element
+C. selector matched multiple elements
+D. typing did not update rendered DOM
+E. controlled React state reverted the value
+F. required select option/value mismatch
+G. field does not exist in rendered form
+H. harness expected a field the form does not require
+I. form genuinely cannot accept a required value
+J. another exact cause
+
+Do NOT modify anything until the exact failing field(s) and reason are known.
+
+Report internally:
+
+FAILED FIELD:
+<field>
+
+EXPECTED:
+<value/state>
+
+OBSERVED:
+<value/state>
+
+CAUSE:
+<exact cause>
+
+==================================================
+PHASE 3 — FIX ONLY THE LOCAL HARNESS IF APPROPRIATE
+==================================================
+
+If the generated form itself is functional and the failure is caused by the
+acceptance harness:
+
+fix ONLY the local harness.
+
+Do not modify:
+- BuildCustom production code
+- control Worker
+- runtime Worker
+- gateway Worker
+- generated CRM source
+
+Use normal browser interaction.
+
+For text fields:
+- focus normally
+- clear normally if necessary
+- type normally
+- allow React input/change events to occur
+
+For selects:
+- inspect the actual available option values
+- select a valid existing option through normal browser interaction
+
+Do not:
+- assign React state directly
+- inject state
+- use evaluate() to bypass UI behavior
+- manually call the generated API
+- force DOM values after React rejects them
+
+==================================================
+PHASE 4 — FIELD-BY-FIELD PRE-SUBMIT GATE
+==================================================
+
+Replace the opaque combined validation with explicit field-by-field
+validation.
+
+Use a NEW unique disposable marker for this still-unsubmitted controlled
+attempt.
+
+Populate the form.
+
+Then verify EACH REQUIRED FIELD separately.
+
+At minimum:
+
+NAME
+expected: exact disposable name/marker
+observed: <actual>
+PASS/FAIL
+
+PROJECT TYPE
+expected: selected valid option
+observed: <actual>
+PASS/FAIL
+
+STATUS
+expected: selected valid option
+observed: <actual>
+PASS/FAIL
+
+Also report populated optional fields individually.
+
+Do not expose secrets/capabilities.
+
+Only proceed if ALL fields required by the generated client/server are
+visibly and correctly populated.
+
+If any required field fails:
+
+STOP.
+
+Do NOT click Submit.
+
+Return the exact field and reason.
+
+==================================================
+PHASE 5 — RECONFIRM MUTATION BASELINE
+==================================================
+
+Immediately before Submit, read-only verify:
+
+lead count = 12
+IDs = 1–12
+
+Also verify:
+
+new approved Submit click count = 0
+
+If either condition is false:
+
+STOP.
+
+==================================================
+PHASE 6 — ONE APPROVED SUBMIT
+==================================================
+
+ONLY if the field-by-field gate passes:
+
+Start the already-prepared redacted network capture.
+
+Then click Submit exactly ONCE.
+
+Increment the new approved click count to 1.
+
+Never automatically retry.
+
+Capture without exposing capability values:
+
+- OPTIONS if present
+- OPTIONS status
+- POST occurrence
+- POST count
+- POST status
+- request Content-Type
+- redacted request body
+- response status
+- response body
+- subsequent leads GET
+- subsequent stats GET
+- request/frame attribution
+
+==================================================
+PHASE 7 — VERIFY RESULT
+==================================================
+
+Read-only query the authoritative database.
+
+Successful expected result:
+
+lead count = 13
+
+Exactly one new lead should exist with the submitted unique marker and
+expected field values.
+
+Then verify the generated UI contains that lead.
+
+If:
+
+- exactly one POST occurred
+- HTTP response indicates success
+- exactly one new lead persisted
+- UI reflects it
+
+then:
+
+ADD LEAD: PASS
+
+There is NO activity-record requirement.
+
+If any of those fail:
+
+STOP.
+
+Do not retry.
+
+Return the exact evidence.
+
+==================================================
+PHASE 8 — CONTINUE CUSTOMER JOURNEY
+==================================================
+
+If ADD LEAD passes, continue immediately.
+
+Do not stop merely to report the pass.
+
+Send exactly:
+
+"Change the dashboard to a dark navy theme and add a recent leads section showing the five newest leads."
+
+Verify one AI edit, new revision, requested changes and working preview.
+
+Then:
+
+1. leave and reopen project 5
+2. verify conversation/files/revision/preview persistence
+3. initial BuildCustom Publish
+4. verify public generated-app URL
+5. verify public application functionality
+6. same-revision Publish Updates
+7. verify publish idempotency
+
+Then send exactly:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify one second edit, new revision and requested change.
+
+Publish Updates.
+
+Verify:
+- new immutable candidate/release
+- same stable public URL
+- public URL serves updated revision
+
+Then:
+- logout
+- login normally with retained test credential
+- verify complete persistence
+- perform basic independent-account ownership isolation
+- measure active publish claims
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact field that caused the previous harness gate failure
+2. root cause
+3. whether generated form itself was functional
+4. harness-only change made, if any
+5. field-by-field pre-submit results
+6. authoritative pre-submit lead count
+7. approved Submit click count
+8. OPTIONS result
+9. POST count/status
+10. generated response
+11. authoritative post-submit lead count
+12. persisted lead result
+13. generated UI result
+14. Add Lead PASS/FAIL
+15. first AI edit + revision
+16. reopen/persistence result
+17. initial publish release/script/public URL
+18. same-revision publish/idempotency result
+19. second AI edit + revision
+20. publish-update result
+21. returning-login result
+22. ownership-isolation result
+23. active publish claims
+24. serving runtime/control/gateway versions
+25. remaining concrete customer-facing blockers
+26. GO / NO-GO
+
+Never include preview capability/token values.
+
+If complete:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP.
+
+Do not begin billing, custom domains, cleanup, dependency upgrades,
+telemetry, or unrelated polish.
