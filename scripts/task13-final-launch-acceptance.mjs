@@ -33,6 +33,7 @@ const EXTENDED_PHASES = [
   "signup", "generate", "reconcileGeneration", "preview", "approvedLead",
   "verifyRecoveredForm", "approvedRecoveredLead", "instrumentedRecoveredLead",
   "postRepairApprovedLead",
+  "recoveredEdit1",
   "edit1", "reopen", "publish1", "publishSame", "edit2", "publishUpdate",
   "returning", "isolation",
 ];
@@ -2427,6 +2428,240 @@ async function instrumentedRecoveredLeadPhase({ postRepair = false } = {}) {
   }
 }
 
+async function recoveredEdit1Phase() {
+  const checkpoint = JSON.parse(await readFile(RECOVERY_CHECKPOINT, "utf8"));
+  assert.equal(checkpoint.stage, "post-repair-lead-pass-stop-before-edit1");
+  assert.equal(checkpoint.postRepairLeadAttempt?.acceptance?.status, "PASS");
+  assert.equal(checkpoint.postRepairLeadAttempt?.acceptance?.newLeadId, 13);
+  assert.equal(checkpoint.postRepairApprovedLeadSubmitClicks, 1);
+  assert(!checkpoint.edit1, "Edit1 has already been prepared; do not resend the instruction.");
+  const password = process.env.BUILDCUSTOM_TASK13_PROJECT5_PASSWORD;
+  assert(password, "Recovered owner credential is unavailable.");
+  const state = {
+    projectId: checkpoint.projectId, agentId: checkpoint.agentId,
+    userId: checkpoint.ownerUserId, identity: { email: checkpoint.ownerEmail, password },
+  };
+  assert.equal(state.projectId, 5);
+  let browser, page, audit, beforeRows;
+  const snapshot = async () => {
+    const [project, status, revisionBody, turnsBody, filesBody, releasesBody, htmlBody, appBody] =
+      await Promise.all([
+        apiGet(page, `/api/projects/${state.projectId}`, "Edit1 owner project"),
+        runtimeGet(page, state.projectId, "status"),
+        runtimeGet(page, state.projectId, "revision"),
+        runtimeGet(page, state.projectId, "turns"),
+        runtimeGet(page, state.projectId, "files"),
+        runtimeGet(page, state.projectId, "releases"),
+        apiGet(page, `/api/projects/${state.projectId}/runtime/files/content?path=public%2Findex.html`, "Edit1 HTML"),
+        apiGet(page, `/api/projects/${state.projectId}/runtime/files/content?path=public%2Fapp.jsx`, "Edit1 app source"),
+      ]);
+    const revision = (revisionBody?.commitHash || revisionBody?.revision?.commitHash || "").toLowerCase();
+    const files = Array.isArray(filesBody) ? filesBody : filesBody?.files;
+    const turns = Array.isArray(turnsBody) ? turnsBody : turnsBody?.turns;
+    const releases = Array.isArray(releasesBody) ? releasesBody : releasesBody?.releases;
+    assert.equal(String(project.userId), state.userId);
+    assert.equal(String(project.agentId), state.agentId);
+    assert.equal(status.nativeThink, true);
+    assert.match(revision, /^[a-f0-9]{40}$/);
+    assert(Array.isArray(turns) && Array.isArray(files) && Array.isArray(releases));
+    assert(files.some(file => file.path === "public/index.html"));
+    assert(files.some(file => file.path === "public/app.jsx"));
+    assert.equal(typeof htmlBody?.content, "string");
+    assert.equal(typeof appBody?.content, "string");
+    return { status, revision, turns, files, releases, html: htmlBody.content, app: appBody.content };
+  };
+  const idle = status => status.runtimeStatus === "ready" && status.state?.shouldBeGenerating === false
+    && status.state?.generation?.status === "idle";
+  const leadSummary = row => ({
+    id: Number(row.id), name: row.name, status: row.status,
+    projectType: row.project_type, estimatedValue: Number(row.estimated_value),
+  });
+  const previewProof = async () => {
+    const current = await runtimeGet(page, state.projectId, "status");
+    const previewUrl = previewUrlFromStatus(current);
+    assert(previewUrl, "The owner preview URL is unavailable.");
+    const frame = await previewFrame(page, previewUrl);
+    await frame.waitForFunction(() => /recent\s+leads/i.test(document.body?.innerText || ""),
+      { timeout: 60_000 });
+    const proof = await frame.evaluate(() => {
+      const visible = element => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      };
+      const heading = [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")]
+        .find(node => visible(node) && /^recent\s+leads$/i.test(node.textContent.trim()));
+      const section = heading?.closest("section") || heading?.parentElement?.parentElement;
+      const backgrounds = [...document.querySelectorAll("body,header,aside,nav,main,section,div")]
+        .filter(visible).map(node => {
+          const box = node.getBoundingClientRect();
+          return { color: getComputedStyle(node).backgroundColor, width: box.width, height: box.height };
+        }).filter(item => item.width >= 250 && item.height >= 40);
+      return {
+        headingVisible: !!heading, sectionText: section?.innerText?.slice(0, 3000) || "",
+        dashboardText: document.body?.innerText?.slice(0, 4500) || "",
+        backgrounds, stylesheetCount: document.styleSheets.length,
+        rootPopulated: (document.querySelector("#root")?.childElementCount || 0) > 0,
+      };
+    });
+    assert(proof.headingVisible && proof.rootPopulated && proof.stylesheetCount > 0);
+    assert(/dashboard/i.test(proof.dashboardText));
+    const newest = checkpoint.edit1.before.newestFive;
+    const positions = newest.map(lead => proof.sectionText.indexOf(lead.name));
+    assert(positions.every(position => position >= 0),
+      "Recent Leads section does not show all five newest authoritative leads.");
+    assert(positions.every((position, index) => index === 0 || positions[index - 1] < position),
+      "Recent Leads section is not newest-first.");
+    assert(!checkpoint.edit1.before.sixthNewestName
+      || !proof.sectionText.includes(checkpoint.edit1.before.sixthNewestName),
+    "Recent Leads section contains more than the intended five newest leads.");
+    const navyCount = proof.backgrounds.filter(({ color }) => {
+      const match = color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!match) return false;
+      const [red, green, blue] = match.slice(1).map(Number);
+      return red <= 45 && green <= 65 && blue <= 105 && blue > red && blue > green;
+    }).length;
+    assert(navyCount > checkpoint.edit1.before.navySurfaceCount,
+      "The rendered dashboard did not gain dark-navy surfaces compared with its pre-edit state.");
+    return { newestIds: newest.map(item => item.id), navyRendered: true,
+      recentLeadsRendered: true, stylesheetCount: proof.stylesheetCount };
+  };
+  try {
+    browser = await launchBrowser(RECOVERED_PROFILE);
+    page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 900 });
+    page.setDefaultTimeout(UI_TIMEOUT);
+    page.setDefaultNavigationTimeout(UI_TIMEOUT);
+    await ensureIdentity(page, state);
+    const projects = projectsArray(await apiGet(page, "/api/projects", "Edit1 owner project list"));
+    assert.equal(projects?.length, 1);
+    assert.equal(String(projects[0].id), String(state.projectId));
+    const before = await snapshot();
+    assert.equal(before.revision, checkpoint.revision);
+    assert(idle(before.status), "The agent has an unresolved generation operation.");
+    assert.equal(before.turns.filter(turn => turn.prompt === EDIT1_PROMPT).length, 0);
+    beforeRows = await authoritativeLeadRows(page, state);
+    assert.equal(beforeRows.length, 13);
+    assert.deepEqual(beforeRows.map(row => Number(row.id)), Array.from({ length: 13 }, (_, index) => index + 1));
+    assert.equal(beforeRows[12].name, checkpoint.postRepairLeadAttempt.marker);
+    const latest = [...beforeRows].sort((a, b) => Number(b.id) - Number(a.id));
+    await openEditor(page, state.projectId);
+    const previewUrl = previewUrlFromStatus(before.status);
+    assert(previewUrl);
+    const initialFrame = await previewFrame(page, previewUrl);
+    await initialFrame.waitForFunction(() => document.body?.innerText?.includes("Roofing Dashboard"),
+      { timeout: UI_TIMEOUT });
+    const initialNavySurfaceCount = await initialFrame.evaluate(() =>
+      [...document.querySelectorAll("body,header,aside,nav,main,section,div")]
+        .filter(node => {
+          const rect = node.getBoundingClientRect();
+          return rect.width >= 250 && rect.height >= 40;
+        }).filter(node => {
+          const match = getComputedStyle(node).backgroundColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+          if (!match) return false;
+          const [red, green, blue] = match.slice(1).map(Number);
+          return red <= 45 && green <= 65 && blue <= 105 && blue > red && blue > green;
+        }).length);
+    checkpoint.edit1 = {
+      instruction: EDIT1_PROMPT, clickReserved: false, agentInstructionsSent: 0,
+      before: {
+        revision: before.revision, leadCount: beforeRows.length,
+        leadDigest: createHash("sha256").update(JSON.stringify(beforeRows)).digest("hex"),
+        newestFive: latest.slice(0, 5).map(leadSummary), sixthNewestName: latest[5].name,
+        navySurfaceCount: initialNavySurfaceCount,
+        releaseCount: before.releases.length, filePaths: before.files.map(file => file.path),
+      },
+      outcome: "preparing-one-instruction",
+    };
+    checkpoint.stage = "edit1-preparing";
+    await saveRecoveredCheckpoint(checkpoint);
+    audit = attachSuggestionAudit(page);
+    await audit.waitFor(EDIT1_PROMPT, 0, 1);
+    const immediatelyBefore = await snapshot();
+    assert.equal(immediatelyBefore.revision, before.revision);
+    assert(idle(immediatelyBefore.status), "Agent stopped being idle before edit1.");
+    assert.equal(immediatelyBefore.turns.filter(turn => turn.prompt === EDIT1_PROMPT).length, 0);
+    assert.deepEqual(await authoritativeLeadRows(page, state), beforeRows);
+    const input = page.locator('[data-testid="input-editor-chat"]');
+    await input.fill(EDIT1_PROMPT);
+    checkpoint.edit1.clickReserved = true;
+    checkpoint.stage = "edit1-instruction-pending-no-retry";
+    await saveRecoveredCheckpoint(checkpoint);
+    await page.locator('[data-testid="button-send-chat"]').click();
+    checkpoint.edit1.agentInstructionsSent = 1;
+    await saveRecoveredCheckpoint(checkpoint);
+    await audit.waitFor(EDIT1_PROMPT, 1, 15_000);
+    await waitForNativeUiSuccess(page);
+    let after;
+    let stable = 0;
+    const deadline = Date.now() + GENERATION_TIMEOUT;
+    while (Date.now() < deadline && stable < 2) {
+      after = await snapshot();
+      stable = after.revision !== before.revision && idle(after.status) ? stable + 1 : 0;
+      if (stable < 2) await new Promise(resolve => setTimeout(resolve, 4_000));
+    }
+    assert.equal(stable, 2, "Agent did not settle on a new stable authoritative revision.");
+    assert.equal(after.turns.filter(turn => turn.prompt === EDIT1_PROMPT).length, 1);
+    assert.notEqual(after.revision, before.revision);
+    assert(/recent.{0,20}leads/i.test(`${after.html}\n${after.app}`),
+      "Authoritative files lack a recent-leads section.");
+    assert.deepEqual(after.releases, before.releases, "An unexpected release/publish occurred.");
+    assert.deepEqual(await authoritativeLeadRows(page, state), beforeRows, "Edit1 changed lead records.");
+    await page.goto(`${BASE}/app/project/${state.projectId}`, { waitUntil: "domcontentloaded" });
+    await openEditor(page, state.projectId);
+    const reopened = await snapshot();
+    assert.equal(reopened.revision, after.revision, "Reopen resolved to a different revision.");
+    assert(idle(reopened.status));
+    assert.equal(reopened.turns.filter(turn => turn.prompt === EDIT1_PROMPT).length, 1);
+    assert.equal(reopened.html, after.html);
+    assert.equal(reopened.app, after.app);
+    assert.deepEqual(reopened.releases, before.releases);
+    const proof = await previewProof();
+    assert.deepEqual(await authoritativeLeadRows(page, state), beforeRows);
+    checkpoint.edit1.outcome = "PASS";
+    checkpoint.edit1.after = {
+      revision: after.revision, leadCount: 13, newestFiveIds: proof.newestIds,
+      allLeadRowsUnchanged: true, duplicateCreated: false,
+      newStableRevision: true, reopenedSameRevision: true,
+      authoritativeFilesPresent: true, ...proof,
+      unexpectedPublish: false, unintendedMutation: false,
+    };
+    checkpoint.stage = "edit1-pass-stop-before-next-step";
+    await saveRecoveredCheckpoint(checkpoint);
+    report("recovered-edit1-pass", { preEditRevision: before.revision, ...checkpoint.edit1.after,
+      agentInstructionsSent: checkpoint.edit1.agentInstructionsSent });
+  } catch (error) {
+    if (checkpoint.edit1 && checkpoint.stage !== "edit1-pass-stop-before-next-step") {
+      let observed = null;
+      if (page) {
+        try {
+          const latest = await snapshot();
+          const rows = await authoritativeLeadRows(page, state);
+          observed = {
+            revision: latest.revision, idle: idle(latest.status),
+            exactInstructionTurns: latest.turns.filter(turn => turn.prompt === EDIT1_PROMPT).length,
+            leadCount: rows.length, leadDigestMatches: !!beforeRows &&
+              createHash("sha256").update(JSON.stringify(rows)).digest("hex") ===
+                checkpoint.edit1.before.leadDigest,
+            releaseCount: latest.releases.length,
+          };
+        } catch { /* Preserve the no-retry guard if read-only reconciliation fails. */ }
+      }
+      checkpoint.edit1.outcome = checkpoint.edit1.clickReserved
+        ? "ambiguous-or-failed-no-retry" : "pre-instruction-failure";
+      checkpoint.edit1.failure = safeError(error);
+      checkpoint.edit1.readOnlyAfterFailure = observed;
+      checkpoint.stage = checkpoint.edit1.clickReserved
+        ? "edit1-blocked-no-retry" : "edit1-preflight-blocked";
+      await saveRecoveredCheckpoint(checkpoint);
+      report("recovered-edit1-fail", { error: safeError(error), observed, noRetry: true });
+    }
+    throw error;
+  } finally {
+    await audit?.close();
+    if (browser) await browser.close();
+  }
+}
+
 async function previewPhase({ approved = false } = {}) {
   const state = await readCheckpoint();
   if (approved) {
@@ -3749,6 +3984,7 @@ try {
   else if (phase === "approvedRecoveredLead") await recoveredApprovedLeadPhase();
   else if (phase === "instrumentedRecoveredLead") await instrumentedRecoveredLeadPhase();
   else if (phase === "postRepairApprovedLead") await instrumentedRecoveredLeadPhase({ postRepair: true });
+  else if (phase === "recoveredEdit1") await recoveredEdit1Phase();
   else if (phase === "edit1") await runEditPhase(1);
   else if (phase === "reopen") await reopenPhase();
   else if (phase === "publish1") await publish1Phase();

@@ -1,0 +1,121 @@
+AUTHORIZED: proceed to the next existing Task 13 acceptance step: `edit1`.
+
+Do NOT revisit the completed Add Lead test.
+
+Add Lead is ACCEPTED as PASS based on authoritative reconciliation:
+
+- exactly 1 authorized Submit click
+- click event observed
+- submit event observed
+- handler/fetch observed
+- exactly 1 POST /api/leads
+- HTTP 201
+- readable successful response
+- lead count 12 → 13
+- new lead ID 13
+- leads 1–12 unchanged
+- lead 13 values correct
+- Estimated Value stored as 12500
+- no duplicate
+- customer UI updated
+- no console/page errors
+- no unintended mutation
+
+The additional Origin-correlation harness assertion is informational for this acceptance result. Preserve its evidence, but do NOT modify the harness or reopen Add Lead based solely on that assertion.
+
+NEXT STEP: `edit1`
+
+Perform ONLY the already-planned edit1 operation:
+
+"the dark-navy dashboard and five newest leads"
+
+Use the SAME:
+- Project 5
+- owner account
+- agent
+- current accepted workflow
+- durable Task 13 checkpoint
+
+Before edit1:
+
+1. Record the current authoritative revision.
+2. Confirm Project 5 still has 13 leads.
+3. Record the current five newest leads so their pre-edit state is known.
+4. Preserve lead 13 and the completed Add Lead evidence.
+5. Confirm there are zero active/unresolved mutation operations before starting.
+
+Then perform exactly ONE edit1 instruction through the normal BuildCustom customer workflow.
+
+Do not manually edit generated-app files.
+Do not directly modify the generated-app database.
+Do not submit another Add Lead form.
+Do not perform edit2 or any later acceptance step.
+Do not automatically resend/retry the edit instruction if the result is ambiguous.
+
+Observe the normal agent lifecycle through completion.
+
+After edit1 completes, verify:
+
+A. REVISION
+- a new stable authoritative revision exists
+- it differs from the pre-edit revision
+- reopen resolves to that same revision
+
+B. UI CHANGE
+- dashboard has the requested dark-navy treatment
+- requested visual change is actually rendered in preview, not merely present in source
+
+C. DATA CHANGE
+- the five newest leads reflect exactly the edit1 requirement
+- verify their authoritative database state
+- leads outside the intended five are unchanged
+- no duplicate leads were created
+- total lead count remains 13 unless the existing edit1 specification explicitly requires otherwise
+
+D. PERSISTENCE
+- reopen Project 5
+- authoritative files remain present
+- edit1 result remains present
+- lead/database state remains correct
+
+E. SAFETY
+- no cross-account impact
+- no unintended mutation
+- no extra agent instruction/retry
+- no unexpected publish/deployment operation
+
+If edit1 fails or becomes ambiguous:
+
+STOP.
+
+Do not retry the edit.
+Do not repair anything.
+Do not proceed to another acceptance step.
+
+Preserve the evidence and report the earliest confirmed failure.
+
+If edit1 passes:
+
+Update the durable non-secret Task 13 checkpoint and STOP before the next acceptance step.
+
+Return:
+
+Pre-edit revision:
+Post-edit revision:
+Agent instructions sent: 1
+Agent lifecycle result:
+New stable revision: YES/NO
+Dark-navy dashboard rendered: PASS/FAIL
+Lead count before → after:
+Five newest lead IDs:
+Five newest leads correct: PASS/FAIL
+Other leads unchanged: YES/NO
+Duplicate leads created: YES/NO
+Reopen/persistence: PASS/FAIL
+Authoritative files: PASS/FAIL
+Unexpected deployment/publish: YES/NO
+Unintended mutation: YES/NO
+edit1 acceptance: PASS/FAIL
+Exact next Task 13 step:
+
+Then STOP.

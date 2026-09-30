@@ -31,7 +31,7 @@
       12
     ]
   },
-  "stage": "post-repair-lead-pass-stop-before-edit1",
+  "stage": "edit1-blocked-no-retry",
   "formVerification": {
     "result": "PASS",
     "method": "browser-typed fields in the live same-owner generated-app preview",
@@ -597,5 +597,73 @@
       "nextTask13Step": "edit1: dark navy dashboard and five newest leads, pending separate authorization"
     }
   },
-  "postRepairApprovedLeadSubmitClicks": 1
+  "postRepairApprovedLeadSubmitClicks": 1,
+  "edit1": {
+    "instruction": "Change the dashboard to a dark navy theme and add a recent leads section showing the five newest leads.",
+    "clickReserved": true,
+    "agentInstructionsSent": 1,
+    "before": {
+      "revision": "d4bc4b85d03cfaf55326d078f08b9446b98e68b1",
+      "leadCount": 13,
+      "leadDigest": "9ed571b4a337a686949eb6004359bb042d699438971eb599a69ffa866b4a2764",
+      "newestFive": [
+        {
+          "id": 13,
+          "name": "Task13 repaired lead ba0bec6ccaaa6196",
+          "status": "New Lead",
+          "projectType": "Architectural Shingle Replacement",
+          "estimatedValue": 12500
+        },
+        {
+          "id": 12,
+          "name": "Samuel Brooks",
+          "status": "Follow Up",
+          "projectType": "Architectural Shingle Replacement",
+          "estimatedValue": 19200
+        },
+        {
+          "id": 11,
+          "name": "Karen Higgins",
+          "status": "Estimate Sent",
+          "projectType": "Roof Inspection & Leak Repair",
+          "estimatedValue": 4500
+        },
+        {
+          "id": 10,
+          "name": "Dr. Aris Thorne",
+          "status": "Job Won",
+          "projectType": "Architectural Shingle Replacement",
+          "estimatedValue": 24800
+        },
+        {
+          "id": 9,
+          "name": "Patrick O'Connor",
+          "status": "Lost",
+          "projectType": "Architectural Shingle Replacement",
+          "estimatedValue": 14200
+        }
+      ],
+      "sixthNewestName": "Clara Thorne",
+      "navySurfaceCount": 1,
+      "releaseCount": 0,
+      "filePaths": [
+        ".think/space.json",
+        "package.json",
+        "public/app.jsx",
+        "public/index.html",
+        "src/index.ts",
+        "wrangler.json"
+      ]
+    },
+    "outcome": "ambiguous-or-failed-no-retry",
+    "failure": "UI did not submit exactly the expected prompt over the normal builder connection. 0 !== 1",
+    "readOnlyAfterFailure": {
+      "revision": "d4bc4b85d03cfaf55326d078f08b9446b98e68b1",
+      "idle": true,
+      "exactInstructionTurns": 0,
+      "leadCount": 13,
+      "leadDigestMatches": true,
+      "releaseCount": 0
+    }
+  }
 }
