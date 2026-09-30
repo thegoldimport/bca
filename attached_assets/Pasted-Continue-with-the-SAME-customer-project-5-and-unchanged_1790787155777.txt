@@ -1,0 +1,339 @@
+Continue with the SAME customer, project 5, and unchanged initial revision.
+
+IMPORTANT CORRECTION TO ACCEPTANCE CRITERIA:
+
+An activity record is NOT required.
+
+The original customer prompt requested a roofing CRM with leads. It did not
+request an activity table or activity history.
+
+Therefore:
+
+- do NOT modify the generated app to add an activity table
+- do NOT modify the POST handler to create activity
+- do NOT fail acceptance because activity functionality was not generated
+
+The forensic investigation authoritatively proved that the previous Submit
+click persisted ZERO new leads.
+
+The database still contains exactly the original 12 seeded leads, IDs 1–12.
+
+Therefore there is no duplicate persisted mutation from the prior attempt.
+
+We are approving ONE NEW CONTROLLED Add Lead attempt, but ONLY after improving
+the LOCAL ACCEPTANCE HARNESS as described below.
+
+Do NOT deploy production code before this attempt.
+
+Do NOT modify generated project source.
+
+CURRENT PROJECT
+
+Project:
+5
+
+Agent:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Revision:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Current authoritative database baseline:
+
+12 leads
+IDs 1–12
+no lead from previous test attempt
+
+==================================================
+PHASE 1 — IMPROVE LOCAL ACCEPTANCE OBSERVABILITY
+==================================================
+
+Modify ONLY the local acceptance harness.
+
+The purpose is to ensure that if the next attempt fails, we know WHERE it
+failed.
+
+Do not deploy this harness as production application code.
+
+Before clicking Submit, the harness must establish that the generated React
+form actually contains the intended values.
+
+Do not rely only on assigning DOM input.value.
+
+Interact with the form the same way a real user would, using normal browser
+typing/input behavior that triggers React's controlled-input events.
+
+Use clearly disposable values with a unique marker.
+
+Before Submit verify from the rendered UI:
+
+- Name field visibly contains expected name/marker
+- Project Type contains a valid value
+- Status contains a valid value
+- other populated fields visibly contain their intended values
+
+Where safely observable, confirm the generated form is no longer in a state
+that would trigger its:
+
+if (!formData.name)
+
+early return.
+
+Do NOT modify React state directly.
+
+Do NOT inject JavaScript to bypass the UI.
+
+==================================================
+PHASE 2 — CAPTURE REDACTED NETWORK EVIDENCE
+==================================================
+
+For this ONE attempt retain enough browser evidence to establish:
+
+- OPTIONS request, if browser sends one
+- OPTIONS status
+- POST request
+- POST status
+- request Content-Type
+- request body fields, excluding secrets
+- generated response status/body
+- subsequent leads GET
+- subsequent stats GET
+
+Record request initiator/frame so BuildCustom parent-page traffic remains
+distinguishable from generated-preview traffic.
+
+IMPORTANT:
+
+Preview capability/token values are sensitive.
+
+Never print or persist their values.
+
+Redact them from:
+
+- URLs
+- headers
+- reports
+- logs produced by the acceptance harness
+
+It is acceptable to record:
+
+capability_present = true/false
+
+but not its value.
+
+Do not alter production logging for this task.
+
+==================================================
+PHASE 3 — ESTABLISH BASELINE
+==================================================
+
+Before mutation, perform a read-only authoritative check.
+
+Require:
+
+lead count = 12
+
+Record the highest lead ID and existing IDs.
+
+Also confirm through the browser that the generated CRM currently renders and
+its normal leads/stats reads succeed.
+
+If the baseline differs unexpectedly, STOP.
+
+==================================================
+PHASE 4 — ONE CONTROLLED ADD LEAD ATTEMPT
+==================================================
+
+Reset the local no-retry counter for this NEW explicitly approved attempt.
+
+The historical failed click remains recorded separately.
+
+Allow exactly ONE new Submit click.
+
+Before clicking:
+
+- verify required fields are visibly populated
+- verify the unique marker is visible in the Name field
+- start network capture
+
+Then click Submit exactly once.
+
+Do not retry automatically under any circumstance.
+
+Observe the complete result.
+
+==================================================
+PHASE 5 — CLASSIFY THE REQUEST PATH
+==================================================
+
+Immediately determine:
+
+Did OPTIONS occur?
+
+If yes:
+- status?
+- did it pass capability validation?
+- was it side-effect-free?
+
+Did POST occur?
+
+If yes:
+- exactly how many POST requests?
+- did capability authorization succeed?
+- did it reach generated-app dispatch?
+- what HTTP status returned?
+- what response body returned?
+- was the response browser-readable?
+
+Do not infer these from UI behavior when network evidence exists.
+
+==================================================
+PHASE 6 — VERIFY AUTHORITATIVE PERSISTENCE
+==================================================
+
+After the single attempt, perform a read-only authoritative database check.
+
+Expected successful state:
+
+lead count = 13
+
+Exactly ONE new lead should exist.
+
+Verify:
+
+- new ID
+- expected name/unique marker
+- expected project type
+- expected status
+- other submitted values as applicable
+
+Then verify browser behavior:
+
+- generated UI shows the new lead
+- subsequent leads GET includes it
+- stats refresh appropriately if the generated application is designed to
+  reflect the new lead
+
+There is NO activity-record requirement.
+
+==================================================
+PHASE 7 — DECISION
+==================================================
+
+If:
+
+- exactly one POST occurred
+- POST succeeded
+- exactly one lead persisted
+- generated UI reflects the new lead
+
+then:
+
+ADD LEAD: PASS
+
+and immediately continue the launch-readiness journey.
+
+If it fails:
+
+STOP.
+
+Do not retry.
+
+Return the exact captured request stage that failed.
+
+==================================================
+PHASE 8 — CONTINUE JOURNEY IF ADD LEAD PASSES
+==================================================
+
+Send exactly ONE first AI edit:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+
+- exactly one edit
+- new revision
+- requested changes appear
+- preview works
+- reads work
+- Add Lead functionality remains available
+
+Then:
+
+1. leave project
+2. return to dashboard
+3. reopen same project
+4. verify conversation/files/revision/preview persistence
+5. initial BuildCustom Publish
+6. verify public *.apps.buildcustom.ai URL
+7. verify public HTML/CSS/JS/data behavior
+8. same-revision Publish Updates
+9. verify no duplicate immutable deployment
+
+Then send exactly:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify:
+
+- exactly one second edit
+- new revision
+- requested button appears
+- preview remains functional
+
+Publish Updates.
+
+Verify:
+
+- new immutable candidate/release
+- stable public URL remains unchanged
+- public URL serves the updated revision
+
+Then:
+
+- logout
+- login normally with retained disposable credential
+- verify project/conversation/files/latest revision/preview/public URL persist
+- perform basic second-account ownership isolation
+- measure active publish claims
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. pre-submit authoritative lead count
+2. confirmation React form was populated through normal browser interaction
+3. OPTIONS result
+4. POST result and count
+5. generated response
+6. post-submit authoritative lead count
+7. persisted lead result
+8. generated UI result
+9. Add Lead PASS/FAIL
+10. first AI edit + revision
+11. reopen/persistence result
+12. initial publish release/script/public URL
+13. same-revision publish result
+14. second AI edit + revision
+15. publish-update result
+16. returning-login result
+17. ownership-isolation result
+18. active publish claims
+19. serving runtime/control/gateway versions
+20. remaining concrete customer-facing BLOCKERS
+21. GO / NO-GO
+
+Do not include preview capability/token values anywhere in the report.
+
+If the complete journey passes:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP.
+
+Do not begin billing, custom domains, cleanup, dependency upgrades, telemetry,
+or unrelated polish.

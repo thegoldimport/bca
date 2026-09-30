@@ -28,7 +28,7 @@ const UI_TIMEOUT = 90_000;
 const GENERATION_TIMEOUT = 8 * 60_000;
 const phase = process.argv[2];
 const EXTENDED_PHASES = [
-  "signup", "generate", "reconcileGeneration", "preview",
+  "signup", "generate", "reconcileGeneration", "preview", "approvedLead",
   "edit1", "reopen", "publish1", "publishSame", "edit2", "publishUpdate",
   "returning", "isolation",
 ];
@@ -56,6 +56,7 @@ function safeError(error) {
         return "[redacted-url]";
       }
     })
+    .replace(/([?&]t=)[^&\s"'<>]+/gi, "$1[redacted]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
     .replace(/\b(password|passwd|token|secret|authorization|cookie|csrf)\b["']?(\s*[:=]\s*)["']?([^"'\s,;}]+)/gi,
       "$1$2[redacted]")
@@ -149,6 +150,42 @@ async function readCheckpoint({ required = true } = {}) {
     if (!required && error?.code === "ENOENT") return null;
     throw new Error(`Checkpoint is unavailable, unsafe, or invalid: ${safeError(error)}`);
   }
+}
+
+// The owner-only stock database inspector reads the same branch-specific App
+// Facet as the generated preview. Never use a preview capability for this.
+async function authoritativeLeadRows(page, state) {
+  const cookies = (await page.cookies(BASE))
+    .filter(cookie => ["accessToken", "csrf-token"].includes(cookie.name))
+    .map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
+  assert(cookies.includes("accessToken="), "Owner session is unavailable for the read-only database check.");
+  const url = new URL(`/api/agent/${state.agentId}/db/query`, RUNTIME);
+  for (const [key, value] of Object.entries({
+    branch: "main", table: "leads", limit: "100", offset: "0", orderBy: "id", orderDir: "asc",
+  })) url.searchParams.set(key, value);
+  const response = await fetch(url, {
+    method: "GET", headers: { Accept: "application/json", Cookie: cookies },
+    signal: AbortSignal.timeout(30_000),
+  });
+  assert.equal(response.status, 200, "Owner-only database inspector was unavailable.");
+  const body = await response.json();
+  assert.equal(body?.success, true, "Owner-only database inspection failed.");
+  assert.equal(body?.data?.branch, "main");
+  assert.equal(body?.data?.table, "leads");
+  const rows = body.data.rows;
+  assert(Array.isArray(rows) && rows.length === body.data.totalCount,
+    "Authoritative database result was incomplete; do not mutate.");
+  return rows;
+}
+
+function assertApprovedLeadBaseline(rows, state) {
+  const ids = rows.map(row => Number(row.id)).sort((a, b) => a - b);
+  assert.equal(rows.length, 12, "Lead baseline changed; stop without submitting.");
+  assert.deepEqual(ids, Array.from({ length: 12 }, (_, index) => index + 1),
+    "Lead IDs differ from the verified seed-only baseline; stop without submitting.");
+  assert(!rows.some(row => Object.values(row).some(value => value === state.leadMarker)),
+    "The marker already exists in the authoritative database.");
+  return { count: rows.length, highestId: ids.at(-1), ids };
 }
 
 async function launchBrowser() {
@@ -663,8 +700,15 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
           accessControlAllowMethods: headers["access-control-allow-methods"] || null,
           accessControlAllowHeaders: headers["access-control-allow-headers"] || null,
         };
+        if (found.method === "POST" && url.pathname.endsWith("/api/leads")) {
+          void response.text().then(text => {
+            found.leadResponseBody = redactedLeadFields(text);
+            found.responseBodyReadable = true;
+          }).catch(() => { found.responseBodyReadable = false; });
+        }
         if (response.status() >= 200 && response.status() < 400
-          && ["document", "stylesheet", "script", "fetch", "xhr"].includes(found.resourceType)) {
+          && ["document", "stylesheet", "script", "fetch", "xhr"].includes(found.resourceType)
+          && !(found.method === "POST" && url.pathname.endsWith("/api/leads"))) {
           void response.text().then(text => {
             found.responseBodyReadable = true;
             found.responseBodyLength = text.length;
@@ -689,7 +733,7 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
       else corsErrors.push({ requestId: null, resourceType: "page", failure });
     }
   });
-  return { requests, failed, corsErrors, parentPageHttpErrors, platformTelemetryErrors };
+  return { requests, failed, corsErrors, parentPageHttpErrors, platformTelemetryErrors, previewUrl: expectedPreviewUrl };
 }
 
 function attachPreviewAudit(page, expectedPreviewUrl = null) {
@@ -1261,8 +1305,8 @@ function correlatedLeadTransport(audit, marker) {
   const unsafeHeaders = post.headerNames.filter(name =>
     !/^(?:accept|accept-language|content-language|content-type|origin|referer|user-agent|accept-encoding|connection|host|content-length|cache-control|pragma|sec-.*)$/i.test(name));
   const preflightRequired = !simpleContentType || unsafeHeaders.length > 0;
-  if (preflightRequired) {
-    assert.equal(options.length, 1, "Expected exactly one OPTIONS preflight correlated to the exact POST URL/query and method.");
+  if (preflightRequired && options.length) {
+    assert.equal(options.length, 1, "Multiple OPTIONS preflights were observed for the exact POST URL/query and method.");
     const preflight = options[0];
     assert.equal(preflight.headers.origin || "", postOrigin,
       "OPTIONS preflight Origin did not match the unique-marker POST Origin.");
@@ -1284,15 +1328,127 @@ function correlatedLeadTransport(audit, marker) {
       .split(",").map(value => value.trim().toLowerCase()).filter(Boolean);
     assert(requestedHeaders.every(header => allowedHeaders.includes(header) || allowedHeaders.includes("*")),
       "Correlated preflight did not allow all requested headers.");
-  } else {
+  } else if (!preflightRequired) {
     assert.equal(options.length, 0, "A simple lead POST unexpectedly had a correlated OPTIONS request.");
   }
   return {
     postRequestId: post.requestId, postUrl: safeObservedUrl(post.url), postStatus: post.status,
     correlatedOptionsRequestIds: options.map(item => item.requestId),
-    preflightRequired, preflightStatus: options[0]?.status ?? null,
+    preflightRequired, preflightObserved: options.length > 0,
+    preflightStatus: options[0]?.status ?? null,
     corsErrors: audit.corsErrors.length,
   };
+}
+
+const LEAD_FIELDS = new Set([
+  "id", "name", "phone", "email", "address", "project_type", "status",
+  "estimated_value", "notes", "roof_size_sq", "pitch", "scheduled_date",
+  "created_at", "updated_at", "error", "message",
+]);
+
+function redactedLeadFields(raw) {
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { bodyShape: "non-object" };
+    const fields = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!LEAD_FIELDS.has(key) || !["string", "number", "boolean"].includes(typeof value)) continue;
+      fields[key] = typeof value === "string" ? safeError(value) : value;
+    }
+    return fields;
+  } catch {
+    return { bodyShape: "not-json" };
+  }
+}
+
+function leadEndpoint(url) {
+  try {
+    const path = new URL(url).pathname;
+    if (path.endsWith("/api/leads")) return "leads";
+    if (path.endsWith("/api/stats")) return "stats";
+  } catch { /* Invalid or internal URL. */ }
+  return null;
+}
+
+async function attachLeadCdpAudit(page, previewUrl) {
+  const session = await page.createCDPSession();
+  await session.send("Network.enable");
+  const requests = new Map();
+  session.on("Network.requestWillBeSent", event => {
+    const endpoint = leadEndpoint(event.request.url);
+    if (!endpoint || !["OPTIONS", "POST", "GET"].includes(event.request.method)) return;
+    const fromPreview = isPreviewAuditRequest(previewUrl, event.request.url, event.documentURL || "");
+    const headers = event.request.headers || {};
+    const header = name => Object.entries(headers).find(([key]) => key.toLowerCase() === name)?.[1] || null;
+    requests.set(event.requestId, {
+      requestId: event.requestId, endpoint, method: event.request.method,
+      initiator: fromPreview ? "generated-preview" : "parent-page",
+      frameId: event.frameId || null,
+      capability_present: new URL(event.request.url).searchParams.has("t"),
+      contentType: header("content-type"),
+      accessControlRequestMethod: header("access-control-request-method"),
+      status: null, finished: false,
+    });
+  });
+  session.on("Network.responseReceived", event => {
+    const entry = requests.get(event.requestId);
+    if (entry) entry.status = event.response.status;
+  });
+  session.on("Network.loadingFinished", event => {
+    const entry = requests.get(event.requestId);
+    if (entry) entry.finished = true;
+  });
+  session.on("Network.loadingFailed", event => {
+    const entry = requests.get(event.requestId);
+    if (entry) entry.failure = safeError(event.errorText);
+  });
+  return { requests, close: () => session.detach().catch(() => undefined) };
+}
+
+function leadAttemptEvidence(audit, from, cdp, marker, baseline, postRows, visible) {
+  const requests = audit.requests.slice(from).filter(item =>
+    leadEndpoint(item.url) && ["OPTIONS", "POST", "GET"].includes(item.method));
+  return {
+    baseline, authoritativeAfter: postRows
+      ? { count: postRows.length, ids: postRows.map(row => row.id),
+        matchingIds: postRows.filter(row => row.name === marker).map(row => row.id) }
+      : { available: false },
+    ui: visible,
+    browserRequests: requests.map(item => ({
+      requestId: item.requestId, method: item.method, endpoint: leadEndpoint(item.url),
+      initiator: isPreviewAuditRequest(audit.previewUrl, item.url, item.initiatorFrameUrl)
+        ? "generated-preview" : "parent-page",
+      resourceType: item.resourceType,
+      capability_present: new URL(item.url).searchParams.has("t"),
+      status: item.status ?? null,
+      contentType: item.headers.contentType,
+      accessControlRequestMethod: item.headers.accessControlRequestMethod,
+      responseHeaders: item.responseHeaders || null,
+      requestBodyFields: item.method === "POST" ? redactedLeadFields(item.bodyText || "") : undefined,
+      responseBodyFields: item.method === "POST" ? item.leadResponseBody || null : undefined,
+      responseBodyReadable: item.responseBodyReadable === true,
+    })),
+    cdpRequests: [...cdp.requests.values()].filter(item =>
+      item.initiator === "generated-preview" && ["OPTIONS", "POST", "GET"].includes(item.method)),
+    failedRequests: audit.failed.filter(item => leadEndpoint(item.url))
+      .map(item => ({ requestId: item.requestId, method: item.method,
+        endpoint: leadEndpoint(item.url), failure: safeError(item.failure) })),
+    corsErrorCount: audit.corsErrors.length,
+  };
+}
+
+async function saveLeadEvidence(evidence) {
+  const destination = path.join(PRIVATE_DIR, "approved-lead-evidence.json");
+  const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
+  const file = await open(temporary, "wx", 0o600);
+  try {
+    await file.writeFile(`${JSON.stringify(evidence)}\n`, "utf8");
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  await rename(temporary, destination);
+  await chmod(destination, 0o600);
 }
 
 async function markerVisibleInPreview(frame, marker) {
@@ -1338,7 +1494,7 @@ async function markLeadOutcomeUncertain(state) {
   await saveCheckpoint(state);
 }
 
-async function addLeadIfAvailable(page, frame, state, audit) {
+async function addLeadIfAvailable(page, frame, state, audit, { approved = false, authoritativeBaseline = null } = {}) {
   if (state.stage === "lead-submit-pending") {
     try {
       const found = await markerVisibleInPreview(frame, state.leadMarker);
@@ -1439,126 +1595,185 @@ async function addLeadIfAvailable(page, frame, state, audit) {
   state.leadOutcome = priorOutcome;
   await saveCheckpoint(state);
 
-  const fillResult = await frame.evaluate(marker => {
-    const visible = element => {
-      const box = element.getBoundingClientRect();
-      return box.width > 0 && box.height > 0;
-    };
-    const scope = [...document.querySelectorAll('[role="dialog"],dialog[open],form')]
-      .find(element => visible(element)
-        && [...element.querySelectorAll("input:not([type=hidden]),textarea,select")].some(visible));
-    if (!scope) return { nameSet: false, unfilledRequired: 0, submitIndex: -1, formFound: false };
-    const controls = [...scope.querySelectorAll("input:not([type=hidden]),textarea,select")]
-      .filter(element => {
-        return visible(element);
-      });
-    const details = controls.map(element => ({
-      tag: element.tagName.toLowerCase(),
-      type: (element.getAttribute("type") || "").toLowerCase(),
-      label: `${element.getAttribute("aria-label") || ""} ${element.getAttribute("placeholder") || ""} ${element.getAttribute("name") || ""} ${element.id || ""}`,
-      required: element.required,
-    }));
-    const values = [];
-    let nameSet = false;
-    for (let index = 0; index < controls.length; index += 1) {
-      const element = controls[index];
-      const detail = details[index];
-      const label = detail.label.toLowerCase();
-      let value = null;
-      if (detail.tag === "select") {
-        const options = [...element.options];
-        const option = options.find(item => item.value && /new|lead|roof|replacement/i.test(`${item.value} ${item.text}`))
-          || options.find(item => item.value);
-        if (option) value = option.value;
-      } else if (detail.type === "email" || /e-?mail/.test(label)) value = `lead-${marker.replace(/\W/g, "").toLowerCase()}@example.com`;
-      else if (detail.type === "tel" || /phone|tel/.test(label)) value = "+1-202-555-0144";
-      else if (/name|customer|contact/.test(label) && !nameSet) {
-        value = marker;
-        nameSet = true;
-      } else if (/notes|note|description|message/.test(label)) value = "Disposable Task 13 acceptance record";
-      else if (/value|estimate|revenue|amount/.test(label)) value = "12500";
-      else if (/project|type/.test(label)) value = "Roof replacement";
-      else if (detail.type === "number") value = "12500";
-      else if (detail.type === "text" && !nameSet) {
-        value = marker;
-        nameSet = true;
-      }
-      if (value !== null) {
-        if (detail.tag === "select") {
-          element.value = value;
-          element.dispatchEvent(new Event("change", { bubbles: true }));
-        } else {
-          const prototype = detail.tag === "textarea" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-          Object.getOwnPropertyDescriptor(prototype, "value").set.call(element, value);
-          element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
-          element.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-        values.push({ index, value, required: element.required });
-      }
-    }
-    const unfilledRequired = controls.map((element, index) => ({ element, index }))
-      .filter(({ element, index }) => element.required && !values.some(item => item.index === index));
-    const submitControls = [...scope.querySelectorAll("button,[role=button],input[type=submit]")]
-      .filter(element => /add|save|create|submit/i.test(element.textContent || element.value || ""));
-    const submit = submitControls.length === 1 ? submitControls[0] : null;
-    return { nameSet, unfilledRequired: unfilledRequired.length, submitText: submit?.textContent?.trim() || submit?.value || null,
-      submitIndex: submit ? [...document.querySelectorAll("button,[role=button],input[type=submit]")].indexOf(submit) : -1,
-      formFound: true, submitControlCount: submitControls.length };
-  }, state.leadMarker);
-  assert(fillResult.formFound, "Could not identify the actual Add Lead form; no mutation was made.");
-  assert(fillResult.nameSet, "Could not populate a name for the disposable lead.");
-  assert.equal(fillResult.unfilledRequired, 0, "Add Lead form has unsupported required fields; refusing incomplete submission.");
-  assert.equal(fillResult.submitControlCount, 1, "Add Lead form does not have one unambiguous submit button; no mutation was made.");
-  assert(fillResult.submitIndex >= 0, "Add Lead form has no identifiable submit button; no mutation was made.");
-
-  state.stage = "lead-submit-pending";
-  state.actionCounts.leadSubmit = 1;
-  state.leadOutcome = "submit-pending";
-  await saveCheckpoint(state);
-  await frame.evaluate(index => {
-    const submitButtons = [...document.querySelectorAll("button,[role=button],input[type=submit]")];
-    submitButtons[index]?.click();
-  }, fillResult.submitIndex);
-
-  const deadline = Date.now() + 30_000;
-  let visible = { count: 0, stillInForm: true };
-  while (Date.now() < deadline) {
-    visible = await markerVisibleInPreview(frame, state.leadMarker);
-    if (visible.count > 0 && !visible.stillInForm) break;
-    await new Promise(resolve => setTimeout(resolve, 500));
+  const email = `lead-${state.leadMarker.replace(/\W/g, "").toLowerCase()}@example.com`;
+  const phone = "+1-202-555-0144";
+  const notes = "Disposable Task 13 acceptance record";
+  async function typeVisible(selector, text) {
+    const element = await frame.$(selector);
+    assert(element, `Missing visible generated form field: ${selector}`);
+    await element.click({ clickCount: 3 });
+    await element.press("Backspace");
+    await element.type(text, { delay: 12 });
   }
+  await typeVisible('form input[placeholder="e.g. John Smith"]', state.leadMarker);
+  await typeVisible('form input[placeholder="(555) 000-0000"]', phone);
+  await typeVisible('form input[type="email"]', email);
+  await typeVisible('form input[placeholder="123 Main St, Austin TX"]', "123 Demo Street");
+  await typeVisible('form input[type="number"]', "12500");
+  await typeVisible("form textarea", notes);
+  const populated = await frame.evaluate(marker => {
+    const form = [...document.querySelectorAll("form")].find(element => {
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0 && element.querySelector('input[placeholder="e.g. John Smith"]');
+    });
+    if (!form) return { formFound: false };
+    const name = form.querySelector('input[placeholder="e.g. John Smith"]')?.value;
+    const phoneValue = form.querySelector('input[placeholder="(555) 000-0000"]')?.value;
+    const emailValue = form.querySelector('input[type="email"]')?.value;
+    const address = form.querySelector('input[placeholder="123 Main St, Austin TX"]')?.value;
+    const estimate = form.querySelector('input[type="number"]')?.value;
+    const notesValue = form.querySelector("textarea")?.value;
+    const selects = [...form.querySelectorAll("select")];
+    const project = selects[0];
+    const status = selects[1];
+    const submitControls = [...form.querySelectorAll('button[type="submit"],input[type="submit"]')]
+      .filter(element => /add|save|create|submit/i.test(element.textContent || element.value || ""));
+    return {
+      formFound: true, nameMatches: name === marker,
+      phoneMatches: phoneValue === "+1-202-555-0144",
+      emailMatches: emailValue === `lead-${marker.replace(/\W/g, "").toLowerCase()}@example.com`,
+      addressMatches: address === "123 Demo Street", estimateMatches: estimate === "12500",
+      notesMatches: notesValue === "Disposable Task 13 acceptance record",
+      projectType: project?.value || null, status: status?.value || null,
+      projectValid: !!project?.value && [...project.options].some(option => option.value === project.value),
+      statusValid: !!status?.value && [...status.options].some(option => option.value === status.value),
+      requiredFieldsValid: form.checkValidity(), submitCount: submitControls.length,
+      submitDisabled: submitControls[0]?.disabled ?? true,
+    };
+  }, state.leadMarker);
+  assert(populated.formFound && populated.nameMatches && populated.phoneMatches
+    && populated.emailMatches && populated.addressMatches && populated.estimateMatches
+    && populated.notesMatches && populated.projectValid && populated.statusValid
+    && populated.requiredFieldsValid && populated.submitCount === 1 && !populated.submitDisabled,
+  "The rendered React form did not retain all intended values after normal browser typing; no Submit click.");
+  if (approved) report("approved-lead-form-ready", {
+    projectId: state.projectId, formPopulatedByBrowserTyping: true, formValues: populated,
+    newlyApprovedSubmitClicks: state.actionCounts.leadSubmit,
+  });
+  const submit = await frame.$('form button[type="submit"],form input[type="submit"]');
+  assert(submit, "Generated Add Lead Submit control disappeared; no mutation was made.");
+  if (approved) {
+    assert(authoritativeBaseline, "Approved attempt requires an authoritative pre-submit baseline.");
+    // Recheck immediately before the one-way boundary, not only at phase start.
+    assertApprovedLeadBaseline(await authoritativeLeadRows(page, state), state);
+  }
+  const networkStart = audit.requests.length;
+  const cdp = await attachLeadCdpAudit(page, audit.previewUrl);
+  let afterRows = null;
+  let visible = null;
+  let attemptError = null;
+  let evidenceSaved = false;
   try {
-    assert(visible.count >= 1, "The UI did not show the submitted unique marker.");
-    assert.equal(visible.stillInForm, false, "Add Lead form remained open after submission.");
-    const postDeadline = Date.now() + 30_000;
-    let markerPosts = [];
-    while (Date.now() < postDeadline) {
-      markerPosts = audit.requests.filter(item => item.method === "POST"
-        && (requestContainsExactMarker(item, state.leadMarker) || urlContainsExactMarker(item.url, state.leadMarker)));
-      if (markerPosts.length > 1 || markerPosts.length === 1 && markerPosts[0].status !== undefined) break;
+    state.stage = "lead-submit-pending";
+    state.actionCounts.leadSubmit = 1;
+    state.leadOutcome = "submit-pending";
+    await saveCheckpoint(state);
+    await submit.click(); // Exactly one real browser click; never retry on failure.
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      visible = await markerVisibleInPreview(frame, state.leadMarker);
+      if (visible.count > 0 && !visible.stillInForm) break;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    await new Promise(resolve => setTimeout(resolve, 750));
+    afterRows = approved ? await authoritativeLeadRows(page, state) : null;
+    assert(visible?.count >= 1 && visible.stillInForm === false,
+      "Generated UI did not display the created lead after the single Submit click.");
+    const attemptRequests = audit.requests.slice(networkStart);
+    const posts = attemptRequests.filter(item => item.method === "POST"
+      && leadEndpoint(item.url) === "leads"
+      && isPreviewAuditRequest(audit.previewUrl, item.url, item.initiatorFrameUrl));
+    assert.equal(posts.length, 1, "Expected exactly one generated-preview leads POST.");
+    assert(requestContainsExactMarker(posts[0], state.leadMarker),
+      "POST did not contain the visible unique name marker.");
+    const cdpPosts = [...cdp.requests.values()].filter(item =>
+      item.method === "POST" && item.endpoint === "leads" && item.initiator === "generated-preview");
+    assert(cdpPosts.length <= 1, "CDP observed more than one generated-preview leads POST.");
+    assert.equal(posts[0].status, 201, "Generated lead POST did not return HTTP 201.");
+    const bodyDeadline = Date.now() + 5_000;
+    while (posts[0].responseBodyReadable === undefined && Date.now() < bodyDeadline) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    assert.equal(markerPosts.length, 1, "Mutation outcome is ambiguous: expected one marker-bearing POST.");
+    assert(posts[0].responseBodyReadable === true, "Generated POST response body was not browser-readable.");
     const transport = correlatedLeadTransport(audit, state.leadMarker);
     assert.equal(audit.failed.length, 0, "Preview application has a failed request.");
+    if (approved) {
+      assert.equal(afterRows.length, 13, "The authoritative lead count did not advance exactly once.");
+      const fresh = afterRows.filter(row => !authoritativeBaseline.ids.includes(Number(row.id)));
+      assert.equal(fresh.length, 1, "Expected exactly one new authoritative lead ID.");
+      assert.equal(fresh[0].name, state.leadMarker, "The new database lead does not match the visible name.");
+      assert.equal(fresh[0].phone, phone);
+      assert.equal(fresh[0].email, email);
+      assert.equal(fresh[0].notes, notes);
+      assert.equal(fresh[0].address, "123 Demo Street");
+      assert.equal(fresh[0].project_type, populated.projectType);
+      assert.equal(fresh[0].status, populated.status);
+      assert.equal(Number(fresh[0].estimated_value), 12500);
+      for (const endpoint of ["leads", "stats"]) {
+        assert(attemptRequests.some(item => item.method === "GET" && item.status === 200
+          && leadEndpoint(item.url) === endpoint
+          && isPreviewAuditRequest(audit.previewUrl, item.url, item.initiatorFrameUrl)),
+        `Generated ${endpoint} GET did not refresh successfully after the POST.`);
+      }
+    }
     const backendReadback = await exactMarkerBackendReadback(frame, audit, state.leadMarker);
+    if (approved) {
+      await saveLeadEvidence({
+        ...leadAttemptEvidence(audit, networkStart, cdp, state.leadMarker,
+          authoritativeBaseline, afterRows, visible),
+        result: "PASS", failure: null,
+        formPopulatedByBrowserTyping: true, formValues: populated,
+      });
+      evidenceSaved = true;
+    }
     state.leadOutcome = "verified-once";
     state.stage = "preview-verified";
     await saveCheckpoint(state);
     return {
       available: true, submitted: true, reconciled: false, uiMarkerOccurrences: visible.count,
+      formPopulatedByBrowserTyping: true, formValues: populated,
       transport, backendReadback,
+      ...(approved ? { authoritativeAfter: { count: afterRows.length,
+        newLeadIds: afterRows.filter(row => !authoritativeBaseline.ids.includes(Number(row.id))).map(row => row.id) } } : {}),
     };
   } catch (error) {
+    attemptError = error;
+    if (approved && !afterRows) {
+      try { afterRows = await authoritativeLeadRows(page, state); } catch { /* Keep transport evidence. */ }
+    }
     await markLeadOutcomeUncertain(state);
-    throw new Error(`Add Lead result could not be authoritatively verified; no retry will occur: ${safeError(error)}`);
+    throw new Error(`Add Lead result could not be verified; no retry will occur: ${safeError(error)}`);
+  } finally {
+    if (approved && !evidenceSaved) {
+      await saveLeadEvidence({
+        ...leadAttemptEvidence(audit, networkStart, cdp, state.leadMarker,
+          authoritativeBaseline, afterRows, visible),
+        result: attemptError ? "FAIL" : "PASS",
+        failure: attemptError ? safeError(attemptError) : null,
+        formPopulatedByBrowserTyping: true, formValues: populated,
+      });
+    }
+    await cdp.close();
   }
 }
 
-async function previewPhase() {
+async function previewPhase({ approved = false } = {}) {
   const state = await readCheckpoint();
-  assert(["generation-verified", "lead-submit-pending", "preview-verified"].includes(state.stage),
-    "Run generation first; failed/uncertain checkpoints are not retried.");
+  if (approved) {
+    assert.equal(state.projectId, 5, "The one approved attempt is restricted to existing project 5.");
+    assert.equal(state.agentId, "ccac2618-5f92-4d2f-b68f-ca9d2116325e");
+    assert.equal(state.initialRevision, "d4bc4b85d03cfaf55326d078f08b9446b98e68b1");
+    assert(
+      (state.stage === "lead-outcome-uncertain" && state.actionCounts.leadSubmit === 1
+        && !state.historicalLeadAttempts)
+      || (state.stage === "generation-verified" && state.actionCounts.leadSubmit === 0
+        && state.historicalLeadAttempts?.length === 1),
+      "This checkpoint is not eligible for the single newly approved attempt.",
+    );
+  } else {
+    assert(["generation-verified", "lead-submit-pending", "preview-verified"].includes(state.stage),
+      "Run generation first; failed/uncertain checkpoints are not retried.");
+  }
   let browser;
   try {
     browser = await launchBrowser();
@@ -1575,6 +1790,27 @@ async function previewPhase() {
     const currentRevision = await runtimeGet(page, state.projectId, "revision");
     assert.equal((currentRevision?.commitHash || currentRevision?.revision?.commitHash || "").toLowerCase(),
       state.initialRevision, "The saved project changed since the original generation.");
+
+    let authoritativeBaseline = null;
+    if (approved) {
+      authoritativeBaseline = assertApprovedLeadBaseline(await authoritativeLeadRows(page, state), state);
+      if (state.stage === "lead-outcome-uncertain") {
+        state.historicalLeadAttempts = [{
+          marker: state.leadMarker, submitClicks: 1,
+          outcome: "no-persisted-lead-authoritatively-verified",
+        }];
+        state.leadMarker = `Task13 approved lead ${randomBytes(8).toString("hex")}`;
+        state.actionCounts.leadSubmit = 0;
+        state.leadOutcome = "approved-new-attempt-not-clicked";
+        state.stage = "generation-verified";
+        await saveCheckpoint(state);
+      }
+      report("approved-lead-baseline", {
+        projectId: state.projectId, revision: state.initialRevision,
+        authoritativeLeads: authoritativeBaseline, historicalSubmitClicks: 1,
+        newlyApprovedSubmitClicks: 0,
+      });
+    }
 
     const status = await runtimeGet(page, state.projectId, "status");
     const previewUrl = status.previewUrl || status.previewURL || status.state?.previewUrl || status.state?.previewURL;
@@ -1651,7 +1887,7 @@ async function previewPhase() {
 
     let lead;
     try {
-      lead = await addLeadIfAvailable(page, frame, state, audit);
+      lead = await addLeadIfAvailable(page, frame, state, audit, { approved, authoritativeBaseline });
     } catch (error) {
       if (!["lead-submit-pending", "lead-outcome-uncertain"].includes(state.stage)) {
         state.stage = "preview-failed";
@@ -1693,6 +1929,7 @@ async function previewPhase() {
         ...item, failure: safeError(item.failure),
       })),
       addLead: lead,
+      ...(approved ? { authoritativeBaseline } : {}),
     });
   } catch (error) {
     if (!["lead-submit-pending", "lead-outcome-uncertain", "preview-failed", "preview-verified"].includes(state.stage)) {
@@ -2829,6 +3066,7 @@ try {
   else if (phase === "generate") await generatePhase();
   else if (phase === "reconcileGeneration") await reconcileGenerationPhase();
   else if (phase === "preview") await previewPhase();
+  else if (phase === "approvedLead") await previewPhase({ approved: true });
   else if (phase === "edit1") await runEditPhase(1);
   else if (phase === "reopen") await reopenPhase();
   else if (phase === "publish1") await publish1Phase();
