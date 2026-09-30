@@ -1,0 +1,253 @@
+Root cause accepted.
+
+We have identified a concrete hidden Replit dependency in package-lock.json:
+
+- 201 resolved tarball URLs point to package-firewall.replit.internal
+- external CI cannot resolve that private Replit hostname
+- public registry.npmjs.org downloads succeed
+- versions and integrity hashes are already present
+- no dependency-version failure was identified
+- no lifecycle-script failure was identified
+- no resource exhaustion was identified
+
+This is a source portability problem.
+
+Proceed with the smallest surgical fix.
+
+GOAL
+
+Remove the Replit-private package-host dependency from the lockfile WITHOUT
+changing dependency versions or dependency graph.
+
+1. SURGICALLY NORMALIZE THE LOCKFILE
+
+For every package-lock.json entry whose `resolved` URL points to:
+
+package-firewall.replit.internal
+
+replace ONLY the resolved URL with the canonical public npm registry tarball
+URL for that exact package and exact version.
+
+Requirements:
+
+- preserve package name
+- preserve exact version
+- preserve integrity hash
+- preserve dependency graph
+- preserve lockfileVersion
+- do not upgrade packages
+- do not downgrade packages
+- do not add/remove dependencies
+- do not run npm update
+- do not regenerate the entire lockfile unless absolutely required
+- do not use --force
+- do not use --legacy-peer-deps
+
+Handle scoped packages correctly.
+
+Use the package metadata already represented in the lockfile to derive the
+canonical registry.npmjs.org tarball location.
+
+2. VERIFY THE DIFF
+
+After normalization, report:
+
+- number of resolved URLs changed
+- number of remaining references to:
+  package-firewall.replit.internal
+- whether any version changed
+- whether any integrity hash changed
+- whether package count changed
+- whether dependency graph changed
+
+Expected:
+
+Replit-internal resolved URLs: 0
+version changes: 0
+integrity changes: 0
+dependency graph changes: 0
+
+If anything other than resolved URLs changes unexpectedly, STOP before commit.
+
+3. LOCAL EXTERNAL-STYLE VERIFICATION
+
+From a genuinely clean copy of the normalized tree:
+
+- Node 22.22.0
+- npm 10.9.4
+- empty node_modules
+- npm cache must not be relied upon for the affected tarballs
+
+Run:
+
+npm ci
+
+Then:
+
+- TypeScript
+- full root test suite
+- npm run build
+
+Require:
+
+- npm ci PASS
+- 263 tests PASS / 0 FAIL, unless test count legitimately changes for an
+  explained reason unrelated to dependency installation
+- TypeScript PASS
+- production build PASS
+- dist/public exists
+
+Also verify built marketing assets still contain:
+
+- no ai-build-studio.replit.app
+- no customer-facing /api/waitlist
+- correct https://app.buildcustom.ai/signup CTAs
+
+4. COMMIT AND PUSH
+
+If all local checks pass:
+
+Commit ONLY the lockfile portability fix.
+
+Use a clear message such as:
+
+Normalize npm lockfile for external builds
+
+Push normally to GitHub main.
+
+No force push.
+No history rewrite.
+
+5. OBSERVE GITHUB ACTIONS
+
+The existing GitHub Actions deployment workflow should trigger from the push.
+
+Observe it.
+
+The critical proof is that npm ci now succeeds on the external GitHub runner.
+
+If npm ci FAILS:
+
+- capture the uploaded npm debug artifact
+- do not automatically change dependencies
+- do not retry automatically
+- STOP and report the new concrete failure
+
+If npm ci SUCCEEDS:
+
+allow the workflow to continue through:
+
+- production build
+- dist/public verification
+- Wrangler Pages upload
+
+6. IF PAGES DEPLOYMENT SUCCEEDS
+
+Record:
+
+- workflow run ID
+- Pages deployment ID
+- deployed commit SHA
+
+Then verify LIVE https://buildcustom.ai:
+
+- HTTP 200
+- marketing assets load
+- new GitHub build is live
+- Join the Waitlist UI is gone
+- no network request to ai-build-studio.replit.app
+- no customer-facing /api/waitlist request
+- product/pricing CTAs point to https://app.buildcustom.ai/signup
+- signup destination loads
+
+Also verify:
+
+- app.buildcustom.ai is available
+- public signup remains enabled
+- Forgot Password remains available
+- public generated apps remain enabled
+
+Do not create another customer account.
+
+7. VERIFY PRODUCT WORKERS UNCHANGED
+
+Confirm these serving versions remain unchanged:
+
+runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+control:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Do not redeploy them.
+
+8. DISABLE REDUNDANT PAGES GIT BUILD
+
+ONLY after:
+
+- GitHub Actions external npm ci succeeds
+- build succeeds
+- Wrangler Pages upload succeeds
+- live buildcustom.ai verification succeeds
+
+disable the old Cloudflare Pages Git-integrated automatic build path.
+
+Do not delete the bca Pages project.
+
+Production marketing deployment authority becomes:
+
+GitHub main
+→ GitHub Actions
+→ deterministic npm build
+→ Wrangler
+→ Cloudflare Pages bca
+
+Verify the successful deployment remains live afterward.
+
+9. FINAL REPLIT DEPENDENCY SCAN
+
+Now scan CURRENT production source/configuration and live behavior for actual
+dependencies on:
+
+- package-firewall.replit.internal
+- ai-build-studio.replit.app
+- Replit-hosted APIs
+- Replit-hosted assets
+- Replit-hosted production state
+- Replit environment variables required by Cloudflare production
+- any other Replit-only hostname/service required at runtime or deployment
+
+Ignore historical Git objects, old documentation, acceptance records,
+disposable test data, and optional use of Replit as a development IDE.
+
+If none remain, explicitly report:
+
+ZERO PRODUCTION REPLIT DEPENDENCIES CONFIRMED
+
+10. STOP BEFORE SHUTDOWN
+
+DO NOT stop/unpublish the Replit deployment yet.
+
+Return:
+
+- lockfile URLs changed
+- confirmation versions/integrities/graph unchanged
+- local clean-install/test/build results
+- lockfile-fix commit SHA
+- GitHub Actions result
+- Pages deployment ID
+- live marketing verification
+- signup/recovery/public-app status
+- runtime/control/gateway versions
+- old Pages Git integration status
+- remaining real Replit dependencies
+- GO / NO-GO for Replit shutdown
+
+If everything passes, explicitly state:
+
+READY FOR FINAL REPLIT SHUTDOWN
+
+Then STOP.

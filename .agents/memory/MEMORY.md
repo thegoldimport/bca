@@ -56,6 +56,6 @@
 - [Public signup Origin acceptance](signup-origin-gate-evidence.md) — a duplicate-email 400 does not prove invalid-Origin rejection; keep security guards independently attributable.
 - [Acceptance artifact ordering](acceptance-artifact-ordering.md) — persist PASS only after cleanup and before one-time credential handoff; test production-shaped reconciliation evidence.
 - [Transactional email provider](transactional-email-provider.md) — BuildCustom chose Cloudflare Email Service; wait for verified sending-domain onboarding before recovery implementation.
-- [Marketing Pages release](marketing-pages-release.md) — preserve the live Pages asset baseline for narrow changes; reconcile direct uploads with GitHub builds.
+- [Marketing Pages release](marketing-pages-release.md) — GitHub Actions plus Wrangler is the marketing release authority; Pages push builds stay disabled.
 - [External CI npm installs](pages-install-diagnosis.md) — GitHub's npm log traced failed tarball fetches to Replit-internal lockfile URLs; Pages shares symptoms but lacks debug proof.
 - [JSDOM route fixtures](jsdom-route-fixtures.md) — a blank route can be a thrown component error from an underspecified mock, not a routing regression.
