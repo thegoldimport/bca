@@ -1,0 +1,71 @@
+Before we authorize a new Project 5 test baseline, investigate the existing account access.
+
+We already built and production-tested durable BuildCustom authentication and password recovery specifically so access is not dependent on a temporary browser profile.
+
+IMPORTANT:
+Do not create a new user.
+Do not create a new project.
+Do not change Project 5 ownership.
+Do not change any password yet.
+Do not modify the database.
+Do not click Submit.
+Do not establish a replacement baseline.
+This is READ-ONLY investigation first.
+
+The lost Playwright/browser profile should not automatically mean the underlying Project 5 account is inaccessible.
+
+Determine:
+
+1. Who owns Project 5 in the BuildCustom product database.
+   Report:
+   - product user ID
+   - runtime user ID
+   - email address
+   - project ID
+   - agent ID if applicable
+
+2. Confirm whether that same identity still exists in the VibeSDK runtime auth database.
+
+3. Confirm whether the account has a usable supported authentication path:
+   - normal password login, if the credential is available through the existing acceptance setup
+   - OR the production forgot-password/reset-password flow we already implemented
+
+4. Inspect the current Task 13 harness/source/history for any durable test-account credential or authentication setup that was intentionally created for Project 5.
+   Search specifically for:
+   - Project 5 test account email
+   - test credentials
+   - acceptance credentials
+   - admin/test login setup
+   - environment variables used by the acceptance harness
+   - bootstrap/setup scripts
+   - previous Task 13 checkpoints
+   - password-recovery setup
+
+Do NOT print passwords, reset tokens, secrets, or sensitive credentials in the report.
+
+Also determine whether an earlier Task 13 instruction explicitly created or required a persistent admin/test credential intended to prevent exactly this browser-profile-loss problem.
+
+If such a mechanism exists, identify it and explain how the SAME Project 5 account can be safely re-authenticated using it.
+
+If the account exists and password recovery is the supported path, report that. Do NOT initiate the reset yet.
+
+If the underlying account no longer exists or there is genuinely no supported way to authenticate it, show the evidence.
+
+Return:
+
+PROJECT 5
+Product user ID:
+Runtime user ID:
+Email:
+Agent ID:
+Identity still exists: YES/NO
+Normal login available: YES/NO/UNKNOWN
+Password recovery available: YES/NO
+Durable Task 13 credential/setup found: YES/NO
+What was originally intended:
+Safest way to restore SAME-account access:
+Any mutation performed: NO
+
+Then STOP.
+
+Do not resume acceptance testing yet.
