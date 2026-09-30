@@ -1,0 +1,89 @@
+AUTHORIZED: restore access to the SAME Project 5 owner using the existing production password-recovery flow.
+
+This is NOT authorization to create a new user, new project, change ownership, or establish a replacement test identity.
+
+Exact identity to recover:
+
+Product user ID:
+4d91ebb1-c2fc-4906-81fe-8b305761b8a2
+
+Runtime user ID:
+4d91ebb1-c2fc-4906-81fe-8b305761b8a2
+
+Email:
+thegoldimport+buildcustom-launch-task13-1790778045941-0a32dfb2c1@gmail.com
+
+Project ID:
+5
+
+Agent ID:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Proceed narrowly:
+
+1. Use the EXISTING production forgot-password flow for this exact email address.
+
+2. Do not modify the identity, email address, project ownership, Project 5, agent, or application data.
+
+3. Send exactly ONE password-recovery request.
+
+4. Use the legitimate recovery email/link to set a new password for this same account.
+
+5. Do not expose the new password, reset token, recovery URL, or other credential in your report/log output.
+
+6. Log into app.buildcustom.ai normally as this same account.
+
+7. Verify read-only that:
+   - authenticated user ID is still
+     4d91ebb1-c2fc-4906-81fe-8b305761b8a2
+   - Project 5 is visible
+   - Project 5 is still owned by that same user
+   - agent ID remains
+     ccac2618-5f92-4d2f-b68f-ca9d2116325e
+   - existing Project 5 data is intact
+
+8. Create a new authenticated browser profile/checkpoint for the SAME account so loss of the old browser profile no longer blocks this acceptance run.
+
+9. Store the acceptance credential/checkpoint in the existing intended durable Task 13 test mechanism rather than relying only on a disposable /tmp browser session.
+
+Do NOT click Submit yet.
+
+Once SAME-account access is restored, re-establish a fresh READ-ONLY pre-mutation baseline from the actual current Project 5 state. Do not reconstruct the lost baseline from assumptions.
+
+Then run ONLY the corrected form-entry verification from:
+
+scripts/task13-final-launch-acceptance.mjs
+
+Verify specifically that Estimated Value becomes exactly:
+
+12500
+
+and NOT:
+
+012500
+
+Do not Submit merely to test field entry.
+
+If that passes, record that the previous 012500 result was confirmed as a harness artifact.
+
+Then STOP BEFORE THE NEXT MUTATION and report:
+
+- Same Project 5 account recovered: YES/NO
+- Same user ID confirmed: YES/NO
+- Same Project 5 ownership confirmed: YES/NO
+- Same agent confirmed: YES/NO
+- New authenticated checkpoint established: YES/NO
+- Fresh read-only baseline established: YES/NO
+- Corrected harness live verification: PASS/FAIL
+- Estimated Value observed:
+- Submit clicks during this recovery: 0
+- Any unintended mutation: YES/NO
+- Exact next acceptance step
+
+Do not restart Task 13.
+Do not rerun previously accepted infrastructure tests.
+Do not create another account.
+Do not perform AI generation.
+Do not alter product/runtime code.
+
+We are restoring the interrupted acceptance test, not starting a new acceptance cycle.
