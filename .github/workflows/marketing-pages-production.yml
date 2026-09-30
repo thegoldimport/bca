@@ -29,8 +29,29 @@ jobs:
           node-version: 22.22.0
           cache: npm
 
+      - name: Record non-secret install diagnostics
+        run: |
+          uname -srm
+          grep -E '^(NAME|VERSION_ID)=' /etc/os-release
+          node --version
+          npm --version
+          npm config get cache
+          npm config get registry
+          node -p "require('./package-lock.json').lockfileVersion"
+          df -h . /home/runner
+          free -h
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Preserve npm debug logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-debug-logs
+          path: /home/runner/.npm/_logs/
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Build production assets
         run: npm run build
