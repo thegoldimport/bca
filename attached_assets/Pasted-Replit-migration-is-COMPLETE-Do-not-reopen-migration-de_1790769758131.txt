@@ -1,0 +1,291 @@
+Replit migration is COMPLETE.
+
+Do not reopen migration, deployment provenance, historical Git, or Replit
+infrastructure work.
+
+GitHub main is canonical.
+Cloudflare is production.
+Replit is now an optional development environment only.
+
+NEXT PHASE: BUILDCUSTOM PRODUCTION LAUNCH READINESS
+
+Goal:
+
+Prove that a completely new customer can use BuildCustom from signup through
+building and publishing an app without manual intervention.
+
+This is a CUSTOMER-JOURNEY test, not another infrastructure audit.
+
+IMPORTANT
+
+Do not change production architecture during this task.
+
+Do not redeploy:
+- runtime
+- control plane
+- gateway
+
+Do not modify Cloudflare infrastructure unless an actual customer-facing
+failure requires a later approved fix.
+
+Do not use old internal test state as proof of a new-user flow.
+
+PHASE 1 — NEW CUSTOMER
+
+Create ONE disposable production test customer through the exact public flow
+a real customer uses:
+
+https://app.buildcustom.ai/signup
+
+Verify:
+
+- signup succeeds
+- session is established
+- dashboard loads
+- customer starts with the expected empty/new-user state
+- no admin/manual bootstrap is required
+
+Record the disposable account so it can be removed later.
+
+PHASE 2 — CREATE A REAL PROJECT
+
+From the normal customer UI, create ONE new project.
+
+Use this simple prompt:
+
+"Build me a simple CRM for a roofing company. I need a dashboard showing
+total leads, estimates sent, jobs won, and revenue. Add a leads page with
+customer name, phone, email, project type, lead status, estimated value, and
+notes. Make it clean and professional."
+
+Do not manipulate the database or runtime manually to make the project work.
+
+The normal BuildCustom agent must perform the generation.
+
+Verify:
+
+- project is created
+- native ThinkAgent starts
+- generation streams normally
+- files are created
+- generation completes successfully
+- no duplicate generation occurs
+- project reaches stable success state
+
+Record:
+- project ID
+- agent ID
+- resulting revision
+- approximate generation duration
+- any visible customer-facing errors
+
+Do not perform provider-internal request-count archaeology.
+
+PHASE 3 — PREVIEW
+
+Verify the generated application through the normal BuildCustom preview.
+
+Check:
+
+- preview loads
+- HTML renders
+- CSS loads
+- layout is visibly styled
+- navigation works where applicable
+- generated pages/routes work
+- no obvious missing assets
+- no BuildCustom product/session data leaks into the generated app iframe
+
+This is functional acceptance, not pixel-perfect design review.
+
+PHASE 4 — CONVERSATIONAL EDIT
+
+Use the normal BuildCustom conversation to request:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+
+- exactly one customer edit is submitted
+- agent understands the existing project
+- existing files/project context are retained
+- relevant files change
+- a new revision is produced
+- preview updates
+- requested changes appear
+- previous functionality remains
+
+PHASE 5 — REOPEN / PERSISTENCE
+
+Leave the project.
+
+Return to the dashboard.
+
+Reopen the same project through the normal UI.
+
+Verify:
+
+- same project opens
+- conversation history remains
+- authoritative files remain
+- latest revision remains
+- edited preview remains
+- no regeneration occurs merely from reopening
+
+PHASE 6 — PUBLISH
+
+Use the normal customer Publish action.
+
+Verify:
+
+- normal customer can publish without admin role
+- immutable release is created
+- stable *.apps.buildcustom.ai URL is returned
+- public URL returns 200
+- expected edited content is present
+- CSS/assets load
+- published app is isolated from BuildCustom product authentication/state
+
+Record:
+- release ID
+- script identity
+- public URL
+
+PHASE 7 — IDEMPOTENT PUBLISH
+
+Without making another edit, use Publish/Publish Updates again.
+
+Verify:
+
+- no second deployment is created for the same revision
+- same release/script is reused
+- stable URL remains the same
+- UI completes normally
+- no hanging save-address flow occurs
+
+PHASE 8 — SECOND EDIT + PUBLISH UPDATE
+
+Request one small additional edit:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify:
+
+- new revision is produced
+- preview shows the change
+
+Publish updates.
+
+Verify:
+
+- new immutable script/release candidate is created for the changed revision
+- stable public URL remains the same
+- routing switches only after the new candidate succeeds
+- public site shows the new revision
+
+PHASE 9 — SESSION / RETURNING CUSTOMER
+
+Log out normally.
+
+Verify the session is revoked.
+
+Log back in using the same customer credentials.
+
+Verify:
+
+- dashboard loads
+- project remains
+- conversation remains
+- files remain
+- latest preview remains
+- published URL remains associated with the project
+
+Do not test password recovery again unless login itself fails.
+
+PHASE 10 — BASIC ISOLATION
+
+Using one existing independent test account:
+
+Verify it cannot access the new customer's:
+
+- project
+- files
+- preview
+- conversation
+- publish action
+
+Do not perform another giant adversarial security suite.
+
+This is only a regression check that ownership isolation remains intact.
+
+PHASE 11 — CUSTOMER-FACING FAILURE REVIEW
+
+Review the entire journey you just performed.
+
+Report any point where a normal customer:
+
+- sees an error
+- gets stuck
+- needs a refresh
+- needs admin intervention
+- sees internal terminology
+- sees a broken loading state
+- receives unclear feedback
+- could accidentally trigger duplicate work
+
+Separate:
+
+BLOCKER
+Customer cannot complete the core journey.
+
+IMPORTANT UX ISSUE
+Journey works but should be fixed soon.
+
+POLISH
+Does not prevent launch.
+
+Do not turn polish into a launch blocker.
+
+PHASE 12 — FINAL REPORT
+
+Return:
+
+1. signup result
+2. project creation result
+3. AI generation result and duration
+4. preview result
+5. conversational edit result
+6. persistence/reopen result
+7. initial publish result
+8. same-revision publish result
+9. edited-revision publish result
+10. logout/login persistence result
+11. ownership isolation result
+12. public app URL
+13. any BLOCKERS
+14. important UX issues
+15. polish items
+16. active publish claims
+17. GO / NO-GO for allowing real customers to use BuildCustom
+
+A NO-GO must be caused by a concrete customer-facing failure in the tested
+journey.
+
+Do not use:
+- historical provenance
+- old Git cleanliness
+- Replit migration
+- missing telemetry
+- unproven scanner warnings
+
+as launch blockers.
+
+If the complete customer journey passes with no blockers, explicitly state:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP after the report.
+
+Do not begin fixing non-blocking UX/polish issues automatically.
