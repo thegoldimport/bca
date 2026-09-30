@@ -1,0 +1,249 @@
+Proceed with Recommendation B.
+
+GOAL
+
+Establish this production marketing deployment path:
+
+GitHub main
+→ GitHub Actions
+→ deterministic install/build
+→ Wrangler upload
+→ existing Cloudflare Pages project `bca`
+
+We are no longer trying to fix Cloudflare Pages' Git-integrated build
+environment.
+
+Do NOT change marketing application behavior.
+Do NOT modify runtime, control plane, or gateway.
+Do NOT stop Replit yet.
+
+CURRENT SOURCE COMMIT
+
+264e2b109a522c4dbeb9d8911aa3e51e204775d4
+
+CURRENT PAGES PROJECT
+
+bca
+
+BUILD OUTPUT
+
+dist/public
+
+NODE
+
+22.22.0
+
+PHASE 1 — CREATE THE DEPLOYMENT WORKFLOW
+
+Add one GitHub Actions workflow for production marketing deployment.
+
+Requirements:
+
+- trigger on pushes to `main`
+- allow manual workflow_dispatch
+- checkout the exact commit being deployed
+- use Node 22.22.0
+- use npm dependency caching where appropriate
+- run `npm ci`
+- run the existing production build
+- verify `dist/public` exists
+- deploy ONLY `dist/public`
+- deploy to the existing Cloudflare Pages project `bca`
+- use Cloudflare's supported Wrangler/GitHub Action deployment path
+- do not create another Pages project
+- do not deploy Workers
+- do not run database migrations
+- do not touch runtime/control/gateway
+
+Use GitHub Actions secrets for Cloudflare credentials.
+
+Do not put secret values in:
+- source
+- workflow YAML
+- logs
+- documentation
+
+Use the minimum Cloudflare permissions needed to deploy to the existing
+Pages project.
+
+Before requesting/using credentials, determine the exact secret NAMES and
+minimum required Cloudflare API token permissions.
+
+If the required GitHub secrets do not already exist and you cannot create
+them safely through the available authenticated tooling, STOP and tell me
+exactly what I need to add and where.
+
+Do not ask me to paste secret values into source or chat.
+
+PHASE 2 — PRE-DEPLOY SAFETY
+
+Before committing the workflow:
+
+- validate workflow YAML
+- verify npm ci succeeds
+- verify npm run build succeeds
+- verify dist/public exists
+- verify built marketing JS contains no:
+  ai-build-studio.replit.app
+- verify built marketing JS contains no customer-facing:
+  /api/waitlist
+- verify product/pricing CTAs target:
+  https://app.buildcustom.ai/signup
+
+Confirm the workflow cannot deploy:
+- runtime Worker
+- control-plane Worker
+- generated-app gateway
+- D1 migrations
+
+PHASE 3 — COMMIT AND PUSH
+
+If required GitHub secrets are available and the workflow is ready:
+
+Commit only the deployment workflow and any strictly necessary deployment
+configuration.
+
+Use a clear commit message such as:
+
+Add deterministic Cloudflare Pages deployment workflow
+
+Push normally to GitHub main.
+
+No force push.
+No history rewrite.
+
+PHASE 4 — OBSERVE GITHUB ACTION
+
+Observe the workflow triggered by the push.
+
+It must:
+
+- checkout the pushed commit
+- use Node 22.22.0
+- complete npm ci
+- complete production build
+- upload dist/public
+- deploy successfully to existing Pages project bca
+
+If the workflow FAILS:
+
+- do not stop Replit
+- do not modify production Workers
+- do not automatically make speculative dependency changes
+- capture the exact failure
+- STOP and report it
+
+If it SUCCEEDS:
+
+continue to live verification.
+
+PHASE 5 — LIVE MARKETING VERIFICATION
+
+Verify the actual production buildcustom.ai site.
+
+Confirm:
+
+- buildcustom.ai returns 200
+- marketing assets load
+- deployed content corresponds to the new GitHub commit
+- Join the Waitlist UI is gone
+- no live browser/network request goes to:
+  ai-build-studio.replit.app
+- no live browser/network request goes to:
+  /api/waitlist
+- product/pricing CTAs go to:
+  https://app.buildcustom.ai/signup
+- signup destination loads
+
+Also verify:
+
+- app.buildcustom.ai remains available
+- public signup remains enabled
+- Forgot Password page remains available
+
+Do not create another test customer.
+
+PHASE 6 — CLOUDFLARE PRODUCT INVARIANTS
+
+Confirm the marketing deployment did NOT change these serving versions:
+
+runtime:
+60de2816-ad7b-4f71-ac45-1fe18d720b5d
+
+control:
+816a0c2b-ebb4-44c3-a65d-dddf1deb79be
+
+gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Do not redeploy them.
+
+Confirm public generated apps remain enabled.
+
+PHASE 7 — DISABLE REDUNDANT PAGES GIT BUILDS
+
+ONLY AFTER the GitHub Actions deployment has succeeded and the live site has
+been verified:
+
+Disable the old Cloudflare Pages Git-integrated automatic build path so future
+pushes do not create a second competing deployment attempt.
+
+Do not delete the Pages project.
+
+The desired deployment authority becomes:
+
+GitHub Actions → Wrangler → existing Pages project bca
+
+Verify that the successful GitHub Actions deployment remains the production
+Pages deployment after disabling the redundant Git integration.
+
+PHASE 8 — FINAL REPLIT DEPENDENCY CHECK
+
+Now determine whether any CURRENT production functionality still depends on:
+
+- ai-build-studio.replit.app
+- the public Replit deployment
+- Replit-hosted assets
+- Replit-hosted APIs
+- Replit-hosted state required by customers
+- Replit environment variables required by live Cloudflare services
+
+Ignore:
+- Git history
+- old documentation
+- acceptance evidence
+- disposable test emails/data
+- optional use of Replit as a development IDE
+
+Search the live production behavior AND current production source/config.
+
+If no real dependency remains, report:
+
+ZERO PRODUCTION REPLIT DEPENDENCIES CONFIRMED
+
+PHASE 9 — STOP BEFORE SHUTDOWN
+
+Even if everything passes:
+
+DO NOT stop the public Replit deployment yet.
+
+Return:
+
+1. workflow commit SHA
+2. GitHub Actions run result
+3. deployed Pages deployment ID/URL
+4. live buildcustom.ai verification
+5. waitlist/Replit network verification
+6. signup/recovery verification
+7. runtime/control/gateway versions
+8. status of old Pages Git integration
+9. remaining real production Replit dependencies
+10. GO / NO-GO for shutting down Replit production
+
+If all gates pass, explicitly state:
+
+READY FOR FINAL REPLIT SHUTDOWN
+
+Then STOP.
+
+Do not shut Replit down until I explicitly authorize the final step.
