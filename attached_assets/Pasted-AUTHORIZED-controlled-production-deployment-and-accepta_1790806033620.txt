@@ -1,0 +1,780 @@
+AUTHORIZED: controlled production deployment and acceptance of the BuildCustom continuous coding lifecycle.
+
+The local/isolated implementation has already PASSED.
+
+This phase is authorized to:
+
+1. configure initial production operation safeguards
+2. deploy the exact tested continuous-coding lifecycle candidate
+3. verify the deployed runtime/control path
+4. run ONE fresh isolated production coding acceptance fixture
+5. if and only if that passes, return to the EXISTING Project 5 dirty workspace
+6. repair and finish the already-started edit1 using the new lifecycle
+7. stop before edit2
+
+Do not redesign the architecture.
+
+Do not add subagents.
+
+Do not add another orchestration system.
+
+Do not change the internal Think maxSteps=25 guard.
+
+Do not resend the original Project 5 edit1 request.
+
+==================================================
+KNOWN ACCEPTED IMPLEMENTATION
+==================================================
+
+Local/isolated implementation status:
+
+PASS
+
+Project 5 touched:
+NO
+
+Production deployed:
+NO
+
+Production Publish invoked:
+NO
+
+maxSteps:
+unchanged at 25
+
+The implementation now provides:
+
+- durable customer-operation states
+- bounded internal Think continuation
+- same ThinkAgent across continuations
+- same SpaceDO workspace
+- same customer operation
+- hidden/grouped internal continuation messages
+- working-tree preflight
+- preflight before commit
+- atomic preview deployment behavior
+- real commit-failure handling
+- explicit finish_task intent
+- evidence-based completion
+- browser/preview verification
+- no-progress detection
+- resource-boundary handling
+- clarification pause
+- continuation-aware context
+- targeted find/grep discovery guidance
+- recovery/reconnect protection
+- production Publish isolation
+
+Local verification:
+
+163 runtime tests passed across 23 files.
+
+60 BuildCustom adapter/gateway checks passed.
+
+The implementation is retained in:
+
+production/patches/continuous-coding-lifecycle.patch
+
+with reconstruction instructions in:
+
+production/vibesdk-launch/manifest.md
+
+and evidence in:
+
+production/vibesdk-launch/continuous-coding-lifecycle-evidence.md
+
+The tracked patch already passed an independent applicability check against:
+
+- pinned VibeSDK source
+- Task 4B accepted patch
+- Task 6A accepted patch
+- other accepted launch patches
+
+==================================================
+PART 1 — INITIAL PRODUCTION RESOURCE LIMITS
+==================================================
+
+Keep:
+
+Think internal per-turn maxSteps = 25
+
+Do NOT change it.
+
+Configure the CUSTOMER OPERATION with initial production backstops:
+
+MAX TOTAL THINK TURNS:
+5
+
+Meaning:
+
+- original Think turn
+- up to 4 internal continuation turns
+
+This provides approximately 125 maximum Think steps if every turn reaches the existing 25-step guard.
+
+OVERALL WALL-CLOCK LIMIT:
+15 minutes
+
+These are operation-level BACKSTOPS.
+
+They are NOT completion targets.
+
+Existing no-progress detection should stop pathological behavior earlier.
+
+Existing clarification handling should pause earlier.
+
+Existing genuine failures should stop earlier.
+
+Existing completion evidence should complete earlier.
+
+Behavior must remain:
+
+PROGRESSING + WITHIN OPERATION BUDGET
+→ continue
+
+VERIFIED COMPLETE
+→ COMPLETE
+
+USER INPUT REQUIRED
+→ USER_INPUT_REQUIRED
+
+REPEATED NO PROGRESS / REAL BLOCKER
+→ BLOCKED
+
+OPERATION RESOURCE BACKSTOP REACHED
+→ INCOMPLETE_RESOURCE_LIMIT
+
+Never convert resource exhaustion into COMPLETE.
+
+IMPORTANT:
+
+Make these production limits configurable.
+
+Do not scatter hard-coded production thresholds throughout the implementation.
+
+Record exactly where/how they are configured.
+
+If the implementation already has a clean configuration mechanism, use it.
+
+Do not create a new configuration service.
+
+==================================================
+PART 2 — PRE-DEPLOYMENT RECONSTRUCTION
+==================================================
+
+Before deploying:
+
+1. Reconstruct the production candidate from the accepted pinned source and accepted patches exactly according to the manifest.
+
+2. Include:
+
+continuous-coding-lifecycle.patch
+
+3. Verify the patch applies cleanly.
+
+4. Verify the resulting candidate contains the exact locally tested lifecycle implementation.
+
+5. Run:
+
+- focused lifecycle tests
+- typecheck
+- build
+- accepted auth regression
+- accepted ownership regression
+- Task 4B immutable publishing regression
+- Task 6A logout/session regression
+- preview sandbox regression
+- gateway/public routing regression
+
+Do not deploy if reconstruction differs unexpectedly from the tested candidate.
+
+Do not casually resolve patch conflicts.
+
+If reconstruction does not match the accepted candidate:
+
+STOP and report BLOCKED.
+
+==================================================
+PART 3 — PRODUCTION DEPLOYMENT
+==================================================
+
+If pre-deployment verification passes:
+
+Deploy the continuous-coding lifecycle candidate to the EXISTING BuildCustom production runtime/control path.
+
+Do NOT create parallel production infrastructure.
+
+Do NOT replace:
+
+- product D1
+- route KV
+- generated-app gateway
+- dispatch namespace
+- project ownership model
+- runtime identity model
+- production Publish system
+
+Preserve existing accepted architecture.
+
+Current accepted boundaries remain:
+
+BuildCustom owns:
+
+- product identity
+- projects
+- ownership/permissions
+- project-agent mapping
+- dashboard
+- release metadata
+- domains
+- future billing/usage
+
+VibeSDK/Cloudflare owns:
+
+- ThinkAgent
+- SpaceDO
+- workspace
+- files
+- execution
+- preview
+- revisions
+- restore
+- generated-app runtime
+
+==================================================
+PART 4 — POST-DEPLOYMENT SMOKE CHECKS
+==================================================
+
+After deployment, BEFORE running a coding task:
+
+Verify:
+
+- production runtime healthy
+- production control plane healthy
+- existing login works
+- logout/session behavior unchanged
+- signup state unchanged from its current intended production configuration
+- ownership isolation intact
+- existing project dashboard loads
+- existing project files readable
+- existing preview path works
+- public generated apps still work
+- unknown generated-app slug still 404
+- gateway version/bindings unchanged unless an explicitly required deployment artifact changed
+- immutable production Publish path remains separate
+- active publish claims remain healthy/zero where expected
+
+Do not perform unnecessary AI generations during smoke checks.
+
+==================================================
+PART 5 — FRESH PRODUCTION CONTINUATION FIXTURE
+==================================================
+
+Before touching Project 5, prove the new lifecycle on ONE fresh isolated production fixture.
+
+Use a disposable production acceptance user/project/agent or another clearly isolated fixture.
+
+Do NOT use Project 5.
+
+Do NOT use an important existing customer project.
+
+The fixture must deliberately exercise the behavior we changed.
+
+We need a legitimate coding operation that requires MORE THAN ONE internal Think turn.
+
+The goal is NOT to manufacture pointless work.
+
+Use a modest but sufficiently involved coding request where the agent must:
+
+- inspect an existing generated app
+- make multiple related edits
+- preflight
+- encounter the internal 25-step turn boundary naturally or through the existing isolated acceptance mechanism
+- continue automatically
+- finish the SAME customer operation
+- create a coherent revision
+- create/update preview
+- verify browser/runtime evidence
+
+Do not change maxSteps to force the test.
+
+Do not artificially sabotage the app.
+
+If natural task complexity does not cross the boundary, use the already-created deterministic lifecycle acceptance fixture/mechanism rather than wasting model calls trying random prompts.
+
+==================================================
+PART 6 — FRESH FIXTURE ACCEPTANCE CRITERIA
+==================================================
+
+The production fixture passes only if all of the following are demonstrated:
+
+CUSTOMER OPERATION:
+exactly one customer coding request
+
+INTERNAL THINK:
+more than one internal Think turn
+
+CUSTOMER TRANSCRIPT:
+no duplicate customer request
+
+INTERNAL CONTINUATION:
+not exposed as a fake customer message
+
+AGENT:
+same primary ThinkAgent
+
+WORKSPACE:
+same SpaceDO
+
+FILES:
+pending work persists correctly between internal turns
+
+PREFLIGHT:
+runs against working tree before commit
+
+MALFORMED CODE:
+not committed if encountered
+
+COMMIT:
+occurs only after successful preflight
+
+PREVIEW:
+successful
+
+BROWSER/RUNTIME VERIFICATION:
+successful and complete
+
+HEAD:
+matches accepted deployed revision
+
+WORKING TREE:
+clean at COMPLETE
+
+FINISH INTENT:
+present
+
+COMPLETION GATE:
+satisfied
+
+FINAL OPERATION STATE:
+COMPLETE
+
+PRODUCTION PUBLISH:
+NOT invoked
+
+No BuildCustom immutable release should be created merely by this preview lifecycle.
+
+==================================================
+PART 7 — RESOURCE ACCOUNTING CHECK
+==================================================
+
+For the fixture, report:
+
+- number of internal Think turns
+- approximate/available step counts
+- continuation count
+- elapsed operation time
+- no-progress state
+- configured max total turns
+- configured wall-clock ceiling
+- terminal operation state
+
+Do not expose hidden model reasoning.
+
+Tool/action counts and lifecycle evidence are sufficient.
+
+==================================================
+PART 8 — FAILURE RULE FOR FRESH FIXTURE
+==================================================
+
+If the fresh production lifecycle fixture fails because of:
+
+- continuation duplication
+- workspace loss
+- malformed code being committed
+- stale HEAD deployment
+- completion without required evidence
+- transcript corruption
+- ownership/security regression
+- auth regression
+- preview isolation regression
+- production Publish being invoked
+- operation state corruption
+
+STOP.
+
+Do NOT proceed to Project 5.
+
+Preserve evidence.
+
+If safe and clearly justified, rollback the lifecycle deployment to the immediately previous accepted production version.
+
+Do not perform repeated production mutation retries trying to force a pass.
+
+Distinguish:
+
+REAL PRODUCT FAILURE
+
+from:
+
+OBSERVABILITY/HARNESS-ONLY FAILURE
+
+Do not rollback solely because optional telemetry is missing if customer-path authoritative evidence conclusively passes.
+
+==================================================
+PART 9 — PROJECT 5 AUTHORIZATION
+==================================================
+
+ONLY IF the fresh production continuation fixture PASSES:
+
+Project 5 repair is now authorized.
+
+IMPORTANT:
+
+Do NOT resend the original edit1 instruction.
+
+Do NOT reset the workspace.
+
+Do NOT restore HEAD over the workspace.
+
+Do NOT discard the dirty files.
+
+Do NOT start edit2.
+
+Project 5 currently has:
+
+Project ID:
+5
+
+Agent:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Committed HEAD:
+
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Confirmed dirty files:
+
+public/app.jsx
+public/index.html
+
+Known live state:
+
+- all five original edit1 replacements are present
+- dark-navy changes are present
+- Recent Leads UI is present
+- newest-five logic is present:
+  sort((a, b) => b.id - a.id).slice(0, 5)
+- public/app.jsx is malformed
+- known parse failure around:
+  1020:25
+- no accepted new revision exists yet
+- lead database remained stable after the failed edit
+- edit1 is partial/incomplete
+
+==================================================
+PART 10 — FRESH READ-ONLY PROJECT 5 RECONCILIATION
+==================================================
+
+Before sending ANY new Think instruction to Project 5:
+
+Perform a fresh read-only reconciliation.
+
+Confirm:
+
+- same owner
+- same project
+- same agent
+- same committed HEAD
+- dirty working tree still present
+- modified files still public/app.jsx and public/index.html
+- known partial edit1 changes still present
+- live syntax failure still present or report exact changed reality
+- lead data remains authoritative and unchanged from accepted state
+- no unexpected release/publish occurred
+
+If Project 5 state materially differs from the preserved evidence:
+
+STOP and report.
+
+Do not guess.
+
+==================================================
+PART 11 — PROJECT 5 REPAIR CONTINUATION
+==================================================
+
+If reconciliation matches:
+
+Send exactly ONE new coding instruction to the SAME primary ThinkAgent.
+
+This is NOT a resend of edit1.
+
+It is a continuation/repair instruction.
+
+The instruction should communicate, in substance:
+
+The previous coding operation ended at an internal turn boundary and left unfinished work in the current SpaceDO working tree.
+
+Continue from the EXISTING working tree.
+
+Do not restart the requested edit from scratch.
+
+Inspect the current pending changes.
+
+Repair the existing JSX/syntax problem.
+
+Preserve the intended edit1 work:
+
+- dark-navy dashboard/theme
+- Recent Leads behavior
+- show the five newest leads
+
+Validate the current implementation.
+
+Use the normal BuildCustom lifecycle:
+
+targeted inspection
+→ repair
+→ working-tree preflight
+→ preview
+→ browser/runtime verification
+→ coherent revision
+→ finish_task
+
+Do not modify lead records as part of repairing the UI.
+
+Do not production Publish.
+
+==================================================
+PART 12 — PROJECT 5 ACCEPTANCE
+==================================================
+
+Project 5 edit1 passes only if:
+
+- exactly one repair/continuation customer instruction was sent
+- original edit1 was NOT resent
+- same owner/project/agent used
+- existing dirty work was continued, not discarded
+- syntax repaired
+- working-tree preflight passes
+- preview deployment succeeds
+- browser/runtime verification succeeds
+- dark-navy dashboard verified
+- Recent Leads verified
+- exactly five newest leads shown
+- newest IDs correspond to authoritative lead ordering
+- existing lead records remain unchanged
+- no duplicate lead created
+- no unintended lead mutation
+- coherent NEW authoritative revision exists
+- working tree clean at completion
+- completion gate passes
+- operation state COMPLETE
+- no production Publish
+- release count remains unchanged for this preview-only operation
+
+==================================================
+PART 13 — REOPEN / PERSISTENCE
+==================================================
+
+After Project 5 reaches COMPLETE:
+
+Reopen/reconnect the project normally.
+
+Verify:
+
+- same new authoritative revision
+- files persist
+- dark-navy UI persists
+- five-newest-leads UI persists
+- preview persists
+- customer transcript remains coherent
+- internal continuation messages are not displayed as customer messages
+- no duplicate customer instruction appears
+- agent idle
+- operation terminal state remains COMPLETE
+
+==================================================
+PART 14 — SECURITY / REGRESSION CHECK
+==================================================
+
+After Project 5 acceptance, run the minimum focused production regressions necessary to confirm:
+
+- Task 4B immutable production publishing unchanged
+- Task 6A logout/session behavior unchanged
+- ownership isolation unchanged
+- forged ownership access rejected
+- preview sandbox unchanged
+- generated-app gateway unchanged
+- public generated apps still route correctly
+- unknown slug 404
+- production Publish still requires its normal explicit path
+
+Do not run unnecessary AI generations.
+
+==================================================
+PART 15 — DO NOT PROCEED TO EDIT2
+==================================================
+
+Even if everything passes:
+
+STOP after Project 5 edit1 acceptance and reopen verification.
+
+Do NOT start edit2.
+
+Do NOT continue broader Task 13 acceptance yet.
+
+We will review the lifecycle production evidence and Project 5 recovery before authorizing the next mutation.
+
+==================================================
+ROLLBACK
+==================================================
+
+Before deployment, record:
+
+- previous accepted runtime version
+- previous accepted control-plane version if changed
+- gateway version
+- rollback commands/procedure
+
+If a real lifecycle/security/customer-path regression is introduced by this deployment:
+
+rollback to the immediately previous accepted version.
+
+Do not alter Project 5 as part of rollback.
+
+Do not rollback solely for missing optional observability if authoritative customer-path behavior passed.
+
+==================================================
+RETURN ONE REPORT
+==================================================
+
+Return:
+
+OVERALL STATUS:
+PASS / BLOCKED / ROLLED BACK
+
+PRODUCTION LIMITS
+- Think maxSteps:
+- max total Think turns:
+- max internal continuations:
+- wall-clock operation ceiling:
+- where configured:
+
+PRE-DEPLOY
+- patch reconstruction:
+- focused tests:
+- typecheck:
+- build:
+- regressions:
+
+DEPLOYMENT
+- previous runtime version:
+- new runtime version:
+- previous control-plane version:
+- new control-plane version:
+- gateway version:
+- rollout percentage:
+- rollback prepared:
+
+POST-DEPLOY SMOKE
+- runtime:
+- control plane:
+- login:
+- logout:
+- ownership:
+- dashboard:
+- files:
+- preview:
+- public apps:
+- unknown slug:
+- publish isolation:
+
+FRESH PRODUCTION CONTINUATION FIXTURE
+- user/project/agent:
+- exactly one customer request:
+- internal Think turns:
+- continuation count:
+- operation elapsed time:
+- same ThinkAgent:
+- same SpaceDO:
+- transcript coherent:
+- preflight:
+- commit:
+- preview:
+- browser verification:
+- authoritative revision:
+- working tree clean:
+- finish intent:
+- final operation state:
+- production Publish invoked:
+- result:
+
+PROJECT 5 RECONCILIATION
+- owner:
+- project:
+- agent:
+- original HEAD:
+- dirty files before repair:
+- partial edit1 still present:
+- syntax failure confirmed:
+- lead state unchanged:
+- unexpected release/publish:
+- result:
+
+PROJECT 5 REPAIR
+- repair instructions sent:
+- original edit1 resent: MUST BE NO
+- internal Think turns:
+- continuations:
+- syntax repaired:
+- preflight:
+- preview:
+- browser verification:
+- dark-navy dashboard:
+- Recent Leads:
+- exactly five newest leads:
+- lead records unchanged:
+- duplicate lead:
+- unintended mutation:
+- new authoritative revision:
+- working tree clean:
+- completion gate:
+- operation state:
+- production Publish invoked:
+- release count:
+- result:
+
+REOPEN / PERSISTENCE
+- revision persisted:
+- files persisted:
+- UI persisted:
+- preview persisted:
+- transcript coherent:
+- internal messages hidden:
+- agent idle:
+- terminal state persisted:
+
+FINAL REGRESSIONS
+- Task 4B:
+- Task 6A:
+- ownership:
+- preview sandbox:
+- gateway:
+- public routing:
+- unknown slug:
+- Publish separation:
+
+PROJECT 5 touched before fresh fixture passed:
+MUST BE NO
+
+EDIT2 started:
+MUST BE NO
+
+KNOWN LIMITATIONS:
+
+EXACT NEXT RECOMMENDED STEP:
+
+Then STOP.
+
+Do not proceed to edit2 or any further Task 13 mutation.
