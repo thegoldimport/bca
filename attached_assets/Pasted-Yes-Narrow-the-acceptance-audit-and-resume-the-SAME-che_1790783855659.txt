@@ -1,0 +1,231 @@
+Yes. Narrow the acceptance audit and resume the SAME checkpoint.
+
+Do NOT:
+- change production code merely because of the /api/projects/5/blog-posts 404
+- suppress browser errors globally
+- ignore all 404s
+- create another customer/project
+- regenerate project 5
+- restart the journey
+- send an AI edit before preview acceptance passes
+
+CURRENT CHECKPOINT
+
+Project:
+5
+
+Agent:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Initial revision:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Runtime:
+31ca3dce-e6c8-416b-b5e2-995034e2dcac
+
+Control:
+ee6d49fe-5cb2-43f6-9392-003c6fde567b
+
+Gateway:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+Known current evidence:
+
+- app.jsx = 200
+- app.jsx has Access-Control-Allow-Origin: null
+- React mounts
+- generated CRM renders
+- scoped stats GET = 200
+- scoped leads GET = 200
+
+The previous formal audit failed because it counted:
+
+GET /api/projects/5/blog-posts -> 404
+
+That request originated from the BUILDCUSTOM PRODUCT PAGE, not the generated
+CRM preview.
+
+==================================================
+FIX THE ACCEPTANCE HARNESS ONLY
+==================================================
+
+The preview acceptance audit must distinguish:
+
+A. requests initiated by the generated preview iframe/application
+
+from
+
+B. unrelated requests initiated by the BuildCustom parent/product page
+
+Preview acceptance should fail for relevant failures in A.
+
+It should NOT fail because of unrelated failures in B.
+
+Prefer identifying requests using actual browser/frame/request initiator
+information.
+
+Do NOT simply ignore:
+- all 404s
+- all /api/* requests
+- all app.buildcustom.ai requests
+- arbitrary console errors
+
+A generated preview request can itself use /api/* and must still be audited.
+
+If frame/request initiator information is available, use that as the primary
+boundary.
+
+The private-preview path may be used as supporting identification, but do not
+assume every relevant generated-app request necessarily has an obvious static
+URL pattern.
+
+Document the exact audit rule.
+
+No production deployment should be required merely to fix the test harness.
+
+==================================================
+RE-RUN PROJECT 5 PREVIEW ACCEPTANCE
+==================================================
+
+Using the SAME customer/project/revision:
+
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Verify:
+
+- preview document loads
+- app.jsx loads
+- React mounts
+- CRM becomes visible
+- CSS is applied
+- navigation works
+- stats/data reads work
+- leads reads work
+- query parameters work
+- dynamic URLs retain capability
+- no application-blocking error originates from the generated preview
+- unrelated parent-page requests do not determine preview acceptance
+
+Report the parent-page blog-posts 404 separately if it still occurs, but do
+not classify it as a preview blocker unless evidence shows the generated
+application depends on it.
+
+==================================================
+THEN TEST ADD LEAD
+==================================================
+
+If preview acceptance passes, continue immediately.
+
+Use the existing Add Lead UI with clearly disposable data.
+
+Verify:
+
+- required OPTIONS occurs if applicable
+- OPTIONS is side-effect-free
+- POST occurs exactly once
+- capability authorization succeeds
+- body reaches generated handler correctly
+- mutation executes exactly once
+- response is browser-readable
+- UI reflects success
+- lead appears
+- subsequent generated-app GET confirms persistence
+- expected activity record exists
+- no duplicate lead/activity
+- no relevant iframe/application CORS failure
+
+If Add Lead fails, STOP and report the concrete generated-app/preview failure.
+
+==================================================
+IF ADD LEAD PASSES, RESUME THE JOURNEY
+==================================================
+
+Do not stop for another checkpoint merely because the previously blocked
+preview stages now pass.
+
+Send the first AI edit:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+- exactly one edit
+- new revision
+- requested changes
+- working preview
+- working reads
+- working mutations
+
+Then:
+
+1. leave/reopen
+2. verify conversation/files/revision/preview persistence
+3. initial BuildCustom Publish
+4. verify public *.apps.buildcustom.ai application
+5. verify public HTML/CSS/JS/data behavior
+6. same-revision Publish Updates
+7. verify idempotency/no duplicate immutable deployment
+
+Then send:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify:
+- exactly one second edit
+- new revision
+- requested change
+- working preview/data
+
+Publish Updates.
+
+Verify:
+- new immutable candidate/release
+- stable public URL unchanged
+- public URL serves updated revision
+
+Then:
+
+- logout
+- login normally with retained disposable credential
+- verify project/conversation/files/latest revision/preview/public URL persist
+- basic second-account ownership isolation
+- measure active publish claims
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. exact acceptance-audit scoping rule
+2. project 5 initial-revision preview result
+3. whether /api/projects/5/blog-posts remains and its confirmed initiator
+4. Add Lead result
+5. lead/activity persistence result
+6. first AI edit + revision
+7. reopen/persistence result
+8. initial publish release/script/public URL
+9. same-revision publish/idempotency result
+10. second edit + revision
+11. publish-update result
+12. returning-login result
+13. ownership-isolation result
+14. active publish claims
+15. serving runtime/control/gateway versions
+16. remaining concrete customer-facing BLOCKERS
+17. GO / NO-GO
+
+Do not count unrelated BuildCustom parent-page network failures as generated
+preview failures.
+
+Do not ignore genuine iframe/generated-app failures.
+
+If the complete customer journey passes:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP.
+
+Do not begin billing, custom domains, cleanup, dependency upgrades, telemetry,
+or unrelated polish.

@@ -8,6 +8,7 @@ import { chmod, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasReadableScriptSource, isPreviewAuditRequest, safeObservedUrl } from "./preview-request-scope.mjs";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = "https://app.buildcustom.ai";
@@ -582,9 +583,12 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
   const requests = [];
   const failed = [];
   const corsErrors = [];
+  const platformTelemetryErrors = [];
+  const parentPageHttpErrors = [];
   const requestsByObject = new WeakMap();
+  const parentRequestsByObject = new WeakMap();
   let nextRequestId = 0;
-  const expectedOrigin = expectedPreviewUrl ? new URL(expectedPreviewUrl, BASE).origin : null;
+  const expectedOrigin = new URL(expectedPreviewUrl, BASE).origin;
   page.on("request", request => {
     try {
       const url = new URL(request.url());
@@ -593,15 +597,25 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
       if (url.pathname.startsWith("/cdn-cgi/rum")) return;
       let initiatorFrameUrl = "";
       try { initiatorFrameUrl = request.frame()?.url() || ""; } catch { /* Detached frame. */ }
-      let initiatorOrigin = "";
-      try { initiatorOrigin = new URL(initiatorFrameUrl).origin; } catch { /* Worker request. */ }
-      if (url.origin !== expectedOrigin && initiatorOrigin !== expectedOrigin) return;
+      const redirectChain = request.redirectChain();
+      const redirectedFromPreview = redirectChain.some(previous => requestsByObject.has(previous));
+      if (!redirectedFromPreview
+        && !isPreviewAuditRequest(expectedPreviewUrl, request.url(), initiatorFrameUrl)) {
+        if (url.origin === expectedOrigin && initiatorFrameUrl) {
+          parentRequestsByObject.set(request, {
+            method: request.method(), path: url.pathname,
+            initiatorPath: new URL(initiatorFrameUrl).pathname,
+          });
+        }
+        return;
+      }
       const headers = request.headers();
       const item = {
         requestId: ++nextRequestId,
         method: request.method(),
         resourceType: request.resourceType(),
         url: request.url(),
+        redirectSourceUrls: redirectChain.map(previous => previous.url()),
         initiatorFrameUrl,
         headerNames: Object.keys(headers).map(name => name.toLowerCase()),
         headers: {
@@ -620,7 +634,7 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
     try {
       const url = new URL(request.url());
       const item = requestsByObject.get(request);
-      if (!item && url.origin !== expectedOrigin) return;
+      if (!item) return;
       if (url.pathname.startsWith("/cdn-cgi/rum")) return;
       const failure = request.failure()?.errorText || "request failed";
       failed.push({
@@ -636,6 +650,10 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
     try {
       const url = new URL(response.url());
       const found = requestsByObject.get(response.request());
+      const parent = parentRequestsByObject.get(response.request());
+      if (parent && response.status() >= 400) {
+        parentPageHttpErrors.push({ ...parent, status: response.status() });
+      }
       if (found) {
         const headers = response.headers();
         found.status = response.status();
@@ -658,16 +676,20 @@ function attachPreviewRequestAudit(page, expectedPreviewUrl) {
   });
   page.on("console", message => {
     if (message.type() === "error" && /cors|cross.?origin|access.?control|failed to fetch/i.test(message.text())) {
-      corsErrors.push({ requestId: null, resourceType: "console", failure: message.text().slice(0, 300) });
+      const failure = safeError(message.text());
+      if (message.text().includes("/cdn-cgi/rum")) platformTelemetryErrors.push(failure);
+      else corsErrors.push({ requestId: null, resourceType: "console", failure });
     }
   });
   page.on("pageerror", error => {
     const text = String(error?.message || error || "page error");
     if (/cors|cross.?origin|access.?control|failed to fetch/i.test(text)) {
-      corsErrors.push({ requestId: null, resourceType: "page", failure: text.slice(0, 300) });
+      const failure = safeError(text);
+      if (text.includes("/cdn-cgi/rum")) platformTelemetryErrors.push(failure);
+      else corsErrors.push({ requestId: null, resourceType: "page", failure });
     }
   });
-  return { requests, failed, corsErrors };
+  return { requests, failed, corsErrors, parentPageHttpErrors, platformTelemetryErrors };
 }
 
 function attachPreviewAudit(page, expectedPreviewUrl = null) {
@@ -909,18 +931,6 @@ async function renderedPreview(page, frame) {
   return rendered;
 }
 
-function safeObservedUrl(value) {
-  const url = new URL(value);
-  if (url.username) url.username = "[redacted]";
-  if (url.password) url.password = "[redacted]";
-  for (const [name] of url.searchParams) {
-    if (/token|secret|authorization|cookie|csrf|password|email|api.?key|session/i.test(name)) {
-      url.searchParams.set(name, "[redacted]");
-    }
-  }
-  return url.href;
-}
-
 function isDynamicRequestUrl(value) {
   try {
     const url = new URL(value);
@@ -1023,7 +1033,7 @@ async function exercisePreviewNavigation(frame, audit) {
       .some(element => visible(element)
         && /\b(?:add|new|create)\s+(?:a\s+)?lead\b/i.test(
           (element.textContent || "").trim() || (element.getAttribute("aria-label") || "").trim()));
-    const candidates = [...document.querySelectorAll("nav a[href],a[href],[role=tab],nav button")]
+    const candidates = [...document.querySelectorAll("nav a[href],a[href],[role=tab],button")]
       .filter(element => {
         if (!visible(element)) return false;
         const label = (element.textContent || "").trim() || (element.getAttribute("aria-label") || "").trim();
@@ -1039,7 +1049,8 @@ async function exercisePreviewNavigation(frame, audit) {
           } catch { return false; }
         }
         return (element.getAttribute("role") === "tab" && element.getAttribute("aria-selected") !== "true")
-          || (element.closest("nav") !== null && element.getAttribute("aria-current") !== "page");
+          || (element.closest("nav") !== null && element.getAttribute("aria-current") !== "page")
+          || (element instanceof HTMLButtonElement && getComputedStyle(element).cursor === "pointer");
       })
       .map((element, index) => ({
         index,
@@ -1072,7 +1083,7 @@ async function exercisePreviewNavigation(frame, audit) {
   const requestsBefore = audit.requests.length;
   const documentsBefore = audit.requests.filter(item => item.resourceType === "document").length;
   await frame.evaluate(target => {
-    const items = [...document.querySelectorAll("nav a[href],a[href],[role=tab],nav button")]
+    const items = [...document.querySelectorAll("nav a[href],a[href],[role=tab],button")]
       .filter(element => {
         const box = element.getBoundingClientRect();
         const style = getComputedStyle(element);
@@ -1158,14 +1169,13 @@ async function assertPreviewResourceEvidence(audit, previewUrl, rendered) {
     const assets = audit.requests.filter(item => ["stylesheet", "script"].includes(item.resourceType)
       && item.status >= 200 && item.status < 400);
     const assetsReady = assets.every(item => item.responseBodyReadable !== undefined);
-    if (documentReady && assetsReady) break;
+    const scriptSourcesReady = rendered.scriptUrls.every(source => hasReadableScriptSource(audit.requests, source));
+    if (documentReady && assetsReady && scriptSourcesReady) break;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  const origin = new URL(previewUrl, BASE).origin;
-  const requests = audit.requests.filter(item => {
-    try { return new URL(item.initiatorFrameUrl || item.url).origin === origin || new URL(item.url).origin === origin; }
-    catch { return false; }
-  });
+  // Requests were attributed by the preview iframe or its exact route when
+  // observed; origin equality would also include parent-page API failures.
+  const requests = audit.requests;
   const documents = requests.filter(item => item.resourceType === "document");
   assert(documents.some(item => item.status >= 200 && item.status < 400 && item.responseBodyReadable === true),
     "Preview document response was not captured/readable through the browser protocol.");
@@ -1197,9 +1207,11 @@ async function assertPreviewResourceEvidence(audit, previewUrl, rendered) {
   }
   if (rendered.externalScripts > 0) {
     for (const source of rendered.scriptUrls) {
-      const script = audit.requests.find(item => item.resourceType === "script" && item.url === source);
-      assert(script && script.status >= 200 && script.status < 400 && script.responseBodyReadable === true,
-        "An external preview script did not return a readable successful response.");
+      const observed = audit.requests.filter(item => item.url === source).map(diagnostic);
+      assert(hasReadableScriptSource(audit.requests, source),
+        `An external preview script did not return a readable successful response: ${JSON.stringify({
+          host: new URL(source).hostname, path: new URL(source).pathname, observed,
+        })}`);
     }
   }
   const failedApiGets = audit.requests.filter(item => ["fetch", "xhr"].includes(item.resourceType)
@@ -1211,8 +1223,7 @@ async function assertPreviewResourceEvidence(audit, previewUrl, rendered) {
     stylesheetApplied: rendered.stylesheetApplied, inlineStyleApplied: rendered.inlineStyleApplied,
     computedStyleEvidence: rendered.computedStyles,
     externalScripts: rendered.externalScripts, inlineScripts: rendered.inlineScripts,
-    externalScriptResponsesReadable: rendered.externalScripts === 0
-      || audit.requests.filter(item => item.resourceType === "script").every(item => item.responseBodyReadable === true),
+    externalScriptResponsesReadable: rendered.scriptUrls.every(source => hasReadableScriptSource(audit.requests, source)),
     failedApiGets: 0,
   };
 }
@@ -1558,6 +1569,12 @@ async function previewPhase() {
     const projects = projectsArray(await apiGet(page, "/api/projects", "Owner dashboard project list"));
     assert.equal(projects?.length, 1, "Preview requires exactly one customer project.");
     assert.equal(String(projects[0]?.id), String(state.projectId));
+    const project = await apiGet(page, `/api/projects/${state.projectId}`, "Owner project");
+    assert.equal(String(project?.agentId), state.agentId,
+      "The saved project is not attached to the checkpoint's agent.");
+    const currentRevision = await runtimeGet(page, state.projectId, "revision");
+    assert.equal((currentRevision?.commitHash || currentRevision?.revision?.commitHash || "").toLowerCase(),
+      state.initialRevision, "The saved project changed since the original generation.");
 
     const status = await runtimeGet(page, state.projectId, "status");
     const previewUrl = status.previewUrl || status.previewURL || status.state?.previewUrl || status.state?.previewURL;
@@ -1565,16 +1582,40 @@ async function previewPhase() {
     const audit = attachPreviewRequestAudit(page, previewUrl);
     await openEditor(page, state.projectId);
     const frame = await previewFrame(page, previewUrl);
+    // A ready document can still contain only the initial loading placeholder.
+    // Do not accept or submit a lead until this existing CRM has mounted.
+    await frame.waitForFunction(() => {
+      const text = document.body?.innerText || "";
+      return text.includes("Roofing Dashboard") && text.includes("Leads Directory")
+        && !/^\s*Loading ApexRoof CRM\.{0,3}\s*$/.test(text)
+        && (document.querySelector("#root")?.childElementCount || 0) > 0;
+    }, { timeout: 90_000 });
     const rendered = await renderedPreviewWithAppliedStyles(page, frame);
     const resources = await assertPreviewResourceEvidence(audit, previewUrl, rendered);
     const navigation = await exercisePreviewNavigation(frame, audit);
+    assert(navigation.exercised && navigation.javascriptNavigationEvidence,
+      "The generated CRM did not demonstrate working in-app navigation.");
+    const dataDeadline = Date.now() + 30_000;
+    const observedData = endpoint => audit.requests.some(item => {
+      try {
+        return item.method === "GET" && item.status === 200
+          && /json/i.test(item.responseHeaders?.contentType || "")
+          && new URL(item.url).pathname.endsWith(`/api/${endpoint}`);
+      } catch { return false; }
+    });
+    while (Date.now() < dataDeadline && (!observedData("stats") || !observedData("leads"))) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    assert(observedData("stats") && observedData("leads"),
+      "The mounted CRM did not complete both scoped stats and leads JSON GETs.");
     const observedJsonCandidates = audit.requests.filter(item =>
       item.method === "GET" && item.status >= 200 && item.status < 300
         && /json/i.test(item.responseHeaders?.contentType || "") && /^https?:/i.test(item.url));
     const jsonReads = await browserReadableJsonGets(frame, audit, null);
-    if (observedJsonCandidates.length > 0) {
-      assert(jsonReads.some(item => item.bodyReadable && item.status >= 200 && item.status < 300),
-        "Preview made successful JSON GET requests, but none were browser-readable when re-requested with their observed URLs.");
+    for (const endpoint of ["stats", "leads"]) {
+      assert(jsonReads.some(item => item.bodyReadable && item.status === 200
+        && new URL(item.url).pathname.endsWith(`/api/${endpoint}`)),
+      `The generated CRM's ${endpoint} JSON GET was not browser-readable.`);
     }
     const queryJsonCandidates = observedJsonCandidates.filter(item => {
       try { return new URL(item.url).search.length > 0; } catch { return false; }
@@ -1646,7 +1687,11 @@ async function previewPhase() {
       queryBearingJsonGet: queryJsonEvidence,
       dynamicJsonGet: dynamicJsonEvidence,
       requestEvidence: previewRequestEvidence(audit),
-      corsFailures: audit.corsErrors,
+      parentPageHttpErrors: audit.parentPageHttpErrors,
+      platformTelemetryErrorCount: audit.platformTelemetryErrors.length,
+      corsFailures: audit.corsErrors.map(item => ({
+        ...item, failure: safeError(item.failure),
+      })),
       addLead: lead,
     });
   } catch (error) {
