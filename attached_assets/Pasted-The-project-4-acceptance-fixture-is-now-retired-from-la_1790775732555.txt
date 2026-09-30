@@ -1,0 +1,353 @@
+The project 4 acceptance fixture is now retired from launch-readiness testing
+because we no longer possess its disposable account credential.
+
+This is NOT a newly discovered BuildCustom customer-facing defect.
+
+Do NOT:
+- add an admin password reset
+- bypass authentication
+- transfer project 4
+- modify its owner
+- modify project 4
+- delete project 4 yet
+- change production auth
+- continue trying to recover that disposable account
+
+We will now perform ONE clean, final customer-journey test from scratch.
+
+CURRENT PRODUCTION VERSIONS
+
+Runtime:
+a0a853d2-b2e4-4899-af46-c4f292fb8edb
+
+Control:
+167eaeb5-2420-41d4-a740-cc0ce04b72d9
+
+Gateway previously recorded as:
+26ac7a8c-695f-49d9-845a-8fe79ec2c28e
+
+Before testing, READ-ONLY verify the currently serving gateway version.
+
+Do not deploy anything merely to make the version match the recorded value.
+
+==================================================
+PHASE 1 — CREATE ONE NEW DISPOSABLE CUSTOMER
+==================================================
+
+Create a new disposable launch-readiness customer through the NORMAL public:
+
+https://app.buildcustom.ai/signup
+
+Use a test email/mailbox that the test environment can actually access if
+email is needed.
+
+Generate a strong disposable password and retain it ONLY in the secure test
+environment for the duration of this acceptance run.
+
+Do NOT:
+- print the password in chat
+- put it in source
+- commit it
+- put it in logs/reports
+
+Verify:
+
+- public signup succeeds
+- normal customer session established
+- dashboard loads
+- zero-project/new-user state appears
+- no manual bootstrap is required
+
+Record the user ID and email, but NOT the password.
+
+==================================================
+PHASE 2 — CREATE THE TEST PROJECT
+==================================================
+
+Through the normal customer UI create exactly ONE project with:
+
+"Build me a simple CRM for a roofing company. I need a dashboard showing
+total leads, estimates sent, jobs won, and revenue. Add a leads page with
+customer name, phone, email, project type, lead status, estimated value, and
+notes. Make it clean and professional."
+
+Verify:
+
+- exactly one project
+- exactly one prompt
+- native ThinkAgent runs
+- generation streams
+- files are created
+- stable revision produced
+- generation completes
+- no duplicate generation
+
+Record:
+
+- project ID
+- agent ID
+- revision
+- generation duration
+
+==================================================
+PHASE 3 — FULL PREVIEW ACCEPTANCE
+==================================================
+
+This phase specifically re-tests the platform defects we fixed.
+
+Verify on normal first load:
+
+- HTML loads
+- CSS loads/applies
+- JavaScript loads/executes
+- no application-blocking CORS error
+- visible application renders
+- navigation works
+- generated GET/API data requests work
+- JSON responses are browser-readable
+- requests containing query parameters work
+- dynamic/template-literal URLs retain preview capability
+
+If the generated app contains an existing normal data-creation/mutation action,
+test it through the UI.
+
+For the roofing CRM, if Add Lead exists, add ONE clearly disposable lead.
+
+Verify:
+
+- OPTIONS preflight succeeds
+- OPTIONS itself does NOT execute mutation code
+- POST occurs exactly once
+- capability authorization succeeds
+- JSON body reaches generated handler
+- generated handler executes exactly once
+- response is browser-readable
+- UI reflects success
+- subsequent GET shows the record
+- no duplicate record is created
+- no relevant CORS failure
+
+If this newly generated app happens not to expose a mutation UI, do NOT alter
+the source just to manufacture one.
+
+Instead report that mutation browser acceptance could not be exercised on
+that generated fixture.
+
+However, the focused runtime/control tests for mutation transport must remain
+passing.
+
+If any real preview behavior fails, STOP and report the concrete blocker.
+
+Ignore unrelated /cdn-cgi/rum telemetry errors unless they actually prevent
+generated-app functionality.
+
+==================================================
+PHASE 4 — FIRST NORMAL AI EDIT
+==================================================
+
+Send exactly:
+
+"Change the dashboard to a dark navy theme and add a recent leads section
+showing the five newest leads."
+
+Verify:
+
+- exactly one edit submitted
+- existing project context retained
+- new revision produced
+- requested changes appear
+- preview still renders
+- CSS/JS still work
+- GET/API data still works
+- mutation behavior still works if available
+
+==================================================
+PHASE 5 — LEAVE AND REOPEN
+==================================================
+
+Leave the project through normal UI.
+
+Return to dashboard.
+
+Reopen it.
+
+Verify:
+
+- same project
+- conversation persists
+- files persist
+- latest revision persists
+- edited preview persists
+- no automatic regeneration occurs
+
+==================================================
+PHASE 6 — INITIAL PUBLISH
+==================================================
+
+Publish through the NORMAL BUILDCUSTOM CUSTOMER UI.
+
+IMPORTANT:
+
+This means BuildCustom's Publish control inside app.buildcustom.ai.
+
+It does NOT mean Replit's Publish button.
+
+Do not publish the Replit project.
+
+Verify:
+
+- ordinary customer can publish
+- immutable release created
+- public *.apps.buildcustom.ai URL returned
+- URL returns 200
+- HTML renders
+- CSS loads
+- JS executes
+- generated application works publicly
+- data behavior required by the generated application works publicly
+- no BuildCustom product credentials leak into the public app
+
+Record:
+
+- release ID
+- script identity
+- public URL
+
+==================================================
+PHASE 7 — SAME-REVISION PUBLISH
+==================================================
+
+Without editing, invoke BuildCustom Publish/Publish Updates again.
+
+Verify:
+
+- same revision does not create a second immutable deployment
+- existing release/script is reused as designed
+- stable URL unchanged
+- customer UI completes normally
+
+==================================================
+PHASE 8 — SECOND AI EDIT
+==================================================
+
+Send exactly:
+
+"Add a green New Lead button in the top-right of the leads page."
+
+Verify:
+
+- exactly one edit
+- new revision
+- requested change visible
+- preview remains functional
+- data reads remain functional
+- mutation transport remains functional
+
+==================================================
+PHASE 9 — PUBLISH UPDATE
+==================================================
+
+Publish the changed revision.
+
+Verify:
+
+- new immutable candidate/release for the changed revision
+- previous release remains intact
+- stable public URL remains the same
+- routing changes only after candidate success
+- stable URL now serves the updated application
+
+==================================================
+PHASE 10 — RETURNING CUSTOMER
+==================================================
+
+Log out normally.
+
+Verify old session is revoked.
+
+Log back in through the NORMAL public login using the securely retained
+disposable credential.
+
+Verify:
+
+- same user identity
+- dashboard loads
+- project remains
+- conversation remains
+- files remain
+- latest revision remains
+- preview works
+- published URL remains associated with project
+
+==================================================
+PHASE 11 — BASIC OWNERSHIP ISOLATION
+==================================================
+
+Using the existing independent tester account:
+
+Verify it cannot access the new customer's:
+
+- project
+- files
+- conversation
+- preview
+- publish controls
+- releases
+
+Do not perform another giant security audit.
+
+==================================================
+PHASE 12 — FINAL STATE
+==================================================
+
+Verify:
+
+- active publish claims = 0
+- runtime serving version
+- control serving version
+- gateway serving version
+- no Replit production dependency was reintroduced
+
+Do NOT clean up the new test customer/project yet.
+
+We may need the passing fixture for follow-up verification.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. new disposable user ID/email
+2. project ID
+3. agent ID
+4. initial revision
+5. generation duration
+6. preview result
+7. GET/query/dynamic URL result
+8. OPTIONS/mutation result
+9. first AI edit + new revision
+10. reopen/persistence result
+11. initial publish release/script/public URL
+12. same-revision publish result
+13. second AI edit + revision
+14. publish-update result
+15. logout/login persistence result
+16. ownership-isolation result
+17. active publish claims
+18. runtime/control/gateway versions
+19. remaining concrete customer-facing BLOCKERS
+20. GO / NO-GO
+
+GO / NO-GO must be based on the actual new-customer journey, not inability to
+access the retired project 4 test fixture.
+
+If every required customer-facing flow passes, state exactly:
+
+BUILDCUSTOM CORE CUSTOMER JOURNEY: PASS
+READY FOR REAL CUSTOMER USE
+
+STOP after the report.
+
+Do not begin billing, custom domains, cleanup, dependency upgrades, telemetry
+work, or unrelated polish.
