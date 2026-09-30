@@ -1,0 +1,536 @@
+We have accepted the architecture review.
+
+Now do TWO things:
+
+1. obtain the missing READ-ONLY Project 5 SpaceDO working-tree evidence;
+2. produce the concrete implementation plan for fixing BuildCustom's coding lifecycle BEFORE we resume Task 13.
+
+DO NOT IMPLEMENT THE ARCHITECTURE FIX YET.
+
+Do not:
+- resend edit1
+- modify Project 5
+- commit/reset/discard its working tree
+- change maxSteps
+- deploy runtime changes
+- proceed to edit2
+
+==================================================
+PART 1 — PROJECT 5 WORKING TREE
+==================================================
+
+The architecture report established that committed-file HTTP routes cannot tell us whether pending SpaceDO edits exist.
+
+We need actual read-only SpaceDO evidence.
+
+Use the smallest safe OWNER-AUTHORIZED OPERATOR PATH available to inspect the SAME Project 5 SpaceDO.
+
+We need:
+
+- gitStatus
+- gitDiff against current HEAD
+- read-only inspection of modified working files as necessary
+
+If no existing owner-authorized path exposes these operations, identify the narrowest safe temporary/operator mechanism required.
+
+Do NOT create a general public Git endpoint.
+
+Do NOT expose arbitrary users' workspaces.
+
+Do NOT mutate the workspace.
+
+Project:
+
+5
+
+Committed revision:
+
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Determine conclusively:
+
+- dirty/clean
+- modified files
+- exact diff summary
+- whether all five failed-turn edits remain
+- whether dark-navy changes exist
+- whether five-newest-leads logic exists
+- whether live working files currently parse
+- whether the reconstructed JSX syntax failure exists in the REAL workspace
+- whether unrelated changes exist
+- whether this workspace is safe to continue from
+
+Do not fix anything.
+
+==================================================
+PART 2 — DESIGN THE MINIMAL CONTINUOUS CODING LOOP
+==================================================
+
+We are NOT solving this by simply changing:
+
+maxSteps = 25
+
+to:
+
+maxSteps = 50/100/etc.
+
+The architecture review established:
+
+- maxSteps=25 is stock VibeSDK application behavior
+- it is not a Workers/provider/Think hard limit
+- Think exposes lifecycle hooks
+- Think session persists
+- SpaceDO workspace persists
+- current VibeSDK can strand successful edits when the model reaches maxSteps before deploy_space
+- current context selection drops much prior tool/file context
+- grep/find/range reads already exist
+- Cloudflare supports subagents, but current VibeSDK does not use them
+- subagents are NOT required for the first fix
+
+TARGET PRODUCT BEHAVIOR:
+
+The CUSTOMER operation is the coding TASK.
+
+An internal Think turn is NOT the customer operation.
+
+Example:
+
+Customer:
+"Make the dashboard dark navy and show the five newest leads."
+
+Internally BuildCustom may require:
+
+Think turn 1
+→ continuation
+→ Think turn 2
+→ validation
+→ repair continuation
+→ validation
+→ coherent revision
+→ completion
+
+But to the customer this remains ONE coding operation.
+
+==================================================
+A. DEFINE TASK COMPLETION
+==================================================
+
+Design an explicit completion contract.
+
+A coding operation must NOT be considered successful merely because Think produced final text.
+
+For a normal code-changing task, completion should require evidence such as:
+
+- requested work actually applied
+- workspace in a coherent state
+- deploy/build validation succeeds
+- preview is created/updated
+- appropriate browser/runtime validation occurs
+- coherent Git revision exists
+- agent indicates task complete
+
+Determine the exact minimum completion conditions using EXISTING VibeSDK/Think/SpaceDO mechanisms.
+
+Do not create another revision system.
+
+==================================================
+B. INTERNAL CONTINUATION
+==================================================
+
+Determine exactly how to use the INSTALLED Think version to continue an incomplete coding operation across internal model turns.
+
+Inspect and reference actual installed implementation for:
+
+- continueLastTurn
+- beforeTurn
+- beforeStep
+- onStepFinish
+- onChatResponse
+- stopWhen
+- context/session APIs
+- recovery/fibers where actually relevant
+
+We need a bounded mechanism like:
+
+run Think
+→ internal turn reaches model/step boundary
+→ inspect completion state
+→ if task incomplete AND progressing AND resource budget remains:
+      continue internally
+→ repeat
+→ stop when complete / blocked / user input required / exceptional resource ceiling
+
+Do not assume continueLastTurn works after the forced VibeSDK max-step final response.
+
+PROVE from source how the proposed mechanism would work with the installed version.
+
+If continueLastTurn is not appropriate, identify the closest native Think-supported alternative.
+
+Do not build a separate Workflow orchestrator unless native Think genuinely cannot do this.
+
+==================================================
+C. RESOURCE / SAFETY BOUND
+==================================================
+
+We still need protection against runaway agents.
+
+Design a generous OPERATION-LEVEL bound rather than exposing a tiny TURN-level ceiling as completion.
+
+For example, the architecture may have:
+
+- internal per-turn model guard
+- overall coding-operation model-call/tool/cost/time guard
+
+But do NOT choose arbitrary production numbers yet unless supported by evidence.
+
+We need the behavior:
+
+PROGRESSING NORMALLY
+→ continue
+
+REPEATED FAILURES / NO PROGRESS
+→ stop as blocked
+
+USER INPUT REQUIRED
+→ stop and ask user
+
+REAL RESOURCE CEILING
+→ stop honestly as incomplete
+
+TASK VERIFIED
+→ complete
+
+A resource ceiling must NEVER be reported as successful task completion.
+
+==================================================
+D. PRESERVE WORK ACROSS CONTINUATIONS
+==================================================
+
+SpaceDO is authoritative.
+
+Continuation must operate on the SAME working tree.
+
+Do not:
+- recreate files
+- reset workspace
+- duplicate file storage
+- create BuildCustom-side file state
+
+Determine how pending edits remain available across internal turns.
+
+Also determine how to handle malformed intermediate code safely.
+
+DO NOT automatically commit broken intermediate work merely because a turn ended.
+
+==================================================
+E. VALIDATION / REPAIR
+==================================================
+
+Use the existing VibeSDK-native path where possible.
+
+The current prompt expects:
+
+edit
+→ deploy_space
+→ browser console
+→ repair
+
+Design the completion loop so that:
+
+1. agent edits
+2. build/preview validation occurs
+3. errors feed back into the same customer operation
+4. agent repairs
+5. validation runs again
+6. coherent revision is accepted
+7. operation completes
+
+Determine whether deploy_space should remain model-selected or whether lifecycle/completion enforcement should require it before success.
+
+Do not automatically publish the generated app.
+
+Preview/deploy_space and BuildCustom immutable production Publish remain separate concepts.
+
+==================================================
+F. FOLLOW-UP EDIT EFFICIENCY
+==================================================
+
+We do not want another 18-read discovery cycle for every small edit.
+
+Use what already exists FIRST:
+
+- find
+- grep
+- range read
+- persistent conversation
+- SpaceDO workspace
+- current revision/branch
+- compact project context
+
+Propose the smallest prompt/context changes that encourage:
+
+SEARCH FIRST
+→ TARGETED READ
+→ EDIT
+
+instead of:
+
+READ GIANT FILE FROM TOP TO BOTTOM
+
+Determine whether the Think system prompt should explicitly instruct the agent to use grep/find before paging large files.
+
+Determine whether supplying a small workspace-derived context block at turn start would materially help.
+
+Possible useful context:
+
+- current revision
+- branch
+- concise file tree/manifest
+- recently modified files
+- previous relevant file paths
+
+Do NOT build semantic indexing yet.
+
+==================================================
+G. CONTEXT ACROSS FOLLOW-UP REQUESTS
+==================================================
+
+Design the smallest improvement to context selection.
+
+Current selectThinkContextMessages retains limited text history and selected tool pairs but generally drops prior file/edit tool results.
+
+We do NOT want unlimited historical tool context.
+
+Determine whether we should maintain a compact project/session context containing things such as:
+
+- architecture summary
+- important files
+- recently edited files
+- current revision
+- key project decisions
+
+It must remain secondary to the actual SpaceDO workspace.
+
+Workspace/Git is source of truth.
+
+Do not create a competing memory database if Think context blocks/session state already provide an appropriate mechanism.
+
+==================================================
+H. SUBAGENTS
+==================================================
+
+DO NOT add subagents in the first implementation unless the evidence shows they are required.
+
+However, document the future extension point.
+
+Cloudflare Agents supports subAgent(), but VibeSDK does not currently register delegation in its coding loop.
+
+Future possible uses:
+
+PRIMARY CODING AGENT
+    |
+    +-- exploration/search subagent
+    +-- test/debug subagent
+    +-- research subagent
+    +-- independent verification subagent
+
+Primary agent retains:
+
+- user intent
+- architecture
+- write authority
+- final validation
+- completion decision
+
+Prefer single-writer semantics.
+
+Do not allow multiple agents to concurrently mutate the same SpaceDO working tree without an explicitly safe architecture.
+
+For NOW determine:
+
+- whether any subagent is actually required before launch
+- what extension point we should preserve for later
+
+==================================================
+I. DO NOT BREAK ACCEPTED BUILDCUSTOM BOUNDARIES
+==================================================
+
+Preserve:
+
+BuildCustom:
+- product identity
+- projects
+- ownership
+- permissions
+- project-agent mapping
+- dashboard
+- release metadata
+- domains
+- future billing/usage
+
+VibeSDK/Cloudflare:
+- ThinkAgent
+- SpaceDO
+- workspace
+- files
+- execution
+- preview
+- revisions
+- restore
+- generated-app runtime
+
+Also preserve:
+
+- Task 4B immutable publishing behavior
+- Task 6A authentication/logout protections
+- current ownership isolation
+- current preview sandbox protections
+- current generated-app gateway
+- runtime sole password/session authority
+
+Do not redesign these.
+
+==================================================
+J. TEST PLAN
+==================================================
+
+Design focused tests for the lifecycle change.
+
+At minimum include:
+
+1. SMALL EDIT
+Agent completes normally within one internal turn.
+
+2. LARGE EDIT
+Agent reaches the old-style internal step boundary while progressing.
+BuildCustom continues the SAME customer task automatically.
+Task eventually validates and commits.
+
+3. MALFORMED INTERMEDIATE EDIT
+Build/preview fails.
+Agent receives error.
+Agent repairs.
+Final coherent revision succeeds.
+
+4. NO-PROGRESS LOOP
+Agent repeatedly performs equivalent operations or errors.
+Overall operation stops safely as BLOCKED rather than continuing forever.
+
+5. USER INPUT REQUIRED
+Agent needs clarification.
+Operation pauses and asks customer rather than inventing an answer.
+
+6. RESOURCE CEILING
+Overall exceptional ceiling reached.
+Operation reports INCOMPLETE/BLOCKED, never SUCCESS.
+
+7. FOLLOW-UP EDIT
+Second request uses targeted search/context and does not unnecessarily rediscover the entire project.
+
+8. RECOVERY
+Browser/client disconnect does not duplicate the user instruction or corrupt workspace.
+
+9. COMMIT CONTRACT
+No successful completion without a coherent authoritative revision.
+
+10. PUBLISH ISOLATION
+None of this automatically triggers BuildCustom production Publish.
+
+==================================================
+K. IMPLEMENTATION SCOPE
+==================================================
+
+Return the SMALLEST set of files/functions that would need to change.
+
+Prefer changes inside the existing VibeSDK/Think integration.
+
+Do not introduce a new service unless absolutely necessary.
+
+For every proposed change report:
+
+FILE
+FUNCTION
+CURRENT BEHAVIOR
+PROPOSED BEHAVIOR
+WHY REQUIRED
+
+Also identify which changes are:
+
+MUST FIX BEFORE LAUNCH
+
+versus:
+
+FOLLOW-UP OPTIMIZATION
+
+==================================================
+RETURN
+==================================================
+
+Return one report with:
+
+1. PROJECT 5 LIVE WORKING-TREE RESULT
+   - accessible
+   - git status
+   - modified files
+   - syntax state
+   - edit1 complete/partial
+   - safe to continue
+
+2. EXACT CURRENT COMPLETION FAILURE
+
+3. PROPOSED CUSTOMER-OPERATION LIFECYCLE
+
+4. EXACT THINK NATIVE CONTINUATION MECHANISM
+
+5. HOW PROGRESS IS DETECTED
+
+6. HOW COMPLETION IS DETECTED
+
+7. HOW BLOCKED/USER-INPUT STATES ARE DETECTED
+
+8. RESOURCE/SAFETY MODEL
+
+9. WORKSPACE PRESERVATION MODEL
+
+10. VALIDATION/REPAIR LOOP
+
+11. FOLLOW-UP FILE-DISCOVERY IMPROVEMENT
+
+12. CONTEXT-SELECTION IMPROVEMENT
+
+13. SUBAGENT DECISION
+    - needed before launch YES/NO
+    - future role
+
+14. FILES/FUNCTIONS TO CHANGE
+
+15. FOCUSED TEST PLAN
+
+16. COMPATIBILITY WITH:
+    - Task 4B
+    - Task 6A
+    - ownership isolation
+    - preview sandbox
+    - gateway
+    - immutable publishing
+
+17. MUST FIX BEFORE LAUNCH
+
+18. CAN WAIT UNTIL AFTER LAUNCH
+
+19. RECOMMENDED HANDLING OF THE EXISTING PROJECT 5 FAILED EDIT1 WORKSPACE AFTER THE FIX IS DESIGNED
+
+20. IMPLEMENTATION ORDER
+
+FINAL RULE:
+
+DO NOT IMPLEMENT YET.
+
+Do not change Project 5.
+Do not change maxSteps.
+Do not commit/reset the pending working tree.
+Do not resend edit1.
+Do not deploy.
+Do not proceed to edit2.
+
+Return the concrete implementation plan and STOP.

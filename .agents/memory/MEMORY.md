@@ -63,3 +63,5 @@
 - [External CI npm installs](pages-install-diagnosis.md) — GitHub's npm log traced failed tarball fetches to Replit-internal lockfile URLs; Pages shares symptoms but lacks debug proof.
 - [JSDOM route fixtures](jsdom-route-fixtures.md) — a blank route can be a thrown component error from an underspecified mock, not a routing regression.
 - [Same-origin preview audits](same-origin-preview-audits.md) — classify requests by preview path or initiator frame, not origin alone; exclude platform telemetry separately.
+- [SpaceDO storage forensics](spacedo-storage-forensics.md) — Cloudflare's read-only Durable Object SQL query can reveal a live persisted workspace when owner Git routes only show HEAD.
+- [Think continuation queue](think-continuation-queue.md) — installed Think's response hook still runs inside the queued RPC turn; awaiting a queued continuation there deadlocks.
