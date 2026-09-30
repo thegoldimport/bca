@@ -1,0 +1,94 @@
+Do a NARROW READ-ONLY investigation of the failed edit1 send attempt.
+
+Do NOT resend edit1.
+Do NOT click Send.
+Do NOT modify code.
+Do NOT modify Project 5.
+Do NOT invoke the agent.
+Do NOT proceed to edit2.
+
+Current authoritative state:
+
+- checkpoint: edit1-blocked-no-retry
+- Project 5
+- pre-edit revision:
+  d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+- post-attempt revision: unchanged
+- one UI Send click was attempted
+- ZERO edit1 instructions were observed on the builder connection
+- ZERO edit1 turns exist
+- agent is idle
+- lead count remains 13
+- lead-row digest unchanged
+- release count remains 0
+- no unintended mutation observed
+
+Therefore the edit itself was NOT delivered.
+
+Investigate only the path:
+
+PROMPT TEXT
+→ SEND BUTTON
+→ CLICK EVENT
+→ BUILDER SUBMIT/SEND HANDLER
+→ WS MESSAGE
+→ SERVER/AGENT TURN
+
+Determine the earliest point we can establish failed.
+
+Inspect read-only:
+
+1. The actual prompt composer and Send button used by the harness.
+   Confirm:
+   - prompt text was actually present
+   - correct Send element was targeted
+   - enabled/disabled state
+   - whether another element/overlay could intercept interaction
+   - whether the element was replaced/stale
+   - form/button semantics
+   - click/submit/send handler structure
+
+2. The harness send implementation.
+   Determine exactly how the UI click was performed and whether it matches normal user interaction.
+
+3. Existing evidence from the failed attempt.
+   Check for:
+   - click event evidence
+   - submit/composer event evidence
+   - console errors
+   - page errors
+   - WebSocket frames
+   - connection state
+   - navigation/re-render around the click
+
+4. The builder source path from Send → WebSocket.
+   Identify what should happen after a valid Send action.
+
+5. Confirm again from authoritative state that no edit1 turn or instruction reached the agent.
+
+Do not speculate beyond available evidence.
+
+If the historical evidence cannot establish the cause, say so. Do NOT start another forensic loop trying to reconstruct events that were never captured.
+
+Return only:
+
+Prompt text present before click: YES/NO/UNKNOWN
+Correct Send element targeted: YES/NO/UNKNOWN
+Send enabled before click: YES/NO/UNKNOWN
+Click event confirmed: YES/NO/UNKNOWN
+Composer/send handler invoked: YES/NO/UNKNOWN
+WebSocket connected at attempt: YES/NO/UNKNOWN
+Edit1 WebSocket frame observed: YES/NO
+Server/agent turn observed: YES/NO
+Earliest confirmed failure point:
+Concrete browser/client error, if any:
+Harness issue established: YES/NO
+Product issue established: YES/NO
+Root cause established: YES/NO
+Smallest next action:
+
+Then STOP.
+
+If the root cause cannot be established from existing evidence, the smallest next action should be to instrument the send path BEFORE authorizing one additional send, exactly as we did for the Add Lead issue.
+
+Do not change anything and do not resend.
