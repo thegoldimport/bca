@@ -140,3 +140,17 @@ mtime_ms = 1790892961820
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/750a438c-e1d3-461c-81d3-f4e4ec2c1329/4208714a-2ece-413d-b48c-25f3a22a8170"
 storage_version_token = "1790892962451139"
 content_type = "text/html"
+
+[[outputs]]
+id = "xKfcwyilEsR3US8iweVkE"
+uri = "file://production/vibesdk-launch/canonical-release-checkpoint.md"
+type = "text"
+title = "Canonical source and release receipt"
+description = "Git/reconstruction/deployment passed. Full Project 8 smoke remains incomplete; includes exact live versions, rollback targets, one-login evidence, scope exclusions and receipt-retention limitations."
+logical_id = "392d7d8e-0775-4fd1-a3b3-d8c6629b86e8"
+content_hash = "sha256:b68a6adbbe8244c79b93af6efa0028e1a729139796d4aa2d11a50fcfafcf3357"
+size = 7761
+mtime_ms = 1790896857499
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/392d7d8e-0775-4fd1-a3b3-d8c6629b86e8/fc1efd71-66a1-44ff-b52b-17b7c3987ce7"
+storage_version_token = "1790896943402000"
+content_type = "text/markdown"
