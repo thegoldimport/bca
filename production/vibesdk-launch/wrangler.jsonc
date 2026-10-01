@@ -183,6 +183,8 @@
     }
   ],
   "vars": {
+    "THINK_OPERATION_MAX_CONTINUATIONS": "4",
+    "THINK_OPERATION_MAX_ELAPSED_MS": "900000",
     "REGISTRATION_ENABLED": "true",
     "TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
     "DISPATCH_NAMESPACE": "buildcustom-vibesdk-launch-dispatch",

@@ -1,0 +1,29 @@
+{
+  "mode": "after",
+  "startedAt": "2026-10-01T12:03:16.485Z",
+  "checks": {
+    "runtime": "PASS",
+    "controlAndSignupConfiguration": "PASS",
+    "activePublishClaims": 0,
+    "signupValidation": "PASS",
+    "passwordRecoveryAnonymousAndInvalidToken": "PASS",
+    "login": "PASS",
+    "dashboard": "PASS",
+    "crossOwnerStatus": 404,
+    "forgedHeaderStatus": 400,
+    "ignoredOwnerHeaderStatus": 404,
+    "ownershipAndForgedAccess": "PASS",
+    "files": "PASS",
+    "runtimeStatus": "PASS",
+    "existingPreview": "PASS",
+    "publicApps": "PASS",
+    "unknownSlug": 404,
+    "logoutStatus": 204,
+    "oldIdentityProbe": "ANONYMOUS",
+    "oldProtectedProjectsStatus": 401,
+    "logoutRevocation": "PASS",
+    "publishSeparation": "NO_PUBLISH_REQUESTS"
+  },
+  "status": "PASS",
+  "finishedAt": "2026-10-01T12:03:32.705Z"
+}

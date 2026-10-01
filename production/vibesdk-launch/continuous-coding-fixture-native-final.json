@@ -1,0 +1,224 @@
+{
+  "at": "2026-10-01T12:43:10.506Z",
+  "agentId": "e4606862-99a9-4dbd-bad2-7c7bd3dacf4f",
+  "queries": [
+    {
+      "sql": "SELECT id,role,created_at,length(content) AS bytes,CASE WHEN role='user' AND instr(content,'__THINK_INTERNAL_CONTINUATION__:')>0 THEN 1 ELSE 0 END AS internal_continuation FROM assistant_messages ORDER BY created_at,id"
+    },
+    {
+      "sql": "SELECT request_id,status,created_at,completed_at FROM cf_ai_chat_stream_metadata"
+    },
+    {
+      "sql": "SELECT json_extract(j.value,'$.toolName') AS name,json_extract(j.value,'$.state') AS state,json_extract(j.value,'$.toolCallId') AS call_id,json_extract(j.value,'$.output.status') AS output_status,json_extract(j.value,'$.errorText') AS error_text FROM assistant_messages m,json_each(m.content,'$.parts') j WHERE m.role='assistant' AND json_extract(j.value,'$.type') LIKE 'tool-%'"
+    },
+    {
+      "sql": "SELECT json_extract(e.value,'$.type') AS chunk_type,count(*) AS n FROM cf_ai_chat_stream_chunks c,json_each(CASE WHEN json_type(c.body)='array' THEN c.body ELSE json_array(c.body) END) e GROUP BY 1"
+    },
+    {
+      "sql": "SELECT json_extract(e.value,'$.type') AS chunk_type,json_extract(e.value,'$.errorText') AS error_text FROM cf_ai_chat_stream_chunks c,json_each(CASE WHEN json_type(c.body)='array' THEN c.body ELSE json_array(c.body) END) e WHERE json_extract(e.value,'$.type') IN ('error','tool-output-error','tool-input-error')"
+    }
+  ],
+  "result": {
+    "results": [
+      {
+        "columns": [
+          "id",
+          "role",
+          "created_at",
+          "bytes",
+          "internal_continuation"
+        ],
+        "rows": [
+          [
+            "9a1ea492-7887-4acb-8b70-443dadcb0085",
+            "user",
+            "2026-10-01 12:17:11",
+            1902,
+            0
+          ],
+          [
+            "aa92c956-bb90-44a0-b10f-7a6e84d3fa16",
+            "assistant",
+            "2026-10-01 12:18:48",
+            51836,
+            0
+          ]
+        ],
+        "meta": {
+          "rows_read": 4,
+          "rows_written": 0
+        }
+      },
+      {
+        "columns": [
+          "request_id",
+          "status",
+          "created_at",
+          "completed_at"
+        ],
+        "rows": [
+          [
+            "6a8e4da5-6834-4381-928e-1b09d3430ef9",
+            "error",
+            1790857031944,
+            1790857128534
+          ]
+        ],
+        "meta": {
+          "rows_read": 1,
+          "rows_written": 0
+        }
+      },
+      {
+        "columns": [
+          "name",
+          "state",
+          "call_id",
+          "output_status",
+          "error_text"
+        ],
+        "rows": [
+          [
+            "list",
+            "output-available",
+            "call_116888",
+            null,
+            null
+          ],
+          [
+            "find",
+            "output-available",
+            "call_114571",
+            null,
+            null
+          ],
+          [
+            "read",
+            "output-available",
+            "call_65653",
+            null,
+            null
+          ],
+          [
+            "activate_skill",
+            "output-available",
+            "call_189725",
+            null,
+            null
+          ],
+          [
+            "set_title",
+            "output-available",
+            "call_134944",
+            null,
+            null
+          ],
+          [
+            "write",
+            "output-available",
+            "call_188618",
+            null,
+            null
+          ],
+          [
+            "write",
+            "output-available",
+            "call_108037",
+            null,
+            null
+          ],
+          [
+            "write",
+            "output-available",
+            "call_7592",
+            null,
+            null
+          ],
+          [
+            "write",
+            "output-available",
+            "call_126075",
+            null,
+            null
+          ],
+          [
+            "write",
+            "output-available",
+            "call_70640",
+            null,
+            null
+          ],
+          [
+            "write",
+            "output-available",
+            "call_108814",
+            null,
+            null
+          ],
+          [
+            "write",
+            "output-available",
+            "call_55531",
+            null,
+            null
+          ]
+        ],
+        "meta": {
+          "rows_read": 27,
+          "rows_written": 0
+        }
+      },
+      {
+        "columns": [
+          "chunk_type",
+          "n"
+        ],
+        "rows": [
+          [
+            "finish-step",
+            12
+          ],
+          [
+            "start",
+            1
+          ],
+          [
+            "start-step",
+            13
+          ],
+          [
+            "tool-input-available",
+            12
+          ],
+          [
+            "tool-input-delta",
+            12
+          ],
+          [
+            "tool-input-start",
+            12
+          ],
+          [
+            "tool-output-available",
+            12
+          ]
+        ],
+        "meta": {
+          "rows_read": 162,
+          "rows_written": 0
+        }
+      },
+      {
+        "columns": [
+          "chunk_type",
+          "error_text"
+        ],
+        "rows": [],
+        "meta": {
+          "rows_read": 88,
+          "rows_written": 0
+        }
+      }
+    ]
+  }
+}

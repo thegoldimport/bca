@@ -1,0 +1,287 @@
+diff --git a/worker/api/controllers/auth/controller.test.ts b/worker/api/controllers/auth/controller.test.ts
+index cd8e3fd11273904c1ea6ac514a1e1dc7954973c8..99eb92bc86ce400df5df972132d6adb9f8920306 100644
+--- a/worker/api/controllers/auth/controller.test.ts
++++ b/worker/api/controllers/auth/controller.test.ts
+@@ -1,6 +1,7 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { AuthController } from './controller';
+ import type { RouteContext } from '../../types/route-context';
++import { SecurityError, SecurityErrorType } from 'shared/types/errors';
+ 
+ const {
+ 	mockGetOAuthAuthorizationUrl,
+@@ -9,6 +10,8 @@ const {
+ 	mockProvisionFromToken,
+ 	mockRegister,
+ 	mockLogin,
++	mockRequestPasswordReset,
++	mockResetPassword,
+ } =
+ 	vi.hoisted(() => ({
+ 		mockGetOAuthAuthorizationUrl: vi.fn(),
+@@ -17,6 +20,8 @@ const {
+ 		mockProvisionFromToken: vi.fn(),
+ 		mockRegister: vi.fn(),
+ 		mockLogin: vi.fn(),
++		mockRequestPasswordReset: vi.fn(),
++		mockResetPassword: vi.fn(),
+ 	}));
+ 
+ vi.mock('../../../database/services/AuthService', () => ({
+@@ -26,6 +31,8 @@ vi.mock('../../../database/services/AuthService', () => ({
+ 		getPendingLinkUserId: mockGetPendingLinkUserId,
+ 		register: mockRegister,
+ 		login: mockLogin,
++		requestPasswordReset: mockRequestPasswordReset,
++		resetPassword: mockResetPassword,
+ 	})),
+ }));
+ 
+@@ -57,6 +64,94 @@ function makeContext(overrides: Partial<RouteContext> = {}): RouteContext {
+ 	} as unknown as RouteContext;
+ }
+ 
++function makeCsrfRequest(path: string, body: unknown, headers: Record<string, string> = {}): Request {
++	const token = 'reset-csrf-test-token';
++	const csrfCookie = encodeURIComponent(JSON.stringify({ token, timestamp: Date.now() }));
++	return new Request(`${BASE_URL}${path}`, {
++		method: 'POST',
++		headers: {
++			'Content-Type': 'application/json',
++			Origin: BASE_URL,
++			Cookie: `csrf-token=${csrfCookie}`,
++			'X-CSRF-Token': token,
++			...headers,
++		},
++		body: JSON.stringify(body),
++	});
++}
++
++describe('AuthController password recovery', () => {
++	beforeEach(() => {
++		vi.clearAllMocks();
++		mockRequestPasswordReset.mockResolvedValue(undefined);
++		mockResetPassword.mockResolvedValue(undefined);
++	});
++
++	it('returns the same generic response for known and unknown emails', async () => {
++		const responses = await Promise.all(['known@example.com', 'unknown@example.com'].map(email =>
++			AuthController.forgotPassword(
++				makeCsrfRequest('/api/auth/forgot-password', { email }),
++				testEnv,
++				{} as ExecutionContext,
++				makeContext(),
++			)
++		));
++
++		expect(responses.map(response => response.status)).toEqual([200, 200]);
++		expect(await Promise.all(responses.map(response => response.json()))).toEqual([
++			{ success: true, data: { message: 'If an account exists for that email, password reset instructions will be sent.' } },
++			{ success: true, data: { message: 'If an account exists for that email, password reset instructions will be sent.' } },
++		]);
++		expect(mockRequestPasswordReset).toHaveBeenCalledTimes(2);
++	});
++
++	it('requires CSRF and rejects an untrusted Origin', async () => {
++		const csrfFailure = await AuthController.forgotPassword(
++			makeCsrfRequest('/api/auth/forgot-password', { email: 'user@example.com' }, {
++				'X-CSRF-Token': 'incorrect',
++			}),
++			testEnv,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++		const originFailure = await AuthController.resetPassword(
++			makeCsrfRequest('/api/auth/reset-password', {
++				token: 'opaque-token',
++				newPassword: 'Strong-but-not-a-real-password-52!',
++				confirmPassword: 'Strong-but-not-a-real-password-52!',
++			}, { Origin: 'https://attacker.example' }),
++			testEnv,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++
++		expect(csrfFailure.status).toBe(403);
++		expect(originFailure.status).toBe(403);
++		expect(mockRequestPasswordReset).not.toHaveBeenCalled();
++		expect(mockResetPassword).not.toHaveBeenCalled();
++	});
++
++	it('passes a validated reset request to the existing auth service', async () => {
++		const response = await AuthController.resetPassword(
++			makeCsrfRequest('/api/auth/reset-password', {
++				token: 'opaque-token',
++				newPassword: 'Strong-but-not-a-real-password-52!',
++				confirmPassword: 'Strong-but-not-a-real-password-52!',
++			}),
++			testEnv,
++			{} as ExecutionContext,
++			makeContext(),
++		);
++
++		expect(response.status).toBe(200);
++		expect(mockResetPassword).toHaveBeenCalledWith(
++			'opaque-token',
++			'Strong-but-not-a-real-password-52!',
++			expect.any(Request),
++		);
++	});
++});
++
+ describe('AuthController registration gate', () => {
+ 	beforeEach(() => {
+ 		vi.clearAllMocks();
+@@ -94,6 +189,60 @@ describe('AuthController registration gate', () => {
+ 		expect(mockRegister).toHaveBeenCalledOnce();
+ 	});
+ 
++it.each([
++  ['invalid email', { email: 'not-an-email', password: 'Valid-Test-Password123!', name: 'Test User' }],
++  ['weak password', { email: 'new-user@example.test', password: 'short', name: 'Test User' }],
++])('rejects %s as a client validation error before calling AuthService', async (_label, body) => {
++  const response = await AuthController.register(
++    new Request(`${BASE_URL}/api/auth/register`, {
++      method: 'POST',
++      headers: { 'content-type': 'application/json' },
++      body: JSON.stringify(body),
++    }),
++    testEnv,
++    {} as ExecutionContext,
++    makeContext(),
++  );
++  expect(response.status).toBe(400);
++  expect(await response.json()).toMatchObject({
++    success: false,
++    error: { message: _label === 'invalid email'
++      ? 'Enter a valid email address.' : 'Password does not meet the requirements.' },
++  });
++  expect(mockRegister).not.toHaveBeenCalled();
++});
++
++it.each(['user@example.com', 'USER@EXAMPLE.COM'])(
++  'preserves bounded duplicate rejection for %s', async email => {
++    mockRegister.mockRejectedValueOnce(new SecurityError(SecurityErrorType.CONFLICT, 'Account already exists', 409));
++    const response = await AuthController.register(
++      new Request(`${BASE_URL}/api/auth/register`, {
++        method: 'POST',
++        headers: { 'content-type': 'application/json' },
++        body: JSON.stringify({ email, password: 'Valid-Test-Password123!', name: 'Test User' }),
++      }),
++      testEnv, {} as ExecutionContext, makeContext(),
++    );
++    expect(response.status).toBe(409);
++    expect(mockRegister.mock.calls[0][0].email).toBe('user@example.com');
++  },
++);
++
++it('preserves 500 for an unexpected registration service failure', async () => {
++  mockRegister.mockRejectedValueOnce(new Error('simulated runtime outage'));
++  const response = await AuthController.register(
++    new Request(`${BASE_URL}/api/auth/register`, {
++      method: 'POST',
++      headers: { 'content-type': 'application/json' },
++      body: JSON.stringify({ email: 'new-user@example.test', password: 'Valid-Test-Password123!', name: 'Test User' }),
++    }),
++    testEnv,
++    {} as ExecutionContext,
++    makeContext(),
++  );
++  expect(response.status).toBe(500);
++});
++
+ 	it('rejects registration with the explicit disabled code when the gate is off', async () => {
+ 		const response = await AuthController.register(
+ 			new Request(`${BASE_URL}/api/auth/register`, {
+diff --git a/worker/api/controllers/auth/controller.ts b/worker/api/controllers/auth/controller.ts
+index eed0ae9bdfc019c6b5bda6d09afda77dbbeac4fd..7dbeb2c5e30eefe857eacdff83308709ff558dec 100644
+--- a/worker/api/controllers/auth/controller.ts
++++ b/worker/api/controllers/auth/controller.ts
+@@ -2,6 +2,7 @@
+  * Secure Authentication Controller
+  */
+ 
++import { ZodError } from 'zod';
+ import { AuthService } from '../../../database/services/AuthService';
+ import { SessionService } from '../../../database/services/SessionService';
+ import { UserService } from '../../../database/services/UserService';
+@@ -86,6 +87,15 @@ export class AuthController extends BaseController {
+             
+             return response;
+         } catch (error) {
++            // Only schema validation is a client error. Keep service failures
++            // on the existing 5xx path instead of masking them as bad input.
++            if (error instanceof ZodError) {
++                const field = error.issues[0]?.path[0];
++                const message = field === 'email' ? 'Enter a valid email address.'
++                    : field === 'password' ? 'Password does not meet the requirements.'
++                    : 'Check your registration details.';
++                return AuthController.createErrorResponse(message, 400);
++            }
+             if (error instanceof SecurityError) {
+                 return AuthController.createErrorResponse(error.message, error.statusCode);
+             }
+@@ -142,8 +152,8 @@ export class AuthController extends BaseController {
+     }
+ 
+     /**
+-     * Request a password reset. The response intentionally does not disclose
+-     * whether the address belongs to an account.
++     * Request a password reset without disclosing whether the address belongs
++     * to an account.
+      */
+     static async forgotPassword(request: Request, env: Env, ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+         try {
+diff --git a/worker/database/services/AuthService.ts b/worker/database/services/AuthService.ts
+index f77cca3e7c9acb8978a1854bdd1316e5229e45e7..d84c0339387dea46e7075bdb994041b9c9cc1b42 100644
+--- a/worker/database/services/AuthService.ts
++++ b/worker/database/services/AuthService.ts
+@@ -378,10 +378,8 @@ export class AuthService extends BaseService {
+         const text = `We received a request to reset your password.\n\nReset your password using this link (valid for 60 minutes):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
+         const html = `<p>We received a request to reset your password.</p><p><a href="${resetUrl}">Reset your password</a> (valid for 60 minutes).</p><p>If you did not request this, you can ignore this email.</p>`;
+         try {
+-            // Cloudflare Email Service's documented builder accepts a named
+-            // sender, while the installed workers-types describes the raw
+-            // SMTP-envelope EmailMessage (`from: string`). Keep the documented
+-            // runtime payload and bridge only that stale type declaration here.
++            // The Cloudflare Email Service builder supports a named sender,
++            // although the installed workers-types models raw EmailMessage data.
+             const message = {
+                 from: { email: 'security@buildcustom.ai', name: 'BuildCustom' },
+                 to: normalizedEmail,
+diff --git a/worker/database/services/SessionService.ts b/worker/database/services/SessionService.ts
+index e44ed8d48132f4e774a3fafdb6eb09beb9cc284c..55d59411716433064b3388a3d7df6a4c4510eb5a 100644
+--- a/worker/database/services/SessionService.ts
++++ b/worker/database/services/SessionService.ts
+@@ -187,8 +187,8 @@ export class SessionService extends BaseService {
+     }
+ 
+     /**
+-     * Change a user's password and revoke that user's sessions in one atomic D1
+-     * batch. A failure in either statement rolls both changes back.
++     * Change a user's password and revoke that user's sessions in one atomic
++     * D1 batch.
+      */
+     async changePasswordAndRevokeSessions(
+         userId: string,
+@@ -221,7 +221,7 @@ export class SessionService extends BaseService {
+             );
+         }
+     }
+-
++    
+     /**
+      * Revoke all sessions for a user
+      */
+diff --git a/worker/types/env.d.ts b/worker/types/env.d.ts
+index ddd85bb1394b32606d630aa85bd2ac898bf53efb..b08cb6ab1652a00642660f299e09d81f1b7d0230 100644
+--- a/worker/types/env.d.ts
++++ b/worker/types/env.d.ts
+@@ -1,6 +1,6 @@
+ declare namespace Cloudflare {
+ 	interface Env {
+-	EMAIL: SendEmail;
++EMAIL: SendEmail;
+ 		// Dashboard-managed settings are intentionally omitted from wrangler vars.
+ 		ALLOWED_EMAIL?: string;
+ 		ALLOCATION_STRATEGY?: string;

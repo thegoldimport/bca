@@ -1,0 +1,13 @@
+{
+  "mode": "before",
+  "startedAt": "2026-10-01T11:59:54.029Z",
+  "checks": {
+    "runtime": "PASS",
+    "controlAndSignupConfiguration": "PASS",
+    "activePublishClaims": 0,
+    "signupValidation": "PASS"
+  },
+  "status": "BLOCKED",
+  "error": "Expected values to be strictly equal:\n\n429 !== 200\n",
+  "finishedAt": "2026-10-01T11:59:55.415Z"
+}

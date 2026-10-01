@@ -14,3 +14,17 @@ mtime_ms = 1789925102786
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/195f1237-d571-452f-ae09-5a9c119c704a/aace8b0a-ff41-4db2-92d0-d3f8f5a0d155"
 storage_version_token = "1789925162895608"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "aFX2TOOxTNBBUCVWPoryr"
+uri = "file://production/vibesdk-launch/continuous-coding-production-report.md"
+type = "text"
+title = "Continuous coding production report: BLOCKED"
+description = "Full authorization report: exact provenance and reconstruction, passing tests and smoke, active runtime version, one failed fixture, and Project 5 gate."
+logical_id = "103c3013-c7c4-4d57-970a-66644a3b03db"
+content_hash = "sha256:55076f7a852b2303bd152ba3dba16de0100e25522102a006d50ececd567a36aa"
+size = 14864
+mtime_ms = 1790858918939
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/103c3013-c7c4-4d57-970a-66644a3b03db/e3fe3931-be54-4ce3-8042-497656ab14a9"
+storage_version_token = "1790859101855334"
+content_type = "text/markdown"

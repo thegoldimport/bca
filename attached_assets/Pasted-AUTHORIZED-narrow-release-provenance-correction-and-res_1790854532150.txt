@@ -1,0 +1,665 @@
+AUTHORIZED: narrow release-provenance correction and resume the previously approved continuous-coding production deployment ONLY if exact reconstruction is restored.
+
+This is NOT authorization to redesign or change the continuous-coding lifecycle.
+
+The previous deployment correctly stopped because the tracked release recipe did not reproduce the complete source used by the accepted local regression checks.
+
+Current status:
+
+OVERALL:
+BLOCKED at pre-deployment reconstruction
+
+Production changes:
+NONE
+
+AI generations:
+NONE
+
+Project 5:
+UNTOUCHED
+
+Production Publish:
+NOT INVOKED
+
+Edit2:
+NOT STARTED
+
+==================================================
+KNOWN RECONSTRUCTION RESULT
+==================================================
+
+All six existing patches applied cleanly in manifest order.
+
+Accepted dependency lock hash matched.
+
+All 21 continuous-coding lifecycle source/test files matched the locally tested implementation exactly.
+
+Five additional files differed:
+
+1.
+worker/api/controllers/auth/controller.ts
+
+Meaningful difference:
+the reconstruction is missing the tested registration validation handling that returns bounded HTTP 400 responses for schema/validation failures while preserving unexpected failures as 5xx.
+
+2.
+worker/api/controllers/auth/controller.test.ts
+
+Meaningful difference:
+the reconstruction is missing additional password-recovery/CSRF and registration error-contract tests.
+
+3.
+worker/database/services/AuthService.ts
+
+Difference:
+comment only
+
+4.
+worker/database/services/SessionService.ts
+
+Difference:
+comment/whitespace only
+
+5.
+worker/types/env.d.ts
+
+Difference:
+formatting only
+
+The controller mismatch changes behavior.
+
+Therefore the release recipe currently does not exactly reproduce the complete tested checkout.
+
+==================================================
+GOAL
+==================================================
+
+Correct ONLY the release provenance so that:
+
+PINNED SOURCE
++
+ACCEPTED PATCH SERIES
++
+ACCEPTED DEPENDENCY LOCK
+
+reconstructs the exact source that was used for the successful local lifecycle/regression acceptance.
+
+Do not invent new behavior.
+
+Do not rewrite the auth implementation.
+
+Do not refactor.
+
+Do not change the lifecycle implementation.
+
+Do not touch Project 5.
+
+==================================================
+PART 1 — IDENTIFY THE ORIGIN OF THE FIVE DIFFERENCES
+==================================================
+
+Before changing the patch series, determine where each of the five tested-checkout differences originated.
+
+For each file classify it as:
+
+A. previously accepted production behavior that was accidentally omitted from the tracked patch series
+
+B. change introduced during continuous-coding lifecycle development
+
+C. nonfunctional local drift such as comment/whitespace/formatting
+
+D. unexplained
+
+Pay particular attention to:
+
+worker/api/controllers/auth/controller.ts
+
+The missing registration validation behavior sounds consistent with the previously accepted registration/schema-error handling from the production signup work.
+
+Verify that from the existing repository evidence/history/accepted source.
+
+Do not guess.
+
+Also inspect:
+
+worker/api/controllers/auth/controller.test.ts
+
+Determine which tests correspond to already accepted:
+
+- password recovery
+- CSRF protection
+- registration error contracts
+
+and whether they are tests of already accepted production behavior rather than new lifecycle behavior.
+
+==================================================
+PART 2 — CORRECT THE PATCH PROVENANCE
+==================================================
+
+If the meaningful auth differences are confirmed to be previously accepted/tested behavior:
+
+Create the SMALLEST tracked provenance patch necessary to reproduce them.
+
+Prefer a dedicated patch representing the missing accepted auth behavior rather than modifying unrelated historical patches.
+
+For example, conceptually:
+
+production/patches/<appropriate-auth-provenance-name>.patch
+
+Choose a descriptive name based on the actual origin.
+
+Do not call it a lifecycle patch if it is not lifecycle behavior.
+
+Update:
+
+production/vibesdk-launch/manifest.md
+
+so reconstruction order is explicit.
+
+The manifest must describe:
+
+- pinned VibeSDK commit
+- accepted patch order
+- dependency lock/hash
+- purpose of the provenance patch
+- why it exists
+- that it preserves already-tested/accepted auth behavior
+
+==================================================
+PART 3 — NONFUNCTIONAL DIFFERENCES
+==================================================
+
+For:
+
+worker/database/services/AuthService.ts
+worker/database/services/SessionService.ts
+worker/types/env.d.ts
+
+Do not create pointless behavioral patches solely to preserve meaningless whitespace unless exact source reproducibility requires it.
+
+However, our goal for the release candidate is deterministic reconstruction.
+
+Choose the smallest clean solution:
+
+Either:
+
+A. include those exact nonfunctional differences in an appropriately scoped provenance patch
+
+OR
+
+B. normalize the tested checkout back to the reconstructed canonical representation IF AND ONLY IF doing so is provably nonfunctional and then rerun the affected tests against that canonical source.
+
+Do NOT silently ignore the differences.
+
+At the end, there must be ONE clearly identified canonical release source.
+
+==================================================
+PART 4 — EXACT RECONSTRUCTION CHECK
+==================================================
+
+After correcting provenance:
+
+Start again from the pinned clean VibeSDK source.
+
+Apply the COMPLETE accepted patch series in manifest order.
+
+Apply the accepted dependency lock.
+
+Then compare the reconstructed release candidate against the canonical tested source.
+
+Required result:
+
+NO UNEXPLAINED SOURCE DIFFERENCES.
+
+For all runtime source files that affect behavior:
+
+EXACT MATCH.
+
+For any intentionally normalized comment/format-only file:
+
+document the normalization and ensure the canonical source used for the new regression run is the reconstructed version.
+
+Do not proceed if a behavioral mismatch remains.
+
+==================================================
+PART 5 — RERUN PREDEPLOY TESTS
+==================================================
+
+Once reconstruction is deterministic, rerun the required checks against THE RECONSTRUCTED CANDIDATE.
+
+Not the old working checkout.
+
+Run:
+
+- continuous-coding lifecycle focused tests
+- registration validation/error-contract tests
+- password recovery tests
+- CSRF tests
+- Task 4B immutable publishing regression
+- Task 6A auth/logout/session regression
+- ownership isolation regression
+- preview sandbox regression
+- gateway/public routing regression
+- typecheck
+- build
+
+Confirm the continuous-coding implementation still passes on the reconstructed candidate.
+
+==================================================
+PART 6 — CONFIGURE APPROVED PRODUCTION LIMITS
+==================================================
+
+ONLY after reconstruction and tests pass:
+
+Configure the previously approved operation-level production limits:
+
+Think maxSteps:
+25
+UNCHANGED
+
+Maximum total Think turns:
+5
+
+Maximum internal continuations:
+4
+
+Overall operation wall-clock ceiling:
+15 minutes / 900000 ms
+
+Expected configuration:
+
+THINK_OPERATION_MAX_CONTINUATIONS=4
+THINK_OPERATION_MAX_ELAPSED_MS=900000
+
+Use the existing configuration mechanism.
+
+Do not create a new config service.
+
+Verify these values mean:
+
+1 original Think turn
++
+maximum 4 internal continuation turns
+
+Do not accidentally interpret "4 continuations" as 4 total turns.
+
+==================================================
+PART 7 — RESUME THE PREVIOUSLY APPROVED DEPLOYMENT
+==================================================
+
+If and ONLY if:
+
+- provenance correction passes
+- reconstruction is deterministic
+- behavioral source matches
+- tests pass
+- typecheck passes
+- build passes
+
+then resume the already authorized controlled production deployment.
+
+Current observed pre-change versions were:
+
+Runtime:
+31ca3dce-e6c8-416b-b5e2-995034e2dcac
+
+Control plane:
+0e01f7dc-51c4-4736-9873-ea431abc823c
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+
+Record the actual versions again immediately before deployment.
+
+Do not assume they are unchanged.
+
+Deploy only the components actually required by the candidate.
+
+Do not deploy the gateway if it has no required change.
+
+Do not create parallel infrastructure.
+
+==================================================
+PART 8 — POST-DEPLOY SMOKE
+==================================================
+
+After deployment verify:
+
+- runtime healthy
+- control plane healthy
+- login
+- logout/session revocation
+- registration/signup behavior
+- password recovery path
+- ownership isolation
+- dashboard
+- files
+- preview
+- public generated apps
+- unknown generated-app slug 404
+- production Publish separation
+- gateway unchanged unless explicitly required
+
+Do not perform unnecessary AI generations.
+
+==================================================
+PART 9 — FRESH CONTINUATION FIXTURE
+==================================================
+
+Then resume the exact fresh-production continuation acceptance from the prior authorization.
+
+BEFORE Project 5:
+
+Run ONE isolated production coding fixture proving:
+
+- exactly one customer coding request
+- more than one internal Think turn
+- same ThinkAgent
+- same SpaceDO
+- same visible customer operation
+- no duplicated customer request
+- internal continuation hidden/grouped correctly
+- pending edits survive the turn boundary
+- working-tree preflight occurs before commit
+- coherent commit/revision
+- preview succeeds
+- browser/runtime verification succeeds
+- final working tree clean
+- finish intent present
+- completion gate passes
+- final state COMPLETE
+- production Publish NOT invoked
+
+Use the deterministic acceptance mechanism if necessary.
+
+Do not waste model calls trying random prompts merely to cross 25 steps.
+
+==================================================
+PART 10 — FAILURE RULE
+==================================================
+
+If the fresh production fixture reveals a REAL lifecycle/security/customer-path regression:
+
+STOP.
+
+Do not touch Project 5.
+
+Preserve evidence.
+
+Rollback to the immediately previous accepted production version if the new deployment caused the regression and rollback is safe.
+
+Do not repeatedly retry mutations.
+
+Do not treat missing optional observability as a product failure when authoritative customer-path evidence passes.
+
+==================================================
+PART 11 — PROJECT 5
+==================================================
+
+ONLY if the fresh production continuation fixture passes:
+
+Proceed with the previously authorized Project 5 reconciliation and repair.
+
+Do NOT resend original edit1.
+
+First perform fresh read-only reconciliation.
+
+Expected preserved state:
+
+Project:
+5
+
+Agent:
+ccac2618-5f92-4d2f-b68f-ca9d2116325e
+
+Original committed HEAD:
+d4bc4b85d03cfaf55326d078f08b9446b98e68b1
+
+Expected dirty files:
+public/app.jsx
+public/index.html
+
+Expected partial work:
+
+- dark-navy changes
+- Recent Leads UI
+- five-newest logic
+- malformed JSX around previously identified area
+- no accepted new revision
+
+Confirm actual state before mutation.
+
+If materially different:
+STOP.
+
+==================================================
+PART 12 — PROJECT 5 REPAIR
+==================================================
+
+If reconciliation matches:
+
+Send exactly ONE repair/continuation instruction to the SAME primary ThinkAgent.
+
+Do NOT resend the original edit1 request.
+
+Continue from the EXISTING dirty workspace.
+
+Repair the malformed JSX.
+
+Preserve the intended existing work:
+
+- dark-navy dashboard/theme
+- Recent Leads
+- five newest leads
+
+Use the new lifecycle:
+
+targeted inspection
+→ repair
+→ working-tree preflight
+→ preview
+→ browser/runtime verification
+→ coherent revision
+→ finish_task
+→ COMPLETE
+
+Do not mutate lead records.
+
+Do not production Publish.
+
+==================================================
+PART 13 — PROJECT 5 ACCEPTANCE
+==================================================
+
+Require:
+
+- same owner/project/agent
+- existing dirty work continued rather than discarded
+- syntax repaired
+- preflight passes
+- preview succeeds
+- browser/runtime verification succeeds
+- dark-navy dashboard verified
+- Recent Leads verified
+- exactly five newest leads shown
+- authoritative lead data unchanged
+- no duplicate lead
+- no unintended lead mutation
+- new coherent authoritative revision
+- working tree clean
+- completion gate passes
+- operation COMPLETE
+- production Publish NOT invoked
+- preview-only operation does not create a production release
+
+Then reopen the project and verify persistence:
+
+- revision
+- files
+- UI
+- preview
+- transcript
+- internal continuation messages hidden
+- no duplicated customer request
+- agent idle
+- COMPLETE persists
+
+==================================================
+PART 14 — STOP
+==================================================
+
+STOP after Project 5 edit1 acceptance/reopen verification.
+
+Do NOT start edit2.
+
+Do NOT continue broader Task 13 mutations.
+
+==================================================
+RETURN ONE REPORT
+==================================================
+
+Return:
+
+OVERALL STATUS:
+PASS / BLOCKED / ROLLED BACK
+
+PROVENANCE CORRECTION
+
+For each of the five mismatched files:
+- classification:
+- origin:
+- behavioral/nonfunctional:
+- resolution:
+
+New provenance patch:
+Manifest updated:
+Patch order:
+Dependency lock/hash:
+Exact reconstruction result:
+Remaining source differences:
+
+RECONSTRUCTED-CANDIDATE TESTS
+
+- lifecycle:
+- registration:
+- password recovery:
+- CSRF:
+- Task 4B:
+- Task 6A:
+- ownership:
+- preview sandbox:
+- gateway/public routing:
+- typecheck:
+- build:
+
+PRODUCTION LIMITS
+
+- maxSteps:
+- max total Think turns:
+- max continuations:
+- wall-clock:
+- exact configuration:
+
+DEPLOYMENT
+
+- previous runtime:
+- new runtime:
+- previous control:
+- new control:
+- gateway:
+- rollout:
+- rollback prepared:
+
+POST-DEPLOY
+
+- runtime:
+- control:
+- login:
+- logout:
+- signup:
+- password recovery:
+- ownership:
+- dashboard:
+- files:
+- preview:
+- public apps:
+- unknown slug:
+- Publish separation:
+
+FRESH CONTINUATION FIXTURE
+
+- exactly one customer request:
+- internal Think turns:
+- continuations:
+- same ThinkAgent:
+- same SpaceDO:
+- transcript:
+- preflight:
+- commit:
+- preview:
+- browser verification:
+- revision:
+- working tree:
+- finish intent:
+- completion gate:
+- final state:
+- production Publish:
+- result:
+
+PROJECT 5 RECONCILIATION
+
+- owner/project/agent:
+- HEAD:
+- dirty files:
+- partial work:
+- syntax state:
+- lead state:
+- unexpected release/publish:
+- result:
+
+PROJECT 5 REPAIR
+
+- repair instructions sent:
+- original edit1 resent: MUST BE NO
+- internal Think turns:
+- continuations:
+- syntax:
+- preflight:
+- preview:
+- browser verification:
+- dark navy:
+- Recent Leads:
+- five newest:
+- lead records:
+- duplicate:
+- unintended mutation:
+- new revision:
+- working tree:
+- completion gate:
+- final state:
+- production Publish:
+- result:
+
+REOPEN
+
+- revision:
+- files:
+- UI:
+- preview:
+- transcript:
+- internal messages hidden:
+- duplicate customer request:
+- agent idle:
+- COMPLETE persisted:
+
+PROJECT 5 touched before fresh fixture passed:
+MUST BE NO
+
+EDIT2 started:
+MUST BE NO
+
+KNOWN LIMITATIONS:
+
+EXACT NEXT RECOMMENDED STEP:
+
+Then STOP.

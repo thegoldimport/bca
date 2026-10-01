@@ -1,0 +1,30 @@
+diff --git a/worker/services/browser-capture/types.ts b/worker/services/browser-capture/types.ts
+index dca04f400ed89a8b118e2c25a34210a8c4432d56..1c1602c7ab60064a77e872406265e208fac34768 100644
+--- a/worker/services/browser-capture/types.ts
++++ b/worker/services/browser-capture/types.ts
+@@ -46,11 +46,16 @@ export interface BrowserConsoleRequestFailure {
+ }
+ 
+ export interface BrowserConsoleCaptureResult {
++	/** URL originally requested by the caller. */
+ 	url: string;
++	/** Final URL after browser navigation and any redirects. */
++	finalUrl?: string;
+ 	capturedAt: string;
+ 	logs: BrowserConsoleEntry[];
+ 	pageErrors: BrowserConsolePageError[];
+ 	requestFailures: BrowserConsoleRequestFailure[];
++	/** True when an upstream capture implementation omitted diagnostic entries. */
++	truncated?: boolean;
+ 	/**
+ 	 * Populated when the dev sidecar is unavailable. The tool returns
+ 	 * the result intact so the LLM sees the warning and moves on
+@@ -92,6 +97,8 @@ export interface CapturePage {
+ 	on(event: 'response', cb: (res: CaptureHttpResponse) => void): unknown;
+ 	setViewport(v: { width: number; height: number }): Promise<void>;
+ 	goto(url: string, opts?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
++	/** Final browser URL; optional to support older structural Page adapters. */
++	url?(): string;
+ 	evaluate(script: string): Promise<unknown>;
+ 	close(): Promise<void>;
+ }

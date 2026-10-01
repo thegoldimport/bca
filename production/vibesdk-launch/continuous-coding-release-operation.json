@@ -1,0 +1,108 @@
+{
+  "startedAt": "2026-10-01T11:49:23.876Z",
+  "state": "ACTIVE",
+  "before": {
+    "buildcustom-vibesdk-launch": {
+      "version": "31ca3dce-e6c8-416b-b5e2-995034e2dcac",
+      "deployment": "0c404411-12ec-4529-a715-1e564f32565d"
+    },
+    "buildcustom-control-plane-launch": {
+      "version": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+      "deployment": "c3d8479e-af7c-44a7-ad42-6c68f89a37b4"
+    },
+    "buildcustom-apps-gateway": {
+      "version": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+      "deployment": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427"
+    },
+    "buildcustom-apps-gateway-launch": {
+      "version": "26ac7a8c-695f-49d9-845a-8fe79ec2c28e",
+      "deployment": "24db97f2-3e9e-4513-98c3-e1691884f335"
+    }
+  },
+  "expected": [
+    {
+      "name": "assets/esbuild-B4PnW_4U.wasm",
+      "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+    },
+    {
+      "name": "assets/hook-proxy-CkF0EhRO-odPdDpPH.js",
+      "sha256": "403143888a602947a183c6fa8c72073a67da42b4c96c340ef3b580cf71273286"
+    },
+    {
+      "name": "assets/mimetext.browser.es-CF8iqyB7.js",
+      "sha256": "325c98348fe2301cd3062c944f7b3221ef0712eb4e1cd09b4d8607ba6f4fd894"
+    },
+    {
+      "name": "assets/NodeWebSocketTransport-BntJgCj_.js",
+      "sha256": "ff0416528695d05574e54b0c37a8e1b2a3142ead1b35a3e81c41c2a5fc836928"
+    },
+    {
+      "name": "assets/rolldown-runtime-BzI350Cx.js",
+      "sha256": "f2868774669a0e4fd09238692bdeff8f8fa83db87f2d12af1efb94d9fcb0510e"
+    },
+    {
+      "name": "assets/version-BHTiQTUJ.js",
+      "sha256": "09204dcb53adbb5608b861d1ff434d0099e6691d6de9e5a923fdfcede304992d"
+    },
+    {
+      "name": "index.js",
+      "sha256": "29246c9ae666d335826b0d2f2c17acfd8dfa624872da0d8253fe7dce8ebd6728"
+    }
+  ],
+  "parity": {
+    "pathsCompared": 853,
+    "differences": [],
+    "lockHash": "b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f"
+  },
+  "limits": {
+    "maxSteps": 25,
+    "maxTotalTurns": 5,
+    "maxContinuations": 4,
+    "maxElapsedMs": 900000
+  },
+  "retainedAssets": true,
+  "retainedContainers": true,
+  "rollbackCommand": "node scripts/continuous-coding-release.mjs rollback",
+  "metadataCorrection": true,
+  "priorUploadResponse": {
+    "status": 400,
+    "codes": [
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057,
+      10057
+    ]
+  },
+  "newVersion": "122e2da3-5617-49cc-92ca-5c5723e30af3",
+  "bindingsVerified": true,
+  "modulesVerified": true,
+  "verifiedAt": "2026-10-01T11:49:35.221Z",
+  "lastDeployment": "6cf030ed-a130-495b-825d-9fc09c79f706",
+  "updatedAt": "2026-10-01T12:03:16.436Z"
+}

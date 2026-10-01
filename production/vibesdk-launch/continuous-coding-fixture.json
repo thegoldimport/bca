@@ -1,0 +1,422 @@
+{
+  "startedAt": "2026-10-01T12:11:48.360Z",
+  "state": "BLOCKED_AFTER_NATIVE_STREAM_ERROR",
+  "requestKey": "continuation-fixture-98903d0f-7f04-4426-8374-3c2d9624cb79",
+  "customerRequestsSent": 1,
+  "productionPublishRequests": 0,
+  "project5Touched": false,
+  "ownerId": "3fca0ca3-9515-47da-a7a6-243376696fa3",
+  "projectId": 6,
+  "agentId": "e4606862-99a9-4dbd-bad2-7c7bd3dacf4f",
+  "baselineRevision": {
+    "branch": "main",
+    "commitHash": "72741b6a188214b52db17612bcb647f6d48f8d60"
+  },
+  "storageSchema": {
+    "think": {
+      "results": [
+        {
+          "columns": [
+            "name",
+            "sql"
+          ],
+          "rows": [
+            [
+              "_cf_KV",
+              "CREATE TABLE _cf_KV (\n        key TEXT PRIMARY KEY,\n        value BLOB\n      ) WITHOUT ROWID"
+            ],
+            [
+              "assistant_compactions",
+              "CREATE TABLE assistant_compactions (\n        id TEXT PRIMARY KEY,\n        session_id TEXT NOT NULL DEFAULT '',\n        summary TEXT NOT NULL,\n        from_message_id TEXT NOT NULL,\n        to_message_id TEXT NOT NULL,\n        created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n      )"
+            ],
+            [
+              "assistant_config",
+              "CREATE TABLE assistant_config (\n        session_id TEXT NOT NULL,\n        key TEXT NOT NULL,\n        value TEXT NOT NULL,\n        PRIMARY KEY (session_id, key)\n      )"
+            ],
+            [
+              "assistant_fts",
+              "CREATE VIRTUAL TABLE assistant_fts\n      USING fts5(id UNINDEXED, session_id UNINDEXED, role UNINDEXED, content, tokenize='porter unicode61')"
+            ],
+            [
+              "assistant_fts_config",
+              "CREATE TABLE 'assistant_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID"
+            ],
+            [
+              "assistant_fts_content",
+              "CREATE TABLE 'assistant_fts_content'(id INTEGER PRIMARY KEY, c0, c1, c2, c3)"
+            ],
+            [
+              "assistant_fts_data",
+              "CREATE TABLE 'assistant_fts_data'(id INTEGER PRIMARY KEY, block BLOB)"
+            ],
+            [
+              "assistant_fts_docsize",
+              "CREATE TABLE 'assistant_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)"
+            ],
+            [
+              "assistant_fts_idx",
+              "CREATE TABLE 'assistant_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID"
+            ],
+            [
+              "assistant_messages",
+              "CREATE TABLE assistant_messages (\n        id TEXT PRIMARY KEY,\n        session_id TEXT NOT NULL DEFAULT '',\n        parent_id TEXT,\n        role TEXT NOT NULL,\n        content TEXT NOT NULL,\n        created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n      )"
+            ],
+            [
+              "cf_agent_tool_runs",
+              "CREATE TABLE cf_agent_tool_runs (\n          run_id TEXT PRIMARY KEY,\n          parent_tool_call_id TEXT,\n          agent_type TEXT NOT NULL,\n          input_preview TEXT,\n          input_redacted INTEGER NOT NULL DEFAULT 1,\n          status TEXT NOT NULL,\n          summary TEXT,\n          output_json TEXT,\n          error_message TEXT,\n          interrupted_reason TEXT,\n          child_still_running INTEGER,\n          display_metadata TEXT,\n          display_order INTEGER NOT NULL DEFAULT 0,\n          started_at INTEGER NOT NULL,\n          completed_at INTEGER\n        )"
+            ],
+            [
+              "cf_agents_facet_runs",
+              "CREATE TABLE cf_agents_facet_runs (\n          owner_path TEXT NOT NULL,\n          owner_path_key TEXT NOT NULL,\n          run_id TEXT NOT NULL,\n          created_at INTEGER NOT NULL,\n          PRIMARY KEY (owner_path_key, run_id)\n        )"
+            ],
+            [
+              "cf_agents_fibers",
+              "CREATE TABLE cf_agents_fibers (\n          fiber_id TEXT PRIMARY KEY,\n          idempotency_key TEXT UNIQUE,\n          name TEXT NOT NULL,\n          status TEXT NOT NULL,\n          snapshot TEXT,\n          metadata_json TEXT,\n          error_message TEXT,\n          created_at INTEGER NOT NULL,\n          started_at INTEGER,\n          completed_at INTEGER\n        )"
+            ],
+            [
+              "cf_agents_mcp_servers",
+              "CREATE TABLE cf_agents_mcp_servers (\n            id TEXT PRIMARY KEY NOT NULL,\n            name TEXT NOT NULL,\n            server_url TEXT NOT NULL,\n            callback_url TEXT NOT NULL,\n            client_id TEXT,\n            auth_url TEXT,\n            server_options TEXT\n          )"
+            ],
+            [
+              "cf_agents_queues",
+              "CREATE TABLE cf_agents_queues (\n          id TEXT PRIMARY KEY NOT NULL,\n          payload TEXT,\n          callback TEXT,\n          created_at INTEGER DEFAULT (unixepoch())\n        , retry_options TEXT)"
+            ],
+            [
+              "cf_agents_runs",
+              "CREATE TABLE cf_agents_runs (\n          id TEXT PRIMARY KEY NOT NULL,\n          name TEXT NOT NULL,\n          snapshot TEXT,\n          created_at INTEGER NOT NULL\n        )"
+            ],
+            [
+              "cf_agents_schedules",
+              "CREATE TABLE cf_agents_schedules (\n          id TEXT PRIMARY KEY NOT NULL DEFAULT (randomblob(9)),\n          callback TEXT,\n          payload TEXT,\n          type TEXT NOT NULL CHECK(type IN ('scheduled', 'delayed', 'cron', 'interval')),\n          time INTEGER,\n          delayInSeconds INTEGER,\n          cron TEXT,\n          intervalSeconds INTEGER,\n          running INTEGER DEFAULT 0,\n          created_at INTEGER DEFAULT (unixepoch()),\n          execution_started_at INTEGER,\n          retry_options TEXT,\n          owner_path TEXT,\n          owner_path_key TEXT\n        )"
+            ],
+            [
+              "cf_agents_state",
+              "CREATE TABLE cf_agents_state (\n        id TEXT PRIMARY KEY NOT NULL,\n        state TEXT\n      )"
+            ],
+            [
+              "cf_agents_workflows",
+              "CREATE TABLE cf_agents_workflows (\n          id TEXT PRIMARY KEY NOT NULL,\n          workflow_id TEXT NOT NULL UNIQUE,\n          workflow_name TEXT NOT NULL,\n          status TEXT NOT NULL CHECK(status IN (\n            'queued', 'running', 'paused', 'errored',\n            'terminated', 'complete', 'waiting',\n            'waitingForPause', 'unknown'\n          )),\n          metadata TEXT,\n          error_name TEXT,\n          error_message TEXT,\n          created_at INTEGER NOT NULL DEFAULT (unixepoch()),\n          updated_at INTEGER NOT NULL DEFAULT (unixepoch()),\n          completed_at INTEGER\n        )"
+            ],
+            [
+              "cf_ai_chat_stream_chunks",
+              "CREATE TABLE cf_ai_chat_stream_chunks (\n      id text primary key,\n      stream_id text not null,\n      body text not null,\n      chunk_index integer not null,\n      created_at integer not null\n    )"
+            ],
+            [
+              "cf_ai_chat_stream_metadata",
+              "CREATE TABLE cf_ai_chat_stream_metadata (\n      id text primary key,\n      request_id text not null,\n      status text not null,\n      created_at integer not null,\n      completed_at integer\n    , message_id text)"
+            ],
+            [
+              "cf_think_scheduled_tasks",
+              "CREATE TABLE cf_think_scheduled_tasks (\n        owner_key TEXT NOT NULL,\n        task_id TEXT NOT NULL,\n        schedule_hash TEXT NOT NULL,\n        task_hash TEXT NOT NULL,\n        schedule_id TEXT,\n        next_run_at INTEGER,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        PRIMARY KEY (owner_key, task_id)\n      )"
+            ],
+            [
+              "cf_think_submissions",
+              "CREATE TABLE cf_think_submissions (\n        submission_id TEXT PRIMARY KEY,\n        idempotency_key TEXT UNIQUE,\n        request_id TEXT,\n        stream_id TEXT,\n        status TEXT NOT NULL,\n        messages_json TEXT NOT NULL,\n        metadata_json TEXT,\n        error_message TEXT,\n        created_at INTEGER NOT NULL,\n        messages_applied_at INTEGER,\n        started_at INTEGER,\n        completed_at INTEGER\n      )"
+            ],
+            [
+              "cf_think_workflow_notifications",
+              "CREATE TABLE cf_think_workflow_notifications (\n        notification_id TEXT PRIMARY KEY,\n        submission_id TEXT NOT NULL,\n        workflow_name TEXT NOT NULL,\n        workflow_id TEXT NOT NULL,\n        event_type TEXT NOT NULL,\n        payload_json TEXT NOT NULL,\n        attempts INTEGER NOT NULL DEFAULT 0,\n        last_error TEXT,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        delivered_at INTEGER\n      )"
+            ],
+            [
+              "think_config",
+              "CREATE TABLE think_config (\n        key TEXT NOT NULL,\n        value TEXT NOT NULL,\n        PRIMARY KEY (key)\n      )"
+            ]
+          ],
+          "meta": {
+            "rows_read": 85,
+            "rows_written": 0
+          }
+        }
+      ]
+    },
+    "space": {
+      "results": [
+        {
+          "columns": [
+            "name",
+            "sql"
+          ],
+          "rows": [
+            [
+              "_cf_KV",
+              "CREATE TABLE _cf_KV (\n        key TEXT PRIMARY KEY,\n        value BLOB\n      ) WITHOUT ROWID"
+            ],
+            [
+              "cf_workspace_default",
+              "CREATE TABLE cf_workspace_default (\n        path            TEXT PRIMARY KEY,\n        parent_path     TEXT NOT NULL,\n        name            TEXT NOT NULL,\n        type            TEXT NOT NULL CHECK(type IN ('file','directory','symlink')),\n        mime_type       TEXT NOT NULL DEFAULT 'text/plain',\n        size            INTEGER NOT NULL DEFAULT 0,\n        storage_backend TEXT NOT NULL DEFAULT 'inline' CHECK(storage_backend IN ('inline','r2')),\n        r2_key          TEXT,\n        target          TEXT,\n        content_encoding TEXT NOT NULL DEFAULT 'utf8',\n        content         TEXT,\n        created_at      INTEGER NOT NULL DEFAULT (unixepoch()),\n        modified_at     INTEGER NOT NULL DEFAULT (unixepoch())\n      )"
+            ],
+            [
+              "deployments",
+              "CREATE TABLE deployments (\n        branch TEXT PRIMARY KEY,\n        commit_hash TEXT NOT NULL,\n        main_module TEXT NOT NULL,\n        modules TEXT NOT NULL,\n        assets TEXT NOT NULL DEFAULT '{}',\n        asset_config TEXT NOT NULL DEFAULT '{}',\n        deployed_at INTEGER NOT NULL\n      )"
+            ]
+          ],
+          "meta": {
+            "rows_read": 9,
+            "rows_written": 0
+          }
+        }
+      ]
+    }
+  },
+  "promptSha256": "b0cd439c4960cc1c30094b9ccf5731e8fcf2440f258b0aca26d77283d55e3420",
+  "frames": [
+    {
+      "at": "2026-10-01T12:17:11.728Z",
+      "frame": {
+        "type": "generation_started",
+        "message": "Starting code generation",
+        "totalFiles": 0
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:11.740Z",
+      "frame": {
+        "type": "agent_connected",
+        "state": {
+          "behaviorType": "think",
+          "projectType": "app",
+          "projectName": "buildcustom-project--wvvhjefqrr3xzmnbyyyup",
+          "query": "BuildCustom project 6 [bc-project:6]",
+          "sessionId": "1e34cb5f-d94d-4c42-9bff-b6894d6fd1a6",
+          "hostname": "buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+          "blueprint": {
+            "title": "BuildCustom project 6 [bc-project:6]",
+            "projectName": "buildcustom-project--wvvhjefqrr3xzmnbyyyup",
+            "description": "BuildCustom project 6 [bc-project:6]",
+            "colorPalette": [
+              "#1e1e1e"
+            ],
+            "frameworks": [],
+            "plan": []
+          },
+          "templateName": "think",
+          "generatedFilesMap": {},
+          "conversationMessages": [],
+          "metadata": {
+            "agentId": "e4606862-99a9-4dbd-bad2-7c7bd3dacf4f",
+            "userId": "3fca0ca3-9515-47da-a7a6-243376696fa3",
+            "shouldUseUserKey": false,
+            "userGateway": null
+          },
+          "shouldBeGenerating": false,
+          "commandsHistory": [],
+          "lastPackageJson": "",
+          "pendingUserInputs": [],
+          "projectUpdatesAccumulator": [],
+          "lastDeepDebugTranscript": null,
+          "mvpGenerated": false,
+          "reviewingInitiated": false,
+          "generatedPhases": [],
+          "currentDevState": 0,
+          "phasesCounter": 10,
+          "thinkAgentName": "e4606862-99a9-4dbd-bad2-7c7bd3dacf4f",
+          "currentBranch": "main",
+          "wsOrigin": "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev"
+        },
+        "templateDetails": {
+          "name": "think",
+          "description": {
+            "selection": "think",
+            "usage": "think (template-free)"
+          },
+          "fileTree": {
+            "path": "/",
+            "type": "directory",
+            "children": []
+          },
+          "allFiles": {},
+          "deps": {},
+          "language": "typescript",
+          "projectType": "general",
+          "frameworks": [],
+          "importantFiles": [],
+          "dontTouchFiles": [],
+          "redactedFiles": [],
+          "disabled": false,
+          "renderMode": "sandbox"
+        },
+        "previewUrl": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "deploymentCapabilities": {
+          "platformImmutableRelease": true
+        }
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:11.807Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": true
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:17.900Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": true,
+        "tool": {
+          "name": "list",
+          "status": "start",
+          "id": "call_116888"
+        }
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:17.968Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": false,
+        "tool": {
+          "name": "list",
+          "status": "success",
+          "args": {
+            "path": "/"
+          },
+          "id": "call_116888",
+          "result": "{\"path\":\"/\",\"count\":2,\"entries\":[\".git/\",\".think/\"]}"
+        }
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:19.253Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": true,
+        "tool": {
+          "name": "find",
+          "status": "start",
+          "id": "call_114571"
+        }
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:19.345Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": false,
+        "tool": {
+          "name": "find",
+          "status": "success",
+          "args": {
+            "pattern": "**/*"
+          },
+          "id": "call_114571",
+          "result": "{\"pattern\":\"**/*\",\"count\":1,\"files\":[\"/.think/space.json\"]}"
+        }
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:20.646Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": true,
+        "tool": {
+          "name": "read",
+          "status": "start",
+          "id": "call_65653"
+        }
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:20.804Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": false,
+        "tool": {
+          "name": "read",
+          "status": "success",
+          "args": {
+            "path": "/.think/space.json"
+          },
+          "id": "call_65653",
+          "result": "{\"path\":\"/.think/space.json\",\"content\":\"1\\t{\\n2\\t  \\\"agentId\\\": \\\"e4606862-99a9-4dbd-bad2-7c7bd3dacf4f\\\",\\n3\\t  \\\"createdAt\\\": \\\"2026-10-01T12:11:53.783Z\\\",\\n4\\t  \\\"seededBy\\\": \\\"vibesdk-think\\\"\\n5\\t}\",\"totalLines\":5}"
+        }
+      }
+    },
+    {
+      "at": "2026-10-01T12:17:22.802Z",
+      "frame": {
+        "type": "conversation_response",
+        "message": "",
+        "conversationId": "conv-1790857031709-a0uxrlb",
+        "isStreaming": true,
+        "tool": {
+          "name": "activate_skill",
+          "status": "start",
+          "id": "call_189725"
+        }
+      }
+    }
+  ],
+  "codingStartedAt": "2026-10-01T12:17:11.656Z",
+  "observed": {
+    "at": "2026-10-01T12:24:38.995Z",
+    "status": {
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "connected": true,
+      "files": 1,
+      "state": {
+        "shouldBeGenerating": false,
+        "generation": {
+          "status": "idle"
+        }
+      },
+      "previewUrl": null,
+      "deploymentUrl": null,
+      "publicAvailable": false
+    },
+    "revision": {
+      "branch": "main",
+      "commitHash": "72741b6a188214b52db17612bcb647f6d48f8d60"
+    },
+    "turns": {
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "prompt": "Build a modest, complete static contact-directory demo in the current initialized app.\nInspect the existing files and configuration first. This is ONE preview-only customer coding operation.\nUse plain HTML/CSS/ES modules and no external services, database changes, credentials or production Publish.\nProvide a responsive dark-navy contact dashboard with 24 clearly labeled synthetic demo contacts.\nImplement search by name/company/email, status filters, sortable columns, 6-row pagination, and a read-only contact-detail dialog.\nMake the filters work together, reset pagination when filtering, preserve the query/filter/sort state in the URL, and support browser back/forward.\nInclude a recent-contacts panel containing exactly the five newest IDs, plus accurate counts and a filtered-empty state.\nKeep the directory state/data, filtering/sorting, table rendering, dialog, URL state and app wiring in small separate ES modules.\nAdd a Node-executable deterministic test script covering combined filters, case-insensitive search, sorting, pagination boundaries, newest-five and URL round-trips.\nUse semantic labels, keyboard dialog dismissal/focus return, readable contrast and a mobile layout.\nRetain valid Worker/assets configuration. No packages or external image/font/CDN dependencies are needed.\nAfter implementation, run the deterministic tests and working-tree preflight before creating a coherent revision.\nDeploy only the preview, and use browser/runtime verification to actually exercise search, status filter, pagination, detail dialog, browser history, recent-five and mobile layout.\nIf any verification fails, repair it in this SAME operation. Call finish_task only after verified completion and a clean working tree.\nDo not create a production release or invoke production Publish.",
+          "response": "",
+          "changedFiles": [],
+          "activity": [],
+          "commitHash": null,
+          "createdAt": ""
+        }
+      ]
+    }
+  },
+  "result": "BLOCKED",
+  "finalEvidence": {
+    "nativeStreamStatus": "error",
+    "requestId": "6a8e4da5-6834-4381-928e-1b09d3430ef9",
+    "nativeCompletedAt": "2026-10-01T12:18:48.534Z",
+    "nativeThinkTurns": 1,
+    "internalContinuations": 0,
+    "persistedToolOutputs": 12,
+    "finishTaskCalled": false,
+    "completionGatePassed": false,
+    "completeAccepted": false,
+    "lifecycleStatus": "NOT_EXPOSED",
+    "ownerRuntimeIdle": true,
+    "revisionUnchanged": true,
+    "previewDeployed": false,
+    "productionPublishRequests": 0,
+    "transport": "Collector socket closed before terminal frame; never resent",
+    "cause": "Unresolved native stream error; do not infer candidate causality or completion from missing optional telemetry"
+  }
+}

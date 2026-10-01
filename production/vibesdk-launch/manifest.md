@@ -69,6 +69,8 @@ git apply /path/to/production/patches/task8d-registration-gate.patch
 git apply /path/to/production/patches/task9-password-recovery.patch
 git apply /path/to/production/patches/preview-capability-validation.patch
 git apply /path/to/production/patches/continuous-coding-lifecycle.patch
+git apply /path/to/production/patches/accepted-auth-source-provenance.patch
+git apply /path/to/production/patches/continuous-coding-type-provenance.patch
 cp /path/to/production/vibesdk-launch/wrangler.jsonc ./wrangler.jsonc
 bun install --frozen-lockfile
 bun run test -- worker/database/services/AuthService.password-reset.test.ts worker/database/services/SessionService.password-reset.test.ts worker/database/services/AuthService.test.ts worker/utils/envs.test.ts worker/api/controllers/auth/controller.logout.test.ts worker/api/controllers/auth/controller.test.ts worker/services/deployer/immutable-script-put.test.ts worker/services/deployer/platform-deployment-identity.test.ts worker/services/deployer/think-user-deploy.test.ts worker/agents/core/websocket.test.ts worker/services/deployer/api/cloudflare-api.test.ts worker/api/handlers/space-preview.test.ts
@@ -78,16 +80,30 @@ bun run build
 
 Local checks against that reconstruction passed: 68 focused tests across eleven files, `bun run typecheck`, and `bun run build` with the launch config copied into the source root. The generated `dist/buildcustom_vibesdk_launch/wrangler.json` retained `REGISTRATION_ENABLED=true` and `EMAIL` with `security@buildcustom.ai`. The locked `bun.lock` hash remained `b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f`; pre-existing dependencies from the ignored runtime tree were used only as a local test/build cache after confirming the matching lock hash. They are not part of the recipe or source baseline.
 
-## Continuous coding lifecycle candidate (local only)
+## Continuous coding lifecycle release and production acceptance
+
+### Accepted auth source provenance
+
+Apply `production/patches/accepted-auth-source-provenance.patch` after the lifecycle patch. SHA-256: `a24db885294ac5d37122ceb5c1ef23667d7976e2b605908242a933bea8eb1ea3`.
+
+This dedicated correction retains previously accepted/tested auth behavior that the earlier release inputs omitted. The registration schema-error boundary is evidenced by `scripts/task12l-inactive-runtime-candidate.mjs`, its candidate/regression artifacts, and the successful `task12m-precheck-2026-09-29T12-59-12-452Z.json` source/binding checks. Password-recovery/CSRF controller tests originate in the accepted password-recovery source at BuildCustom commit `d096e4914383a2b1c1676e0d520fab6252a27999`. Additional registration tests cover those accepted error contracts.
+
+The patch captures the five previously reported differences exactly, including nonfunctional auth-service/session comments and environment-declaration formatting, so the canonical source remains the previously tested checkout. It introduces no new auth behavior, lifecycle changes, dependency changes, or normalization. The pinned upstream commit and accepted `bun.lock` hash above remain unchanged. The complete order is Task 4B, Task 6A, registration gate, password recovery, preview capability validation, continuous coding lifecycle, accepted auth source provenance, then continuous coding type provenance.
+
+A full tracked-source comparison additionally identified an omitted browser-capture declaration file. Apply `production/patches/continuous-coding-type-provenance.patch` last (SHA-256 `1170a9e284f1cdd4e7854e6ee8fe0c164f00d1d36c6fb9e4bd744312f78e4101`). It retains the already-tested optional final URL/truncation fields and structural Page URL method exactly, with no emitted runtime behavior. Neither original lifecycle logic nor its original patch/hash changes. This final type-only provenance input completes the eight-patch reconstruction order.
 
 The separate `production/patches/continuous-coding-lifecycle.patch` applies after the five accepted patches above. SHA-256: `3fe4d720abd59991574d5462a2b7340f1b65ada01beb3475a453c4dbdfab057e`. Its applicability was checked against the pinned upstream revision plus those five patches in an isolated temporary checkout. It preserves the original patches and lockfile.
 
 This candidate implements durable customer-operation state, bounded native Think chat continuations, structured completion intent/evidence, read-only working-tree preflight, revision-bound preview verification, and continuation-aware context/transcript presentation. The ignored runtime checkout contains the implementation; the tracked patch is its durable release input. Evidence and limitations are recorded in `continuous-coding-lifecycle-evidence.md`.
 
-Final local checks passed: 163 tests across 23 runtime test files, 60 BuildCustom adapter/gateway regression tests, `bun run typecheck`, and `bun run build`. The candidate has **not** been deployed. Project 5 has not been read, modified, repaired, committed, reset, or published during this implementation.
+After the authorized provenance correction, reconstruction from the pinned upstream source and all eight patches matched all 853 compared canonical source paths exactly. The lock hash was unchanged. The reconstructed candidate passed 163 tests across 23 runtime test files, `bun run typecheck`, and `bun run build`; the focused BuildCustom regression batch passed 127 tests. See `continuous-coding-release-operation.json` and `continuous-coding-production-report.md`.
 
-Operation limits are configurable through `ThinkAgentConfig.operationLimits` and the optional `THINK_OPERATION_MAX_*` host variables. No production values were set. The built-in fallbacks are explicitly uncalibrated development safeguards, not an approved production policy. Review production thresholds and separately authorize deployment before using this candidate on the live runtime.
+Operation limits remain configurable through the existing `ThinkAgentConfig.operationLimits` and optional `THINK_OPERATION_MAX_*` host variables. The authorized production values are `THINK_OPERATION_MAX_CONTINUATIONS=4` and `THINK_OPERATION_MAX_ELAPSED_MS=900000`, with Think `maxSteps=25` unchanged: one original turn plus at most four continuations, five total turns. Other built-in fallbacks were not redesigned or calibrated in this authorization.
+
+The runtime alone was deployed at 100% as version `122e2da3-5617-49cc-92ca-5c5723e30af3`, deployment `6cf030ed-a130-495b-825d-9fc09c79f706`. All seven uploaded module hashes and the retained bindings/assets/containers were verified before activation. Control plane and both gateways were unchanged. The immediately previous accepted runtime remains available for the prepared exact-version rollback. Complete post-deploy non-generation smoke passed.
+
+**Production continuation acceptance is BLOCKED, not PASS.** The single disposable fixture sent exactly one customer coding request. Its native stream recorded an error after one Think turn and 12 tool outputs, with zero internal continuations. The owner runtime became idle, HEAD stayed unchanged, pending module edits persisted, and no preview or production Publish occurred. There was no `finish_task` or accepted COMPLETE result. The underlying native error and its causal relationship to the candidate are unresolved; conditional rollback was not invoked on missing optional telemetry or an unproven cause. Project 5 has not been read or touched; original edit1 was not resent; edit2 was not started.
 
 `bun audit --json` reports high advisories in locked production imports, including Hono 4.12.19, Drizzle ORM 0.44.7, React Router 7.15.1, nanoid 5.1.11, and ws 8.20.1; the Vite/Cloudflare build graph also includes high-advisory Browserslist 4.28.2 and Undici 7.24.8. Vitest 3.2.4 is reported critical but is a dev/test-only dependency, not a serving dependency. No dependency was upgraded in this runtime-preparation task; these findings require separate triage before a public launch.
 
-This establishes a tracked, reproducible intended source baseline, not exact source/artifact parity with a deployed Worker version. Cloudflare version metadata and the recorded chronology do not prove that the current deployed bundle was built from this exact patch sequence.
+For version `122e2da3-5617-49cc-92ca-5c5723e30af3`, exact reconstructed-source parity and seven-module uploaded-byte parity were verified as part of this release. This does not retrospectively establish the source identity of earlier Worker versions, nor does source/build parity establish passing live continuation acceptance.

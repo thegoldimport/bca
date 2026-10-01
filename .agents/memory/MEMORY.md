@@ -63,7 +63,7 @@
 - [External CI npm installs](pages-install-diagnosis.md) — GitHub's npm log traced failed tarball fetches to Replit-internal lockfile URLs; Pages shares symptoms but lacks debug proof.
 - [JSDOM route fixtures](jsdom-route-fixtures.md) — a blank route can be a thrown component error from an underspecified mock, not a routing regression.
 - [Same-origin preview audits](same-origin-preview-audits.md) — classify requests by preview path or initiator frame, not origin alone; exclude platform telemetry separately.
-- [SpaceDO storage forensics](spacedo-storage-forensics.md) — Cloudflare's read-only Durable Object SQL query can reveal a live persisted workspace when owner Git routes only show HEAD.
+- [Think/Space SQL forensics](spacedo-storage-forensics.md) — inspect live files safely; check nested SQL errors and decode packed native stream segments without exposing reasoning.
 - [Think continuation queue](think-continuation-queue.md) — installed Think's response hook still runs inside the queued RPC turn; awaiting a queued continuation there deadlocks.
 - [Think Worker test boundary](think-worker-test-boundary.md) — importing the installed Think harness can fail in isolated Worker tests through a bundled shell dependency; test pure contracts separately.
 - [Ignored-source release parity](ignored-source-release-parity.md) — exact new-feature patch parity does not prove the full reconstructed release preserves tested auth behavior.
