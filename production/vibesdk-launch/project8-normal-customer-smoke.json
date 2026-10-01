@@ -1,0 +1,272 @@
+{
+  "startedAt": "2026-10-01T23:34:47.867Z",
+  "source": "Direct normal customer browser, no smoke harness",
+  "loginPosts": 1,
+  "mutations": [],
+  "outgoingAiInstructions": 0,
+  "publishPosts": 0,
+  "apiResponses": [
+    {
+      "path": "/api/public/capabilities",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/auth/csrf-token",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/api/auth/me",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/auth/me",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/revision",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/public/capabilities",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/blog-posts",
+      "status": 404,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/public/capabilities",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/public/capabilities",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/publishing-settings",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/turns",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/turns",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/revision",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200,
+      "method": "GET"
+    }
+  ],
+  "telemetry": [
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "kind": "console-error",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "kind": "console-error",
+      "path": "/cdn-cgi/rum"
+    }
+  ],
+  "generatedErrors": [],
+  "checks": {
+    "loginHttp": 200,
+    "ownerMatches": true,
+    "agent": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+    "revision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+    "generation": {
+      "shouldBeGenerating": false,
+      "generation": {
+        "status": "idle"
+      }
+    },
+    "platformDashboard": true,
+    "editorLoaded": true,
+    "inputAvailable": true,
+    "leadsHttp": 200,
+    "seededLeads": 12,
+    "previewHttp": 200,
+    "crmRendered": true,
+    "crmDashboard": true,
+    "summaryCards": true,
+    "fiveNewestLeads": true,
+    "leadsTable": true,
+    "search": true,
+    "sorting": true,
+    "statusFiltering": true,
+    "detailsHttp": 200,
+    "leadDetails": true,
+    "sevenFields": {
+      "name": true,
+      "company": true,
+      "email": true,
+      "status": true,
+      "source": true,
+      "estimatedValue": true,
+      "createdDate": true
+    },
+    "persistedNoteCount": 1,
+    "notesRendered": true,
+    "persistedNoteVisible": true,
+    "activityTimeline": true,
+    "persistedTimelineEntries": 1,
+    "finalRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+    "finalGeneration": {
+      "shouldBeGenerating": false,
+      "generation": {
+        "status": "idle"
+      }
+    },
+    "productionReleaseCount": 0,
+    "malformedPreviewUrls": 0,
+    "generatedApiFailures": 0,
+    "generatedApiCors": 0
+  },
+  "finishedAt": "2026-10-01T23:38:11.234Z",
+  "status": "SMOKE PASS",
+  "production": {
+    "canonicalCommit": "cd59fe6274d7a359c5f27ccfcbb6361fc9c146ea",
+    "auditedSourceCommit": "6a8e6dc7dd5e32ee976f3e92f4be363240a598a7",
+    "runtimeVersion": "5a964dd5-db65-4cde-83f8-22a17f4d909f",
+    "controlVersion": "dd40f46c-cd23-4e82-8679-83460169570f",
+    "credits": 250,
+    "maxSteps": 25,
+    "thinkTurns": 5,
+    "continuations": 4,
+    "elapsedMs": 900000,
+    "liveServingVersionsConfirmedAt": "2026-10-01T23:38:39.809Z"
+  },
+  "safety": {
+    "dataMutations": 0,
+    "aiInstructions": 0,
+    "productionReleases": 0,
+    "productionPublish": "NO",
+    "project9Created": false,
+    "project5Touched": false
+  }
+}

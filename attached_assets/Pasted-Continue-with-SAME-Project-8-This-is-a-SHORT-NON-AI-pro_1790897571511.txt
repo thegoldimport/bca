@@ -1,0 +1,320 @@
+Continue with SAME Project 8.
+
+This is a SHORT NON-AI production smoke.
+
+Do NOT modify the smoke harness.
+
+Do NOT create another verification framework.
+
+Do NOT send an AI instruction.
+
+Do NOT change production code.
+
+Do NOT deploy anything.
+
+Do NOT touch Project 5.
+
+Do NOT create Project 9.
+
+Do NOT production Publish yet.
+
+==================================================
+CURRENT ACCEPTED PRODUCTION
+==================================================
+
+GitHub is now canonical:
+
+Repository:
+thegoldimport/bca
+
+Branch:
+main
+
+Canonical commit:
+cd59fe6274d7a359c5f27ccfcbb6361fc9c146ea
+
+Audited executable-source commit:
+6a8e6dc7dd5e32ee976f3e92f4be363240a598a7
+
+Git synchronization:
+0 ahead / 0 behind
+
+Fresh reconstruction:
+PASS
+
+Ten-patch chain:
+PASS
+
+860 source paths/hashes:
+MATCH
+
+Split-module audit:
+PASS
+
+Runtime production version:
+
+5a964dd5-db65-4cde-83f8-22a17f4d909f
+
+Control production version:
+
+dd40f46c-cd23-4e82-8679-83460169570f
+
+Both:
+100%
+
+Gateway:
+UNCHANGED
+
+Production lifecycle configuration:
+
+maxSteps = 25
+maximum Think turns = 5
+maximum internal continuations = 4
+operation credit budget = 250
+elapsed ceiling = 900000 ms
+
+The previous smoke did NOT establish a product failure.
+
+It stopped because test infrastructure matched incoming-message keywords and
+Cloudflare telemetry and then removed its temporary browser profile.
+
+==================================================
+GOAL
+==================================================
+
+Answer one simple question:
+
+DOES THE EXISTING PROJECT 8 STILL WORK NORMALLY AFTER THE PRODUCTION
+DEPLOYMENT?
+
+Use the normal customer experience.
+
+No elaborate harness is required.
+
+==================================================
+STEP 1 — NORMAL LOGIN
+==================================================
+
+Recover/re-establish the SAME Project 8 owner's session using the normal
+production login.
+
+Use the authorized stored credential.
+
+Do not create a user.
+
+Do not change ownership.
+
+Do not bypass authentication.
+
+Confirm:
+
+Project:
+8
+
+Agent:
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Expected revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Generation:
+idle
+
+Do not send anything to the agent.
+
+==================================================
+STEP 2 — OPEN PROJECT 8
+==================================================
+
+Use the normal customer path:
+
+dashboard
+→ Project 8
+→ editor
+
+Confirm:
+
+- dashboard loads
+- Project 8 opens
+- editor loads
+- generation is idle
+- input is available
+- revision remains expected
+
+Do not interpret incoming assistant/history text as an outgoing AI request.
+
+An AI request counts ONLY if an outbound customer instruction/user_suggestion
+is actually observed.
+
+==================================================
+STEP 3 — VERIFY EXISTING PREVIEW
+==================================================
+
+Open the existing Project 8 preview.
+
+Verify:
+
+- preview HTTP 200
+- CRM renders
+- original 12 seeded leads load
+- generated /api/leads succeeds
+- no malformed private-preview URL
+- no generated-app API CORS failure
+
+Ignore Cloudflare /cdn-cgi/rum telemetry CORS/preflight messages for the purpose
+of generated-app API acceptance.
+
+Record them separately if present.
+
+==================================================
+STEP 4 — VERIFY THE EXISTING EDIT
+==================================================
+
+Do NOT mutate data for this smoke.
+
+Use existing records only.
+
+Click an existing lead.
+
+Confirm:
+
+- lead details opens
+- name renders
+- company renders
+- email renders
+- status renders
+- source renders
+- estimated value renders
+- created date renders
+- Notes section renders
+- the previously persisted test note is still present
+- Activity Timeline renders
+- persisted note appears appropriately in activity/history if that is the
+  current generated behavior
+
+Do NOT add another note.
+
+Do NOT create another lead.
+
+==================================================
+STEP 5 — BASIC REGRESSION
+==================================================
+
+Without mutating data, verify:
+
+- dashboard renders
+- summary cards render
+- leads table renders
+- search UI/functions
+- sorting UI/functions
+- status filtering UI/functions
+- five newest leads section renders
+- backend API requests succeed
+- no actionable generated-app console errors
+
+Do not repeat CRUD mutation testing.
+
+That already passed before deployment.
+
+==================================================
+STEP 6 — VERIFY NO RELEASE/PUBLISH
+==================================================
+
+Confirm:
+
+- production releases for Project 8 = 0
+- no production Publish occurred
+- no AI instruction was sent during this smoke
+- current revision remains unchanged
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT let optional test tooling stop this smoke.
+
+Examples that are NOT product failures by themselves:
+
+- screenshot helper failure
+- local observer disconnect
+- incoming-message keyword match
+- Cloudflare /cdn-cgi/rum telemetry CORS
+- optional tail/collector failure
+
+If the actual authenticated customer UI and generated preview work, continue.
+
+Only classify SMOKE FAIL for an actual customer-facing failure such as:
+
+- legitimate owner cannot authenticate
+- Project 8 cannot open
+- editor cannot load
+- existing preview cannot load
+- generated /api/leads fails
+- seeded leads disappear
+- lead details fails
+- persisted data disappears
+- actual generated-app API CORS failure
+- actionable generated-app runtime error
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+SMOKE PASS / REAL PRODUCT FAILURE
+
+PRODUCTION
+- GitHub canonical commit:
+- runtime version:
+- control version:
+- production credits:
+- maxSteps:
+- Think turns:
+- continuations:
+- elapsed ceiling:
+
+PROJECT 8
+- owner login:
+- project:
+- agent:
+- revision:
+- generation idle:
+- editor loaded:
+- input available:
+
+PREVIEW
+- HTTP:
+- CRM rendered:
+- seeded leads:
+- /api/leads:
+- malformed URL:
+- generated-app API CORS:
+- actionable console errors:
+
+EXISTING EDIT
+- lead details:
+- seven fields:
+- Notes:
+- persisted note:
+- Activity Timeline:
+
+REGRESSION
+- dashboard:
+- summary cards:
+- leads table:
+- search:
+- sorting:
+- filtering:
+- newest leads:
+- backend API:
+
+SAFETY
+- data mutations during smoke: MUST BE ZERO
+- AI instructions: MUST BE ZERO
+- production releases: MUST BE ZERO
+- production Publish: MUST BE NO
+- Project 9 created: MUST BE NO
+- Project 5 touched: MUST BE NO
+
+Then STOP.
