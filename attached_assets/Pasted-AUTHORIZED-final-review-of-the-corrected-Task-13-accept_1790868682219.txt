@@ -1,0 +1,472 @@
+AUTHORIZED: final review of the corrected Task 13 acceptance harness and,
+if that review passes, ONE new disposable production lifecycle fixture.
+
+Do NOT require the previously requested Project 2 comparison as a launch gate.
+
+Do NOT create or recover a Project 2 owner session merely for harness
+validation.
+
+Do NOT touch Project 5.
+
+Do NOT retry Project 6.
+
+Do NOT send a coding request to Project 7.
+
+==================================================
+CURRENT FINDINGS
+==================================================
+
+The previous Project 7 stop has been classified as a HARNESS FAILURE.
+
+Two concrete harness defects were found:
+
+1. The harness required legacy status fields that are absent from the current
+native production response.
+
+2. The harness treated a successful SpaceDO SQL read as failure when an
+optional nested `success` field was omitted.
+
+Read-only Project 7 reconciliation established:
+
+- correct owner → project → agent mapping
+- native runtime idle
+- seeded workspace
+- one committed revision
+- zero customer coding turns
+- no preview
+- no release
+- no demonstrated SpaceDO failure
+- no demonstrated product failure
+
+The corrected harness now:
+
+- uses current owner-scoped status contracts
+- uses current owner-scoped revision contracts
+- supports legitimate fresh-project null revision where applicable
+- does not require legacy status fields
+- does not require optional nested SpaceDO `success` when the actual response
+  otherwise establishes success
+- rejects ownership mismatch
+- rejects active generation
+- rejects malformed responses
+- rejects conflicting existing state
+
+Harness self-test:
+PASS
+
+Focused offline harness tests:
+8 PASS
+
+No product code changed.
+
+No observability code changed.
+
+No production deployment occurred from this correction.
+
+==================================================
+IMPORTANT DECISION
+==================================================
+
+The Project 2 healthy-project comparison is NO LONGER REQUIRED as a blocking
+gate.
+
+Do not weaken the harness because of this.
+
+We have concrete root cause for Project 7 plus focused tests.
+
+Do not create additional authentication/session state merely to satisfy the
+old comparison requirement.
+
+==================================================
+PART 1 — REVIEW THE HARNESS DIFF
+==================================================
+
+Perform one final source review of ONLY the harness correction.
+
+Confirm:
+
+1. legacy status fields are no longer required
+
+2. current owner-scoped status contract is used
+
+3. current owner-scoped revision contract is used
+
+4. legitimate fresh-project null revision is supported
+
+5. a real established revision is preserved/recorded when present
+
+6. successful SpaceDO responses do not fail merely because the optional nested
+   `success` property is absent
+
+7. explicit SpaceDO/API errors still fail closed
+
+8. ownership mismatch still fails closed
+
+9. active generation still fails closed
+
+10. malformed responses still fail closed
+
+11. conflicting prior customer state still fails closed
+
+12. preflight remains read-only
+
+13. preflight does not initialize/mutate SpaceDO merely to pass
+
+14. no product/runtime behavior was changed
+
+15. no observability behavior was changed
+
+If ANY of these are false:
+
+STOP.
+
+Do not create a fixture.
+
+==================================================
+PART 2 — RERUN HARNESS TESTS
+==================================================
+
+Run:
+
+- harness self-test
+- all focused harness contract tests
+
+Expected:
+
+PASS
+
+Do not rerun enormous unrelated suites unless the harness change imports or
+modifies production code.
+
+This is a harness-only correction.
+
+==================================================
+PART 3 — CREATE ONE NEW DISPOSABLE FIXTURE
+==================================================
+
+If and ONLY if the harness review/tests pass:
+
+Create ONE new disposable production acceptance fixture.
+
+This should be the next fresh fixture after Project 7.
+
+Do NOT reuse:
+
+- Project 5
+- Project 6
+- Project 7
+
+Use normal supported customer/product paths.
+
+Establish and record:
+
+- user
+- project
+- agent
+- owner mapping
+- initial generation state
+- initial revision state
+- initial customer-turn count
+- initial preview/release state
+
+Run the corrected read-only preflight.
+
+If preflight fails:
+
+STOP.
+
+Do not override it.
+
+Do not create another fixture.
+
+==================================================
+PART 4 — ONE CUSTOMER CODING REQUEST
+==================================================
+
+If preflight passes:
+
+Open the normal coding experience.
+
+Send exactly ONE customer coding request.
+
+Use the same general production lifecycle acceptance goal as the earlier
+fixture so results remain comparable.
+
+Do not:
+
+- deliberately disconnect the browser
+- force an RPC cancellation
+- sabotage the generated application
+- manipulate the workspace behind the agent
+- send a second customer instruction
+- automatically retry failure
+- alter maxSteps
+- alter continuation limits
+
+Current lifecycle limits remain:
+
+Think maxSteps:
+25
+
+Maximum total Think turns:
+5
+
+Maximum internal continuations:
+4
+
+Wall-clock operation ceiling:
+15 minutes
+
+==================================================
+PART 5 — OBSERVE THE OPERATION
+==================================================
+
+The accepted safe observability instrumentation is already production-active.
+
+Do not modify it.
+
+Observe:
+
+- customer request count
+- Think turn count
+- tool step count
+- internal continuation count
+- operation state
+- WebSocket state
+- RPC outcome
+- provider outcome
+- working-tree changes
+- preflight
+- commit
+- preview
+- browser verification
+- finish_task
+- authoritative revision
+- final working-tree state
+
+==================================================
+PART 6 — REQUIRED SUCCESS CONTRACT
+==================================================
+
+For a fully accepted coding operation require:
+
+- exactly ONE customer request
+- same ThinkAgent
+- same SpaceDO
+- requested work represented in workspace
+- working-tree validation/preflight succeeds
+- commit occurs only after successful preflight
+- authoritative HEAD/revision coherent
+- preview deployment succeeds
+- browser/runtime verification succeeds
+- no actionable generated-app errors
+- finish_task recorded
+- working tree clean
+- completion gate accepts
+- final operation state COMPLETE
+- no production Publish
+- no production release created by preview operation
+
+==================================================
+PART 7 — MULTI-TURN REQUIREMENT
+==================================================
+
+Our main remaining acceptance target is the new continuous lifecycle across
+the native Think turn boundary.
+
+Record:
+
+- Think turns
+- internal continuations
+- total steps
+- whether the initial Think turn exhausted its native step allowance
+- whether the host continued the SAME customer operation
+- whether the original customer request was duplicated
+- whether internal continuation messages remained hidden/grouped
+- whether dirty workspace state survived between turns
+
+For:
+
+MULTI-TURN PRODUCTION LIFECYCLE PROVEN = YES
+
+require at least:
+
+- more than one internal Think turn
+- at least one native internal continuation
+- still exactly one customer request
+- same operation
+- same ThinkAgent
+- same SpaceDO
+- eventual COMPLETE
+
+If the fixture successfully completes entirely inside the first native Think
+turn:
+
+classify:
+
+BASIC PRODUCTION LIFECYCLE = PASS
+
+MULTI-TURN PRODUCTION LIFECYCLE = NOT YET PROVEN
+
+Do NOT call that a failure.
+
+Do NOT touch Project 5.
+
+STOP and report.
+
+==================================================
+PART 8 — FAILURE HANDLING
+==================================================
+
+If the fixture fails:
+
+DO NOT retry.
+
+DO NOT repair the fixture.
+
+DO NOT create another fixture.
+
+DO NOT touch Project 5.
+
+Use the already accepted safe diagnostics.
+
+Report the earliest retained failure including:
+
+- component
+- boundary
+- safe error type
+- safe code
+- safe stack frames
+- cause classification
+- WebSocket code/state
+- RPC outcome
+- Think turn/step
+- continuation state
+- provider status
+- operation state
+- workspace safety
+
+Classify the failure based on evidence.
+
+Do not speculate.
+
+==================================================
+PART 9 — NO PROJECT 5 YET
+==================================================
+
+Even if this fixture fully proves multi-turn continuation:
+
+DO NOT touch Project 5 under this authorization.
+
+We will separately authorize the Project 5 dirty-workspace recovery after
+reviewing this result.
+
+==================================================
+RETURN
+==================================================
+
+Return:
+
+OVERALL STATUS:
+PASS / BASIC PASS ONLY / FAILED WITH ROOT CAUSE / BLOCKED
+
+HARNESS REVIEW
+- current status contract:
+- current revision contract:
+- fresh null revision:
+- established revision:
+- SpaceDO optional success handling:
+- explicit error handling:
+- ownership fail-closed:
+- active-generation fail-closed:
+- malformed-response fail-closed:
+- conflicting-state fail-closed:
+- preflight read-only:
+- product code changed: MUST BE NO
+- observability changed: MUST BE NO
+- result:
+
+HARNESS TESTS
+- self-test:
+- focused tests:
+- result:
+
+NEW FIXTURE
+- user:
+- project:
+- agent:
+- owner mapping:
+- initial generation state:
+- initial revision:
+- initial customer turns:
+- initial preview:
+- initial release:
+- corrected preflight:
+- result:
+
+CODING OPERATION
+- customer requests:
+- Think turns:
+- tool steps:
+- internal continuations:
+- same operation:
+- same ThinkAgent:
+- same SpaceDO:
+- duplicated customer request:
+- internal messages hidden:
+- WebSocket:
+- RPC:
+- provider:
+- workspace persisted across turns:
+- preflight:
+- commit:
+- preview:
+- browser verification:
+- finish_task:
+- authoritative revision:
+- working tree:
+- completion gate:
+- final state:
+- production Publish:
+- production release:
+- result:
+
+BASIC PRODUCTION LIFECYCLE:
+PASS / FAIL / NOT RUN
+
+MULTI-TURN PRODUCTION LIFECYCLE PROVEN:
+YES / NO
+
+IF FAILURE
+- earliest retained failure:
+- component:
+- boundary:
+- safe type:
+- safe code:
+- safe frames:
+- cause:
+- classification:
+- confidence:
+- candidate caused failure:
+
+PROJECT 2 SESSION CREATED:
+MUST BE NO
+
+PROJECT 5 READ OR TOUCHED:
+MUST BE NO
+
+PROJECT 6 RETRIED:
+MUST BE NO
+
+PROJECT 7 CODING REQUEST:
+MUST BE NO
+
+NEW FIXTURES:
+MAXIMUM 1
+
+NEW CUSTOMER CODING REQUESTS:
+MAXIMUM 1
+
+EXACT NEXT RECOMMENDED STEP:
+
+Then STOP.
