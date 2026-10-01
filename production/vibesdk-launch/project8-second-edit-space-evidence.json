@@ -1,0 +1,55 @@
+{
+  "at": "2026-10-01T19:42:55.277Z",
+  "agent": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "results": [
+    {
+      "rows": [
+        {
+          "path": "/.git/HEAD",
+          "content_encoding": "utf8",
+          "gitValue": "ref: refs/heads/main"
+        },
+        {
+          "path": "/.git/refs/heads/main",
+          "content_encoding": "utf8",
+          "gitValue": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+        }
+      ],
+      "meta": {
+        "rows_read": 65,
+        "rows_written": 0
+      }
+    },
+    {
+      "rows": [
+        {
+          "branch": "main",
+          "commit_hash": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+          "deployed_at": 1790883643151
+        }
+      ],
+      "meta": {
+        "rows_read": 2,
+        "rows_written": 0
+      }
+    },
+    {
+      "rows": [
+        {
+          "path": "/public/index.html",
+          "content_encoding": "utf8",
+          "bytes": 104935
+        },
+        {
+          "path": "/src/index.ts",
+          "content_encoding": "utf8",
+          "bytes": 18426
+        }
+      ],
+      "meta": {
+        "rows_read": 65,
+        "rows_written": 0
+      }
+    }
+  ]
+}

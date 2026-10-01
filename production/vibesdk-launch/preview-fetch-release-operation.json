@@ -1,0 +1,317 @@
+{
+  "startedAt": "2026-10-01T19:00:28.698Z",
+  "state": "ROLLED_BACK",
+  "worker": "buildcustom-control-plane-launch",
+  "account": "03ef1e6e42498920987f07059e107538",
+  "before": {
+    "buildcustom-control-plane-launch": {
+      "version": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+      "deployment": "c3d8479e-af7c-44a7-ad42-6c68f89a37b4"
+    },
+    "buildcustom-vibesdk-launch": {
+      "version": "f4488693-4424-46a3-9834-30b214645449",
+      "deployment": "cb50d437-5de6-4394-b281-d5439f8bf072"
+    },
+    "buildcustom-apps-gateway": {
+      "version": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+      "deployment": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427"
+    },
+    "buildcustom-apps-gateway-launch": {
+      "version": "26ac7a8c-695f-49d9-845a-8fe79ec2c28e",
+      "deployment": "24db97f2-3e9e-4513-98c3-e1691884f335"
+    }
+  },
+  "previousVersion": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+  "unaffectedBaselines": {
+    "buildcustom-vibesdk-launch": {
+      "version": "f4488693-4424-46a3-9834-30b214645449",
+      "deployment": "cb50d437-5de6-4394-b281-d5439f8bf072",
+      "bindings": [
+        {
+          "name": "AI",
+          "type": "ai"
+        },
+        {
+          "name": "API_RATE_LIMITER",
+          "type": "ratelimit",
+          "namespace_id": "26092631"
+        },
+        {
+          "name": "ASSETS",
+          "type": "assets"
+        },
+        {
+          "name": "AUTH_RATE_LIMITER",
+          "type": "ratelimit",
+          "namespace_id": "26092632"
+        },
+        {
+          "name": "BROWSER",
+          "type": "browser"
+        },
+        {
+          "name": "CF_VERSION_METADATA",
+          "type": "version_metadata"
+        },
+        {
+          "name": "CLOUDFLARE_ACCOUNT_ID",
+          "type": "plain_text"
+        },
+        {
+          "name": "CLOUDFLARE_AI_GATEWAY",
+          "type": "plain_text"
+        },
+        {
+          "name": "CLOUDFLARE_AI_GATEWAY_TOKEN",
+          "type": "secret_text"
+        },
+        {
+          "name": "CLOUDFLARE_API_TOKEN",
+          "type": "secret_text"
+        },
+        {
+          "name": "CodeGenObject",
+          "type": "durable_object_namespace",
+          "namespace_id": "a9c65da411c946569c6d6939190cf03e",
+          "class_name": "CodeGeneratorAgent"
+        },
+        {
+          "name": "CUSTOM_DOMAIN",
+          "type": "plain_text"
+        },
+        {
+          "name": "DB",
+          "type": "d1",
+          "database_id": "716c6600-8c60-408a-9446-3779979d5316"
+        },
+        {
+          "name": "DISPATCH_NAMESPACE",
+          "type": "plain_text"
+        },
+        {
+          "name": "DISPATCHER",
+          "type": "dispatch_namespace"
+        },
+        {
+          "name": "DORateLimitStore",
+          "type": "durable_object_namespace",
+          "namespace_id": "d156c0b8d76148d8a3ab0d4622bf1bde",
+          "class_name": "DORateLimitStore"
+        },
+        {
+          "name": "EMAIL",
+          "type": "send_email"
+        },
+        {
+          "name": "JWT_SECRET",
+          "type": "secret_text"
+        },
+        {
+          "name": "LOADER",
+          "type": "worker_loader"
+        },
+        {
+          "name": "MAX_SANDBOX_INSTANCES",
+          "type": "plain_text"
+        },
+        {
+          "name": "PLATFORM_CAPABILITIES",
+          "type": "json"
+        },
+        {
+          "name": "REGISTRATION_ENABLED",
+          "type": "plain_text"
+        },
+        {
+          "name": "Sandbox",
+          "type": "durable_object_namespace",
+          "namespace_id": "9a4a4f1f70314713b4e5ddfda7a69f03",
+          "class_name": "UserAppSandboxService"
+        },
+        {
+          "name": "SANDBOX_INSTANCE_TYPE",
+          "type": "plain_text"
+        },
+        {
+          "name": "SPACE_DO",
+          "type": "durable_object_namespace",
+          "namespace_id": "bd1438931f1e489b89439e66b385837e",
+          "class_name": "SpaceDO"
+        },
+        {
+          "name": "TEMPLATES_BUCKET",
+          "type": "r2_bucket",
+          "bucket_name": "buildcustom-vibesdk-launch-templates"
+        },
+        {
+          "name": "TEMPLATES_REPOSITORY",
+          "type": "plain_text"
+        },
+        {
+          "name": "THINK_DO",
+          "type": "durable_object_namespace",
+          "namespace_id": "5d1e8716e75e4e1884458127f83c7f1c",
+          "class_name": "ThinkAgent"
+        },
+        {
+          "name": "THINK_OPERATION_MAX_CONTINUATIONS",
+          "type": "plain_text"
+        },
+        {
+          "name": "THINK_OPERATION_MAX_ELAPSED_MS",
+          "type": "plain_text"
+        },
+        {
+          "name": "UserSecretsStore",
+          "type": "durable_object_namespace",
+          "namespace_id": "37c9221368634c12b04f74655e927e8e",
+          "class_name": "UserSecretsStore"
+        },
+        {
+          "name": "VibecoderStore",
+          "type": "kv_namespace",
+          "namespace_id": "80e8a38752dd4012875a189b05b6a148"
+        }
+      ],
+      "scriptRuntime": {
+        "migration_tag": "v6",
+        "assets": {
+          "not_found_handling": "single-page-application",
+          "serve_directly": false,
+          "raw_run_worker_first": true,
+          "base_path": "/"
+        },
+        "compatibility_date": "2026-05-23",
+        "compatibility_flags": [
+          "nodejs_compat"
+        ],
+        "usage_model": "standard",
+        "containers": [
+          {
+            "class_name": "UserAppSandboxService"
+          }
+        ]
+      },
+      "assets": {
+        "not_found_handling": "single-page-application",
+        "serve_directly": false,
+        "raw_run_worker_first": true,
+        "base_path": "/"
+      }
+    },
+    "buildcustom-apps-gateway": {
+      "version": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+      "deployment": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427",
+      "bindings": [
+        {
+          "name": "DISPATCHER",
+          "type": "dispatch_namespace"
+        },
+        {
+          "name": "ROUTES",
+          "type": "kv_namespace",
+          "namespace_id": "248ac5b6821a475794a7fe3d2b0c3718"
+        }
+      ],
+      "scriptRuntime": {
+        "compatibility_date": "2026-09-18",
+        "usage_model": "standard"
+      },
+      "assets": null
+    },
+    "buildcustom-apps-gateway-launch": {
+      "version": "26ac7a8c-695f-49d9-845a-8fe79ec2c28e",
+      "deployment": "24db97f2-3e9e-4513-98c3-e1691884f335",
+      "bindings": [
+        {
+          "name": "DISPATCHER",
+          "type": "dispatch_namespace"
+        },
+        {
+          "name": "PRIVATE_CANARY_HOST",
+          "type": "plain_text"
+        },
+        {
+          "name": "ROUTES",
+          "type": "kv_namespace",
+          "namespace_id": "248ac5b6821a475794a7fe3d2b0c3718"
+        }
+      ],
+      "scriptRuntime": {
+        "compatibility_date": "2026-09-20",
+        "usage_model": "standard"
+      },
+      "assets": null
+    }
+  },
+  "expected": [
+    {
+      "name": "worker.js",
+      "sha256": "b401d3be2bbf23e43f89f3be0cc2a2920a9c2285bf8a3d8249346577ec2b98eb"
+    }
+  ],
+  "changedModules": [
+    "worker.js"
+  ],
+  "sourceCommit": "6cea62eacf8ba4eb17fd53fbfc8872e4eed14b8b",
+  "sourceParity": {
+    "verifiedAt": "2026-10-01T18:56:03.513Z",
+    "status": "PASS",
+    "worker": "buildcustom-control-plane-launch",
+    "sourceCommit": "6cea62eacf8ba4eb17fd53fbfc8872e4eed14b8b",
+    "servingVersion": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+    "mainModule": "worker.js",
+    "differences": [],
+    "reconstructedModules": [
+      {
+        "name": "worker.js",
+        "sha256": "bb15915ab8aa778693403473454edab780bfd7d8e0368535e071f98400ec44e3"
+      }
+    ]
+  },
+  "validation": {
+    "status": "PASS",
+    "safetyReview": "PASS",
+    "rootCauseComponent": "control-plane-preview-proxy",
+    "checkNames": [
+      "focusedTests",
+      "regressionTests",
+      "typecheck",
+      "build"
+    ]
+  },
+  "retainedBindings": true,
+  "retainedAssets": "keep_assets=true required",
+  "retainedRuntimeSettings": true,
+  "assetsUploaded": false,
+  "assetBytesRehashed": false,
+  "rollbackCommand": "node scripts/preview-fetch-release.mjs rollback",
+  "latestBindingRetryUsed": true,
+  "newVersion": "30e77330-6998-4d09-8fb6-4cbb70b3f8a7",
+  "modulesVerified": true,
+  "bindingsVerified": true,
+  "runtimeSettingsVerified": true,
+  "assetsRetentionMode": "keep_assets=true",
+  "verifiedAt": "2026-10-01T19:00:48.040Z",
+  "rolloutPercentage": 100,
+  "deployment": "f768392b-c053-4abe-a591-5f44b2cfbfa7",
+  "updatedAt": "2026-10-01T19:02:51.490Z",
+  "after": {
+    "buildcustom-control-plane-launch": {
+      "version": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+      "deployment": "f768392b-c053-4abe-a591-5f44b2cfbfa7"
+    },
+    "buildcustom-vibesdk-launch": {
+      "version": "f4488693-4424-46a3-9834-30b214645449",
+      "deployment": "cb50d437-5de6-4394-b281-d5439f8bf072"
+    },
+    "buildcustom-apps-gateway": {
+      "version": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+      "deployment": "ddf445e2-6ed9-4f3e-bb19-e3bb5149f427"
+    },
+    "buildcustom-apps-gateway-launch": {
+      "version": "26ac7a8c-695f-49d9-845a-8fe79ec2c28e",
+      "deployment": "24db97f2-3e9e-4513-98c3-e1691884f335"
+    }
+  }
+}

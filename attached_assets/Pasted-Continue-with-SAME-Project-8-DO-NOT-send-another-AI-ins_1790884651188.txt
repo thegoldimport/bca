@@ -1,0 +1,475 @@
+Continue with SAME Project 8.
+
+DO NOT send another AI instruction.
+
+DO NOT reset or repair Project 8.
+
+DO NOT create Project 9.
+
+DO NOT touch Project 5.
+
+DO NOT modify production yet.
+
+We have a concrete edit-operation failure, but the generated edit itself may
+already be valid.
+
+Our first job is to inspect the EXISTING committed/deployed revision and then
+diagnose why the operation failed to reach COMPLETE.
+
+==================================================
+CURRENT PROJECT 8 STATE
+==================================================
+
+Original accepted revision:
+
+04395b156f7e43346a240be3d824eef8104b7697
+
+New edit revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+The edit operation had:
+
+- exactly 1 customer edit instruction
+- no duplicate customer instruction
+- same ThinkAgent
+- same SpaceDO
+- Think pass 1: 25 steps
+- Think pass 2: 25 steps
+- Think pass 3: errored before step 1
+- 48 tool calls
+- 36 reads
+- 9 successful edits
+- edited:
+  - src/index.ts
+  - public/index.html
+- deploy_space returned ok:true
+- new commit created
+- Git HEAD matches deployment
+- previous revision preserved as parent
+- working tree confirmed clean
+- finish_task NOT observed
+- controller COMPLETE NOT established
+- production releases = 0
+- production Publish = NO
+
+Earliest retained lifecycle failure:
+
+19:40:47.656 UTC
+
+Third native Think stream recorded:
+
+error
+
+before any step.
+
+No retained exception/error chunk established the exact cause.
+
+At:
+
+19:40:50.080 UTC
+
+the owner API observer received HTTP 401.
+
+Subsequent evidence confirmed the browser was no longer authenticated.
+
+Causality between the Think error and authentication loss is NOT established.
+
+The UI remained stuck at:
+
+RECOVERING / VERIFYING
+The Agent is done streaming · verifying the stock revision and preview…
+
+==================================================
+STEP 1 — RECOVER SAME OWNER SESSION
+==================================================
+
+Recover/re-establish the legitimate SAME Project 8 owner session using the
+normal supported production authentication path.
+
+Use stored authorized credential if available.
+
+Otherwise use the existing production password-recovery flow for the SAME
+account.
+
+Do NOT:
+
+- create another user
+- create another project
+- change ownership
+- bypass authentication
+- inject a session
+
+After login confirm:
+
+- same owner
+- Project 8
+- same agent
+- revision remains:
+  020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Do NOT send an AI instruction.
+
+==================================================
+STEP 2 — VERIFY THE EXISTING NEW REVISION
+==================================================
+
+Before investigating lifecycle internals, test what the agent already built.
+
+Open the CURRENT Project 8 preview normally.
+
+We need to determine whether the generated edit itself succeeded.
+
+Verify:
+
+1. Preview HTTP 200.
+
+2. Existing CRM loads.
+
+3. Existing seeded leads load.
+
+4. Click an existing lead.
+
+5. Determine whether lead-details experience exists.
+
+6. Verify it shows:
+   - name
+   - company
+   - email
+   - status
+   - source
+   - estimated value
+   - created date
+
+7. Verify Notes section exists.
+
+8. Add ONE test note.
+
+9. Verify note appears.
+
+10. Reload/reopen and verify persistence if supported by the generated app.
+
+11. Verify Activity Timeline exists.
+
+12. Verify activity entries render.
+
+13. Verify design remains consistent with existing CRM.
+
+Then perform a concise regression check:
+
+- dashboard renders
+- summary cards render
+- existing leads remain accessible
+- search works
+- sorting works
+- status filtering works
+- Add Lead works
+- edit lead works
+- delete lead works
+- five newest leads works
+- backend API requests succeed
+- no malformed preview URLs
+- no generated-app API CORS failures
+- no actionable generated-app console errors
+
+For CRUD testing, create at most ONE temporary lead:
+
+Project 8 Regression Test Lead
+
+Then:
+
+create
+→ verify
+→ edit
+→ verify
+→ delete
+→ verify removed
+
+Do NOT modify original seeded leads unnecessarily.
+
+==================================================
+IMPORTANT CLASSIFICATION
+==================================================
+
+If the new feature and existing CRM work:
+
+classify the GENERATED EDIT as:
+
+PASS
+
+even though the OPERATION LIFECYCLE failed to establish COMPLETE.
+
+That distinction is critical.
+
+We may have:
+
+GENERATED APP EDIT = PASS
+EDIT/REDEPLOY = PASS
+OPERATION COMPLETION LIFECYCLE = FAIL
+
+Do not conflate them.
+
+If the generated application itself is broken, document the concrete
+application failure and STOP before lifecycle changes.
+
+==================================================
+STEP 3 — READ-ONLY LIFECYCLE DIAGNOSIS
+==================================================
+
+If the existing revision is usable enough to inspect, diagnose the lifecycle
+failure READ-ONLY.
+
+Do not retry the Think turn.
+
+Do not send another customer instruction.
+
+Trace the operation around:
+
+19:40:47.656 UTC
+
+Determine everything retained about:
+
+- end of Think pass 2
+- decision to initiate continuation #2
+- creation/start of Think pass 3
+- native Think RPC
+- stream creation
+- stream forwarding
+- provider request, if any
+- operation resource accounting
+- continuation counters
+- elapsed-time budget
+- max-turn budget
+- max-continuation budget
+- operation state
+- Fiber/recovery state
+- WebSocket state
+- controller verification state
+
+Specifically answer:
+
+WHY WAS A THIRD THINK PASS STARTED?
+
+Pass 2 had already:
+
+- made the edits
+- committed
+- deployed the preview
+
+Determine what completion evidence was still missing when the host chose to
+continue.
+
+Was it attempting to obtain:
+
+- finish_task
+- browser verification
+- additional repair
+- completion acknowledgement
+- something else
+
+Then determine the earliest boundary at which pass 3 failed.
+
+==================================================
+STEP 4 — INVESTIGATE THE 401 SEPARATELY
+==================================================
+
+Investigate the authentication loss as a separate timeline.
+
+Do NOT assume it caused the Think failure.
+
+Determine:
+
+- which owner API returned 401
+- whether the browser session cookie was present
+- whether the runtime session still existed
+- whether it was revoked
+- revocation reason if available
+- whether it expired
+- whether logout occurred
+- whether password reset occurred
+- whether another test helper/browser action replaced or lost the cookie
+- whether the owner session remained valid server-side
+- whether the 401 came from missing browser credential versus rejected
+  credential
+
+Compare timestamps carefully:
+
+Think stream error:
+19:40:47.656
+
+Owner API 401:
+19:40:50.080
+
+Do not reverse causality merely because the events are close together.
+
+==================================================
+STEP 5 — EXPLAIN THE STUCK UI
+==================================================
+
+Determine why the editor remained:
+
+RECOVERING / VERIFYING
+
+after:
+
+- native stream errored
+- Git commit existed
+- preview deployment existed
+- working tree was clean
+
+Trace the controller state machine.
+
+Determine:
+
+- current persisted operation state
+- expected transition after stream error
+- whether verification should have reconciled the committed revision
+- whether auth loss prevented reconciliation
+- whether missing finish_task prevented COMPLETE
+- whether an error transition should have occurred instead
+- whether the UI was waiting on evidence that could never arrive
+
+We need to distinguish:
+
+A. native Think continuation failure
+
+B. authentication/session failure
+
+C. controller reconciliation failure
+
+D. UI state bug
+
+E. combination
+
+F. insufficient evidence
+
+==================================================
+STEP 6 — DO NOT FIX YET
+==================================================
+
+This authorization is:
+
+VERIFY EXISTING REVISION
++
+READ-ONLY ROOT-CAUSE DIAGNOSIS
+
+Do NOT change:
+
+- runtime
+- lifecycle
+- control plane
+- auth
+- UI
+- observability
+- generated Project 8 source
+
+Do NOT deploy anything.
+
+Do NOT resend anything.
+
+We want the root cause before changing production.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+APP EDIT PASS / APP EDIT FAIL / DIAGNOSIS BLOCKED
+
+PROJECT 8
+- owner recovered:
+- revision:
+- preview:
+- seeded leads:
+- backend API:
+
+NEW FEATURE
+- lead details:
+- correct lead data:
+- Notes:
+- note persistence:
+- Activity Timeline:
+- design consistency:
+- result:
+
+REGRESSION
+- dashboard:
+- summary cards:
+- leads:
+- search:
+- sorting:
+- filtering:
+- Add Lead:
+- edit lead:
+- delete lead:
+- newest leads:
+- backend:
+- browser errors:
+- result:
+
+GENERATED APP EDIT:
+PASS / FAIL
+
+EDIT + PRIVATE PREVIEW REDEPLOY:
+PASS / FAIL
+
+OPERATION COMPLETION LIFECYCLE:
+PASS / FAIL
+
+THINK PASS 3
+- why started:
+- required missing evidence:
+- provider request reached:
+- RPC:
+- stream:
+- steps:
+- earliest retained failure:
+- operation state before:
+- operation state after:
+- resource limits:
+- classification:
+
+AUTH 401
+- endpoint:
+- cookie present:
+- server session present:
+- revoked:
+- revocation reason:
+- expired:
+- browser credential lost:
+- exact cause:
+- relationship to Think failure:
+
+STUCK RECOVERING/VERIFYING
+- persisted operation state:
+- expected transition:
+- actual transition:
+- missing evidence:
+- auth contribution:
+- controller contribution:
+- UI contribution:
+- root cause:
+
+ROOT-CAUSE CLASSIFICATION:
+- native continuation:
+- authentication:
+- controller reconciliation:
+- UI:
+- confidence:
+
+NEW AI REQUESTS:
+MUST BE ZERO
+
+PRODUCTION CHANGES:
+MUST BE ZERO
+
+PRODUCTION PUBLISH:
+MUST BE NO
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

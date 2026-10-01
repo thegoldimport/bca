@@ -1,0 +1,1268 @@
+{
+  "startedAt": "2026-10-01T19:59:41.188Z",
+  "project": 8,
+  "owner": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+  "agent": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "expectedRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+  "newAIRequests": 0,
+  "publishRequests": 0,
+  "loginClicks": 1,
+  "noteSubmissionClicks": 1,
+  "leadCreateClicks": 1,
+  "leadUpdateClicks": 1,
+  "leadDeleteClicks": 1,
+  "appErrors": [],
+  "telemetryErrors": [
+    {
+      "at": "2026-10-01T19:59:56.659Z",
+      "message": "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "at": "2026-10-01T20:00:03.196Z",
+      "message": "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "at": "2026-10-01T20:01:34.498Z",
+      "message": "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "at": "2026-10-01T20:04:27.860Z",
+      "message": "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "at": "2026-10-01T20:05:54.853Z",
+      "message": "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    }
+  ],
+  "requests": [
+    {
+      "at": "2026-10-01T19:59:53.211Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T19:59:56.609Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "GET",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:00:00.077Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:00:03.138Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "GET",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:01:32.135Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:33.329Z",
+      "path": "/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:33.331Z",
+      "path": "/css2",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:33.334Z",
+      "path": "/@babel/standalone/babel.min.js",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:33.335Z",
+      "path": "/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:33.353Z",
+      "path": "/3.4.17",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:33.397Z",
+      "path": "/@babel/standalone@7.29.9/babel.min.js",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.069Z",
+      "path": "/react@18.3.1",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.069Z",
+      "path": "/react-dom@18.3.1/client",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.070Z",
+      "path": "/lucide-react@0.400.0",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.130Z",
+      "path": "/react-dom@18.3.1/es2022/react-dom.mjs",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.130Z",
+      "path": "/react-dom@18.3.1/es2022/client.mjs",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.133Z",
+      "path": "/react@18.3.1/es2022/react.mjs",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.133Z",
+      "path": "/lucide-react@0.400.0/X-ZXJlYWN0LHJlYWN0LWRvbQ/es2022/lucide-react.mjs",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.171Z",
+      "path": "/scheduler@%5E0.23.2",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.215Z",
+      "path": "/scheduler@0.23.2/es2022/scheduler.mjs",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.318Z",
+      "path": "/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:01:34.326Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "GET",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:01:34.496Z",
+      "path": "/cdn-cgi/rum",
+      "method": "POST",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:04:21.679Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1/notes",
+      "method": "OPTIONS",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:04:21.681Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1/notes",
+      "method": "POST",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:04:24.678Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:04:27.805Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "GET",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:05:52.507Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T20:05:54.614Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "GET",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:05:55.250Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1",
+      "method": "GET",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:08:11.349Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "POST",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:08:11.349Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "OPTIONS",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:08:14.071Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "method": "PUT",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:08:14.072Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "method": "OPTIONS",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:08:14.498Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "method": "GET",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:08:15.193Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "method": "OPTIONS",
+      "tokenCount": 1
+    },
+    {
+      "at": "2026-10-01T20:08:15.195Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "method": "DELETE",
+      "tokenCount": 1
+    }
+  ],
+  "responses": [
+    {
+      "at": "2026-10-01T19:59:55.189Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T19:59:58.082Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:00:01.900Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:00:03.259Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:01:33.311Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:01:34.494Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200,
+      "leadCount": 12
+    },
+    {
+      "at": "2026-10-01T20:04:21.953Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1/notes",
+      "status": 204
+    },
+    {
+      "at": "2026-10-01T20:04:22.302Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1/notes",
+      "status": 201
+    },
+    {
+      "at": "2026-10-01T20:04:26.857Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:04:27.951Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:05:53.643Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:05:54.691Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:05:55.458Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/1",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:08:12.362Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 204
+    },
+    {
+      "at": "2026-10-01T20:08:13.456Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 201
+    },
+    {
+      "at": "2026-10-01T20:08:14.138Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "status": 204
+    },
+    {
+      "at": "2026-10-01T20:08:14.317Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:08:14.539Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "status": 200
+    },
+    {
+      "at": "2026-10-01T20:08:15.267Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "status": 204
+    },
+    {
+      "at": "2026-10-01T20:08:15.442Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads/13",
+      "status": 200
+    }
+  ],
+  "checks": {
+    "previewHttp": 200,
+    "seededLeads": 12,
+    "dashboard": true,
+    "summaryCards": true,
+    "newestLeads": {
+      "section": true,
+      "visibleNames": [
+        "Chloe Sterling",
+        "Sophia Chen",
+        "Marcus Thorne",
+        "Amara Okafor",
+        "Eleanor Vance"
+      ]
+    },
+    "leadDetails": {
+      "clicked": true,
+      "opened": true,
+      "fields": {
+        "name": true,
+        "company": true,
+        "email": true,
+        "status": true,
+        "source": true,
+        "estimatedValue": true,
+        "createdDate": true,
+        "expectedDate": "Sep 28, 2026",
+        "background": "rgba(11, 15, 25, 0.8)",
+        "bodyBackground": "rgb(11, 15, 25)"
+      }
+    },
+    "design": {
+      "background": "rgba(11, 15, 25, 0.8)",
+      "bodyBackground": "rgb(11, 15, 25)",
+      "naturalDrawer": true
+    },
+    "noteCreation": true,
+    "notePersistence": true,
+    "activityTimeline": {
+      "exists": true,
+      "renders": true,
+      "notesEvent": true,
+      "entries": [
+        {
+          "id": 1,
+          "lead_id": 1,
+          "type": "note",
+          "title": "Note Added",
+          "description": "Project 8 verification note: existing revision persistence check.",
+          "created_at": "2026-10-01 20:04:22"
+        }
+      ]
+    }
+  },
+  "state": "APP_EDIT_PASS",
+  "preLoginCookieMetadata": [
+    {
+      "name": "accessToken",
+      "expires": 1791134399.04533,
+      "httpOnly": true,
+      "secure": true,
+      "session": false,
+      "domain": "app.buildcustom.ai"
+    }
+  ],
+  "loginStatus": 200,
+  "postLoginCookieMetadata": [
+    {
+      "name": "csrf-token",
+      "expires": 1790891989.341497,
+      "httpOnly": true,
+      "secure": true,
+      "session": false,
+      "domain": "app.buildcustom.ai"
+    },
+    {
+      "name": "accessToken",
+      "expires": 1791143989.341375,
+      "httpOnly": true,
+      "secure": true,
+      "session": false,
+      "domain": "app.buildcustom.ai"
+    }
+  ],
+  "ownerRecovered": true,
+  "revision": {
+    "branch": "main",
+    "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+  },
+  "previewDOM": {
+    "title": "Pulse CRM - Mini Sales Dashboard",
+    "text": "Sales Dashboard\n\nTOTAL LEADS\n\n12\n+12%\nvs last month\n\nQUALIFIED LEADS\n\n3\nQualification Rate\n25%\n\nPIPELINE VALUE\n\n$467,500\nActive Stage Deals\n9 deals\n\nWON REVENUE\n\n$270,000\nWin Rate\n17% (2 won)\nSales Funnel Stage Distribution\nTotal Pipeline Value: $737,500\nNew\n2\nContacted\n2\nQualified\n3\nProposal\n2\nWon\n2\nLost\n1\nFive Newest Leads\nView All (12)\nC\nChloe Sterling\n\nNova BioTech\n\nNew\n$18,500\nS\nSophia Chen\n\nHorizon Health\n\nNew\n$28,000\nM\nMarcus Thorne\n\nCloudMatrix Tech\n\nProposal\n$82,000\nA\nAmara Okafor\n\nVanguard Dynamics\n\nContacted\n$35,000\nE\nEleanor Vance\n\nApex Financial Solutions\n\nQualified\n$45,000\nAdd another lead to pipeline\nTop Opportunities\nVertex Energy\n$150,000\nTariq Al-Mansoor\nWon\nPinnacle Logistics\n$120,000\nDavid Ross\nWon\nBeacon Media Group\n$95,000\nBrian Gallagher\nProposal\nCloudMatrix Tech\n$82,000\nMarcus Thorne\nProposal\nAvg Deal Size:\n$65,625",
+    "buttons": [
+      {
+        "text": "Add New Lead",
+        "title": ""
+      },
+      {
+        "text": "Dashboard12",
+        "title": ""
+      },
+      {
+        "text": "Leads Database12",
+        "title": ""
+      },
+      {
+        "text": "Pipeline KanbanProposal (2)",
+        "title": ""
+      },
+      {
+        "text": "Analytics",
+        "title": ""
+      },
+      {
+        "text": "Reset Sample Data",
+        "title": ""
+      },
+      {
+        "text": "Export CSV",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "New\n2",
+        "title": ""
+      },
+      {
+        "text": "Contacted\n2",
+        "title": ""
+      },
+      {
+        "text": "Qualified\n3",
+        "title": ""
+      },
+      {
+        "text": "Proposal\n2",
+        "title": ""
+      },
+      {
+        "text": "Won\n2",
+        "title": ""
+      },
+      {
+        "text": "Lost\n1",
+        "title": ""
+      },
+      {
+        "text": "View All (12)",
+        "title": ""
+      },
+      {
+        "text": "Add another lead to pipeline",
+        "title": ""
+      }
+    ],
+    "inputs": []
+  },
+  "ui": {
+    "completion": "RECOVERING / VERIFYING · The Agent is idle · confirming its committed revision is stable…",
+    "inputDisabled": true
+  },
+  "featureStartedAt": "2026-10-01T20:01:28.051Z",
+  "lastLeadCollection": [
+    {
+      "id": 9,
+      "name": "Chloe Sterling",
+      "company": "Nova BioTech",
+      "email": "c.sterling@novabiotech.io",
+      "phone": "+1 (555) 234-8901",
+      "status": "New",
+      "source": "Website",
+      "value": 18500,
+      "notes": "Inbound demo request. Mid-market tier, 15 user seats planned.",
+      "created_at": "2026-10-01"
+    },
+    {
+      "id": 3,
+      "name": "Sophia Chen",
+      "company": "Horizon Health",
+      "email": "sophia@horizonhealth.org",
+      "phone": "+1 (555) 345-6789",
+      "status": "New",
+      "source": "LinkedIn",
+      "value": 28000,
+      "notes": "Inquired via Q3 LinkedIn campaign. Interested in team analytics & workflow automation.",
+      "created_at": "2026-10-01"
+    },
+    {
+      "id": 2,
+      "name": "Marcus Thorne",
+      "company": "CloudMatrix Tech",
+      "email": "m.thorne@cloudmatrix.io",
+      "phone": "+1 (555) 876-5432",
+      "status": "Proposal",
+      "source": "Website",
+      "value": 82000,
+      "notes": "Sent custom enterprise pricing proposal with multi-seat discount. Following up Friday.",
+      "created_at": "2026-09-30"
+    },
+    {
+      "id": 5,
+      "name": "Amara Okafor",
+      "company": "Vanguard Dynamics",
+      "email": "amara.o@vanguard.co",
+      "phone": "+1 (555) 456-7890",
+      "status": "Contacted",
+      "source": "Cold Outreach",
+      "value": 35000,
+      "notes": "Initial intro call went well. Scheduling product demonstration for next Tuesday.",
+      "created_at": "2026-09-29"
+    },
+    {
+      "id": 1,
+      "name": "Eleanor Vance",
+      "company": "Apex Financial Solutions",
+      "email": "eleanor.vance@apexfin.com",
+      "phone": "+1 (555) 234-5678",
+      "status": "Qualified",
+      "source": "Referral",
+      "value": 45000,
+      "notes": "Key decision maker. Needs SOC2 compliance details before proposal phase.",
+      "created_at": "2026-09-28"
+    },
+    {
+      "id": 8,
+      "name": "Brian Gallagher",
+      "company": "Beacon Media Group",
+      "email": "bgallagher@beaconmedia.com",
+      "phone": "+1 (555) 123-9876",
+      "status": "Proposal",
+      "source": "Referral",
+      "value": 95000,
+      "notes": "Proposal review meeting set with VP of Operations and CTO.",
+      "created_at": "2026-09-27"
+    },
+    {
+      "id": 6,
+      "name": "Julian Mercer",
+      "company": "Nexus Retail",
+      "email": "julian@nexusretail.com",
+      "phone": "+1 (555) 654-3210",
+      "status": "Qualified",
+      "source": "Event",
+      "value": 64000,
+      "notes": "Met at SaaS Expo 2026. Looking to replace legacy CRM before annual renewal.",
+      "created_at": "2026-09-26"
+    },
+    {
+      "id": 11,
+      "name": "Rachel Zhang",
+      "company": "Lumina Creative",
+      "email": "rachel@luminacreative.co",
+      "phone": "+1 (555) 567-8901",
+      "status": "Contacted",
+      "source": "LinkedIn",
+      "value": 22000,
+      "notes": "Sent product video overview and pricing sheet. Follow up in 3 days.",
+      "created_at": "2026-09-25"
+    },
+    {
+      "id": 12,
+      "name": "Liam O'Connor",
+      "company": "Sterling Heavy Equipment",
+      "email": "liam@sterlingeq.com",
+      "phone": "+1 (555) 678-9012",
+      "status": "Qualified",
+      "source": "Cold Outreach",
+      "value": 78000,
+      "notes": "Budget approved for Q4 software upgrade. Requesting technical security audit.",
+      "created_at": "2026-09-22"
+    },
+    {
+      "id": 10,
+      "name": "Tariq Al-Mansoor",
+      "company": "Vertex Energy",
+      "email": "t.almansoor@vertexenergy.com",
+      "phone": "+1 (555) 890-1234",
+      "status": "Won",
+      "source": "Partner",
+      "value": 150000,
+      "notes": "Expansion deal closed. Added 200 user seats & dedicated priority support.",
+      "created_at": "2026-09-18"
+    },
+    {
+      "id": 4,
+      "name": "David Ross",
+      "company": "Pinnacle Logistics",
+      "email": "dross@pinnaclelogistics.com",
+      "phone": "+1 (555) 987-6543",
+      "status": "Won",
+      "source": "Partner",
+      "value": 120000,
+      "notes": "Contract signed for 3-year multi-seat enterprise plan with custom onboarding!",
+      "created_at": "2026-09-15"
+    },
+    {
+      "id": 7,
+      "name": "Elena Rostova",
+      "company": "CyberShield Global",
+      "email": "erostova@cybershield.net",
+      "phone": "+1 (555) 789-0123",
+      "status": "Lost",
+      "source": "Website",
+      "value": 50000,
+      "notes": "Chose in-house custom build due to strict legacy database requirements.",
+      "created_at": "2026-09-10"
+    }
+  ],
+  "observerCorrections": [
+    {
+      "previousFailure": {
+        "at": "2026-10-01T20:02:00.312Z",
+        "name": "TimeoutError",
+        "message": "Waiting failed: 25000ms exceeded"
+      },
+      "classification": "test-infrastructure-only",
+      "reason": "The whole-row click targeted a noninteractive cell. The live table has a dedicated clickable lead-name button; used that normal control without any code change."
+    },
+    {
+      "previousFailure": {
+        "at": "2026-10-01T20:04:28.622Z",
+        "name": "Error",
+        "message": "Node is either not clickable or not an Element"
+      },
+      "classification": "test-infrastructure-only",
+      "reason": "A new Puppeteer connection reset the existing browser viewport to its default, hiding desktop navigation. Resume after the already successful note; preserve one-way submission count. Use defaultViewport:null."
+    },
+    {
+      "previousFailure": {
+        "at": "2026-10-01T20:08:18.493Z",
+        "name": "AssertionError",
+        "message": "Expected values to be strictly equal:\n\nundefined !== 12\n"
+      },
+      "classification": "test-infrastructure-only",
+      "reason": "CRUD updates local React state without another collection GET; a watcher incorrectly required that GET. Verified persisted final 12-lead state with a normal customer reload. No mutation repeated."
+    }
+  ],
+  "featureDOM": {
+    "text": "Leads Database\nAll Sources\nWebsite\nReferral\nLinkedIn\nCold Outreach\nEvent\nPartner\nOther\nAll Leads\n12\nNew\n(2)\nContacted\n(2)\nQualified\n(3)\nProposal\n(2)\nWon\n(2)\nLost\n(1)\nLEAD NAME\n\t\nCOMPANY\n\t\nSTATUS\n\t\nSOURCE\n\t\nESTIMATED VALUE\n\tACTIONS\n\nC\nChloe Sterling\nc.sterling@novabiotech.io\n\t\nNova BioTech\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nWebsite\t$18,500\t\n\n\nS\nSophia Chen\nsophia@horizonhealth.org\n\t\nHorizon Health\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nLinkedIn\t$28,000\t\n\n\nM\nMarcus Thorne\nm.thorne@cloudmatrix.io\n\t\nCloudMatrix Tech\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nWebsite\t$82,000\t\n\n\nA\nAmara Okafor\namara.o@vanguard.co\n\t\nVanguard Dynamics\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nCold Outreach\t$35,000\t\n\n\nE\nEleanor Vance\neleanor.vance@apexfin.com\n\t\nApex Financial Solutions\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nReferral\t$45,000\t\n\n\nB\nBrian Gallagher\nbgallagher@beaconmedia.com\n\t\nBeacon Media Group\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nReferral\t$95,000\t\n\n\nJ\nJulian Mercer\njulian@nexusretail.com\n\t\nNexus Retail\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nEvent\t$64,000\t\n\n\nR\nRachel Zhang\nrachel@luminacreative.co\n\t\nLumina Creative\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nLinkedIn\t$22,000\t\n\n\nL\nLiam O'Connor\nliam@sterlingeq.com\n\t\nSterling Heavy Equipment\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nCold Outreach\t$78,000\t\n\n\nT\nTariq Al-Mansoor\nt.almansoor@vertexenergy.com\n\t\nVertex Energy\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nPartner\t$150,000\t\n\n\nD\nDavid Ross\ndross@pinnaclelogistics.com\n\t\nPinnacle Logistics\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nPartner\t$120,000\t\n\n\nE\nElena Rostova\nerostova@cybershield.net\n\t\nCyberShield Global\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nWebsite\t$50,000\t\nShowing 12 of 12 total leads\nE\nEleanor Vance\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\nApex Financial Solutions\n\nLead Info\nNotes (0)\nActivity Timeline (0)\n\nESTIMATED VALUE\n\n$45,000\n\nLEAD SOURCE\n\nReferral\nContact Information & Meta\nEmail Address\neleanor.vance@apexfin.com\nPhone Number\n+1 (555) 234-5678\nCompany Name\nApex Financial Solutions\nCreated Date\nSep 28, 2026\nPrimary Lead Notes\nView All Notes (0) →\n\nKey decision maker. Needs SOC2 compliance details before proposal phase.",
+    "buttons": [
+      {
+        "text": "Add New Lead",
+        "title": ""
+      },
+      {
+        "text": "Dashboard12",
+        "title": ""
+      },
+      {
+        "text": "Leads Database12",
+        "title": ""
+      },
+      {
+        "text": "Pipeline KanbanProposal (2)",
+        "title": ""
+      },
+      {
+        "text": "Analytics",
+        "title": ""
+      },
+      {
+        "text": "Reset Sample Data",
+        "title": ""
+      },
+      {
+        "text": "Export CSV",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "All Leads\n12",
+        "title": ""
+      },
+      {
+        "text": "New\n(2)",
+        "title": ""
+      },
+      {
+        "text": "Contacted\n(2)",
+        "title": ""
+      },
+      {
+        "text": "Qualified\n(3)",
+        "title": ""
+      },
+      {
+        "text": "Proposal\n(2)",
+        "title": ""
+      },
+      {
+        "text": "Won\n(2)",
+        "title": ""
+      },
+      {
+        "text": "Lost\n(1)",
+        "title": ""
+      },
+      {
+        "text": "Chloe Sterling",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Sophia Chen",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Marcus Thorne",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Amara Okafor",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Eleanor Vance",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Brian Gallagher",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Julian Mercer",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Rachel Zhang",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Liam O'Connor",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Tariq Al-Mansoor",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "David Ross",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "Elena Rostova",
+        "title": ""
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "",
+        "title": "Edit Lead"
+      },
+      {
+        "text": "",
+        "title": "Delete Lead"
+      },
+      {
+        "text": "",
+        "title": ""
+      },
+      {
+        "text": "Lead Info",
+        "title": ""
+      },
+      {
+        "text": "Notes (0)",
+        "title": ""
+      },
+      {
+        "text": "Activity Timeline (0)",
+        "title": ""
+      },
+      {
+        "text": "View All Notes (0) →",
+        "title": ""
+      }
+    ],
+    "inputs": [
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "placeholder": "Search leads by name, company, email, source...",
+        "value": ""
+      }
+    ]
+  },
+  "selectedLead": {
+    "id": 1,
+    "name": "Eleanor Vance",
+    "company": "Apex Financial Solutions",
+    "email": "eleanor.vance@apexfin.com",
+    "status": "Qualified",
+    "source": "Referral",
+    "value": 45000,
+    "created_at": "2026-09-28"
+  },
+  "noteText": "Project 8 verification note: existing revision persistence check.",
+  "noteReservedAt": "2026-10-01T20:04:21.628Z",
+  "noteHTTP": 201,
+  "noteResult": {
+    "notes": [
+      {
+        "id": 1,
+        "lead_id": 1,
+        "author": "Sales Rep",
+        "content": "Project 8 verification note: existing revision persistence check.",
+        "created_at": "2026-10-01 20:04:22"
+      }
+    ],
+    "activities": [
+      {
+        "id": 1,
+        "lead_id": 1,
+        "type": "note",
+        "title": "Note Added",
+        "description": "Project 8 verification note: existing revision persistence check.",
+        "created_at": "2026-10-01 20:04:22"
+      }
+    ]
+  },
+  "persistedDetails": {
+    "id": 1,
+    "name": "Eleanor Vance",
+    "company": "Apex Financial Solutions",
+    "email": "eleanor.vance@apexfin.com",
+    "phone": "+1 (555) 234-5678",
+    "status": "Qualified",
+    "source": "Referral",
+    "value": 45000,
+    "notes": "Project 8 verification note: existing revision persistence check.",
+    "created_at": "2026-09-28",
+    "notesList": [
+      {
+        "id": 1,
+        "lead_id": 1,
+        "author": "Sales Rep",
+        "content": "Project 8 verification note: existing revision persistence check.",
+        "created_at": "2026-10-01 20:04:22"
+      }
+    ],
+    "activityTimeline": [
+      {
+        "id": 1,
+        "lead_id": 1,
+        "type": "note",
+        "title": "Note Added",
+        "description": "Project 8 verification note: existing revision persistence check.",
+        "created_at": "2026-10-01 20:04:22"
+      }
+    ]
+  },
+  "timelineDOM": "P\nPulse CRM\nMINI\n\nSales Team Pipeline\n\nAdd New Lead\nMAIN WORKSPACE\nDashboard\n12\nLeads Database\n12\nPipeline Kanban\nProposal (2)\nAnalytics\nSYSTEM & DATA\nReset Sample Data\nExport CSV\nQ4 Pipeline Target\n94%\n$467,500\nGoal: $500k\nLeads Database\n\nReal-time sales CRM pipeline & key opportunity management\n\nSQLite Persisted\nAdd Lead\nSource:\nAll Sources\nWebsite\nReferral\nLinkedIn\nCold Outreach\nEvent\nPartner\nOther\nExport\nAll Leads\n12\nNew\n(2)\nContacted\n(2)\nQualified\n(3)\nProposal\n(2)\nWon\n(2)\nLost\n(1)\nLEAD NAME\n\t\nCOMPANY\n\t\nSTATUS\n\t\nSOURCE\n\t\nESTIMATED VALUE\n\t\nCREATED DATE\n\tACTIONS\n\nC\nChloe Sterling\nc.sterling@novabiotech.io\n\t\nNova BioTech\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nWebsite\t$18,500\tOct 1, 2026\t\n\n\nS\nSophia Chen\nsophia@horizonhealth.org\n\t\nHorizon Health\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nLinkedIn\t$28,000\tOct 1, 2026\t\n\n\nM\nMarcus Thorne\nm.thorne@cloudmatrix.io\n\t\nCloudMatrix Tech\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nWebsite\t$82,000\tSep 30, 2026\t\n\n\nA\nAmara Okafor\namara.o@vanguard.co\n\t\nVanguard Dynamics\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nCold Outreach\t$35,000\tSep 29, 2026\t\n\n\nE\nEleanor Vance\neleanor.vance@apexfin.com\n\t\nApex Financial Solutions\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nReferral\t$45,000\tSep 28, 2026\t\n\n\nB\nBrian Gallagher\nbgallagher@beaconmedia.com\n\t\nBeacon Media Group\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nReferral\t$95,000\tSep 27, 2026\t\n\n\nJ\nJulian Mercer\njulian@nexusretail.com\n\t\nNexus Retail\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nEvent\t$64,000\tSep 26, 2026\t\n\n\nR\nRachel Zhang\nrachel@luminacreative.co\n\t\nLumina Creative\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nLinkedIn\t$22,000\tSep 25, 2026\t\n\n\nL\nLiam O'Connor\nliam@sterlingeq.com\n\t\nSterling Heavy Equipment\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nCold Outreach\t$78,000\tSep 22, 2026\t\n\n\nT\nTariq Al-Mansoor\nt.almansoor@vertexenergy.com\n\t\nVertex Energy\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nPartner\t$150,000\tSep 18, 2026\t\n\n\nD\nDavid Ross\ndross@pinnaclelogistics.com\n\t\nPinnacle Logistics\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nPartner\t$120,000\tSep 15, 2026\t\n\n\nE\nElena Rostova\nerostova@cybershield.net\n\t\nCyberShield Global\n\t\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\t\nWebsite\t$50,000\tSep 10, 2026\t\nShowing 12 of 12 total leads\nTip: Click headers to sort or use status dropdowns to convert deals directly.\nE\nEleanor Vance\nNew\nContacted\nQualified\nProposal\nWon\nLost\n\nApex Financial Solutions\n\nLead Info\nNotes (1)\nActivity Timeline (1)\nAUDIT & ACTIVITY LOG\n1 total events\nNote Added\nOct 1, 2026\n\nProject 8 verification note: existing revision persistence check.",
+  "regression": {
+    "search": true,
+    "sorting": {
+      "ascending": true,
+      "descending": true
+    },
+    "filtering": {
+      "status": "Qualified",
+      "count": 3
+    },
+    "createHTTP": 201,
+    "addLead": true,
+    "editHTTP": 200,
+    "editLead": true,
+    "activityChronology": {
+      "entries": [
+        {
+          "id": 5,
+          "lead_id": 13,
+          "type": "updated",
+          "title": "Contact Details Updated",
+          "description": "Updated primary contact or company information",
+          "created_at": "2026-10-01 20:08:14"
+        },
+        {
+          "id": 4,
+          "lead_id": 13,
+          "type": "value_change",
+          "title": "Estimated Value Updated",
+          "description": "Value updated from $1,234 to $1,789",
+          "created_at": "2026-10-01 20:08:14"
+        },
+        {
+          "id": 3,
+          "lead_id": 13,
+          "type": "status_change",
+          "title": "Status changed to Contacted",
+          "description": "Stage updated from \"New\" to \"Contacted\"",
+          "created_at": "2026-10-01 20:08:14"
+        },
+        {
+          "id": 2,
+          "lead_id": 13,
+          "type": "created",
+          "title": "Lead Created",
+          "description": "Lead added to CRM pipeline from source: Website",
+          "created_at": "2026-10-01 20:08:13"
+        }
+      ],
+      "chronological": true,
+      "order": "newest first"
+    },
+    "deleteConfirmation": true,
+    "deleteHTTP": 200,
+    "deleteLead": true,
+    "originalSeedsUnchanged": true,
+    "crudPersistenceAfterReload": true,
+    "backendAPI": true,
+    "malformedPreviewURLs": 0,
+    "dashboard": true,
+    "summaryCards": true,
+    "newestLeads": {
+      "section": true,
+      "visibleNames": [
+        "Chloe Sterling",
+        "Sophia Chen",
+        "Marcus Thorne",
+        "Amara Okafor",
+        "Eleanor Vance"
+      ]
+    }
+  },
+  "leadCreateReservedAt": "2026-10-01T20:08:11.308Z",
+  "temporaryLeadId": 13,
+  "leadUpdateReservedAt": "2026-10-01T20:08:14.020Z",
+  "leadDeleteReservedAt": "2026-10-01T20:08:15.155Z",
+  "finalLeadCollection": [
+    {
+      "id": 9,
+      "name": "Chloe Sterling",
+      "company": "Nova BioTech",
+      "email": "c.sterling@novabiotech.io",
+      "phone": "+1 (555) 234-8901",
+      "status": "New",
+      "source": "Website",
+      "value": 18500,
+      "notes": "Inbound demo request. Mid-market tier, 15 user seats planned.",
+      "created_at": "2026-10-01"
+    },
+    {
+      "id": 3,
+      "name": "Sophia Chen",
+      "company": "Horizon Health",
+      "email": "sophia@horizonhealth.org",
+      "phone": "+1 (555) 345-6789",
+      "status": "New",
+      "source": "LinkedIn",
+      "value": 28000,
+      "notes": "Inquired via Q3 LinkedIn campaign. Interested in team analytics & workflow automation.",
+      "created_at": "2026-10-01"
+    },
+    {
+      "id": 2,
+      "name": "Marcus Thorne",
+      "company": "CloudMatrix Tech",
+      "email": "m.thorne@cloudmatrix.io",
+      "phone": "+1 (555) 876-5432",
+      "status": "Proposal",
+      "source": "Website",
+      "value": 82000,
+      "notes": "Sent custom enterprise pricing proposal with multi-seat discount. Following up Friday.",
+      "created_at": "2026-09-30"
+    },
+    {
+      "id": 5,
+      "name": "Amara Okafor",
+      "company": "Vanguard Dynamics",
+      "email": "amara.o@vanguard.co",
+      "phone": "+1 (555) 456-7890",
+      "status": "Contacted",
+      "source": "Cold Outreach",
+      "value": 35000,
+      "notes": "Initial intro call went well. Scheduling product demonstration for next Tuesday.",
+      "created_at": "2026-09-29"
+    },
+    {
+      "id": 1,
+      "name": "Eleanor Vance",
+      "company": "Apex Financial Solutions",
+      "email": "eleanor.vance@apexfin.com",
+      "phone": "+1 (555) 234-5678",
+      "status": "Qualified",
+      "source": "Referral",
+      "value": 45000,
+      "notes": "Project 8 verification note: existing revision persistence check.",
+      "created_at": "2026-09-28"
+    },
+    {
+      "id": 8,
+      "name": "Brian Gallagher",
+      "company": "Beacon Media Group",
+      "email": "bgallagher@beaconmedia.com",
+      "phone": "+1 (555) 123-9876",
+      "status": "Proposal",
+      "source": "Referral",
+      "value": 95000,
+      "notes": "Proposal review meeting set with VP of Operations and CTO.",
+      "created_at": "2026-09-27"
+    },
+    {
+      "id": 6,
+      "name": "Julian Mercer",
+      "company": "Nexus Retail",
+      "email": "julian@nexusretail.com",
+      "phone": "+1 (555) 654-3210",
+      "status": "Qualified",
+      "source": "Event",
+      "value": 64000,
+      "notes": "Met at SaaS Expo 2026. Looking to replace legacy CRM before annual renewal.",
+      "created_at": "2026-09-26"
+    },
+    {
+      "id": 11,
+      "name": "Rachel Zhang",
+      "company": "Lumina Creative",
+      "email": "rachel@luminacreative.co",
+      "phone": "+1 (555) 567-8901",
+      "status": "Contacted",
+      "source": "LinkedIn",
+      "value": 22000,
+      "notes": "Sent product video overview and pricing sheet. Follow up in 3 days.",
+      "created_at": "2026-09-25"
+    },
+    {
+      "id": 12,
+      "name": "Liam O'Connor",
+      "company": "Sterling Heavy Equipment",
+      "email": "liam@sterlingeq.com",
+      "phone": "+1 (555) 678-9012",
+      "status": "Qualified",
+      "source": "Cold Outreach",
+      "value": 78000,
+      "notes": "Budget approved for Q4 software upgrade. Requesting technical security audit.",
+      "created_at": "2026-09-22"
+    },
+    {
+      "id": 10,
+      "name": "Tariq Al-Mansoor",
+      "company": "Vertex Energy",
+      "email": "t.almansoor@vertexenergy.com",
+      "phone": "+1 (555) 890-1234",
+      "status": "Won",
+      "source": "Partner",
+      "value": 150000,
+      "notes": "Expansion deal closed. Added 200 user seats & dedicated priority support.",
+      "created_at": "2026-09-18"
+    },
+    {
+      "id": 4,
+      "name": "David Ross",
+      "company": "Pinnacle Logistics",
+      "email": "dross@pinnaclelogistics.com",
+      "phone": "+1 (555) 987-6543",
+      "status": "Won",
+      "source": "Partner",
+      "value": 120000,
+      "notes": "Contract signed for 3-year multi-seat enterprise plan with custom onboarding!",
+      "created_at": "2026-09-15"
+    },
+    {
+      "id": 7,
+      "name": "Elena Rostova",
+      "company": "CyberShield Global",
+      "email": "erostova@cybershield.net",
+      "phone": "+1 (555) 789-0123",
+      "status": "Lost",
+      "source": "Website",
+      "value": 50000,
+      "notes": "Chose in-house custom build due to strict legacy database requirements.",
+      "created_at": "2026-09-10"
+    }
+  ],
+  "finalDashboard": "Sales Dashboard\n\nTOTAL LEADS\n\n12\n+12%\nvs last month\n\nQUALIFIED LEADS\n\n3\nQualification Rate\n25%\n\nPIPELINE VALUE\n\n$467,500\nActive Stage Deals\n9 deals\n\nWON REVENUE\n\n$270,000\nWin Rate\n17% (2 won)\nSales Funnel Stage Distribution\nTotal Pipeline Value: $737,500\nNew\n2\nContacted\n2\nQualified\n3\nProposal\n2\nWon\n2\nLost\n1\nFive Newest Leads\nView All (12)\nC\nChloe Sterling\n\nNova BioTech\n\nNew\n$18,500\nS\nSophia Chen\n\nHorizon Health\n\nNew\n$28,000\nM\nMarcus Thorne\n\nCloudMatrix Tech\n\nProposal\n$82,000\nA\nAmara Okafor\n\nVanguard Dynamics\n\nContacted\n$35,000\nE\nEleanor Vance\n\nApex Financial Solutions\n\nQualified\n$45,000\nAdd another lead to pipeline\nTop Opportunities\nVertex Energy\n$150,000\nTariq Al-Mansoor\nWon\nPinnacle Logistics\n$120,000\nDavid Ross\nWon\nBeacon Media Group\n$95,000\nBrian Gallagher\nProposal\nCloudMatrix Tech\n$82,000\nMarcus Thorne\nProposal\nAvg Deal Size:\n$65,625",
+  "finalOwnerRevision": {
+    "me": {
+      "id": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+      "username": "Observability acceptance",
+      "email": "observability-0184dc148f7f@buildcustom.ai",
+      "role": "user",
+      "plan": "free",
+      "created_at": "2026-10-01 15:55:46"
+    },
+    "revision": {
+      "branch": "main",
+      "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+    },
+    "releases": {
+      "releases": []
+    }
+  },
+  "finishedVerificationAt": "2026-10-01T20:09:13.740Z"
+}

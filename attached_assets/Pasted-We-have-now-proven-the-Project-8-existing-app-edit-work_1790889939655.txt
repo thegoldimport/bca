@@ -1,0 +1,492 @@
+We have now proven the Project 8 existing-app edit workflow.
+
+Do NOT resend the Project 8 edit.
+
+Do NOT modify Project 8 generated source.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+Do NOT redesign the continuous-coding lifecycle.
+
+We have one concrete configuration/lifecycle issue to fix before moving to
+production Publish testing.
+
+==================================================
+ACCEPTED PROJECT 8 RESULT
+==================================================
+
+Project 8 edit revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+GENERATED APP EDIT:
+PASS
+
+EDIT + PRIVATE PREVIEW REDEPLOY:
+PASS
+
+Verified through the actual application:
+
+- same existing Project 8
+- one customer edit request
+- existing app inspected
+- frontend/backend edited
+- new revision committed
+- preview redeployed
+- lead details works
+- all seven requested lead fields display correctly
+- Notes works
+- note persisted across reload/reopen
+- Activity Timeline works
+- dashboard works
+- summary cards work
+- search works
+- ascending/descending sorting works
+- filtering works
+- five newest leads works
+- temporary lead create/edit/delete works
+- original 12 seeded leads preserved
+- generated API works
+- no malformed preview URLs
+- no generated-app API CORS failure
+- no actionable generated-app console errors
+
+No additional AI request was required to obtain this result.
+
+==================================================
+CONFIRMED COMPLETION FAILURE
+==================================================
+
+The application edit itself succeeded.
+
+The operation did NOT establish native COMPLETE because the operation exhausted
+its cumulative credit budget.
+
+Current relevant limits:
+
+Think maxSteps:
+25
+
+Maximum total Think turns:
+5
+
+Maximum internal continuations:
+4
+
+Operation elapsed-time ceiling:
+15 minutes
+
+Operation credit budget:
+100 credits
+
+Reservation per model call:
+2 credits
+
+Observed:
+
+Think pass 1:
+25 steps
+
+Think pass 2:
+25 steps
+
+Credits after two passes:
+
+50 model-step reservations × 2 credits = 100 credits
+
+Pass 2 ended RUNNING because:
+
+- progress existed
+- continuation capacity remained
+- finish_task had not occurred
+
+The lifecycle correctly attempted pass 3.
+
+Before pass 3 step 1, beforeStep attempted another 2-credit reservation:
+
+102 > 100
+
+The operation therefore entered:
+
+INCOMPLETE_RESOURCE_LIMIT
+
+No third-pass provider request occurred.
+
+This is the concrete issue we are fixing.
+
+==================================================
+GOAL
+==================================================
+
+Make the production operation-level resource configuration internally
+consistent with the continuation configuration we intentionally selected.
+
+We allow:
+
+up to 5 total Think turns
+
+with:
+
+25 max steps per Think turn
+
+Therefore the cumulative model-credit budget must not make those continuation
+limits meaningless after only two full turns.
+
+Do NOT remove resource protection.
+
+Do NOT make operations unlimited.
+
+Do NOT change maxSteps.
+
+Do NOT increase the number of Think turns.
+
+Do NOT increase continuation count.
+
+Do NOT increase the 15-minute wall-clock ceiling.
+
+We are aligning the cumulative credit ceiling with the already-approved
+continuation envelope.
+
+==================================================
+PART 1 — VERIFY CREDIT SEMANTICS
+==================================================
+
+Before changing configuration, inspect the active implementation and confirm:
+
+- exact meaning of one operation credit
+- exact reservation amount per model call
+- whether every Think step necessarily consumes one reservation
+- whether unused reservations are refunded
+- whether tool-only activity consumes these credits
+- whether retries consume them
+- whether internal continuation initialization consumes them
+- whether finish_task itself consumes model credits
+- whether the budget is intended as cost protection, loop protection, or both
+
+Confirm the Project 8 arithmetic against the active production implementation.
+
+Do not perform another AI generation for this inspection.
+
+==================================================
+PART 2 — SET A COHERENT PRODUCTION CREDIT LIMIT
+==================================================
+
+If the confirmed semantics remain:
+
+2 credits reserved per model step
+
+and:
+
+25 steps maximum per Think turn
+
+and:
+
+5 total Think turns maximum
+
+then configure the operation credit budget to support the full already-approved
+Think-turn envelope plus a SMALL explicit safety margin if technically needed
+for completion bookkeeping.
+
+The straightforward full-turn envelope is:
+
+25 steps
+× 5 Think turns
+× 2 credits
+= 250 credits
+
+Use 250 unless source inspection establishes that a small additional amount is
+required for legitimate completion bookkeeping outside those 125 model steps.
+
+Do NOT arbitrarily choose a much larger number.
+
+Do NOT make it unlimited.
+
+Document the arithmetic.
+
+The independent protections remain:
+
+- 25 maxSteps per native Think turn
+- 5 maximum total Think turns
+- 4 maximum internal continuations
+- 15-minute operation ceiling
+- existing no-progress detection
+- existing completion contract
+
+==================================================
+PART 3 — TERMINAL RESOURCE-LIMIT UX
+==================================================
+
+Inspect the existing client/controller handling for:
+
+INCOMPLETE_RESOURCE_LIMIT
+
+A legitimate terminal resource-limit state should NOT leave the customer
+indefinitely seeing:
+
+RECOVERING / VERIFYING
+
+if the authoritative native operation has already terminated because of the
+resource ceiling.
+
+Ensure the existing owner-scoped status contract can represent the terminal
+resource-limit outcome sufficiently for the UI to stop waiting.
+
+Use the smallest existing architecture-compatible change.
+
+Desired behavior:
+
+If operation terminates INCOMPLETE_RESOURCE_LIMIT:
+
+- generation stops
+- UI exits RUNNING/RECOVERING
+- input becomes available again where safe
+- customer receives a clear non-success state
+- operation is NOT represented as COMPLETE
+- existing committed/previewed revision is preserved
+- no automatic resend occurs
+- no production Publish occurs
+
+Do NOT add a second operation-state system.
+
+Do NOT create another ledger.
+
+Use the existing native operation state.
+
+==================================================
+PART 4 — DO NOT CHASE THE 401 IN THIS CHANGE
+==================================================
+
+The later Project 8 owner status/revision requests returned 401.
+
+Evidence currently establishes:
+
+- Cookie header was present
+- earlier sessions still existed
+- earlier sessions were unrevoked
+- earlier sessions were unexpired
+- no password reset evidence
+- exact browser token was not retained
+- exact reason identity validation rejected it is unknown
+- normal login recovered access
+- no causal link to the earlier credit-limit failure exists
+
+Record this as an unresolved separate observation.
+
+DO NOT modify auth in this task.
+
+DO NOT weaken auth.
+
+DO NOT change session validation.
+
+DO NOT add auth retries.
+
+If source inspection happens to reveal an obvious deterministic connection,
+report it, but do not expand scope.
+
+==================================================
+PART 5 — FOCUSED TESTS
+==================================================
+
+Add focused tests for the resource envelope.
+
+At minimum prove:
+
+1. One 25-step Think turn fits.
+
+2. Two 25-step Think turns fit.
+
+3. More than two turns are not blocked merely because the old 100-credit
+   ceiling was reached.
+
+4. Full configured five-turn envelope is representable under the new credit
+   budget.
+
+5. A request exceeding the configured cumulative credit ceiling still enters
+   INCOMPLETE_RESOURCE_LIMIT.
+
+6. Resource exhaustion does not produce COMPLETE.
+
+7. Resource exhaustion does not resend the original customer instruction.
+
+8. Existing dirty/committed workspace is preserved.
+
+9. Existing preview/revision is preserved.
+
+10. Recovery/reconnect retains cumulative credit usage.
+
+11. No-progress protection still works.
+
+12. 15-minute operation ceiling still works independently.
+
+13. maxSteps remains 25.
+
+14. maximum Think turns remains 5.
+
+15. maximum internal continuations remains 4.
+
+For UI/status handling prove:
+
+16. INCOMPLETE_RESOURCE_LIMIT exits indefinite RECOVERING/VERIFYING.
+
+17. UI does not show COMPLETE.
+
+18. input becomes available where safe.
+
+19. no automatic customer resend occurs.
+
+==================================================
+PART 6 — REGRESSIONS
+==================================================
+
+Run the relevant existing:
+
+- continuous-coding lifecycle tests
+- operation recovery tests
+- completion-gate tests
+- owner/status contract tests
+- preview tests
+- Task4B immutable publish regressions
+- Task6A auth/logout regressions
+- ownership isolation
+- gateway regressions
+- typecheck
+- build
+- Worker deployment dry-run
+
+Do not run another AI generation yet.
+
+==================================================
+PART 7 — DEPLOY MINIMUM REQUIRED COMPONENTS
+==================================================
+
+If and ONLY if:
+
+- semantics confirmed
+- new budget is justified mathematically
+- focused tests pass
+- relevant regressions pass
+- typecheck/build pass
+
+deploy only the minimum required production component(s).
+
+Record:
+
+- previous version
+- new version
+- exact changed configuration
+- exact changed code if terminal-state UI/status required code
+- rollback version
+
+Do not modify Project 8.
+
+Do not send an AI request.
+
+Do not production Publish.
+
+==================================================
+PART 8 — AFTER DEPLOYMENT
+==================================================
+
+Perform only non-AI smoke checks.
+
+Confirm:
+
+- login works
+- Project 8 opens
+- current Project 8 revision remains
+  020de27f52eb0273554e1004cb12eb9f2977aa7a
+- existing Project 8 preview still works
+- 12 seeded leads remain
+- lead details still works
+- existing persisted note remains
+- no production release exists
+- no customer instruction is sent
+
+Do NOT rerun the Project 8 edit.
+
+We already accepted the generated edit.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+PASS / BLOCKED
+
+CREDIT SEMANTICS
+- credit meaning:
+- reservation per model call:
+- max model steps per Think turn:
+- max Think turns:
+- maximum configured model-step envelope:
+- required credit arithmetic:
+- previous budget:
+- new budget:
+- safety margin:
+- rationale:
+
+RESOURCE LIMITS
+- maxSteps:
+- total Think turns:
+- internal continuations:
+- elapsed ceiling:
+- credit ceiling:
+- no-progress protection:
+- changed limits:
+
+TERMINAL RESOURCE STATE
+- authoritative state:
+- owner API exposure:
+- UI behavior before:
+- UI behavior after:
+- COMPLETE incorrectly shown:
+- automatic resend:
+- revision/preview preserved:
+
+TESTS
+- focused:
+- lifecycle:
+- recovery:
+- completion:
+- owner/status:
+- preview:
+- Task4B:
+- Task6A:
+- ownership:
+- gateway:
+- typecheck:
+- build:
+- dry-run:
+
+DEPLOYMENT
+- components:
+- previous versions:
+- new versions:
+- rollout:
+- rollback:
+
+PROJECT 8 SMOKE
+- revision unchanged:
+- preview:
+- 12 seeded leads:
+- lead details:
+- persisted note:
+- releases:
+- new AI requests:
+
+AUTH 401
+- changed auth code: MUST BE NO
+- current classification: UNRESOLVED SEPARATE OBSERVATION
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+PRODUCTION PUBLISH:
+MUST BE NO
+
+Then STOP.

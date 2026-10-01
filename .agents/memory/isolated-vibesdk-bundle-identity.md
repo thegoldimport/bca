@@ -8,3 +8,9 @@ When an isolated VibeSDK checkout borrows `node_modules` from another checkout, 
 **Why:** A disposable test Worker built with the fixed checkout still ran the unmodified SpaceDO because the shared `node_modules` pointed its workspace-package symlink at the original baseline. The first live canary reproduced the old mixed tree, while a later dry-run inspection revealed the new restore guard was absent. Only a verified candidate-package alias yielded a true fixed-code canary.
 
 **How to apply:** For future isolated canaries using shared dependencies, inspect package symlink targets and the built Worker bundle before consuming a model run. A deployment succeeding or showing a new Worker version does not prove the intended source was bundled.
+
+For byte-exact bundle provenance, a symlinked dependency directory can change esbuild's embedded module identifiers even when the dependency bytes are identical. Reconstruct with physically located dependencies before treating a byte mismatch as source drift.
+
+**Why:** An untouched control-plane reconstruction differed from its accepted production bundle only because module identifiers included the shared dependency directory's external path. A physical dependency copy reproduced the accepted bundle exactly.
+
+**How to apply:** Inspect a bounded bundle diff when an untouched build fails parity. Do not weaken the hash gate or normalize arbitrary bundle text; reproduce the original resolution layout.

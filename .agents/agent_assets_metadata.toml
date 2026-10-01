@@ -42,3 +42,101 @@ mtime_ms = 1790862446780
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/5882864f-42aa-425b-9518-ec1ec3871659/7a8fffbb-008e-4b95-9597-f4402514e03b"
 storage_version_token = "1790862452898799"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "W01g1sCzOMaCFJohycu8f"
+uri = "file://production/vibesdk-launch/project8-acceptance-result.html"
+type = "html"
+title = "Project 8 production acceptance report"
+description = "Single-request evidence, native continuation counts, confirmed preview failure, infrastructure limitations, and complete safety-scope receipt."
+logical_id = "193e47a4-5b47-4d94-acee-7fbba2f57ae5"
+content_hash = "sha256:2e44be371c6b8966eede825fe2d4a5ff7b7d0a9fc4ae31edc9b5d95d6d47af01"
+size = 10284
+mtime_ms = 1790877428492
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/193e47a4-5b47-4d94-acee-7fbba2f57ae5/3344bed9-9d14-4f32-8c9d-c8d03b5f2f7b"
+storage_version_token = "1790877626586671"
+content_type = "text/html"
+
+[[outputs]]
+id = "iqLslsXUaslyYkg9_QSxp"
+uri = "file://production/vibesdk-launch/preview-fetch-system-fix-result.html"
+type = "html"
+title = "Preview fix: full verification and deployment receipt"
+description = "Root cause, system changes, tests, rollout and rollback history, unchanged Project 8 browser evidence, and safety confirmations."
+logical_id = "539903c5-025d-4018-abf4-1f2105bdd3b8"
+content_hash = "sha256:eff4e74252c33451b0a9ff03d55c94befc3f45dfbde2fd66f70c583bd0c4c671"
+size = 14623
+mtime_ms = 1790882401437
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/539903c5-025d-4018-abf4-1f2105bdd3b8/460449ab-a7b8-4564-8f76-bbf2a17de05f"
+storage_version_token = "1790882440830692"
+content_type = "text/html"
+
+[[outputs]]
+id = "4q61btBPPyWDICTRKUSaf"
+uri = "file://screenshots/project8-preview-fetch-corrected-final.jpg"
+type = "image"
+title = "Project 8: verified production preview"
+description = "Same committed CRM in the normal editor preview, displaying 12 leads. No AI request or production Publish."
+logical_id = "1961e0d1-1c4a-48ca-8064-d70c75787648"
+content_hash = "sha256:3b1ee5a89f28de84fb23e2e77b8600fc401a710748aef16696d85be03a8116b6"
+size = 168420
+mtime_ms = 1790882284893
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/1961e0d1-1c4a-48ca-8064-d70c75787648/2f3e49cc-1e8b-43fd-9b43-c5873df547b9"
+storage_version_token = "1790882441513890"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "rsYwRrJA_z9QWkRkYqakZ"
+uri = "file://production/vibesdk-launch/project8-second-edit-result.html"
+type = "html"
+title = "Project 8 second edit: failure receipt"
+description = "Exact single-send evidence, 25+25 native steps, new commit and preview deployment, third-stream error, authentication block, and unperformed feature/regression checks."
+logical_id = "da5af115-1ce2-4618-8058-fa403769f9e3"
+content_hash = "sha256:8edb4c7cd722474417ef27e6d8d3bb3cae1c1b271c72811046d018c2c82fc544"
+size = 11397
+mtime_ms = 1790884331976
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/da5af115-1ce2-4618-8058-fa403769f9e3/0bc15c80-5c64-4200-bd63-1410dd34bd25"
+storage_version_token = "1790884332845731"
+content_type = "text/html"
+
+[[outputs]]
+id = "V3RpiDY9Sra-Hdh4y55k0"
+uri = "file://screenshots/project8-second-edit-terminal.jpg"
+type = "image"
+title = "Project 8 terminal customer UI"
+description = "Actual production editor remains RECOVERING / VERIFYING. This screenshot is not a new-feature acceptance result."
+logical_id = "014d05e1-0f6d-4039-a2ed-47ad1916ee7b"
+content_hash = "sha256:c030b0011c052105cf09a6f77fcf6c638542064d209e533ea1aa8bbcdb0297f0"
+size = 47588
+mtime_ms = 1790883810636
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/014d05e1-0f6d-4039-a2ed-47ad1916ee7b/010a1bb1-7ae1-48c0-b506-becf44435e30"
+storage_version_token = "1790884333503169"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "5l675OeDqzOzA1ueB3YWo"
+uri = "file://production/vibesdk-launch/project8-existing-revision-diagnosis.html"
+type = "html"
+title = "Project 8 verification and root-cause receipt"
+description = "Full app/regression results, native credit-limit diagnosis, separate 401 evidence, final editor state, and zero-change safety receipt."
+logical_id = "3be0ceae-0264-45b0-b659-3a0c675e3699"
+content_hash = "sha256:dc2905b0ede79cd2a5b9fd5e2257a684152a8069b62e9cb5e71045dc0e2a7885"
+size = 22607
+mtime_ms = 1790886741896
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/3be0ceae-0264-45b0-b659-3a0c675e3699/de55a6b9-38ab-4110-9fbb-e4088f966dcb"
+storage_version_token = "1790886748764858"
+content_type = "text/html"
+
+[[outputs]]
+id = "sUT8n3l0kvefydMCs-JmM"
+uri = "file://production/vibesdk-launch/resource-envelope-receipt.html"
+type = "html"
+title = "Resource-limit fix: blocked rollout receipt"
+description = "Full credit arithmetic, limits, terminal behavior, test results, unchanged production versions, deployment blockers and scope controls."
+logical_id = "750a438c-e1d3-461c-81d3-f4e4ec2c1329"
+content_hash = "sha256:5a941235979093685598051064158eb016bd3fbbb513ad04da3f742dffa2ac54"
+size = 10888
+mtime_ms = 1790892961820
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/750a438c-e1d3-461c-81d3-f4e4ec2c1329/4208714a-2ece-413d-b48c-25f3a22a8170"
+storage_version_token = "1790892962451139"
+content_type = "text/html"

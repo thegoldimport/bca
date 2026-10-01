@@ -1,0 +1,89 @@
+{
+  "at": "2026-10-01T20:32:21.862Z",
+  "worker": "buildcustom-vibesdk-launch",
+  "activeVersion": "f4488693-4424-46a3-9834-30b214645449",
+  "activeDeploymentCreatedAt": "2026-10-01T14:11:18.296104Z",
+  "bundleSha256": "862f5cfef1e505e1408bbbebad98d3f15d116531e20fe5f9db72ad3e9e3dce13",
+  "bundleBytes": 12741190,
+  "configuredOverrides": {
+    "maxContinuations": 4,
+    "maxElapsedMs": 900000
+  },
+  "defaults": {
+    "maxModelCalls": 650,
+    "maxToolCalls": 1300,
+    "maxCredits": 100
+  },
+  "modelReservationCreditCost": 2,
+  "retainedModelCalls": 50,
+  "retainedToolCalls": 48,
+  "nextCumulativeCreditReservation": 102,
+  "cause": "credit_limit",
+  "qualification": "Exact exception message not retained; deterministic attribution from matching active bundle/configuration/counters",
+  "selectedActiveBundleLines": [
+    {
+      "line": 211791,
+      "source": "var THINK_UNCALIBRATED_OPERATION_LIMITS = {"
+    },
+    {
+      "line": 211792,
+      "source": "\tmaxContinuations: 25,"
+    },
+    {
+      "line": 211793,
+      "source": "\tmaxModelCalls: 650,"
+    },
+    {
+      "line": 211794,
+      "source": "\tmaxToolCalls: 1300,"
+    },
+    {
+      "line": 211795,
+      "source": "\tmaxElapsedMs: 3600 * 1e3,"
+    },
+    {
+      "line": 211796,
+      "source": "\tmaxCredits: 100"
+    },
+    {
+      "line": 212344,
+      "source": "\tcreditCost: 2,"
+    },
+    {
+      "line": 392524,
+      "source": "\tasync reserveOperationResource(resource) {"
+    },
+    {
+      "line": 392527,
+      "source": "\t\tif (resource === \"model\") operation = await this.refreshMeteredCredits(operation);"
+    },
+    {
+      "line": 392528,
+      "source": "\t\tconst reservation = reserveThinkTaskResource(operation, resource, Date.now(), resource === \"model\" ? THINK_MODEL_CONFIG.creditCost : 0);"
+    },
+    {
+      "line": 392529,
+      "source": "\t\tif (reservation.limitExceeded) {"
+    },
+    {
+      "line": 392530,
+      "source": "\t\t\tthis.putTaskDiagnostic(this.taskOperationKey, reservation.operation);"
+    },
+    {
+      "line": 392531,
+      "source": "\t\t\tthis.stopForResourceLimit(reservation.limitExceeded, reservation.operation);"
+    },
+    {
+      "line": 392532,
+      "source": "\t\t\tthrow new Error(`Think operation stopped: ${reservation.limitExceeded}`);"
+    },
+    {
+      "line": 393134,
+      "source": "\t\t\tif ((await this.getTaskLifecycle()).status === \"INCOMPLETE_RESOURCE_LIMIT\") throw new Error(\"Think operation stopped at its cumulative resource limit.\");"
+    },
+    {
+      "line": 393135,
+      "source": "\t\t\tawait this.reserveOperationResource(\"model\");"
+    }
+  ]
+}

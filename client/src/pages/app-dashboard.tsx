@@ -791,10 +791,27 @@ function BuildActivity({
 
 type NativeCompletionPhase = "idle" | "running" | "recovering" | "success" | "error";
 
+type NativeTaskLifecycle = {
+  status: string;
+  reason?: string;
+  updatedAt: number;
+};
+
 const NATIVE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
 const NATIVE_STREAM_QUIET_MS = 30_000;
 const NATIVE_REVISION_STABILITY_MS = 5_000;
 const NATIVE_RECOVERY_POLL_MS = 5_000;
+
+function nativeResourceLimitError(runtimeStatus: any, operationStartedAt?: number): string | null {
+  const lifecycle = runtimeStatus?.nativeTaskLifecycle as NativeTaskLifecycle | undefined;
+  if (typeof lifecycle?.status !== "string"
+    || lifecycle.status.toUpperCase() !== "INCOMPLETE_RESOURCE_LIMIT"
+    || typeof lifecycle.updatedAt !== "number"
+    || !Number.isFinite(lifecycle.updatedAt)
+    || (typeof operationStartedAt === "number" && lifecycle.updatedAt < operationStartedAt)) return null;
+  const reason = typeof lifecycle.reason === "string" ? lifecycle.reason.trim().slice(0, 240) : "";
+  return `Stopped at the resource limit${reason ? `: ${reason}` : ""}. This operation is incomplete, not complete. Existing files and preview are unchanged. Review them or send another instruction.`;
+}
 
 type NativeOperationBaseline = {
   revision: string | null;
@@ -916,10 +933,12 @@ function EditorPage() {
   const nativeThink = currentRuntimeCapability?.nativeThink === true;
   const nativeRuntimeReady = nativeThink && currentRuntimeCapability?.status?.runtimeStatus === "ready";
   const canPublishNative = Boolean(currentRuntimeCapability && nativeThink);
+  const resourceLimitedOperation = nativeResourceLimitError(currentRuntimeCapability?.status);
   const runtimeGenerationStatus = String(currentRuntimeCapability?.status?.state?.generation?.status || "").toLowerCase();
   const nativeRuntimeAlreadyWorking = nativeThink && (
     currentRuntimeCapability?.status?.state?.shouldBeGenerating === true
-    || ["pending", "queued", "starting", "running", "building", "generating"].includes(runtimeGenerationStatus)
+    || (!resourceLimitedOperation
+      && ["pending", "queued", "starting", "running", "building", "generating"].includes(runtimeGenerationStatus))
   );
   const canManageProduction = Boolean(currentRuntimeCapability && !nativeThink);
   const [chatInput, setChatInput] = useState("");
@@ -1356,6 +1375,51 @@ function EditorPage() {
   }, [projectId, nativeThink, nativeRuntimeReady]);
 
   useEffect(() => {
+    if (!projectId || !nativeThink || !resourceLimitedOperation
+      || currentRuntimeCapability?.status?.state?.shouldBeGenerating !== true) return;
+    let cancelled = false;
+    let requestInFlight = false;
+    let controller: AbortController | null = null;
+    const refreshTerminalStatus = async () => {
+      if (cancelled || requestInFlight) return;
+      requestInFlight = true;
+      controller = new AbortController();
+      try {
+        const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
+          headers: authHeaders(),
+          signal: controller.signal,
+        });
+        if (response.status === 401 || response.status === 403) {
+          cancelled = true; // No authentication retries; a manual reopen is required.
+          return;
+        }
+        const status = await response.json().catch(() => ({}));
+        if (!cancelled && response.ok && status.nativeThink === true
+          && activeProjectIdRef.current === projectId) {
+          setRuntimeCapability({ projectId, nativeThink: true, status });
+        }
+      } catch {
+        // Keep input disabled until a successful owner-status read confirms idle.
+      } finally {
+        requestInFlight = false;
+        controller = null;
+      }
+    };
+    void refreshTerminalStatus();
+    const poll = window.setInterval(() => { void refreshTerminalStatus(); }, NATIVE_RECOVERY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      controller?.abort();
+    };
+  }, [
+    projectId,
+    nativeThink,
+    resourceLimitedOperation,
+    currentRuntimeCapability?.status?.state?.shouldBeGenerating,
+  ]);
+
+  useEffect(() => {
     if (!projectId) return;
     fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() })
       .then(async (response) => {
@@ -1437,7 +1501,18 @@ function EditorPage() {
     const generationStatus = String(state.generation?.status || state.generationStatus || state.status || "").toLowerCase();
     const runtimeActive = state.shouldBeGenerating === true
       || ["pending", "queued", "starting", "running", "building", "generating"].includes(generationStatus);
-    if (!savedBaseline && !runtimeActive) return;
+    if (!savedBaseline) {
+      const terminalError = nativeResourceLimitError(status);
+      if (terminalError) {
+        setNativeCompletionPhase("error");
+        setNativeCompletionMessage(terminalError);
+        setNativeRecoveryUnverified(false);
+        setRuntimeError(terminalError);
+        setSending(false);
+        return;
+      }
+      if (!runtimeActive) return;
+    }
 
     let cancelled = false;
     const controller = new AbortController();
@@ -1482,6 +1557,8 @@ function EditorPage() {
       return shouldGenerate === false && ["idle", "complete", "completed", "success", "succeeded"].includes(generation);
     };
     const terminalRuntimeError = (runtimeStatus: any): string | null => {
+      const resourceLimitError = nativeResourceLimitError(runtimeStatus, savedBaseline?.startedAt);
+      if (resourceLimitError) return resourceLimitError;
       const runtimeState = runtimeStatus?.state || {};
       const generation = String(
         runtimeState.generation?.status
@@ -1525,6 +1602,7 @@ function EditorPage() {
           if (cancelled || activeProjectIdRef.current !== projectId) return;
           const terminalError = terminalRuntimeError(runtimeStatus);
           if (terminalError) {
+            setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
             clearNativeOperationBaseline(projectId);
             setNativeCompletionPhase("error");
             setNativeCompletionMessage(terminalError);
@@ -1585,6 +1663,7 @@ function EditorPage() {
                 if (cancelled || activeProjectIdRef.current !== projectId) return;
                 const finalError = terminalRuntimeError(lastStatus);
                 if (finalError) {
+                  setRuntimeCapability({ projectId, nativeThink: true, status: lastStatus });
                   clearNativeOperationBaseline(projectId);
                   setNativeCompletionPhase("error");
                   setNativeCompletionMessage(finalError);
@@ -1609,6 +1688,7 @@ function EditorPage() {
                     if (cancelled || activeProjectIdRef.current !== projectId) return;
                     const verifiedError = terminalRuntimeError(verifiedStatus);
                     if (verifiedError) {
+                      setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
                       clearNativeOperationBaseline(projectId);
                       setNativeCompletionPhase("error");
                       setNativeCompletionMessage(verifiedError);
@@ -1810,9 +1890,10 @@ function EditorPage() {
         else resolve();
       };
 
-      const failTurn = (message: string, recoverable = false) => {
+      const failTurn = (message: string, recoverable = false, runtimeStatus?: any) => {
         const error = new Error(message);
         if (isOperationActive()) {
+          if (runtimeStatus) setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
           setRuntimeError(message);
           replaceAssistantMessage(message);
           setNativeCompletionPhase("error");
@@ -1859,6 +1940,8 @@ function EditorPage() {
         return generationSignal === false && settledStatuses.includes(generationStatus);
       };
       const runtimeTerminalError = (runtimeStatus: any): string | null => {
+        const resourceLimitError = nativeResourceLimitError(runtimeStatus, startedAt);
+        if (resourceLimitError) return resourceLimitError;
         const state = runtimeStatus?.state || {};
         const status = String(
           state.generation?.status
@@ -1923,7 +2006,7 @@ function EditorPage() {
           }
           const statusError = runtimeTerminalError(status);
           if (statusError) {
-            failTurn(statusError);
+            failTurn(statusError, false, status);
             return;
           }
           if (!isRuntimeIdle(status)) {
@@ -1990,7 +2073,7 @@ function EditorPage() {
           }
           const finalStatusError = runtimeTerminalError(latestStatus);
           if (finalStatusError) {
-            failTurn(finalStatusError);
+            failTurn(finalStatusError, false, latestStatus);
             return;
           }
           if (!isRuntimeIdle(latestStatus)) {
@@ -2087,7 +2170,7 @@ function EditorPage() {
           }
           const verifiedStatusError = runtimeTerminalError(verifiedStatus);
           if (verifiedStatusError) {
-            failTurn(verifiedStatusError);
+            failTurn(verifiedStatusError, false, verifiedStatus);
             return;
           }
           const verifiedCommitHash = typeof verifiedRevision.commitHash === "string"
@@ -2229,6 +2312,18 @@ function EditorPage() {
         lastFrameAt = Date.now();
         frameSequence += 1;
         revisionCandidate = null;
+        const streamedTaskLifecycle = frame.nativeTaskLifecycle
+          || (frame.code === "INCOMPLETE_RESOURCE_LIMIT"
+            ? { status: frame.code, reason: frame.reason }
+            : null);
+        const streamedResourceLimit = nativeResourceLimitError({
+          nativeTaskLifecycle: streamedTaskLifecycle,
+          state: { shouldBeGenerating: false },
+        }, startedAt);
+        if (streamedResourceLimit) {
+          failTurn(streamedResourceLimit);
+          return;
+        }
 
         const tool = frame.tool || {};
         const toolName = typeof tool.name === "string" ? tool.name : "";

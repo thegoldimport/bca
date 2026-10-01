@@ -1,0 +1,82 @@
+{
+  "url": "https://app.buildcustom.ai/app/editor/8",
+  "ui": {
+    "inputDisabled": false,
+    "phaseText": []
+  },
+  "storage": null,
+  "auth": {
+    "status": 200,
+    "id": "379ce699-b905-43cc-b5ba-f40bb42ded20"
+  },
+  "status": {
+    "status": 200,
+    "data": {
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "connected": true,
+      "files": 5,
+      "state": {
+        "shouldBeGenerating": false,
+        "generation": {
+          "status": "idle"
+        }
+      },
+      "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "deploymentUrl": null,
+      "publicAvailable": false
+    }
+  },
+  "revision": {
+    "status": 200,
+    "data": {
+      "branch": "main",
+      "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+    }
+  },
+  "files": {
+    "status": 200,
+    "keys": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4"
+    ]
+  },
+  "turns": {
+    "status": 200,
+    "turns": [
+      {
+        "id": 1,
+        "mode": "build",
+        "commitHash": null,
+        "createdAt": "",
+        "promptLength": 774,
+        "responseLength": 3932,
+        "activityCount": 0
+      },
+      {
+        "id": 2,
+        "mode": "build",
+        "commitHash": null,
+        "createdAt": "",
+        "promptLength": 825,
+        "responseLength": 2134,
+        "activityCount": 0
+      }
+    ]
+  },
+  "at": "2026-10-01T20:23:34.810Z",
+  "clientStateReadOnly": {
+    "at": "2026-10-01T20:24:46.813Z",
+    "inputDisabled": false,
+    "recoveryBaselinePresent": false,
+    "matchingControlStates": [
+      {
+        "ancestor": 8,
+        "value": "idle"
+      }
+    ]
+  }
+}

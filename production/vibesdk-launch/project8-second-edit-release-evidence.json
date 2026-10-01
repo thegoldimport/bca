@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-01T19:47:17.376Z",
+  "rowsWritten": 0,
+  "rows": [
+    {
+      "id": 8,
+      "user_id": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+      "agent_id": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+      "native_published_releases": 0,
+      "legacy_release_count": 0
+    }
+  ]
+}

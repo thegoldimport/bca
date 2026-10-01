@@ -1,0 +1,1739 @@
+{
+  "startedAt": "2026-10-01T17:19:50.467Z",
+  "projectId": 8,
+  "ownerId": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+  "agentId": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "state": "TERMINAL_OBSERVED",
+  "authenticationMethod": "normal production login UI",
+  "sendClicks": 1,
+  "outboundCustomerInstructions": 1,
+  "publishRequests": 0,
+  "navigation": [
+    {
+      "url": "https://app.buildcustom.ai/login",
+      "status": 200,
+      "redirects": []
+    },
+    {
+      "url": "https://app.buildcustom.ai/app",
+      "status": 200,
+      "redirects": []
+    },
+    {
+      "url": "https://app.buildcustom.ai/app",
+      "status": 200,
+      "redirects": []
+    },
+    {
+      "url": "https://app.buildcustom.ai/app",
+      "status": 200,
+      "redirects": []
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()",
+    "Failed to load resource: the server responded with a status of 401 ()"
+  ],
+  "failedRequests": [],
+  "httpFailures": [
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/blog-posts",
+      "status": 404
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/blog-posts",
+      "status": 404
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/blog-posts",
+      "status": 404
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/blog-posts",
+      "status": 404
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/previews",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    },
+    {
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401
+    }
+  ],
+  "startingUrl": "https://app.buildcustom.ai/login",
+  "loginHttpStatus": 200,
+  "dashboardLoaded": true,
+  "authenticatedOwner": {
+    "status": 200,
+    "ownerId": "379ce699-b905-43cc-b5ba-f40bb42ded20"
+  },
+  "initialSnapshot": {
+    "at": "2026-10-01T17:27:07.724Z",
+    "status": {
+      "state": "idle",
+      "connected": true,
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "agentMatched": true,
+      "shouldBeGenerating": false,
+      "generationStatus": "idle",
+      "previewUrl": null,
+      "deploymentUrl": null,
+      "idleNoGeneration": true,
+      "terminalNoGeneration": true
+    },
+    "revision": {
+      "branch": "main",
+      "headCommitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+      "statusLastDeployedCommit": null,
+      "matchingCustomerTurnCommitHash": null,
+      "spaceGitHeadCommitHash": null,
+      "spaceGitReadState": "NOT_REQUIRED",
+      "committedHeadVerified": true,
+      "workingTreeDirty": null,
+      "baselineKnown": true
+    },
+    "ownerRuntimeRevision": {
+      "httpStatus": 200,
+      "schemaValid": true,
+      "branch": "main",
+      "commitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+      "source": "branch+commitHash",
+      "valid": true
+    },
+    "turns": {
+      "available": true,
+      "schemaValid": true,
+      "total": 0,
+      "customerTurnCount": 0,
+      "matchingCustomerPromptCount": 0,
+      "unmatchedPromptCount": 0,
+      "promptSha256": null,
+      "matchingCustomerPromptCommitHash": null
+    }
+  },
+  "releasesBeforeSend": 0,
+  "projectOpened": true,
+  "attemptedDestination": "https://app.buildcustom.ai/app/editor/8",
+  "editorLoaded": true,
+  "inputVisible": true,
+  "sendAvailable": true,
+  "failure": {
+    "name": "TypeError",
+    "message": "page.keyboard.insertText is not a function",
+    "stack": "TypeError: page.keyboard.insertText is not a function\n    at file:///home/runner/workspace/.local/acceptance/project8-customer-journey.mjs:181:23"
+  },
+  "failureState": "OPEN_PROJECT",
+  "matchingPromptFrames": 1,
+  "finalUrl": "https://app.buildcustom.ai/app/editor/8",
+  "authAfterFailure": {
+    "status": 200,
+    "ownerId": "379ce699-b905-43cc-b5ba-f40bb42ded20"
+  },
+  "finishedAt": "2026-10-01T17:29:42.467Z",
+  "previousImmediateButtonCheck": {
+    "name": "AssertionError",
+    "message": "Customer Send genuinely unavailable.",
+    "stack": "AssertionError [ERR_ASSERTION]: Customer Send genuinely unavailable.\n    at file:///home/runner/workspace/.local/acceptance/project8-customer-journey.mjs:152:64"
+  },
+  "resumedBeforeAnySendAt": "2026-10-01T17:26:56.884Z",
+  "editorFailureDOM": {
+    "inputDisabled": false,
+    "inputPlaceholder": "Describe what you want to build...",
+    "sendDisabled": false,
+    "visibleNotices": [
+      "What do you want to build?\n\nDescribe your idea, or start with one of these:\n\nBuild a landing page for my business\nCreate an online store\nMake a dashboard for tracking data\nBuild a booking website"
+    ]
+  },
+  "previousKeyboardInputFailure": {
+    "name": "AssertionError",
+    "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ ''\n- 'Build a polished mini CRM dashboard for a small sales team.\\n' +\n-   '\\n' +\n-   'Requirements:\\n' +\n-   '\\n' +\n-   '- responsive dashboard layout\\n' +\n-   '- dark navy professional visual theme\\n' +\n-   '- left navigation\\n' +\n-   '- summary cards for Total Leads, Qualified Leads, Pipeline Value, and Won\\n' +\n-   '- searchable and sortable leads table\\n' +\n-   '- lead fields for name, company, email, status, source, estimated value, and created date\\n' +\n-   '- Add Lead form/modal\\n' +\n-   '- edit an existing lead\\n' +\n-   '- delete a lead with confirmation\\n' +\n-   '- status options: New, Contacted, Qualified, Proposal, Won, Lost\\n' +\n-   '- filtering by status\\n' +\n-   '- five newest leads section\\n' +\n-   '- seed realistic sample lead data\\n' +\n-   '- persist changes appropriately for the generated application\\n' +\n-   '- make the finished app visually polished and usable\\n' +\n-   '- verify the finished application works before completing the task'\n",
+    "stack": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ ''\n- 'Build a polished mini CRM dashboard for a small sales team.\\n' +\n-   '\\n' +\n-   'Requirements:\\n' +\n-   '\\n' +\n-   '- responsive dashboard layout\\n' +\n-   '- dark navy professional visual theme\\n' +\n-   '- left navigation\\n' +\n-   '- summary cards for Total Leads, Qualified Leads, Pipeline Value, and Won\\n' +\n-   '- searchable and sortable leads table\\n' +\n-   '- lead fields for name, company, email, status, source, estimated value, and created date\\n' +\n-   '- Add Lead form/modal\\n' +\n-   '- edit an existing lead\\n' +\n-   '- delete a lead with confirmation\\n' +\n-   '- status options: New, Contacted, Qualified, Proposal, Won, Lost\\n' +\n-   '- filtering by status\\n' +\n-   '- five newest leads section\\n' +\n-   '- seed realistic sample lead data\\n' +\n-   '- persist changes appropriately for the generated application\\n' +\n-   '- make the finished app visually polished and usable\\n' +\n-   '- verify the finished application works before completing the task'\n\n    at file:///home/runner/workspace/.local/acceptance/project8-customer-journey.mjs:170:10"
+  },
+  "previousInputAPIFailure": {
+    "name": "TypeError",
+    "message": "page.keyboard.insertText is not a function",
+    "stack": "TypeError: page.keyboard.insertText is not a function\n    at file:///home/runner/workspace/.local/acceptance/project8-customer-journey.mjs:181:23"
+  },
+  "inputMethod": "multiline text insertion without Enter key",
+  "customerPathHealthy": true,
+  "preSendSnapshot": {
+    "at": "2026-10-01T17:27:14.684Z",
+    "status": {
+      "state": "idle",
+      "connected": true,
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "agentMatched": true,
+      "shouldBeGenerating": false,
+      "generationStatus": "idle",
+      "previewUrl": null,
+      "deploymentUrl": null,
+      "idleNoGeneration": true,
+      "terminalNoGeneration": true
+    },
+    "revision": {
+      "branch": "main",
+      "headCommitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+      "statusLastDeployedCommit": null,
+      "matchingCustomerTurnCommitHash": null,
+      "spaceGitHeadCommitHash": null,
+      "spaceGitReadState": "NOT_REQUIRED",
+      "committedHeadVerified": true,
+      "workingTreeDirty": null,
+      "baselineKnown": true
+    },
+    "ownerRuntimeRevision": {
+      "httpStatus": 200,
+      "schemaValid": true,
+      "branch": "main",
+      "commitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+      "source": "branch+commitHash",
+      "valid": true
+    },
+    "turns": {
+      "available": true,
+      "schemaValid": true,
+      "total": 0,
+      "customerTurnCount": 0,
+      "matchingCustomerPromptCount": 0,
+      "unmatchedPromptCount": 0,
+      "promptSha256": null,
+      "matchingCustomerPromptCommitHash": null
+    }
+  },
+  "sendClickReservedAt": "2026-10-01T17:27:14.689Z",
+  "terminalFrames": [],
+  "latestSnapshot": {
+    "at": "2026-10-01T17:29:42.464Z",
+    "status": {
+      "state": "idle",
+      "connected": true,
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "agentMatched": true,
+      "shouldBeGenerating": false,
+      "generationStatus": "idle",
+      "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "deploymentUrl": null,
+      "idleNoGeneration": true,
+      "terminalNoGeneration": true
+    },
+    "revision": {
+      "branch": "main",
+      "headCommitHash": "8f126d74e60c82780cb7d7556f23c2dd3469f58a",
+      "statusLastDeployedCommit": null,
+      "matchingCustomerTurnCommitHash": null,
+      "spaceGitHeadCommitHash": null,
+      "spaceGitReadState": "NOT_REQUIRED",
+      "committedHeadVerified": true,
+      "workingTreeDirty": null,
+      "baselineKnown": true
+    },
+    "ownerRuntimeRevision": {
+      "httpStatus": 200,
+      "schemaValid": true,
+      "branch": "main",
+      "commitHash": "8f126d74e60c82780cb7d7556f23c2dd3469f58a",
+      "source": "branch+commitHash",
+      "valid": true
+    },
+    "turns": {
+      "available": true,
+      "schemaValid": true,
+      "total": 1,
+      "customerTurnCount": 1,
+      "matchingCustomerPromptCount": 1,
+      "unmatchedPromptCount": 0,
+      "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+      "matchingCustomerPromptCommitHash": null
+    }
+  },
+  "webSocket": {
+    "sockets": 2,
+    "ownerSockets": 2,
+    "closes": 1,
+    "errors": 0,
+    "closeFrames": []
+  },
+  "screenshot": "screenshots/project8-terminal-ui.jpg",
+  "terminalObservationWasProvisional": true,
+  "finalAcceptanceFile": "production/vibesdk-launch/project8-acceptance-result.json",
+  "finalAcceptanceStatus": "REAL PRODUCT FAILURE"
+}

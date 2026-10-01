@@ -1,0 +1,127 @@
+{
+  "startedAt": "2026-10-01T19:01:05.904Z",
+  "projectId": 8,
+  "expectedRevision": "04395b156f7e43346a240be3d824eef8104b7697",
+  "newAIRequests": 0,
+  "requests": [
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenPresent": false,
+      "tokenCount": 0,
+      "queryNames": []
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/react",
+      "method": "GET",
+      "tokenPresent": true,
+      "tokenCount": 1,
+      "queryNames": []
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/react-dom/client",
+      "method": "GET",
+      "tokenPresent": true,
+      "tokenCount": 1,
+      "queryNames": []
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/lucide-react",
+      "method": "GET",
+      "tokenPresent": true,
+      "tokenCount": 1,
+      "queryNames": []
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/cdn-cgi/rum",
+      "method": "OPTIONS",
+      "tokenPresent": true,
+      "tokenCount": 1,
+      "queryNames": []
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/cdn-cgi/rum",
+      "method": "POST",
+      "tokenPresent": true,
+      "tokenCount": 1,
+      "queryNames": []
+    }
+  ],
+  "responses": [
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "allowOrigin": null
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/cdn-cgi/rum",
+      "status": 204,
+      "contentType": null,
+      "allowOrigin": "null"
+    },
+    {
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/cdn-cgi/rum",
+      "status": 404,
+      "contentType": "text/plain; charset=UTF-8",
+      "allowOrigin": "null"
+    }
+  ],
+  "errors": [
+    {
+      "type": "error",
+      "message": "Access to script at 'https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/react-dom/client?t=[REDACTED]' from origin 'null' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "type": "error",
+      "message": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "type": "error",
+      "message": "Access to script at 'https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/react?t=[REDACTED]' from origin 'null' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "type": "error",
+      "message": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "type": "error",
+      "message": "Access to script at 'https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/lucide-react?t=[REDACTED]' from origin 'null' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "type": "error",
+      "message": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 404 ()"
+    }
+  ],
+  "noMutationActions": true,
+  "sameOwnerConfirmed": true,
+  "dashboardHTTP": 200,
+  "browser": {
+    "title": "Pulse CRM - Mini Sales Dashboard",
+    "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+    "basePath": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+    "rowCount": 0,
+    "seededLeadsVisible": false,
+    "parentAccessDenied": true
+  },
+  "sandbox": "allow-scripts allow-forms",
+  "finalRevision": "04395b156f7e43346a240be3d824eef8104b7697",
+  "releaseHTTP": 404,
+  "releaseCount": null,
+  "malformedURLObserved": false,
+  "previewHTTP": 200,
+  "apiRequest": null,
+  "apiResponse": null,
+  "screenshot": "screenshots/project8-preview-fetch-fixed.jpg",
+  "result": "FAIL",
+  "failure": {
+    "name": "AssertionError",
+    "message": "Expected values to be strictly equal:\n\nnull !== 0\n"
+  },
+  "finishedAt": "2026-10-01T19:02:17.078Z",
+  "customerBrowserLeftOpen": true
+}

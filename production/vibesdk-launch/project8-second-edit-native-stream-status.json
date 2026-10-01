@@ -1,0 +1,93 @@
+{
+  "results": [
+    {
+      "columns": [
+        "id",
+        "request_id",
+        "status",
+        "created_at",
+        "completed_at",
+        "message_id"
+      ],
+      "rows": [
+        [
+          "UEkSvd0gLiyi2RapGY6E0",
+          "47a16db7-f702-4b76-a5cd-bb3081026dca",
+          "completed",
+          1790875638045,
+          1790875894439,
+          null
+        ],
+        [
+          "gdNp0yb6rMLWE68t8Vvg_",
+          "04120677-f6f8-4c39-a601-ba12832b4128",
+          "completed",
+          1790875894692,
+          1790875950267,
+          null
+        ],
+        [
+          "jVtquNKIBm6bjqQzwzV5i",
+          "dee1eac0-9597-4726-8bf8-b65ede55ad57",
+          "streaming",
+          1790883429737,
+          null,
+          null
+        ]
+      ],
+      "meta": {
+        "rows_read": 6,
+        "rows_written": 0
+      }
+    },
+    {
+      "columns": [
+        "submission_id",
+        "request_id",
+        "stream_id",
+        "status",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "error_bytes"
+      ],
+      "rows": [],
+      "meta": {
+        "rows_read": 2,
+        "rows_written": 0
+      }
+    },
+    {
+      "columns": [
+        "stream_id",
+        "chunks",
+        "last_chunk",
+        "last_chunk_at"
+      ],
+      "rows": [
+        [
+          "UEkSvd0gLiyi2RapGY6E0",
+          28,
+          27,
+          1790875894420
+        ],
+        [
+          "gdNp0yb6rMLWE68t8Vvg_",
+          18,
+          17,
+          1790875950245
+        ],
+        [
+          "jVtquNKIBm6bjqQzwzV5i",
+          22,
+          21,
+          1790883535531
+        ]
+      ],
+      "meta": {
+        "rows_read": 71,
+        "rows_written": 0
+      }
+    }
+  ]
+}

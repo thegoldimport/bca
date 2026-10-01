@@ -1,0 +1,779 @@
+{
+  "startedAt": "2026-10-01T19:36:51.353Z",
+  "projectId": 8,
+  "owner": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+  "agent": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "startingRevision": "04395b156f7e43346a240be3d824eef8104b7697",
+  "state": "OBSERVATION_STOPPED",
+  "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+  "sendClicks": 1,
+  "outboundInstructions": 1,
+  "matchingInstructions": 1,
+  "publishRequests": 0,
+  "frames": [
+    {
+      "at": "2026-10-01T19:37:09.589Z",
+      "type": "generation_started"
+    },
+    {
+      "at": "2026-10-01T19:37:09.646Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4"
+    },
+    {
+      "at": "2026-10-01T19:37:13.951Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "find",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-01T19:37:14.019Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "find",
+      "status": "success"
+    },
+    {
+      "at": "2026-10-01T19:37:15.291Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-01T19:37:15.359Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "success",
+      "paths": [
+        "/src/index.ts"
+      ]
+    },
+    {
+      "at": "2026-10-01T19:37:16.931Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-01T19:37:16.984Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "success",
+      "paths": [
+        "/src/index.ts"
+      ]
+    },
+    {
+      "at": "2026-10-01T19:37:20.922Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-01T19:37:20.972Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "success",
+      "paths": [
+        "/public/index.html"
+      ]
+    },
+    {
+      "at": "2026-10-01T19:37:22.709Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-01T19:37:22.770Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790883429549-33su3u4",
+      "toolName": "read",
+      "status": "success",
+      "paths": [
+        "/public/index.html"
+      ]
+    }
+  ],
+  "statusSamples": [
+    {
+      "at": "2026-10-01T19:37:26.956Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:37:43.183Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:38:00.412Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:38:17.962Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:38:34.807Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:38:51.742Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:39:08.653Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:39:25.673Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:39:42.477Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:39:58.936Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:40:15.963Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    },
+    {
+      "at": "2026-10-01T19:40:33.744Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": null,
+        "publicAvailable": false
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ]
+    }
+  ],
+  "previewRequests": [
+    {
+      "at": "2026-10-01T19:36:59.090Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-01T19:37:02.211Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "GET",
+      "tokenCount": 1
+    }
+  ],
+  "previewResponses": [
+    {
+      "at": "2026-10-01T19:37:01.046Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200,
+      "allowOrigin": null
+    },
+    {
+      "at": "2026-10-01T19:37:02.471Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200,
+      "allowOrigin": "null",
+      "leadCount": 12
+    }
+  ],
+  "appErrors": [],
+  "telemetryErrors": [
+    {
+      "at": "2026-10-01T19:37:02.261Z",
+      "type": "error",
+      "message": "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    }
+  ],
+  "localObserverErrors": [],
+  "filesRead": [
+    "/src/index.ts",
+    "/public/index.html"
+  ],
+  "filesEdited": [],
+  "baseline": {
+    "ownerConfirmed": true,
+    "agentConfirmed": true,
+    "status": {
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "connected": true,
+      "files": 5,
+      "state": {
+        "shouldBeGenerating": false,
+        "generation": {
+          "status": "idle"
+        }
+      },
+      "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "deploymentUrl": null,
+      "publicAvailable": false
+    },
+    "revision": {
+      "branch": "main",
+      "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+    },
+    "turns": [
+      {
+        "id": 1,
+        "mode": "build",
+        "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+        "matchingEdit": false,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      }
+    ],
+    "preview": {
+      "title": "Pulse CRM - Mini Sales Dashboard",
+      "seededLeadsVisible": true,
+      "total12": true
+    },
+    "api": {
+      "at": "2026-10-01T19:37:02.471Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200,
+      "allowOrigin": "null",
+      "leadCount": 12
+    },
+    "actionableErrors": 0
+  },
+  "sendReservedAt": "2026-10-01T19:37:04.738Z",
+  "sentAt": "2026-10-01T19:37:09.542Z",
+  "lastSample": {
+    "at": "2026-10-01T19:40:33.744Z",
+    "status": {
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "connected": true,
+      "files": 5,
+      "state": {
+        "shouldBeGenerating": false,
+        "generation": {
+          "status": "idle"
+        }
+      },
+      "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "deploymentUrl": null,
+      "publicAvailable": false
+    },
+    "revision": {
+      "branch": "main",
+      "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+    },
+    "turns": [
+      {
+        "id": 1,
+        "mode": "build",
+        "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+        "matchingEdit": false,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      },
+      {
+        "id": 2,
+        "mode": "build",
+        "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+        "matchingEdit": true,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      }
+    ]
+  },
+  "failure": {
+    "name": "Error",
+    "message": "Owner GET 401"
+  },
+  "observerFinishedAt": "2026-10-01T19:40:50.080Z",
+  "customerBrowserLeftOpen": true
+}

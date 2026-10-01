@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { runInNewContext } from "node:vm";
 import worker from "../cloudflare/worker";
 import {
   handleLaunchPreviewProxy,
@@ -10,6 +11,10 @@ import {
   rewritePreviewHtml,
   rewritePreviewJavaScript,
 } from "../cloudflare/staging/preview-proxy";
+import {
+  previewBranchPrefix,
+  previewRequestSinkBootstrap,
+} from "../cloudflare/staging/preview-request-sink";
 
 const controlOrigin = "https://buildcustom-control-plane-production.thegoldimport.workers.dev";
 const runtimeOrigin = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
@@ -72,9 +77,31 @@ test("HTML and CSS root assets stay under a branch-scoped path with the preview 
     capability,
   );
   assert.match(javascript, new RegExp(`${previewRoute}src/chunk\\.js`));
-  assert.match(javascript, new RegExp(`${previewRoute}assets/data\\.json`));
-  assert.match(javascript, /fetch\("\/api\/auth\/me"\)/);
-  assert.doesNotMatch(javascript, /auth\/me\?t=/);
+  assert.match(javascript, /fetch\("\/assets\/data\.json"\)/);
+  assert.match(javascript, /fetch\("\/api\/auth\/me\?t=upstream-token"\)/);
+  assert.equal(rewritePreviewJavaScript(
+    'const text = "/assets/data.json"; const template = `http://safe/${path}`; // "/api/leads"',
+    requestUrl,
+    controlOrigin,
+    capability,
+  ), 'const text = "/assets/data.json"; const template = `http://safe/${path}`; // "/api/leads"');
+  const sourceLikeMarkup = rewritePreviewHtml(
+    '<html><head></head><script>const view = <img src="/source-only.png">; const text = "/string.png";</script><!-- <img src="/comment.png"> -->',
+    requestUrl,
+    controlOrigin,
+    capability,
+  );
+  assert.ok(sourceLikeMarkup.includes('<img src="/source-only.png">'));
+  assert.ok(sourceLikeMarkup.includes('const text = "/string.png";'));
+  assert.ok(sourceLikeMarkup.includes('<!-- <img src="/comment.png"> -->'));
+  const dollarCode = "const dollars = \"$& $` $'\";";
+  const leadingComment = '<!-- <head>$& <script>comment source stays intact</script> -->';
+  const protectedScript = `${leadingComment}<html><head></head><script>${dollarCode}</script>`;
+  const protectedOutput = rewritePreviewHtml(protectedScript, requestUrl, controlOrigin, capability);
+  assert.ok(protectedOutput.includes(dollarCode));
+  assert.ok(protectedOutput.includes(leadingComment));
+  assert.ok(protectedOutput.indexOf('<head><meta name="referrer"') > protectedOutput.indexOf('<html>'));
+  assert.ok(protectedOutput.indexOf('<head><meta name="referrer"') > protectedOutput.indexOf(leadingComment));
 
   const moduleUrl = new URL(`${controlOrigin}${previewRoute}src/main.js`);
   const nestedModule = rewritePreviewJavaScript(
@@ -115,6 +142,45 @@ test("Babel script resources are capability-scoped and explicitly marked for sou
   assert.equal(babelLibrary?.searchParams.has("__bc_preview_source"), false);
   assert.match(html, /<link rel="stylesheet" href="[^"]*site\.css\?t=/);
   assert.doesNotMatch(html, /site\.css[^"]*__bc_preview_source/);
+});
+
+test("import maps and Babel bare-package imports survive while relative modules stay preview-scoped", () => {
+  const previewRoute = route("agent-1", "main");
+  const requestUrl = new URL(`${controlOrigin}${previewRoute}`);
+  const capability = { agentId: "agent-1", branch: "main", token, path: "" };
+  const importMap = JSON.stringify({
+    imports: {
+      react: "https://esm.sh/react@18.3.1",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
+      "lucide-react": "https://esm.sh/lucide-react@0.400.0?external=react,react-dom",
+    },
+  });
+  const babelSource = [
+    'import React from "react";',
+    'import { createRoot } from "react-dom/client";',
+    'import { Search } from "lucide-react";',
+    'import "./components/Leads.jsx";',
+    'import "#app-theme";',
+    'import "https://esm.sh/date-fns@4";',
+    'import "//cdn.example.test/module.js";',
+  ].join("\n");
+  const html = rewritePreviewHtml(
+    `<html><head><script type="importmap">${importMap}</script></head>`
+      + `<body><script type="text/babel" data-type="module">${babelSource}</script></body></html>`,
+    requestUrl,
+    controlOrigin,
+    capability,
+  );
+
+  assert.ok(html.includes(`<script type="importmap">${importMap}</script>`));
+  assert.ok(html.includes('import React from "react";'));
+  assert.ok(html.includes('import { createRoot } from "react-dom/client";'));
+  assert.ok(html.includes('import { Search } from "lucide-react";'));
+  assert.ok(html.includes(`import "${controlOrigin}${previewRoute}components/Leads.jsx?t=${token}";`));
+  assert.ok(html.includes('import "#app-theme";'));
+  assert.ok(html.includes('import "https://esm.sh/date-fns@4";'));
+  assert.ok(html.includes('import "//cdn.example.test/module.js";'));
+  assert.doesNotMatch(html, new RegExp(`${previewRoute}(?:react|react-dom/client|lucide-react)`));
 });
 
 test("Babel-fetched text/plain JSX source receives opaque-origin CORS and rewrites scoped API URLs", async () => {
@@ -183,17 +249,10 @@ test("Babel-fetched text/plain JSX source receives opaque-origin CORS and rewrit
   assert.equal(source?.headers.get("Access-Control-Allow-Credentials"), null);
   assert.equal(source?.headers.get("Set-Cookie"), null);
   const rewrittenSource = await source!.text();
-  assert.match(rewrittenSource, /const leadsUrl = ['"]https:\/\/buildcustom-control-plane-production\.thegoldimport\.workers\.dev\/_private_preview\/agent-1\/main\/api\/leads\?status=new&t=/);
-  assert.match(rewrittenSource, /new URL\(`\.\/api\/leads\/\$\{leadId\}\?status=\$\{encodeURIComponent\(status\)\}`/);
+  assert.ok(rewrittenSource.includes("const leadsUrl = './api/leads?status=new';"));
+  assert.ok(rewrittenSource.includes("const leadUrl = `./api/leads/${leadId}?status=${encodeURIComponent(status)}`;"));
   assert.match(rewrittenSource, /fetch\(leadsUrl\); fetch\(leadUrl\);/);
-  const dynamicExpression = rewrittenSource.match(/^const leadUrl = (.+)$/m)?.[1];
-  assert.ok(dynamicExpression);
-  const dynamicUrl = new URL(Function("leadId", "status", `return ${dynamicExpression}`)(42, "won") as string);
-  assert.equal(dynamicUrl.pathname, `${root}api/leads/42`);
-  assert.equal(dynamicUrl.searchParams.get("status"), "won");
-  assert.equal(dynamicUrl.searchParams.get("t"), token);
-  assert.equal(dynamicUrl.searchParams.has("__bc_preview_source"), false);
-  assert.doesNotMatch(rewrittenSource.match(/const leadsUrl = ([^\n]+)/)?.[1] || "", /__bc_preview_source/);
+  assert.doesNotMatch(rewrittenSource, /mainhttps:\/\/api\/leads/);
   const sourceRequest = forwarded.find((request) => new URL(request.url).pathname.endsWith("/app.jsx"));
   assert.ok(sourceRequest);
   assert.equal(new URL(sourceRequest.url).searchParams.get("t"), token);
@@ -267,7 +326,7 @@ test("marked JavaScript, JSX, TypeScript, and TSX source share the same content-
     assert.equal(response?.status, 200, filename);
     assert.equal(response?.headers.get("Content-Type"), "text/plain;charset=UTF-8", filename);
     assert.equal(response?.headers.get("Access-Control-Allow-Origin"), "null", filename);
-    assert.ok((await response!.text()).includes(`${route("agent-1", "main")}api/leads?view=recent&t=`), filename);
+    assert.equal(await response!.text(), 'fetch("./api/leads?view=recent");');
     assert.equal(runtimeRequests.at(-1)?.searchParams.get("screen"), "crm", filename);
     assert.equal(runtimeRequests.at(-1)?.searchParams.get("__bc_preview_source"), null, filename);
   }
@@ -291,13 +350,26 @@ test("plain-text API responses are readable when scoped but are not rewritten as
   assert.equal(await response!.text(), body);
 });
 
-test("dynamic preview URLs keep filters, repeated names, encoding, and fragments with their capability", () => {
+test("dynamic preview URLs keep filters, repeated names, encoding, and fragments at the injected request sink", () => {
   const previewRoute = route("agent-1", "main");
   const requestUrl = new URL(`${controlOrigin}${previewRoute}app.js?t=${token}`);
   const capability = { agentId: "agent-1", branch: "main", token, path: "app.js" };
+  const calls: string[] = [];
+  const window = { fetch(input: string) { calls.push(input); return Promise.resolve("ok"); } };
+  const context = {
+    window,
+    document: { baseURI: requestUrl.href },
+    URL,
+    URLSearchParams,
+  };
+  runInNewContext(previewRequestSinkBootstrap(
+    controlOrigin,
+    previewBranchPrefix(controlOrigin, capability),
+    token,
+  ), context);
   const evaluate = (expression: string, values: Record<string, unknown> = {}) => {
-    const rewritten = rewritePreviewJavaScript(expression, requestUrl, controlOrigin, capability);
-    return new URL(Function(...Object.keys(values), `return ${rewritten}`)(...Object.values(values)) as string);
+    runInNewContext(`window.fetch(${expression})`, { ...context, ...values });
+    return new URL(calls.at(-1)!);
   };
 
   const noQuery = evaluate("`./api/metrics`");
@@ -333,10 +405,10 @@ test("dynamic preview URLs keep filters, repeated names, encoding, and fragments
   assert.deepEqual(existingToken.searchParams.getAll("t"), [token]);
 
   const forbidden = evaluate("`/api/auth/${name}?status=new`", { name: "me" });
-  assert.equal(forbidden.pathname, "/api/auth/me");
-  assert.equal(forbidden.searchParams.has("t"), false);
-  const escaped = evaluate("`../../outside?status=new`");
-  assert.equal(escaped.searchParams.has("t"), false);
+  assert.equal(forbidden.pathname, `${previewRoute}api/auth/me`);
+  assert.equal(forbidden.searchParams.get("t"), token);
+  runInNewContext('window.fetch("../../outside?status=new")', context);
+  assert.equal(calls.at(-1), "../../outside?status=new");
 });
 
 test("runtime-rewritten root assets are normalized only for the matching agent and branch", () => {
@@ -513,13 +585,28 @@ test("opaque sandbox can read normal JavaScript-MIME modules and JSON, but not H
   assert.equal(js.headers.get("Set-Cookie"), null);
   assert.match(await js.text(), /CRM ready/);
 
-  const filteredExpression = rewritePreviewJavaScript(
-    "`./api/leads?status=${encodeURIComponent(first)}&status=${encodeURIComponent(second)}&search=${encodeURIComponent(search)}`",
-    new URL(`${controlOrigin}${root}app.js?t=${token}`),
+  const dynamicCalls: string[] = [];
+  const dynamicWindow = { fetch(input: string) { dynamicCalls.push(input); return Promise.resolve("ok"); } };
+  const dynamicContext = {
+    window: dynamicWindow,
+    document: { baseURI: `${controlOrigin}${root}app.js?t=${token}` },
+    URL,
+    URLSearchParams,
+    fetch: (input: string) => dynamicWindow.fetch(input),
+    first: "new",
+    second: "won",
+    search: "roof & tile",
+  };
+  runInNewContext(previewRequestSinkBootstrap(
     controlOrigin,
-    { agentId: "agent-1", branch: "main", token, path: "app.js" },
+    previewBranchPrefix(controlOrigin, { agentId: "agent-1", branch: "main" }),
+    token,
+  ), dynamicContext);
+  runInNewContext(
+    "fetch(`./api/leads?status=${encodeURIComponent(first)}&status=${encodeURIComponent(second)}&search=${encodeURIComponent(search)}`)",
+    dynamicContext,
   );
-  const filteredUrl = Function("first", "second", "search", `return ${filteredExpression}`)("new", "won", "roof & tile") as string;
+  const filteredUrl = dynamicCalls[0];
   const json = await handleLaunchPreviewProxy(env, new Request(filteredUrl, {
     headers: corsHeaders,
   }));
@@ -861,6 +948,9 @@ test("worker serves the marked Babel JSX URL to an opaque-origin GET and validat
           headers: { "Content-Type": "text/plain; charset=utf-8" },
         });
       }
+      if (url.pathname.endsWith("/api/leads")) {
+        return Response.json({ status: url.searchParams.get("status") });
+      }
       return new Response("unavailable", { status: 404 });
     },
   } as unknown as Fetcher;
@@ -917,10 +1007,32 @@ test("worker serves the marked Babel JSX URL to an opaque-origin GET and validat
   assert.equal(source.headers.get("Access-Control-Allow-Origin"), "null");
   assert.equal(source.headers.get("Access-Control-Allow-Credentials"), null);
   assert.equal(source.headers.get("Set-Cookie"), null);
-  assert.match(await source.text(), new RegExp(
-    `${appOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${root}api/leads\\?status=new&t=`,
-  ));
-  assert.deepEqual(runtimeRequests.map((request) => request.method), ["GET", "GET"]);
+  const sourceText = await source.text();
+  assert.equal(sourceText, 'fetch("./api/leads?status=new");');
+  const bootstrapMatch = htmlText.match(/<meta name="referrer" content="no-referrer"><script>([\s\S]*?)<\/script>/);
+  assert.ok(bootstrapMatch, "The inline request sink must run before generated scripts.");
+  const appRequests: string[] = [];
+  const appWindow = { fetch(input: string) { appRequests.push(input); return Promise.resolve("ok"); } };
+  const appContext = {
+    window: appWindow,
+    document: { baseURI: `${appOrigin}${root}` },
+    URL,
+    URLSearchParams,
+    fetch: (input: string) => appWindow.fetch(input),
+  };
+  runInNewContext(bootstrapMatch[1], appContext);
+  runInNewContext(sourceText, appContext);
+  assert.equal(appRequests.length, 1);
+  const apiUrl = new URL(appRequests[0]);
+  assert.equal(apiUrl.href, `${appOrigin}${root}api/leads?status=new&t=${token}`);
+  assert.doesNotMatch(apiUrl.pathname, /mainhttps:/);
+  const apiResponse = await worker.fetch(new Request(apiUrl, {
+    headers: { Origin: "null" },
+  }), env as never);
+  assert.equal(apiResponse.status, 200);
+  assert.equal(apiResponse.headers.get("Access-Control-Allow-Origin"), "null");
+  assert.deepEqual(await apiResponse.json(), { status: "new" });
+  assert.deepEqual(runtimeRequests.map((request) => request.method), ["GET", "GET", "GET"]);
   assert.ok(runtimeRequests.every((request) => new URL(request.url).searchParams.has("t")));
   assert.ok(runtimeRequests.every((request) => !new URL(request.url).searchParams.has("__bc_preview_source")));
   assert.deepEqual(validatorCalls, [], "A simple source GET must not require an OPTIONS validation RPC.");

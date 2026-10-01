@@ -1,0 +1,58 @@
+{
+  "status": "PASS",
+  "receiptPrefix": "preview-fetch-corrected",
+  "worker": "buildcustom-control-plane-launch",
+  "sourceCommit": "6cea62eacf8ba4eb17fd53fbfc8872e4eed14b8b",
+  "safetyReview": "PASS",
+  "rootCause": {
+    "status": "PROVEN",
+    "component": "control-plane-preview-proxy",
+    "summary": "Arbitrary JavaScript URL rewriting corrupts the Project 8 slash predicate and fallback into mainhttps://api/leads. Preserve source expressions and authenticate actual same-branch requests. The first rolled-back candidate's bare-module/import-map regression is corrected.",
+    "evidence": [
+      "Committed helper and fetch at revision 04395b156f7e43346a240be3d824eef8104b7697",
+      "Exact old-transform replay",
+      "project8-native-preview-bootstrap-verification.json",
+      "tests/cloudflare-preview-request-sink.test.ts",
+      "preview-fetch-corrected-source-parity.json",
+      "preview-fetch-release-operation.json: first candidate ROLLED_BACK"
+    ]
+  },
+  "checks": {
+    "focusedTests": "PASS",
+    "regressionTests": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS"
+  },
+  "testResults": {
+    "focusedPreviewTests": { "passed": 28, "failed": 0 },
+    "rootSuite": { "passed": 282, "failed": 0, "log": "/tmp/preview-fetch-corrected-root-tests.log" },
+    "ownerAndScope": { "passed": 22, "failed": 0 },
+    "runtimeRegressions": { "passed": 176, "failed": 0, "files": 24 },
+    "releaseSafetySelfTest": { "passed": 32, "failed": 0 },
+    "rootTypecheck": "PASS",
+    "rootBuild": "PASS",
+    "launchWorkerDryRun": "PASS",
+    "isolatedChromiumImportMapRender": "PASS"
+  },
+  "candidateModules": [
+    {
+      "name": "worker.js",
+      "sha256": "4f957d427575a5491f3b5dd05487e871505551e8ebe54fed4dff6b8954167377"
+    }
+  ],
+  "sourceHashes": {
+    "cloudflare/staging/preview-proxy.ts": "e04df41cb7154ad039212df480c466f39485196c600bd5521cdbd53710f09f48",
+    "cloudflare/staging/preview-request-sink.ts": "a83bb626cb6f1383241a4b0b8cb8cc0d21943537944370bf9da50f5e05228227"
+  },
+  "scope": {
+    "project8SourceChanged": false,
+    "newAIRequests": 0,
+    "lifecycleChanged": false,
+    "maxStepsChanged": false,
+    "continuationChanged": false,
+    "authChanged": false,
+    "gatewayChanged": false,
+    "sandboxChanged": false,
+    "assetUpload": false
+  }
+}

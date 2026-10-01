@@ -1,0 +1,7 @@
+{
+  "state": "STAGING_FAILED_OR_UNKNOWN",
+  "startedAt": "2026-10-01T21:57:07.717Z",
+  "validationSha256": "7f16b6c98385fb1d34b8afc0f1766a8de837e69d8a2cd718db5fb4788a7912d9",
+  "targets": {},
+  "failure": "Only the main JS module may change\n+ actual - expected\n\n+ '[{\"name\":\"assets/esbuild-B4PnW_4U.wasm\",\"sha256\":\"08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3\"},{\"name\":\"assets/hook-proxy-CkF0EhRO-odPdDpPH.js\",\"sha256\":\"403143888a602947a183c6fa8c72073a67da42b4c96c340ef3b580cf71273286\"},{\"name\":\"assets/mimetext.browser.es-CF8iqyB7.js\",\"sha256\":\"325c98348fe2301cd3062c944f7b3221ef0712eb4e1cd09b4d8607ba6f4fd894\"},{\"name\":\"assets/NodeWebSocketTransport-BntJgCj_.js\",\"sha256\":\"ff0416528695d05574e54b0c37a8e1b2a3142ead1b35a3e81c41c2a5fc836928\"},{\"name\":\"assets/rolldown-runtime-BzI350Cx.j"
+}

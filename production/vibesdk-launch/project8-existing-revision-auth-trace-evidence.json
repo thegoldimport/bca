@@ -1,0 +1,39 @@
+{
+  "at": "2026-10-01T20:22:02.567Z",
+  "scope": {
+    "from": 1790883649000,
+    "to": 1790883650200
+  },
+  "rows": [
+    {
+      "at": "2026-10-01T19:40:49.963Z",
+      "service": "buildcustom-control-plane-launch",
+      "type": "cf-worker-event",
+      "traceId": "098836ad4bf9ea07c525ce0ea37157a2",
+      "requestId": "aece1d231509e3f0f09923d8df5fb091",
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/revision",
+      "status": 401,
+      "requestCookieHeaderPresent": true,
+      "sourceKeys": [
+        "level",
+        "message"
+      ],
+      "message": "GET https://app.buildcustom.ai/api/projects/8/runtime/revision"
+    },
+    {
+      "at": "2026-10-01T19:40:49.953Z",
+      "service": "buildcustom-control-plane-launch",
+      "type": "cf-worker-event",
+      "traceId": "cc1c00d69a699179714bdde479852f53",
+      "requestId": "ffb33ca406a0d88b4f33fbc34bd0189b",
+      "url": "https://app.buildcustom.ai/api/projects/8/runtime/status",
+      "status": 401,
+      "requestCookieHeaderPresent": true,
+      "sourceKeys": [
+        "level",
+        "message"
+      ],
+      "message": "GET https://app.buildcustom.ai/api/projects/8/runtime/status"
+    }
+  ]
+}

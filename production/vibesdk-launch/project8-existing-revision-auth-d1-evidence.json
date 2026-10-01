@@ -1,0 +1,78 @@
+{
+  "at": "2026-10-01T20:15:29.257Z",
+  "binding": "live buildcustom-vibesdk-launch DB",
+  "results": [
+    {
+      "rows": [
+        {
+          "id": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+          "is_active": 1,
+          "is_suspended": 0,
+          "locked_until": null,
+          "deleted_at": null,
+          "password_changed_at": null
+        }
+      ],
+      "rowsWritten": 0
+    },
+    {
+      "rows": [
+        {
+          "id": "58731ac4-07e0-4c4e-bf0f-4261ca0aa3e4",
+          "user_id": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+          "created_at": 1790870146,
+          "expires_at": 1791129346,
+          "is_revoked": 0,
+          "revoked_at": null,
+          "revoked_reason": null,
+          "last_activity": 1790870146
+        },
+        {
+          "id": "16c0f481-aec5-40e4-a5d7-e7153a1ea9a9",
+          "user_id": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+          "created_at": 1790875198,
+          "expires_at": 1791134398,
+          "is_revoked": 0,
+          "revoked_at": null,
+          "revoked_reason": null,
+          "last_activity": 1790875198
+        },
+        {
+          "id": "ab24008b-9e34-48db-b7e1-b55c5442f1bc",
+          "user_id": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+          "created_at": 1790884788,
+          "expires_at": 1791143988,
+          "is_revoked": 0,
+          "revoked_at": null,
+          "revoked_reason": null,
+          "last_activity": 1790884788
+        }
+      ],
+      "rowsWritten": 0
+    },
+    {
+      "rows": [],
+      "rowsWritten": 0
+    },
+    {
+      "rows": [
+        {
+          "attempted_at": "2026-10-01 15:55:45",
+          "attempt_type": "register",
+          "success": 1
+        },
+        {
+          "attempted_at": "2026-10-01 17:19:58",
+          "attempt_type": "login",
+          "success": 1
+        },
+        {
+          "attempted_at": "2026-10-01 19:59:49",
+          "attempt_type": "login",
+          "success": 1
+        }
+      ],
+      "rowsWritten": 0
+    }
+  ]
+}

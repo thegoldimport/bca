@@ -1,0 +1,564 @@
+Continue the BuildCustom production acceptance using the SAME Project 8.
+
+We are done expanding the acceptance harness.
+
+The goal now is simple:
+
+1. Recover the legitimate Project 8 owner session.
+2. Open Project 8 through the normal BuildCustom customer UI.
+3. If the real editor loads normally, send exactly ONE customer coding request.
+4. Observe whether the continuous-coding lifecycle works.
+5. If the real editor fails, capture the actual browser error and stop.
+
+DO NOT create Project 9.
+
+DO NOT create another fixture.
+
+DO NOT reset Project 8.
+
+DO NOT modify Project 8's workspace before Send.
+
+DO NOT touch Project 5.
+
+DO NOT retry Project 6.
+
+DO NOT send anything to Project 7.
+
+DO NOT change the runtime.
+
+DO NOT change the lifecycle implementation.
+
+DO NOT change observability.
+
+DO NOT change product code.
+
+DO NOT production Publish.
+
+==================================================
+KNOWN PROJECT 8 BASELINE
+==================================================
+
+Project:
+8
+
+Agent:
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Last confirmed state:
+
+- owner correct
+- agent mapping correct
+- generation ready
+- connected
+- idle
+- prior customer coding turns = 0
+- existing releases = 0
+- existing preview/deployment = none
+- owner-scoped API calls successful
+- branch = main
+- revision =
+  2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8
+- customer coding requests = 0
+
+The previous attempt DID NOT exercise the coding agent.
+
+It failed in local/browser test infrastructure during editor navigation before
+Send.
+
+A production product failure was NOT established.
+
+==================================================
+STEP 1 — RECOVER THE SAME OWNER SESSION
+==================================================
+
+Recover/re-establish the legitimate Project 8 owner's production login.
+
+Use the normal supported authentication path.
+
+If the Project 8 test credential is already stored in the authorized secret
+mechanism, use it.
+
+If the credential is unavailable, use the EXISTING production password
+recovery flow for the SAME Project 8 account.
+
+It is authorized to recover this account for this acceptance test.
+
+Do NOT:
+
+- create a new user
+- create another project
+- change ownership
+- bypass authentication
+- inject a fake session
+- use an admin shortcut
+
+After login confirm:
+
+- same Project 8
+- same owner
+- same agent
+
+Then perform a SMALL read-only reconciliation.
+
+Confirm:
+
+- generation idle
+- customer turns still 0
+- releases still 0
+- no existing preview/deployment
+- branch/revision still expected
+
+If the revision changed unexpectedly or Project 8 has acquired customer
+activity:
+
+STOP and report the actual conflicting state.
+
+Otherwise continue.
+
+==================================================
+STEP 2 — OPEN THE REAL CUSTOMER UI
+==================================================
+
+Use the normal production BuildCustom customer path.
+
+Navigate:
+
+login
+→ dashboard
+→ Project 8
+→ editor/builder
+
+We are testing whether a REAL authenticated customer can open their project.
+
+Before navigation, attach lightweight browser listeners so that if navigation
+actually fails we retain the error.
+
+Capture:
+
+- navigation exception
+- page errors
+- console errors
+- failed network requests
+- final URL
+- relevant HTTP status
+- redirect chain if applicable
+
+Do NOT build another elaborate navigation harness.
+
+==================================================
+IF THE EDITOR FAILS TO LOAD
+==================================================
+
+If the actual authenticated customer cannot open Project 8's editor:
+
+STOP.
+
+This time retain the concrete failure.
+
+Report:
+
+- starting URL
+- attempted destination
+- final URL
+- navigation exception type
+- navigation exception message
+- safe stack if available
+- HTTP failure/status
+- failed request
+- console errors
+- page errors
+- whether authentication remained valid
+- whether dashboard still loaded
+- whether the supported direct Project 8 URL loaded
+- whether this appears to be product UI failure or local automation failure
+
+Do NOT retry repeatedly.
+
+Do NOT modify product code.
+
+Do NOT create another fixture.
+
+==================================================
+IF THE EDITOR LOADS
+==================================================
+
+If Project 8 opens successfully through the normal customer UI:
+
+Confirm visually/DOM-wise:
+
+- correct project
+- editor visible
+- coding prompt/input visible
+- Send available
+- generation idle
+- no existing customer coding turn
+
+At this point:
+
+DO NOT STOP FOR MORE HARNESS ANALYSIS.
+
+The previous navigation problem can be treated as a test-infrastructure issue
+unless the current customer path provides contrary evidence.
+
+Proceed to the coding test.
+
+==================================================
+DIAGNOSTICS COLLECTOR
+==================================================
+
+The optional collector previously failed:
+
+pretty-tail-failed
+exit code 1
+
+Try to start it ONCE.
+
+If it works:
+use it.
+
+If it fails:
+capture its stderr/startup error and CONTINUE.
+
+Do NOT let pretty-tail become another acceptance project.
+
+The safe production observability instrumentation is already deployed.
+
+Failure of an optional local observation helper does NOT block Send if the
+real customer UI is healthy.
+
+==================================================
+STEP 3 — SEND ONE REAL CUSTOMER CODING REQUEST
+==================================================
+
+Send EXACTLY ONE customer coding request through the normal BuildCustom editor.
+
+Use a substantial but normal app-building task that has a reasonable chance
+of requiring more than one native Think turn.
+
+Use this request:
+
+Build a polished mini CRM dashboard for a small sales team.
+
+Requirements:
+
+- responsive dashboard layout
+- dark navy professional visual theme
+- left navigation
+- summary cards for Total Leads, Qualified Leads, Pipeline Value, and Won
+- searchable and sortable leads table
+- lead fields for name, company, email, status, source, estimated value, and
+  created date
+- Add Lead form/modal
+- edit an existing lead
+- delete a lead with confirmation
+- status options: New, Contacted, Qualified, Proposal, Won, Lost
+- filtering by status
+- five newest leads section
+- seed realistic sample lead data
+- persist changes appropriately for the generated application
+- make the finished app visually polished and usable
+- verify the finished application works before completing the task
+
+Send that request ONCE.
+
+Count a customer instruction as SENT only when the outbound customer
+user_suggestion/instruction frame is actually observed.
+
+A UI click alone does not count as a sent instruction.
+
+Do NOT:
+
+- click Send twice
+- resend because UI appears slow
+- retry automatically
+- send follow-up instructions
+- manipulate the workspace
+- deliberately disconnect anything
+- alter maxSteps
+- alter continuation limits
+
+==================================================
+CURRENT LIFECYCLE CONFIGURATION
+==================================================
+
+Think maxSteps:
+25
+
+Maximum total Think turns:
+5
+
+Maximum internal continuations:
+4
+
+Operation wall-clock ceiling:
+15 minutes / 900000 ms
+
+Do not change these.
+
+==================================================
+STEP 4 — LET BUILDCUSTOM WORK
+==================================================
+
+Once the customer request is observed outbound:
+
+LET THE OPERATION RUN.
+
+Do not interfere merely because the first native Think turn reaches its
+25-step boundary.
+
+That boundary is precisely what we are trying to test.
+
+Observe:
+
+- customer request count
+- Think turn count
+- tool steps
+- internal continuation count
+- operation identity
+- ThinkAgent identity
+- SpaceDO identity
+- WebSocket
+- RPC
+- provider outcome
+- workspace changes
+- workspace persistence between turns
+- working-tree preflight
+- commit
+- preview
+- browser/runtime verification
+- finish_task
+- authoritative revision
+- final working-tree state
+- final operation state
+
+==================================================
+WHAT COUNTS AS BASIC SUCCESS
+==================================================
+
+Require:
+
+- exactly ONE customer request
+- requested app created
+- working-tree validation/preflight succeeds
+- commit occurs after successful validation
+- authoritative revision is coherent
+- preview succeeds
+- browser/runtime verification succeeds
+- no actionable generated-app errors remain
+- finish_task occurs
+- working tree ends clean
+- completion gate accepts
+- operation state = COMPLETE
+- production Publish = NO
+
+If all of that happens inside ONE Think turn:
+
+BASIC PRODUCTION LIFECYCLE = PASS
+
+MULTI-TURN PRODUCTION LIFECYCLE = NOT PROVEN
+
+This is NOT a failure.
+
+STOP and report.
+
+==================================================
+WHAT COUNTS AS MULTI-TURN SUCCESS
+==================================================
+
+If the operation crosses the native Think boundary, verify:
+
+- exactly ONE customer request remains
+- more than one Think turn occurred
+- at least one INTERNAL continuation occurred
+- customer request was NOT duplicated
+- same customer operation continued
+- same ThinkAgent
+- same SpaceDO
+- dirty/pending workspace state survived between turns
+- internal continuation was not presented as another customer request
+- subsequent turn continued the unfinished work
+- validation eventually passed
+- commit succeeded
+- preview succeeded
+- browser/runtime verification succeeded
+- finish_task occurred
+- authoritative revision is coherent
+- working tree ends clean
+- final state = COMPLETE
+
+If so:
+
+BASIC PRODUCTION LIFECYCLE = PASS
+
+MULTI-TURN PRODUCTION LIFECYCLE = PASS
+
+This is the result we have been trying to prove.
+
+STOP and report.
+
+==================================================
+IF THE REAL CODING OPERATION FAILS
+==================================================
+
+Once the customer instruction has actually been sent, any failure becomes
+interesting.
+
+DO NOT RETRY.
+
+DO NOT repair the fixture.
+
+DO NOT send another customer instruction.
+
+DO NOT create another fixture.
+
+DO NOT touch Project 5.
+
+Use the accepted production observability evidence that is available.
+
+Report the EARLIEST retained failure.
+
+Distinguish:
+
+- product/runtime failure
+- lifecycle failure
+- provider failure
+- RPC failure
+- WebSocket failure
+- workspace/preflight failure
+- commit failure
+- preview failure
+- browser verification failure
+- resource limit
+- test-infrastructure-only failure
+
+Do not speculate beyond retained evidence.
+
+==================================================
+IMPORTANT RULE
+==================================================
+
+Do not stop because an OPTIONAL TESTING HELPER fails.
+
+Examples:
+
+- pretty-tail fails
+- screenshot helper fails
+- local diagnostic helper disconnects
+- automation helper has a nonessential problem
+
+If the real authenticated customer UI remains usable, continue using the
+normal customer path.
+
+The hard stop conditions before Send are now limited to ACTUAL customer-path
+problems:
+
+- cannot authenticate legitimate Project 8 owner
+- Project 8 ownership is wrong
+- agent mapping is wrong
+- generation already active
+- Project 8 already contains a customer coding request
+- unexpected release exists
+- unexpected preview/deployment exists
+- required owner API actually returns an explicit failure
+- real customer editor does not load
+- Send is genuinely unavailable
+
+Otherwise:
+
+SEND THE REQUEST.
+
+==================================================
+RETURN
+==================================================
+
+Return:
+
+OVERALL STATUS:
+MULTI-TURN PASS / BASIC PASS / REAL PRODUCT FAILURE / CUSTOMER-PATH BLOCKED
+
+PROJECT 8
+- same owner:
+- authentication method:
+- project:
+- agent:
+- owner mapping:
+- initial generation:
+- initial revision:
+- customer turns before Send:
+- releases before Send:
+- preview/deployment before Send:
+
+EDITOR
+- dashboard loaded:
+- project opened:
+- editor loaded:
+- input visible:
+- Send available:
+- customer path healthy:
+- previous navigation failure classification:
+
+DIAGNOSTIC COLLECTOR
+- attempted:
+- started:
+- if failed, startup error:
+- did collector failure block Send:
+
+CODING OPERATION
+- Send clicks:
+- outbound customer instructions observed:
+- customer requests:
+- Think turns:
+- total tool steps:
+- internal continuations:
+- same operation:
+- same ThinkAgent:
+- same SpaceDO:
+- duplicate customer instruction:
+- workspace persisted between turns:
+- WebSocket:
+- RPC:
+- provider:
+- working-tree preflight:
+- commit:
+- preview:
+- browser verification:
+- finish_task:
+- authoritative revision:
+- final working tree:
+- completion gate:
+- final operation state:
+- production Publish:
+
+BASIC PRODUCTION LIFECYCLE:
+PASS / FAIL / NOT RUN
+
+MULTI-TURN PRODUCTION LIFECYCLE:
+PASS / NOT PROVEN / FAIL
+
+IF FAILURE
+- earliest retained failure:
+- component:
+- boundary:
+- error type/code:
+- safe diagnostic evidence:
+- product failure or test-infrastructure failure:
+- candidate runtime implicated:
+- confidence:
+- rollback recommendation:
+
+PROJECT 9 CREATED:
+MUST BE NO
+
+PROJECT 5 TOUCHED:
+MUST BE NO
+
+PROJECT 6 RETRIED:
+MUST BE NO
+
+PROJECT 7 CODING REQUEST:
+MUST BE NO
+
+NEW CUSTOMER CODING REQUESTS:
+MAXIMUM 1
+
+Then STOP.

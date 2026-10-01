@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Project 8 production acceptance result</title>
+<style>body{max-width:960px;margin:40px auto;padding:0 24px;font:16px/1.55 system-ui,sans-serif;color:#172033}h1,h2{line-height:1.2}h2{margin-top:32px}table{border-collapse:collapse;width:100%}td,th{padding:9px 12px;text-align:left;border-bottom:1px solid #dce2ec;vertical-align:top}td:first-child{width:32%;font-weight:600}code{overflow-wrap:anywhere;font-size:.9em}.status{padding:16px;background:#fff0ed;border-left:4px solid #b52a21}.note{padding:14px;background:#edf3fa}li{margin:6px 0}</style>
+<h1>Project 8 production acceptance</h1>
+<p class="status"><strong>OVERALL STATUS: REAL PRODUCT FAILURE</strong><br>Native continuation occurred, but the generated CRM fails to load its lead data in the normal customer preview. No PASS is claimed.</p>
+<p>Evidence captured on October 1, 2026. Exactly one CRM coding request was sent. No repair, follow-up coding instruction, production Publish, or runtime change was performed.</p>
+<h2>Project and initial state</h2>
+<table><tr><td>Same owner</td><td>Confirmed: <code>379ce699-b905-43cc-b5ba-f40bb42ded20</code></td></tr>
+<tr><td>Authentication</td><td>Normal production login UI using the authorized stored credential; HTTP 200. Later read-only reopen reused the same authenticated browser profile and reconfirmed this owner.</td></tr>
+<tr><td>Project / agent / mapping</td><td>Project 8; <code>c9b4c828-07d1-41aa-a6bb-2c858b29c09e</code>. Owner-to-project and agent mapping verified.</td></tr>
+<tr><td>Initial generation</td><td>Idle, ready, connected, native Think.</td></tr>
+<tr><td>Initial revision</td><td><code>main / 2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8</code></td></tr>
+<tr><td>Before Send</td><td>Zero customer turns; zero releases; no preview or production deployment.</td></tr></table>
+<h2>Customer editor and collector</h2>
+<table><tr><td>Customer path</td><td>Login → dashboard → Project 8 → editor. Dashboard, project, editor, and prompt input loaded. Send was available and the customer path was healthy.</td></tr>
+<tr><td>Previous navigation failure</td><td>Local test-infrastructure failure, not an established product failure.</td></tr>
+<tr><td>Collector</td><td>Attempted once. Did not reach readiness; zero safe events. It terminated before readiness and no startup stderr was retained, so no specific startup cause is claimed. Its failure did not block Send.</td></tr></table>
+<h2>Coding operation</h2>
+<table><tr><td>Send / outbound / customer count</td><td>One explicit Send click. One outbound <code>user_suggestion</code> at <code>17:27:17.813Z</code>, matching the complete supplied CRM request. Exactly one matching customer turn. Prompt SHA-256: <code>12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86</code>.</td></tr>
+<tr><td>Think turns / steps</td><td>Two persisted assistant passes: 25 and 16 native <code>step-start</code> markers, 41 total. The structural projection separately recognizes 27 tool-call IDs; that whitelist count is not asserted as a complete count of every tool type.</td></tr>
+<tr><td>Internal continuations</td><td>One continuation-marked internal user record at 17:31:34Z. It was not another customer request.</td></tr>
+<tr><td>Operation identity</td><td>One customer request and an internal continuation are confirmed. An explicit authoritative operation ID was not exposed, so same-operation identity is not independently attested at that level.</td></tr>
+<tr><td>ThinkAgent / SpaceDO</td><td>The same mapped agent key was used for scoped Think and Space queries. No alternate agent, Space, fixture, or reset was used.</td></tr>
+<tr><td>Duplicate customer instruction</td><td>No. The read-only reopen emitted zero additional instructions.</td></tr>
+<tr><td>Workspace persistence</td><td>Workspace changes, two revision hashes, a persisted internal continuation, and a subsequent pass are recorded. Current Space Git head and deployment agree. Dirty/pending state at the precise turn boundary was not available.</td></tr>
+<tr><td>WebSocket</td><td>Outbound instruction and <code>generation_started</code> retained. The original UI later reported an interruption. Complete close-code and native terminal-event evidence is unavailable. Local observer interference is documented separately below.</td></tr>
+<tr><td>RPC / provider</td><td>No retained RPC or provider error code. Two native assistant records persisted; provider finish reason and authoritative RPC outcome are unavailable. Neither component is blamed.</td></tr>
+<tr><td>Working-tree preflight</td><td>Not independently proven. Structured validation-success and validation-before-commit evidence were unavailable.</td></tr>
+<tr><td>Commit / revision</td><td>Two hashes observed: <code>8f126d74e60c82780cb7d7556f23c2dd3469f58a</code> and <code>04395b156f7e43346a240be3d824eef8104b7697</code>. Current owner revision, Space Git head, and deployment agree on the latter.</td></tr>
+<tr><td>Preview</td><td>Private preview HTML returned HTTP 200. The normal editor rendered “Pulse CRM - Mini Sales Dashboard.” Production deployment remains absent and releases remain zero.</td></tr>
+<tr><td>Browser/runtime verification</td><td>FAIL. A normal preview bootstrap requests the malformed lead API URL below and encounters CORS / <code>net::ERR_FAILED</code>. Zero lead rows and zero-value summary cards were observed. CRUD and persistence success are not claimed.</td></tr>
+<tr><td>finish_task</td><td>Three recognized invocations with <code>complete</code> statuses in the native transcript. These are not independently treated as proof that the controller completion gate accepted.</td></tr>
+<tr><td>Final working tree / completion gate</td><td>Clean-tree state and authoritative gate acceptance are unproven. Protected lifecycle storage was not queried or bypassed.</td></tr>
+<tr><td>Final operation state</td><td>Authoritative coordinator state unavailable. Backend snapshot reports idle/ready, and the recovered customer editor is usable without a completion badge. Neither observation proves operation state COMPLETE.</td></tr>
+<tr><td>Limits / Publish</td><td>Unchanged: maxSteps 25; at most 5 Think turns; 4 internal continuations; 900000 ms operation ceiling. Production Publish: NO; release count: zero.</td></tr></table>
+<h2>Acceptance verdicts</h2>
+<p><strong>BASIC PRODUCTION LIFECYCLE: FAIL.</strong> The generated application has an actionable lead-loading error. Required clean-tree and completion-gate evidence is also absent.</p>
+<p><strong>MULTI-TURN PRODUCTION LIFECYCLE: FAIL for full acceptance.</strong> Crossing the native 25-step boundary and internally continuing are proven, but the required end-to-end browser/runtime outcome failed. This does not mean the continuation mechanism itself failed.</p>
+<h2>Earliest retained actionable generated-app failure</h2>
+<table><tr><td>Retained reproduction</td><td>Normal generated-preview reload, 17:54:20–17:54:26Z. No synthetic API probe was used in this decisive capture.</td></tr>
+<tr><td>Component / boundary</td><td>Generated application → private-preview lead API fetch.</td></tr>
+<tr><td>Failed URL</td><td><code>https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/mainhttps://api/leads</code></td></tr>
+<tr><td>Error</td><td>Chromium: fetch from origin <code>null</code> blocked by CORS because the response lacks <code>Access-Control-Allow-Origin</code>; <code>net::ERR_FAILED</code>; application console: <code>Error loading leads: TypeError: Failed to fetch</code>. No reliable HTTP status was exposed for the blocked fetch.</td></tr>
+<tr><td>Safe diagnostic evidence</td><td>Requests were attributed to the generated iframe. Its sandbox is <code>allow-scripts allow-forms</code>. Lead rows: zero. Platform telemetry CORS errors are excluded from the actionable app failure.</td></tr>
+<tr><td>Classification / confidence</td><td>Real generated-app/private-preview failure, not just a local helper failure. High confidence in the browser failure; exact ownership between generated URL construction and preview remapping is not determined.</td></tr>
+<tr><td>Candidate runtime / rollback</td><td>Preview URL/fetch boundary implicated. No established provider, RPC, or coding-runtime failure. No production rollback recommended from this evidence alone.</td></tr></table>
+<h2>Local testing limitations</h2>
+<p class="note">The original observer incorrectly treated a changed revision as terminal. Suspending its cleanup also suspended its request interception and made later original-page verification samples unreliable. Terminating that local helper closed its managed browser despite the intention to retain it. The same authenticated profile was then reopened through dashboard → Project 8 → editor, with zero new coding instructions. The decisive generated-app failure was reproduced there through normal bootstrap traffic. No production cancellation request was sent; no coding retry occurred.</p>
+<h2>Safety scope</h2>
+<ul><li>Project 9 created: NO.</li><li>New fixture or user: NO.</li><li>Project 8 reset or pre-Send workspace modification: NO.</li><li>Project 5 touched: NO.</li><li>Project 6 retried: NO.</li><li>Project 7 coding request: NO.</li><li>New customer coding requests: ONE.</li><li>Product code, runtime, lifecycle implementation, deployed observability, or limits changed: NO.</li><li>Production Publish: NO.</li></ul>
+<h2>Evidence files</h2>
+<ul><li><code>project8-customer-journey.json</code>: login, navigation, initial state, single click, exact outbound match.</li><li><code>project8-final-authoritative-evidence.json</code>: same owner/agent, final revision, one matching customer turn, zero releases.</li><li><code>project8-native-structural-evidence.json</code>: safe native pass, step, continuation, tool, and Space metadata.</li><li><code>project8-readonly-reopen.json</code>: same authenticated owner and normal editor/preview recovery; zero extra instructions.</li><li><code>project8-native-preview-bootstrap-verification.json</code>: decisive normal-bootstrap lead-fetch failure.</li></ul>
+<p><strong>Stopped. No repair or further coding instruction.</strong></p>
+</html>

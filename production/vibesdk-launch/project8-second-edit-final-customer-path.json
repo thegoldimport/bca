@@ -1,0 +1,41 @@
+{
+  "at": "2026-10-01T19:43:30.562Z",
+  "url": "https://app.buildcustom.ai/app/editor/8",
+  "requests": [
+    {
+      "path": "/api/auth/me",
+      "status": 200,
+      "signedIn": false
+    },
+    {
+      "path": "/api/projects/8",
+      "status": 401,
+      "message": "Unauthorized"
+    },
+    {
+      "path": "/api/projects/8/runtime/status",
+      "status": 401,
+      "message": "Unauthorized"
+    },
+    {
+      "path": "/api/projects/8/runtime/revision",
+      "status": 401,
+      "message": "Unauthorized"
+    },
+    {
+      "path": "/api/projects/8/runtime/turns",
+      "status": 401,
+      "message": "Unauthorized"
+    },
+    {
+      "path": "/api/projects/8/runtime/releases",
+      "status": 401,
+      "message": "Unauthorized"
+    }
+  ],
+  "ui": {
+    "stopVisible": true,
+    "inputDisabled": true,
+    "completion": "RECOVERING / VERIFYING · The Agent is done streaming · verifying the stock revision and preview…"
+  }
+}

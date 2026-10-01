@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-01T17:48:05.398Z",
+  "localObserverTerminated": true,
+  "customerBrowserNotSignalled": true,
+  "productionOperationNotSignalled": true,
+  "reason": "Suspended observer also owned Fetch interception. Terminated only that local Node process without running its browser-close cleanup so its CDP attachment/interception could detach. Post-suspension customer UI samples are not independent product-failure evidence.",
+  "runtimeLimitsChanged": false,
+  "forcedCodingCancellation": false
+}

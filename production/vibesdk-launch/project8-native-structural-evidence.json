@@ -1,0 +1,474 @@
+{
+  "evidenceKind": "PROJECT8_NATIVE_STRUCTURAL_METADATA_ONLY",
+  "capturedAt": "2026-10-01T17:48:32.148Z",
+  "mapping": {
+    "verified": true,
+    "projectId": 8,
+    "agentId": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+    "thinkNamespaceScoped": true,
+    "spaceNamespaceScoped": true
+  },
+  "nativeTranscript": {
+    "requestedMessageCount": 4,
+    "matchedMessageCount": 4,
+    "messages": [
+      {
+        "id": "10d4ba7f-3054-444a-8690-fa677c37e18b",
+        "role": "user",
+        "createdAt": "2026-10-01T17:27:17.000Z",
+        "sqliteContentLength": 888,
+        "utf8Bytes": 888
+      },
+      {
+        "id": "4f880d23-cdd3-4d56-a8d1-d22e5611ce9f",
+        "role": "assistant",
+        "createdAt": "2026-10-01T17:31:34.000Z",
+        "sqliteContentLength": 174416,
+        "utf8Bytes": 174532
+      },
+      {
+        "id": "cfaea899-a5c5-4cfd-9068-77d207cfbea2",
+        "role": "user",
+        "createdAt": "2026-10-01T17:31:34.000Z",
+        "sqliteContentLength": 681,
+        "utf8Bytes": 681
+      },
+      {
+        "id": "126d3316-1036-4e6d-886a-c620d508721b",
+        "role": "assistant",
+        "createdAt": "2026-10-01T17:32:30.000Z",
+        "sqliteContentLength": 23090,
+        "utf8Bytes": 23090
+      }
+    ],
+    "customerPromptMessageCount": 1,
+    "internalContinuationMessageCount": 1,
+    "continuationRecords": [
+      {
+        "id": "cfaea899-a5c5-4cfd-9068-77d207cfbea2",
+        "markerRecognized": true,
+        "sqliteContentLength": 681,
+        "rawStoredMessageUtf8Bytes": 681,
+        "rawStoredMessageSha256": "d2b1cf82ab49fd0126d4383eb496e8fa3fd4205c108144b2c4b683cd182e86e0"
+      }
+    ],
+    "assistantTranscriptTurnCount": 2,
+    "thinkTurnIdsObserved": [],
+    "aggregateToolStepCount": 41,
+    "aggregateToolCounts": {
+      "list": 2,
+      "find": 1,
+      "read": 6,
+      "set_title": 1,
+      "write": 5,
+      "deploy_space": 7,
+      "edit": 1,
+      "finish_task": 3,
+      "commit": 1
+    },
+    "assistantMessages": [
+      {
+        "messageId": "4f880d23-cdd3-4d56-a8d1-d22e5611ce9f",
+        "createdAt": "2026-10-01T17:31:34.000Z",
+        "parseState": "JSON_STRUCTURAL_DECODED",
+        "decodedObjectCount": 122,
+        "partTypeCounts": {
+          "step-start": 25,
+          "other": 24,
+          "text": 1
+        },
+        "toolCounts": {
+          "list": 1,
+          "find": 1,
+          "read": 3,
+          "set_title": 1,
+          "write": 5,
+          "deploy_space": 3,
+          "edit": 1,
+          "finish_task": 1
+        },
+        "toolStepCount": 25,
+        "turnNumbers": [],
+        "stepNumbers": [],
+        "toolCalls": [
+          {
+            "tool": "list",
+            "callId": "call_227540",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "find",
+            "callId": "call_311347",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "read",
+            "callId": "call_2135",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "set_title",
+            "callId": "call_16325",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "write",
+            "callId": "call_2314",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "write",
+            "callId": "call_248797",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "write",
+            "callId": "call_15656",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "write",
+            "callId": "call_256841",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "deploy_space",
+            "callId": "call_242298",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "read",
+            "callId": "call_50004",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "write",
+            "callId": "call_316554",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "read",
+            "callId": "call_236663",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "edit",
+            "callId": "call_3046",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "deploy_space",
+            "callId": "call_386879",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "finish_task",
+            "callId": "call_196346",
+            "state": null,
+            "status": "complete"
+          },
+          {
+            "tool": "deploy_space",
+            "callId": "call_252242",
+            "state": null,
+            "status": null
+          }
+        ],
+        "finishTask": {
+          "observed": true,
+          "invocationCount": 1,
+          "resultStatuses": [
+            "complete"
+          ],
+          "finishReasons": [],
+          "flags": {},
+          "operationIds": []
+        },
+        "workflowToolOutcomes": {
+          "deploy_space": {
+            "statusEnums": [],
+            "booleans": {},
+            "operationIds": [],
+            "commitHashes": [
+              "04395b156f7e43346a240be3d824eef8104b7697",
+              "8f126d74e60c82780cb7d7556f23c2dd3469f58a"
+            ],
+            "toolCallCount": 3
+          },
+          "finish_task": {
+            "statusEnums": [
+              "complete"
+            ],
+            "booleans": {},
+            "operationIds": [],
+            "commitHashes": [],
+            "toolCallCount": 1
+          }
+        },
+        "commitHashes": [
+          "04395b156f7e43346a240be3d824eef8104b7697",
+          "8f126d74e60c82780cb7d7556f23c2dd3469f58a"
+        ],
+        "sqliteContentLength": 174416,
+        "utf8Bytes": 174532,
+        "thinkStepStartCount": 25,
+        "distinctToolCallCount": 16
+      },
+      {
+        "messageId": "126d3316-1036-4e6d-886a-c620d508721b",
+        "createdAt": "2026-10-01T17:32:30.000Z",
+        "parseState": "JSON_STRUCTURAL_DECODED",
+        "decodedObjectCount": 75,
+        "partTypeCounts": {
+          "step-start": 16,
+          "other": 15,
+          "text": 1
+        },
+        "toolCounts": {
+          "list": 1,
+          "read": 3,
+          "deploy_space": 4,
+          "commit": 1,
+          "finish_task": 2
+        },
+        "toolStepCount": 16,
+        "turnNumbers": [],
+        "stepNumbers": [],
+        "toolCalls": [
+          {
+            "tool": "list",
+            "callId": "call_261741",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "read",
+            "callId": "call_224750",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "read",
+            "callId": "call_292584",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "read",
+            "callId": "call_6895",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "deploy_space",
+            "callId": "call_251334",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "deploy_space",
+            "callId": "call_11647",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "commit",
+            "callId": "call_18272",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "deploy_space",
+            "callId": "call_254242",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "finish_task",
+            "callId": "call_229224",
+            "state": null,
+            "status": "complete"
+          },
+          {
+            "tool": "deploy_space",
+            "callId": "call_12978",
+            "state": null,
+            "status": null
+          },
+          {
+            "tool": "finish_task",
+            "callId": "call_560725",
+            "state": null,
+            "status": "complete"
+          }
+        ],
+        "finishTask": {
+          "observed": true,
+          "invocationCount": 2,
+          "resultStatuses": [
+            "complete"
+          ],
+          "finishReasons": [],
+          "flags": {},
+          "operationIds": []
+        },
+        "workflowToolOutcomes": {
+          "deploy_space": {
+            "statusEnums": [],
+            "booleans": {},
+            "operationIds": [],
+            "commitHashes": [
+              "04395b156f7e43346a240be3d824eef8104b7697"
+            ],
+            "toolCallCount": 4
+          },
+          "commit": {
+            "statusEnums": [],
+            "booleans": {},
+            "operationIds": [],
+            "commitHashes": [
+              "04395b156f7e43346a240be3d824eef8104b7697"
+            ],
+            "toolCallCount": 1
+          },
+          "finish_task": {
+            "statusEnums": [
+              "complete"
+            ],
+            "booleans": {},
+            "operationIds": [],
+            "commitHashes": [],
+            "toolCallCount": 2
+          }
+        },
+        "commitHashes": [
+          "04395b156f7e43346a240be3d824eef8104b7697"
+        ],
+        "sqliteContentLength": 23090,
+        "utf8Bytes": 23090,
+        "thinkStepStartCount": 16,
+        "distinctToolCallCount": 11
+      }
+    ],
+    "aggregateThinkStepStartCount": 41,
+    "aggregateDistinctToolCallCount": 27,
+    "finishTaskEvidence": {
+      "invocationCount": 3,
+      "resultStatuses": [
+        "complete"
+      ],
+      "successfulCompletion": null,
+      "toolReportedComplete": true,
+      "controllerCompletionGateAccepted": null,
+      "preflightPassed": null,
+      "previewVerified": null,
+      "browserVerified": null,
+      "cleanWorkingTree": null,
+      "commitCreated": null,
+      "productionPublish": null,
+      "unavailableFields": [
+        "preflightPassed",
+        "previewVerified",
+        "browserVerified",
+        "cleanWorkingTree",
+        "commitCreated",
+        "productionPublish"
+      ]
+    },
+    "transcriptDistinctCommitHashes": [
+      "04395b156f7e43346a240be3d824eef8104b7697",
+      "8f126d74e60c82780cb7d7556f23c2dd3469f58a"
+    ],
+    "transcriptDistinctCommitHashCount": 2,
+    "stepCountBasis": "Native assistant parts type=step-start; distinct tool-call IDs are reported separately."
+  },
+  "spaceDo": {
+    "rowsWritten": 0,
+    "deployments": [
+      {
+        "branch": "main",
+        "commitHash": "04395b156f7e43346a240be3d824eef8104b7697",
+        "deployedAt": "2026-10-01T17:32:16.549Z"
+      }
+    ],
+    "deploymentRowCount": 1,
+    "gitHead": {
+      "kind": "ref",
+      "branch": "main",
+      "commitHash": "04395b156f7e43346a240be3d824eef8104b7697"
+    },
+    "protectedLifecycleState": "NOT_QUERIED",
+    "deploymentEvidenceInterpretation": "One persisted current deployment row observed; distinct revision hashes from transcript are reported separately."
+  },
+  "backendCompletionEvidence": {
+    "source": "existing owner-authenticated snapshot; no new runtime request made",
+    "observedAt": "2026-10-01T17:44:04.131Z",
+    "runtimeState": "idle",
+    "runtimeStatus": "ready",
+    "connected": true,
+    "nativeThink": true,
+    "idleNoGeneration": true,
+    "customerTurnCount": 1,
+    "matchingCustomerPromptCount": 1,
+    "matchingCustomerTurnCommitHash": null,
+    "ownerRevisionCommitHash": "04395b156f7e43346a240be3d824eef8104b7697",
+    "workingTreeDirty": null
+  },
+  "customerUiGate": "VERIFYING",
+  "limitations": [
+    "Protected lifecycle storage was not queried; finish_task output is available only if present in native transcript structure.",
+    "Current customer UI gate remains VERIFYING; backend idle/revision evidence is not browser verification."
+  ],
+  "outboundCustomerSuggestion": {
+    "eventType": "user_suggestion",
+    "observedAt": "2026-10-01T17:27:17.813Z",
+    "matchedFullPrompt": true,
+    "customerTurnMatches": 1
+  },
+  "workflowOutcomeSummary": {
+    "finishTask": {
+      "invocationCount": 3,
+      "resultStatuses": [
+        "complete"
+      ],
+      "completionStatus": "TOOL_REPORTS_COMPLETE; CONTROLLER_GATE_UNVERIFIED",
+      "preflightPassed": null,
+      "previewVerified": null,
+      "browserVerified": null,
+      "cleanWorkingTree": null,
+      "commitCreated": null,
+      "productionPublish": null
+    },
+    "commit": {
+      "toolCallCount": 1,
+      "outcome": "HASHES_OBSERVED; STRUCTURED_SUCCESS_FLAG_UNAVAILABLE",
+      "distinctCommitHashes": [
+        "04395b156f7e43346a240be3d824eef8104b7697",
+        "8f126d74e60c82780cb7d7556f23c2dd3469f58a"
+      ]
+    },
+    "deploy": {
+      "toolCallCount": 7,
+      "persistedDeploymentRows": 1,
+      "currentDeploymentCommitHash": "04395b156f7e43346a240be3d824eef8104b7697",
+      "priorDeploymentOutcome": "UNAVAILABLE"
+    },
+    "preflight": "UNAVAILABLE_FROM_STRUCTURED_NATIVE_FIELDS",
+    "browserVerification": "UNAVAILABLE_FROM_STRUCTURED_NATIVE_FIELDS; CUSTOMER_UI_GATE_VERIFYING",
+    "cleanWorkingTree": "UNAVAILABLE; OWNER SNAPSHOT WORKING-TREE FIELD NULL"
+  }
+}

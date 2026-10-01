@@ -1,0 +1,519 @@
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index 0803e94..c659e9a 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -1,5 +1,6 @@
+ import { RpcTarget } from 'cloudflare:workers';
+ import { ThinkStreamForwarder } from '../../think/stream-forwarder';
++import { projectNativeTaskLifecycle } from '../../think/task-lifecycle-status';
+ import { emitThinkDiagnostic, observeThinkBoundary, withThinkDiagnosticSafety, type ThinkDiagnosticContext } from '../../think/diagnostics';
+ import { getAgentByName } from 'agents';
+ import type { UIMessage } from 'ai';
+@@ -52,6 +53,7 @@ import { InFlightLock, isCommitRevision } from '../../../services/deployer/platf
+  */
+ type ThinkAgentStub = {
+ 	configureVibe: (config: ThinkAgentConfig) => Promise<void>;
++configureOperationLimits: (limits: NonNullable<ThinkAgentConfig['operationLimits']>) => Promise<void>;
+ 	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
+ 	beginTask: (taskId: string, candidateConversationId: string) => Promise<ThinkTaskOperation>;
+ 	getTaskLifecycle: () => Promise<ThinkTaskLifecycle>;
+@@ -280,15 +282,8 @@ export class ThinkCodingBehavior
+ 			systemPrompt: this.buildSystemPrompt(modelName, aiModelConfig.provider),
+ 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
+ 		};
+-		const operationLimitEnv = this.env as unknown as Record<string, unknown>;
+ 		try {
+-			const operationLimits = parseThinkOperationLimits({
+-				maxContinuations: operationLimitEnv.THINK_OPERATION_MAX_CONTINUATIONS,
+-				maxModelCalls: operationLimitEnv.THINK_OPERATION_MAX_MODEL_CALLS,
+-				maxToolCalls: operationLimitEnv.THINK_OPERATION_MAX_TOOL_CALLS,
+-				maxElapsedMs: operationLimitEnv.THINK_OPERATION_MAX_ELAPSED_MS,
+-				maxCredits: operationLimitEnv.THINK_OPERATION_MAX_CREDITS,
+-			});
++			const operationLimits = this.operationLimitsFromEnvironment();
+ 			if (Object.keys(operationLimits).length > 0) config.operationLimits = operationLimits;
+ 		} catch (error) {
+ 			this.logger.warn('Ignoring invalid Think operation-limit environment configuration', error);
+@@ -347,6 +342,22 @@ export class ThinkCodingBehavior
+ 		].join('\n');
+ 	}
+ 
++	/** Read the same authoritative lifecycle used by the continuation driver. */
++	async getNativeTaskLifecycle() {
++		return projectNativeTaskLifecycle(await (await this.getThinkStub()).getTaskLifecycle());
++	}
++
++	private operationLimitsFromEnvironment() {
++		const env = this.env as unknown as Record<string, unknown>;
++		return parseThinkOperationLimits({
++			maxContinuations: env.THINK_OPERATION_MAX_CONTINUATIONS,
++			maxModelCalls: env.THINK_OPERATION_MAX_MODEL_CALLS,
++			maxToolCalls: env.THINK_OPERATION_MAX_TOOL_CALLS,
++			maxElapsedMs: env.THINK_OPERATION_MAX_ELAPSED_MS,
++			maxCredits: env.THINK_OPERATION_MAX_CREDITS,
++		});
++	}
++
+ 	/**
+ 	 * Bootstrap an empty SpaceDO: write a marker file and commit so the DO is
+ 	 * instantiated with a `main` branch and a valid HEAD.
+@@ -534,6 +545,9 @@ export class ThinkCodingBehavior
+ 	 */
+ 	private async runPrompt(text: string, taskId: string): Promise<void> {
+ 		const stub = await this.getThinkStub();
++		// Refresh future-operation policy for existing agents, without rewriting
++		// the persisted limits of an operation recovered by beginTask.
++		await stub.configureOperationLimits(this.operationLimitsFromEnvironment());
+ 		const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId());
+ 		const initialLifecycle = await stub.getTaskLifecycle();
+ 		if (initialLifecycle.status !== 'RUNNING') return;
+diff --git a/worker/agents/core/codingAgent.ts b/worker/agents/core/codingAgent.ts
+index 97bd94a..b6a2df3 100644
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -282,8 +282,20 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+             } catch (error) {
+                 this.logger().error('Error getting preview URL:', error);
+             }
++            let nativeTaskLifecycle;
++            if (this.behavior instanceof ThinkCodingBehavior) {
++                try {
++                    nativeTaskLifecycle = await this.behavior.getNativeTaskLifecycle();
++                } catch {
++                    sendToConnection(connection, WebSocketMessageResponses.ERROR, {
++                        error: 'Native task status could not be read.',
++                    });
++                    return;
++                }
++            }
+             sendToConnection(connection, WebSocketMessageResponses.AGENT_CONNECTED, {
+                 state: this.state,
++                ...(nativeTaskLifecycle ? { nativeTaskLifecycle } : {}),
+                 templateDetails: this.behavior.getTemplateDetails(),
+                 previewUrl: previewUrl,
+                     ...(this.state.behaviorType === 'think' && this.env.ENABLE_USER_ACCOUNT_DEPLOY !== 'true'
+diff --git a/worker/agents/think/ThinkAgent.ts b/worker/agents/think/ThinkAgent.ts
+index 4535eb7..f8c350e 100644
+--- a/worker/agents/think/ThinkAgent.ts
++++ b/worker/agents/think/ThinkAgent.ts
+@@ -35,6 +35,7 @@ import {
+ 	recordThinkOperation,
+ 	resolveThinkTaskStart,
+ 	reserveThinkTaskResource,
++parseThinkOperationLimits,
+ 	recoverThinkTaskOperation,
+ 	readThinkCurrentRevisionEvidence,
+ 	sameSignedPreviewUrl,
+@@ -1177,7 +1178,17 @@ export class ThinkAgent extends Think<Env> {
+ 	 * lazily, so a refresh is what actually pulls it in for a new app instead of
+ 	 * any stale cached value.
+ 	 */
+-	async configureVibe(config: ThinkAgentConfig): Promise<void> {
++/** Update future-operation policy only; persisted in-flight limits are untouched. */
++async configureOperationLimits(limits: NonNullable<ThinkAgentConfig['operationLimits']>): Promise<void> {
++const config = this.getConfig<ThinkAgentConfig>();
++if (!config) throw new Error('Think operation configuration is unavailable.');
++this.configure<ThinkAgentConfig>({
++...config,
++operationLimits: { ...config.operationLimits, ...parseThinkOperationLimits(limits) },
++});
++}
++
++async configureVibe(config: ThinkAgentConfig): Promise<void> {
+ 		this.configure<ThinkAgentConfig>(config);
+ 		try {
+ 			await this.session?.refreshSystemPrompt();
+diff --git a/worker/agents/think/operation-config-refresh.test.ts b/worker/agents/think/operation-config-refresh.test.ts
+new file mode 100644
+index 0000000..043bec5
+--- /dev/null
++++ b/worker/agents/think/operation-config-refresh.test.ts
+@@ -0,0 +1,119 @@
++import { describe, expect, it } from 'vitest';
++import thinkAgentSource from './ThinkAgent.ts?raw';
++import thinkBehaviorSource from '../core/behaviors/think.ts?raw';
++import {
++	createThinkTaskOperation,
++	parseThinkOperationLimits,
++	recoverThinkTaskOperation,
++} from './finish-task-tool';
++
++describe('Think operation config refresh', () => {
++	it('models the configured-operation contract: preserves config, recovers old limits, applies 250 to the next operation', () => {
++		const originalConfig = {
++			userId: 'owner-123',
++			model: {
++				baseURL: 'https://gateway.example/compat',
++				apiKey: 'provider-key',
++				modelName: 'model-a',
++				headers: {
++					Authorization: 'Bearer provider-auth',
++					'cf-aig-authorization': 'Bearer gateway-auth',
++				},
++			},
++			systemPrompt: 'Project context and system instructions.',
++			previewUrl: 'https://preview.example/app',
++			operationLimits: {
++				maxContinuations: 4,
++				maxModelCalls: 17,
++				maxToolCalls: 33,
++				maxElapsedMs: 900_000,
++				maxCredits: 100,
++			},
++		};
++		const configured = {
++			...originalConfig,
++			operationLimits: {
++				...originalConfig.operationLimits,
++				...parseThinkOperationLimits({ maxCredits: 250 }),
++			},
++		};
++
++		const oldOperation = {
++			...createThinkTaskOperation('existing-owner-task', 'conversation-1', originalConfig.operationLimits),
++			modelCalls: 7,
++			toolCalls: 9,
++			creditsConsumed: 14,
++		};
++		expect(configured).toMatchObject({
++			userId: 'owner-123',
++			model: {
++				apiKey: 'provider-key',
++				headers: {
++					Authorization: 'Bearer provider-auth',
++					'cf-aig-authorization': 'Bearer gateway-auth',
++				},
++			},
++			systemPrompt: 'Project context and system instructions.',
++			previewUrl: 'https://preview.example/app',
++			operationLimits: {
++				maxContinuations: 4,
++				maxModelCalls: 17,
++				maxToolCalls: 33,
++				maxElapsedMs: 900_000,
++				maxCredits: 250,
++			},
++		});
++		const recovered = recoverThinkTaskOperation(oldOperation, configured.operationLimits);
++		expect(recovered).toMatchObject({
++			limits: originalConfig.operationLimits,
++			modelCalls: 7,
++			toolCalls: 9,
++			creditsConsumed: 14,
++		});
++		expect(createThinkTaskOperation(
++			'next-owner-task',
++			'conversation-2',
++			configured.operationLimits,
++		).limits).toEqual({
++			...originalConfig.operationLimits,
++			maxCredits: 250,
++		});
++	});
++
++	it('checks source wiring (not rendered SDK behavior) for env refresh before terminal owner-task return', () => {
++		const getter = thinkBehaviorSource.match(
++			/private operationLimitsFromEnvironment\(\)\s*\{[\s\S]*?\n\t\}/,
++		)?.[0];
++		expect(getter).toContain('return parseThinkOperationLimits({');
++		for (const [limit, environmentName] of [
++			['maxContinuations', 'THINK_OPERATION_MAX_CONTINUATIONS'],
++			['maxModelCalls', 'THINK_OPERATION_MAX_MODEL_CALLS'],
++			['maxToolCalls', 'THINK_OPERATION_MAX_TOOL_CALLS'],
++			['maxElapsedMs', 'THINK_OPERATION_MAX_ELAPSED_MS'],
++			['maxCredits', 'THINK_OPERATION_MAX_CREDITS'],
++		]) {
++			expect(getter).toContain(`${limit}: env.${environmentName}`);
++		}
++
++		const runPrompt = thinkBehaviorSource.match(
++			/private async runPrompt\([\s\S]*?(?=\n\t(?:private|protected|public|override)\s|\n\})/,
++		)?.[0];
++		expect(runPrompt).toBeDefined();
++		const refreshIndex = runPrompt!.indexOf('await stub.configureOperationLimits(this.operationLimitsFromEnvironment());');
++		const beginIndex = runPrompt!.indexOf('await stub.beginTask(taskId');
++		const terminalCheckIndex = runPrompt!.indexOf("if (initialLifecycle.status !== 'RUNNING') return;");
++		const driverIndex = runPrompt!.indexOf('driveThinkTaskOperation({');
++		expect(refreshIndex).toBeGreaterThanOrEqual(0);
++		expect(refreshIndex).toBeLessThan(beginIndex);
++		expect(beginIndex).toBeLessThan(terminalCheckIndex);
++		expect(terminalCheckIndex).toBeLessThan(driverIndex);
++
++		const configureLimits = thinkAgentSource.match(
++			/async configureOperationLimits\([\s\S]*?\n\t\}/,
++		)?.[0];
++		expect(configureLimits).toContain('...config');
++		expect(configureLimits).toContain('...config.operationLimits');
++		expect(configureLimits).toContain('...parseThinkOperationLimits(limits)');
++		expect(configureLimits).toContain('operationLimits: { ...config.operationLimits, ...parseThinkOperationLimits(limits) }');
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/task-lifecycle-status.test.ts b/worker/agents/think/task-lifecycle-status.test.ts
+new file mode 100644
+index 0000000..6cfe305
+--- /dev/null
++++ b/worker/agents/think/task-lifecycle-status.test.ts
+@@ -0,0 +1,18 @@
++import { describe, expect, it } from 'vitest';
++import { projectNativeTaskLifecycle } from './task-lifecycle-status';
++
++describe('native owner lifecycle projection', () => {
++	it('uses native terminal state without leaking its summary', () => {
++		const native = { status: 'INCOMPLETE_RESOURCE_LIMIT' as const, reason: 'credit_limit',
++			updatedAt: 1234, summary: 'private details' };
++		expect(projectNativeTaskLifecycle(native)).toEqual({
++			status: 'INCOMPLETE_RESOURCE_LIMIT', reason: 'credit_limit', updatedAt: 1234,
++		});
++		expect(native.status).toBe('INCOMPLETE_RESOURCE_LIMIT');
++	});
++	it('excludes arbitrary reason strings', () => {
++		expect(projectNativeTaskLifecycle({
++			status: 'BLOCKED', updatedAt: 1, summary: 'private', reason: 'private text',
++		})).toEqual({ status: 'BLOCKED', updatedAt: 1 });
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/task-lifecycle-status.ts b/worker/agents/think/task-lifecycle-status.ts
+new file mode 100644
+index 0000000..d060af4
+--- /dev/null
++++ b/worker/agents/think/task-lifecycle-status.ts
+@@ -0,0 +1,20 @@
++import type { ThinkTaskLifecycle } from './finish-task-tool';
++
++const statuses = new Set(['RUNNING', 'COMPLETE', 'BLOCKED', 'INCOMPLETE_RESOURCE_LIMIT']);
++const resourceReasons = new Set([
++	'credit_limit', 'model_call_limit', 'tool_call_limit', 'elapsed_time_limit',
++	'available_credits_limit', 'continuation_budget_exhausted',
++]);
++
++/** Owner-visible metadata from the existing native lifecycle, never its summary. */
++export function projectNativeTaskLifecycle(lifecycle: ThinkTaskLifecycle) {
++	if (!statuses.has(lifecycle.status) || !Number.isFinite(lifecycle.updatedAt)) {
++		throw new Error('Native task lifecycle is unavailable.');
++	}
++	return {
++		status: lifecycle.status,
++		updatedAt: lifecycle.updatedAt,
++		...(lifecycle.reason && resourceReasons.has(lifecycle.reason)
++			? { reason: lifecycle.reason } : {}),
++	};
++}
+\ No newline at end of file
+diff --git a/worker/agents/think/task-operation.test.ts b/worker/agents/think/task-operation.test.ts
+index dc5ab45..96233e3 100644
+--- a/worker/agents/think/task-operation.test.ts
++++ b/worker/agents/think/task-operation.test.ts
+@@ -19,7 +19,9 @@ import {
+ 	resolveThinkOperationLimits,
+ 	parseThinkOperationLimits,
+ 	reserveThinkTaskResource,
++	createFinishTaskTool,
+ } from './finish-task-tool';
++import { THINK_MODEL_CONFIG } from './model-config';
+ 
+ describe('durable Think task operation state', () => {
+ 	it('keeps operation identity and continuation budget across serialization/reconnect', () => {
+@@ -447,4 +449,200 @@ describe('durable Think task operation state', () => {
+ 		expect(calls).toBe(0);
+ 		expect(result.lifecycle.status).toBe('COMPLETE');
+ 	});
++
++	it('enforces the attached 25-step, four-continuation, 15-minute, 250-credit envelope', () => {
++		const limits = resolveThinkOperationLimits({
++			maxContinuations: 4,
++			maxElapsedMs: 900_000,
++			maxCredits: 250,
++		});
++		let operation = createThinkTaskOperation('part5-envelope', 'conversation-stable', limits);
++		const start = operation.startedAt;
++		const allowedMilestones = new Map([
++			[25, 50],
++			[50, 100],
++			[51, 102],
++			[125, 250],
++		]);
++
++		expect(THINK_MODEL_CONFIG.creditCost).toBe(2);
++		expect(operation.limits).toEqual({
++			maxContinuations: 4,
++			maxModelCalls: 650,
++			maxToolCalls: 1300,
++			maxElapsedMs: 900_000,
++			maxCredits: 250,
++		});
++
++		for (let call = 1; call <= 125; call++) {
++			const reservation = reserveThinkTaskResource(operation, 'model', start, THINK_MODEL_CONFIG.creditCost);
++			expect(reservation.limitExceeded).toBeUndefined();
++			operation = reservation.operation;
++			if (allowedMilestones.has(call)) {
++				expect(operation.modelCalls).toBe(call);
++				expect(operation.creditsConsumed).toBe(allowedMilestones.get(call));
++			}
++			if (call % 25 === 0 && call < 125) operation = advanceThinkTaskOperation(operation);
++		}
++		expect(operation.continuationCount).toBe(4);
++		expect(reserveThinkTaskResource(operation, 'model', start, THINK_MODEL_CONFIG.creditCost)).toMatchObject({
++			limitExceeded: 'credit_limit',
++			operation: { modelCalls: 125, creditsConsumed: 250 },
++		});
++	});
++
++	it('charges model reservations only; tool and checkpoint reservations do not spend or refund credits', () => {
++		const initial = createThinkTaskOperation('resource-accounting', 'conversation-stable', {
++			maxCredits: 250,
++			maxElapsedMs: 900_000,
++		});
++		const firstModel = reserveThinkTaskResource(initial, 'model', initial.startedAt, THINK_MODEL_CONFIG.creditCost);
++		const afterTool = reserveThinkTaskResource(firstModel.operation, 'tool', initial.startedAt);
++		const afterCheckpoint = reserveThinkTaskResource(afterTool.operation, 'checkpoint', initial.startedAt);
++
++		expect(firstModel.operation.creditsConsumed).toBe(2);
++		expect(afterTool.operation).toMatchObject({ toolCalls: 1, modelCalls: 1, creditsConsumed: 2 });
++		expect(afterCheckpoint.operation).toMatchObject({ toolCalls: 1, modelCalls: 1, creditsConsumed: 2 });
++		const rejectedModel = reserveThinkTaskResource(
++			{ ...afterCheckpoint.operation, creditsConsumed: 249 },
++			'model',
++			initial.startedAt,
++			THINK_MODEL_CONFIG.creditCost,
++		);
++		expect(rejectedModel.limitExceeded).toBe('credit_limit');
++		expect(rejectedModel.operation.creditsConsumed).toBe(249);
++	});
++
++	it('keeps elapsed-time enforcement independent from progress and continuation decisions', () => {
++		const operation = createThinkTaskOperation('independent-limits', 'conversation-stable', {
++			maxContinuations: 4,
++			maxElapsedMs: 900_000,
++			maxCredits: 250,
++		});
++		const withProgress = recordThinkOperation(operation, 'workspace-operation:changed');
++
++		expect(reserveThinkTaskResource(withProgress, 'tool', operation.startedAt + 899_999).limitExceeded).toBeUndefined();
++		expect(reserveThinkTaskResource(withProgress, 'tool', operation.startedAt + 900_000).limitExceeded)
++			.toBe('elapsed_time_limit');
++		expect(decideThinkTaskContinuation('RUNNING', withProgress, 'workspace-operation:before')).toBe('CONTINUE');
++		expect(decideThinkTaskContinuation('RUNNING', withProgress, 'workspace-operation:changed')).toBe('BLOCKED');
++	});
++
++	it('recovers cumulative usage and preserves fake workspace, revision, and preview evidence', async () => {
++		const evidence = await readThinkCurrentRevisionEvidence(async (method) => {
++			if (method === 'gitStatus') return [{ filepath: 'src/app.ts', workdir: 2 }];
++			if (method === 'gitLog') return [{ oid: 'head-after-edit' }];
++			if (method === 'gitBranch') return { current: 'main', branches: ['main'] };
++			return { branch: 'main', commit_hash: 'preview-deployed-sha' };
++		}, 'main');
++		const seeded = createThinkTaskOperation('recovered-envelope', 'conversation-stable', {
++			maxContinuations: 4,
++			maxElapsedMs: 900_000,
++			maxCredits: 250,
++		});
++		const usage = {
++			...recordThinkOperation(seeded, createThinkOperationFingerprint('workspace-operation', {
++				headCommitHash: evidence.headCommitHash,
++				workspaceStatusFingerprint: evidence.workspaceStatusFingerprint,
++			})),
++			modelCalls: 51,
++			toolCalls: 7,
++			creditsConsumed: 102,
++			startingHead: evidence.headCommitHash,
++			availableMeteredCredits: 80,
++			meteredCreditsInitialized: true,
++			lastValidationFingerprint: 'browser-validation:verified',
++		};
++		const recovered = recoverThinkTaskOperation(
++			JSON.parse(JSON.stringify(advanceThinkTaskOperation(usage))),
++			{ maxCredits: 1, maxElapsedMs: 1 },
++			usage.startedAt + 100,
++		);
++
++		expect(evidence).toMatchObject({
++			headCommitHash: 'head-after-edit',
++			headBranch: 'main',
++			workingTreeClean: false,
++			previewCommitHash: 'preview-deployed-sha',
++			previewBranch: 'main',
++		});
++		expect(recovered).toMatchObject({
++			continuationCount: 1,
++			modelCalls: 51,
++			toolCalls: 7,
++			creditsConsumed: 102,
++			startingHead: 'head-after-edit',
++			availableMeteredCredits: 80,
++			meteredCreditsInitialized: true,
++			lastWorkspaceFingerprint: usage.lastWorkspaceFingerprint,
++			lastValidationFingerprint: 'browser-validation:verified',
++			limits: { maxCredits: 250, maxElapsedMs: 900_000 },
++		});
++	});
++
++	it('does not resend an original prompt or allow a forced resource terminal state to become COMPLETE', async () => {
++		let operation = markThinkTaskChatStarted(createThinkTaskOperation(
++			'forced-resource-terminal',
++			'conversation-stable',
++			{ maxContinuations: 4, maxElapsedMs: 900_000, maxCredits: 250 },
++		), 0);
++		let lifecycle = {
++			status: 'INCOMPLETE_RESOURCE_LIMIT' as const,
++			summary: 'The cumulative credit limit was reached.',
++			reason: 'credit_limit',
++			updatedAt: 10,
++		};
++		const sent: string[] = [];
++		const stub = {
++			getTaskLifecycle: async () => lifecycle,
++			getTaskOperation: async () => operation,
++			recoverPendingTaskChat: async () => 'PERSISTED_INCOMPLETE' as const,
++			markTaskChatStarted: async () => operation,
++			markTaskChatResolved: async () => operation,
++			advanceTaskOperation: async () => operation,
++			stopTask: async () => {},
++		};
++		const result = await driveThinkTaskOperation({
++			stub,
++			initialOperation: operation,
++			initialPrompt: 'the original attached user request',
++			continuationPrompt: () => '__THINK_INTERNAL_CONTINUATION__: resume the saved operation',
++			chat: async (prompt) => { sent.push(prompt); },
++		});
++		const finishTask = createFinishTaskTool({
++			getEvidence: async () => ({
++				preflightSucceeded: true,
++				deploySucceeded: true,
++				deployedCommitHash: 'same-sha',
++				headCommitHash: 'same-sha',
++				headBranch: 'main',
++				workingTreeClean: true,
++				previewCommitHash: 'same-sha',
++				previewBranch: 'main',
++				browserClean: true,
++				browserCommitHash: 'same-sha',
++				browserBranch: 'main',
++				browserPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++				configuredPreviewUrl: 'https://preview.example/space/a/preview/main/?token=signed',
++				deployedPreviewUrl: '/space/a/preview/main/',
++				deployedBranch: 'main',
++			}),
++			getForcedStatus: async () => 'INCOMPLETE_RESOURCE_LIMIT',
++			getForcedLifecycle: async () => lifecycle,
++			saveStatus: async (next) => {
++				lifecycle = next as typeof lifecycle;
++			},
++		});
++		const finishOutput = await finishTask.execute!({
++			status: 'COMPLETE',
++			summary: 'The task is complete.',
++		}, { toolCallId: 'finish-forced-terminal', messages: [], abortSignal: new AbortController().signal });
++
++		expect(sent).toEqual([]);
++		expect(result.lifecycle.status).toBe('INCOMPLETE_RESOURCE_LIMIT');
++		expect(JSON.parse(String(finishOutput))).toMatchObject({
++			status: 'INCOMPLETE_RESOURCE_LIMIT',
++			reason: 'credit_limit',
++		});
++	});
+ });
+\ No newline at end of file

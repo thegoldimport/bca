@@ -1,0 +1,16 @@
+{
+  "verifiedAt": "2026-10-01T19:06:14.335Z",
+  "status": "PASS",
+  "worker": "buildcustom-control-plane-launch",
+  "receiptPrefix": "preview-fetch-corrected",
+  "sourceCommit": "6cea62eacf8ba4eb17fd53fbfc8872e4eed14b8b",
+  "servingVersion": "0e01f7dc-51c4-4736-9873-ea431abc823c",
+  "mainModule": "worker.js",
+  "differences": [],
+  "reconstructedModules": [
+    {
+      "name": "worker.js",
+      "sha256": "bb15915ab8aa778693403473454edab780bfd7d8e0368535e071f98400ec44e3"
+    }
+  ]
+}

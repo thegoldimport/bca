@@ -60,6 +60,7 @@ function fixture({
   changed = false,
   savedOperation = false,
   runtimeStatus = "ready",
+  nativeTaskLifecycle = null,
   rejectHandshakes = 0,
   closeAcceptedSockets = 0,
   accelerateSocketRetries = false,
@@ -68,6 +69,7 @@ function fixture({
     projectId: PROJECT_ID,
     runtimeProvider: "stock-think",
     runtimeStatus,
+    nativeTaskLifecycle,
     rejectHandshakes,
     closeAcceptedSockets,
     accelerateSocketRetries,
@@ -79,7 +81,7 @@ function fixture({
     ...(savedOperation ? {
       operationBaseline: {
         revision: BASELINE,
-        startedAt: 1_758_838_800_000,
+        startedAt: Date.now() - 60_000,
         promptAttempted: true,
         startingTurnCount: BASE_TURNS.length,
         promptDigest: PROMPT_DIGEST,
@@ -154,6 +156,7 @@ function installBrowserHarness(initialFixture) {
         lastDeployedCommit: state.deployedRevision,
         previewUrl: availablePreviewUrl,
       },
+      ...(state.nativeTaskLifecycle ? { nativeTaskLifecycle: state.nativeTaskLifecycle } : {}),
     };
   };
   const json = (value, statusCode = 200) => new Response(JSON.stringify(value), {
@@ -383,6 +386,10 @@ function installBrowserHarness(initialFixture) {
       state.runtimeStatus = runtimeStatus;
       persist();
     },
+    setNativeTaskLifecycle(nativeTaskLifecycle) {
+      state.nativeTaskLifecycle = nativeTaskLifecycle;
+      persist();
+    },
     delayNextRevision() {
       delayNextRevision = true;
     },
@@ -610,6 +617,141 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         const stats = await statsOf(page);
         assert.ok(stats.api.filter((entry) => entry.path.endsWith("/runtime/files")).length >= 1);
         assert.equal(stats.frameworkEnvelopesFiltered, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("owner resource-limit status ends reconnect recovery without completing or replacing the saved revision", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({
+        changed: true,
+        savedOperation: true,
+        nativeTaskLifecycle: {
+          status: "INCOMPLETE_RESOURCE_LIMIT",
+          reason: "operation credit ceiling",
+          updatedAt: Date.now() - 10_000,
+        },
+      }));
+      try {
+        await waitForState(page, "error");
+        const completion = await page.$eval('[data-testid="native-completion-state"]', (node) => ({
+          phase: node.getAttribute("data-state"),
+          text: node.textContent || "",
+        }));
+        assert.equal(completion.phase, "error", "native resource exhaustion is terminal and non-success");
+        assert.match(completion.text, /resource limit/i);
+        assert.match(completion.text, /incomplete, not complete/i);
+        assert.doesNotMatch(completion.text, /SUCCESS|COMPLETE ·/);
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true);
+        assert.equal(await page.$eval("iframe", (frame) => frame.getAttribute("src")), `${serverUrl}/__native_completion_preview/?revision=${EDITED}`);
+        const snapshot = await page.evaluate(() => window.__nativeCompletionHarness.snapshot());
+        assert.equal(snapshot.currentRevision, EDITED, "the pre-existing authoritative revision is unchanged");
+        assert.equal(snapshot.stats.previewPosts, 0, "recovery does not redeploy the preserved preview");
+        assert.equal(snapshot.stats.userSuggestions, 0, "reconnect does not resend the saved instruction");
+        assert.equal(snapshot.stats.publishRequests, 0);
+        assert.equal(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null,
+          "the authoritative terminal outcome safely clears the recovery baseline");
+
+        // The owner may still expose the previous terminal marker after
+        // recovery; that marker must not prevent a new, explicit customer send.
+        await page.type('[data-testid="input-editor-chat"]', "A new, explicitly requested instruction");
+        await page.click('[data-testid="button-send-chat"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        assert.equal((await statsOf(page)).userSuggestions, 1, "only the explicit new send reaches the runtime");
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("live native controller treats a terminal resource-limit stream frame as an error without auto-resend", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(() => window.__nativeCompletionHarness.emit({
+          type: "error",
+          nativeTaskLifecycle: {
+            status: "INCOMPLETE_RESOURCE_LIMIT",
+            reason: "cumulative resource ceiling",
+            updatedAt: Date.now() + 60_000,
+          },
+        }));
+        await waitForState(page, "error");
+        await page.waitForFunction(() => {
+          const input = document.querySelector('[data-testid="input-editor-chat"]');
+          return input && !input.disabled;
+        }, { timeout: 10_000 });
+        const completion = await page.$eval('[data-testid="native-completion-state"]', (node) => ({
+          phase: node.getAttribute("data-state"),
+          text: node.textContent || "",
+        }));
+        assert.equal(completion.phase, "error");
+        assert.match(completion.text, /resource limit/i);
+        assert.match(completion.text, /incomplete, not complete/i);
+        assert.equal((await statsOf(page)).userSuggestions, 1, "the sent customer instruction is never automatically resent");
+        assert.equal((await statsOf(page)).publishRequests, 0);
+        assert.equal((await statsOf(page)).previewPosts, 0);
+        assert.equal((await page.evaluate(() => window.__nativeCompletionHarness.snapshot())).currentRevision, BASELINE);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("authoritative resource limit overrides a stale working label but keeps input disabled until host status is idle", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(() => {
+          const harness = window.__nativeCompletionHarness;
+          harness.setRuntime({ active: true });
+          harness.setNativeTaskLifecycle({
+            status: "INCOMPLETE_RESOURCE_LIMIT",
+            reason: "resource ceiling",
+            updatedAt: Date.now() + 60_000,
+          });
+          harness.closeUnexpectedly();
+        });
+        await page.evaluate(async () => window.__nativeCompletionHarness.fastForward(31_000));
+        await waitForState(page, "error");
+        assert.match(await page.$eval('[data-testid="native-completion-state"]', (node) => node.textContent || ""), /resource limit/i);
+        assert.notEqual(await stateOf(page), "recovering", "the terminal task state ends recovery despite a stale host working flag");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.disabled), true,
+          "the explicit host working flag keeps input unavailable");
+
+        await page.evaluate(() => window.__nativeCompletionHarness.setRuntime({ active: false }));
+        await page.waitForFunction(() => {
+          const input = document.querySelector('[data-testid="input-editor-chat"]');
+          return input && !input.disabled;
+        }, { timeout: 10_000 });
+        assert.equal(await stateOf(page), "error", "clearing the coarse host flag does not turn the task into success");
+        const stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 1, "terminal handling never resends the instruction");
+        assert.equal(stats.previewPosts, 0);
+        assert.equal(stats.publishRequests, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("a prior terminal owner status is visible on reopen but cannot abort a newer explicit operation", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({
+        nativeTaskLifecycle: {
+          status: "INCOMPLETE_RESOURCE_LIMIT",
+          reason: "previous operation reached its resource ceiling",
+          updatedAt: Date.now() - 60 * 60 * 1000,
+        },
+      }));
+      try {
+        await waitForState(page, "error");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true);
+        await page.type('[data-testid="input-editor-chat"]', "Start a new operation");
+        await page.click('[data-testid="button-send-chat"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        await page.evaluate(async () => window.__nativeCompletionHarness.fastForward(31_000));
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .filter((entry) => entry.path.endsWith("/runtime/status")).length >= 2, { timeout: 10_000 });
+        assert.notEqual(await stateOf(page), "error", "an older updatedAt must not terminate the newer operation");
+        assert.notEqual(await stateOf(page), "success", "the new operation remains unverified");
+        assert.equal((await statsOf(page)).userSuggestions, 1, "the only send was explicitly requested by the customer");
       } finally {
         await page.close();
       }

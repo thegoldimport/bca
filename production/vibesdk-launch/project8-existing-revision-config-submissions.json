@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-01T20:17:35.910Z",
+  "results": [
+    {
+      "rows": [
+        {
+          "key": "skillsFingerprint",
+          "configured_limits": null
+        },
+        {
+          "key": "_think_config",
+          "configured_limits": "{\"maxContinuations\":4,\"maxElapsedMs\":900000}"
+        }
+      ],
+      "rowsWritten": 0
+    },
+    {
+      "rows": [],
+      "rowsWritten": 0
+    }
+  ]
+}

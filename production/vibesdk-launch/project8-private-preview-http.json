@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-01T17:42:18.709Z",
+  "statusHttp": 200,
+  "previewHttpStatus": 200,
+  "contentType": "text/html; charset=utf-8",
+  "htmlBytes": 92040,
+  "title": "Pulse CRM - Mini Sales Dashboard",
+  "crmMarkers": {
+    "totalLeads": true,
+    "qualifiedLeads": true,
+    "pipelineValue": true,
+    "won": true,
+    "addLead": true,
+    "statuses": true
+  },
+  "externalStylesheets": 1
+}

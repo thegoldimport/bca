@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-01T19:47:16.593Z",
+  "rowsWritten": 0,
+  "matchingCustomerEditMessages": 1,
+  "internalContinuationMessages": 2,
+  "rows": [
+    {
+      "id": "d1820e58-a660-43aa-8228-aab3ffaba78d",
+      "session_id": "",
+      "parent_id": "126d3316-1036-4e6d-886a-c620d508721b",
+      "role": "user",
+      "created_at": "2026-10-01 19:37:09",
+      "bytes": 940,
+      "matchesAuthorizedEdit": true,
+      "internalContinuation": false,
+      "textLengths": [
+        825
+      ],
+      "operationIdentifiers": []
+    },
+    {
+      "id": "02f6e561-0140-4df3-80ae-7323313dec11",
+      "session_id": "",
+      "parent_id": "d1820e58-a660-43aa-8228-aab3ffaba78d",
+      "role": "assistant",
+      "created_at": "2026-10-01 19:39:20",
+      "bytes": 187263
+    },
+    {
+      "id": "3a3bd603-5f2f-4856-b6e0-5ba823c65df2",
+      "session_id": "",
+      "parent_id": "02f6e561-0140-4df3-80ae-7323313dec11",
+      "role": "user",
+      "created_at": "2026-10-01 19:39:20",
+      "bytes": 299,
+      "matchesAuthorizedEdit": false,
+      "internalContinuation": true,
+      "textLengths": [
+        203
+      ],
+      "operationIdentifiers": []
+    },
+    {
+      "id": "43a6b826-49b6-4146-915d-d6b87ec5fc62",
+      "session_id": "",
+      "parent_id": "95cefd17-5bb8-424e-9179-b9ef2f659c6e",
+      "role": "user",
+      "created_at": "2026-10-01 19:40:47",
+      "bytes": 299,
+      "matchesAuthorizedEdit": false,
+      "internalContinuation": true,
+      "textLengths": [
+        203
+      ],
+      "operationIdentifiers": []
+    },
+    {
+      "id": "95cefd17-5bb8-424e-9179-b9ef2f659c6e",
+      "session_id": "",
+      "parent_id": "3a3bd603-5f2f-4856-b6e0-5ba823c65df2",
+      "role": "assistant",
+      "created_at": "2026-10-01 19:40:47",
+      "bytes": 149700
+    }
+  ]
+}

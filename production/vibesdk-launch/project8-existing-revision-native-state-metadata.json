@@ -1,0 +1,99 @@
+{
+  "at": "2026-10-01T20:12:01.139Z",
+  "results": [
+    {
+      "columns": [
+        "id",
+        "request_id",
+        "status",
+        "created_at",
+        "completed_at"
+      ],
+      "rows": [
+        {
+          "id": "UEkSvd0gLiyi2RapGY6E0",
+          "request_id": "47a16db7-f702-4b76-a5cd-bb3081026dca",
+          "status": "completed",
+          "created_at": 1790875638045,
+          "completed_at": 1790875894439
+        },
+        {
+          "id": "gdNp0yb6rMLWE68t8Vvg_",
+          "request_id": "04120677-f6f8-4c39-a601-ba12832b4128",
+          "status": "completed",
+          "created_at": 1790875894692,
+          "completed_at": 1790875950267
+        },
+        {
+          "id": "jVtquNKIBm6bjqQzwzV5i",
+          "request_id": "dee1eac0-9597-4726-8bf8-b65ede55ad57",
+          "status": "completed",
+          "created_at": 1790883429737,
+          "completed_at": 1790883560444
+        },
+        {
+          "id": "hlUbRURjqepfrtN-pMf8o",
+          "request_id": "484849d1-06db-4bc4-96d8-7e34abdb4dd6",
+          "status": "completed",
+          "created_at": 1790883560643,
+          "completed_at": 1790883647424
+        },
+        {
+          "id": "cr1xhTRVkSNmrmPNSQLOQ",
+          "request_id": "690fbbfe-cb29-440b-843c-3b22e25ad095",
+          "status": "error",
+          "created_at": 1790883647615,
+          "completed_at": 1790883647656
+        }
+      ],
+      "rowsWritten": 0
+    },
+    {
+      "columns": [
+        "fiber_id",
+        "name",
+        "status",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "error_message"
+      ],
+      "rows": [],
+      "rowsWritten": 0
+    },
+    {
+      "columns": [
+        "id",
+        "key",
+        "type"
+      ],
+      "rows": [
+        {
+          "id": "cf_schema_version",
+          "key": null,
+          "type": "integer"
+        }
+      ],
+      "rowsWritten": 0
+    },
+    {
+      "columns": [
+        "id",
+        "name",
+        "created_at",
+        "snapshot_bytes"
+      ],
+      "rows": [],
+      "rowsWritten": 0
+    },
+    {
+      "columns": [
+        "id",
+        "callback",
+        "created_at"
+      ],
+      "rows": [],
+      "rowsWritten": 0
+    }
+  ]
+}

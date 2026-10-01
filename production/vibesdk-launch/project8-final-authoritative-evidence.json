@@ -1,0 +1,92 @@
+{
+  "at": "2026-10-01T17:44:05.181Z",
+  "snapshot": {
+    "at": "2026-10-01T17:44:04.131Z",
+    "status": {
+      "state": "idle",
+      "connected": true,
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "agentMatched": true,
+      "shouldBeGenerating": false,
+      "generationStatus": "idle",
+      "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "deploymentUrl": null,
+      "idleNoGeneration": true,
+      "terminalNoGeneration": true
+    },
+    "revision": {
+      "branch": "main",
+      "headCommitHash": "04395b156f7e43346a240be3d824eef8104b7697",
+      "statusLastDeployedCommit": null,
+      "matchingCustomerTurnCommitHash": null,
+      "spaceGitHeadCommitHash": null,
+      "spaceGitReadState": "NOT_REQUIRED",
+      "committedHeadVerified": true,
+      "workingTreeDirty": null,
+      "baselineKnown": true
+    },
+    "ownerRuntimeRevision": {
+      "httpStatus": 200,
+      "schemaValid": true,
+      "branch": "main",
+      "commitHash": "04395b156f7e43346a240be3d824eef8104b7697",
+      "source": "branch+commitHash",
+      "valid": true
+    },
+    "turns": {
+      "available": true,
+      "schemaValid": true,
+      "total": 1,
+      "customerTurnCount": 1,
+      "matchingCustomerPromptCount": 1,
+      "unmatchedPromptCount": 0,
+      "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+      "matchingCustomerPromptCommitHash": null
+    }
+  },
+  "thinkMessageMetadata": [
+    {
+      "id": "10d4ba7f-3054-444a-8690-fa677c37e18b",
+      "role": "user",
+      "createdAt": "2026-10-01 17:27:17",
+      "bytes": 888
+    },
+    {
+      "id": "4f880d23-cdd3-4d56-a8d1-d22e5611ce9f",
+      "role": "assistant",
+      "createdAt": "2026-10-01 17:31:34",
+      "bytes": 174416
+    },
+    {
+      "id": "cfaea899-a5c5-4cfd-9068-77d207cfbea2",
+      "role": "user",
+      "createdAt": "2026-10-01 17:31:34",
+      "bytes": 681
+    },
+    {
+      "id": "126d3316-1036-4e6d-886a-c620d508721b",
+      "role": "assistant",
+      "createdAt": "2026-10-01 17:32:30",
+      "bytes": 23090
+    }
+  ],
+  "deployments": [
+    {
+      "branch": "main",
+      "commitHash": "04395b156f7e43346a240be3d824eef8104b7697",
+      "deployedAt": 1790875936549
+    }
+  ],
+  "releaseCount": 0,
+  "turnMetadata": [
+    {
+      "responseBytes": 3932,
+      "activityCount": 0,
+      "commitHash": null,
+      "status": null
+    }
+  ],
+  "rowsWritten": 0,
+  "protectedLifecycleQueried": false
+}

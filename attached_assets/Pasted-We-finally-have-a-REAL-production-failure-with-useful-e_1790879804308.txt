@@ -1,0 +1,528 @@
+We finally have a REAL production failure with useful evidence.
+
+The continuous-coding lifecycle crossed the native Think boundary successfully.
+
+DO NOT redesign or modify the continuation system.
+
+DO NOT change maxSteps.
+
+DO NOT change continuation limits.
+
+DO NOT create Project 9.
+
+DO NOT create another fixture.
+
+DO NOT resend the original Project 8 customer request.
+
+DO NOT touch Project 5.
+
+DO NOT retry Project 6.
+
+DO NOT send anything to Project 7.
+
+DO NOT production Publish.
+
+We are now fixing ONE concrete generated-app/private-preview failure.
+
+==================================================
+ACCEPTED EVIDENCE FROM PROJECT 8
+==================================================
+
+Project:
+8
+
+Agent:
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Initial revision:
+2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8
+
+Final generated revision:
+04395b156f7e43346a240be3d824eef8104b7697
+
+Customer requests:
+1
+
+Duplicate customer requests:
+0
+
+Native Think passes:
+2
+
+Step markers:
+25 + 16 = 41
+
+Internal continuations:
+1
+
+The continuation was internal and was NOT presented as another customer
+request.
+
+Same mapped ThinkAgent/Space were retained.
+
+No provider failure established.
+
+No RPC failure established.
+
+Final revision coherence:
+owner revision, Space Git HEAD, and preview deployment agree.
+
+Preview:
+HTTP 200 and rendered in the normal BuildCustom editor.
+
+Production Publish:
+NO
+
+Production releases:
+0
+
+==================================================
+CONFIRMED APPLICATION FAILURE
+==================================================
+
+During NORMAL preview bootstrap, the generated CRM attempted this malformed
+request:
+
+/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/mainhttps://api/leads
+
+Chromium then blocked the request by CORS from origin:
+
+null
+
+Observed errors:
+
+net::ERR_FAILED
+
+Error loading leads: TypeError: Failed to fetch
+
+Result:
+
+The CRM rendered but displayed zero leads.
+
+This was observed during normal generated-app bootstrap.
+
+It was NOT a synthetic API probe.
+
+==================================================
+IMPORTANT CLASSIFICATION
+==================================================
+
+The multi-turn continuation mechanism itself is now PROVEN to have crossed
+the 25-step boundary:
+
+one customer request
+→ Think turn 1
+→ internal continuation
+→ Think turn 2
+
+Do not reopen continuation architecture unless evidence from this investigation
+directly implicates it.
+
+The current failure is at the generated-app/private-preview fetch boundary.
+
+We need to determine EXACTLY why the generated application produced or was
+transformed into:
+
+/_private_preview/<agent>/mainhttps://api/leads
+
+Do not guess.
+
+==================================================
+PHASE 1 — READ-ONLY ROOT CAUSE
+==================================================
+
+Start READ-ONLY.
+
+Inspect the authoritative Project 8 revision:
+
+04395b156f7e43346a240be3d824eef8104b7697
+
+Determine exactly how the generated CRM expresses its API request.
+
+Search the committed generated source for:
+
+api/leads
+/api/leads
+https://api/leads
+fetch(
+axios
+baseURL
+API_URL
+window.location
+location.origin
+
+Report the exact source expression responsible for loading leads.
+
+We need to know whether the generated source itself contains:
+
+fetch("https://api/leads")
+
+or:
+
+fetch("/api/leads")
+
+or some other construction.
+
+==================================================
+PHASE 2 — TRACE THE PREVIEW TRANSFORMATION
+==================================================
+
+Trace the exact request path from generated source through BuildCustom preview.
+
+Determine:
+
+1. Generated source URL expression
+2. Browser-visible preview document URL
+3. Any base URL/base tag involved
+4. Any generated-app fetch wrapper
+5. Any BuildCustom preview URL rewriting
+6. Any service worker/interceptor
+7. Any preview proxy remapping
+8. Final browser request URL
+
+Identify the FIRST point where the URL becomes incorrect.
+
+Specifically determine whether:
+
+A. the generated app incorrectly authored `https://api/leads`
+
+B. BuildCustom incorrectly rewrote a valid `/api/leads`
+
+C. preview remapping incorrectly concatenated a preview prefix with an
+   absolute URL
+
+D. a base URL/base tag transformed the request
+
+E. more than one of these occurred
+
+F. another concrete cause exists
+
+==================================================
+PHASE 3 — COMPARE EXPECTED PREVIEW API CONTRACT
+==================================================
+
+Inspect the CURRENT supported generated-app preview contract.
+
+Answer:
+
+How is a generated full-stack app supposed to call its own backend from
+preview?
+
+For example, determine whether the supported generated-app contract expects:
+
+fetch("/api/leads")
+
+or another documented/internal supported form.
+
+Then determine how the private preview proxy is supposed to route that request
+to the generated application's backend.
+
+Do not invent a new routing architecture.
+
+Use the existing intended BuildCustom/VibeSDK preview contract.
+
+==================================================
+PHASE 4 — DETERMINE RESPONSIBILITY
+==================================================
+
+Classify root cause as one of:
+
+GENERATED CODE BUG
+
+PREVIEW ROUTING BUG
+
+GENERATION/PROMPT CONTRACT BUG
+
+MULTIPLE CONTRIBUTING BUGS
+
+OTHER
+
+This distinction matters.
+
+If the generated agent authored an invalid API URL that our generation
+contract should have prevented, identify why.
+
+If valid generated code was corrupted by BuildCustom preview rewriting,
+identify the exact rewrite bug.
+
+If the generated code is valid according to our contract but the preview
+environment cannot support it, identify that mismatch.
+
+==================================================
+PHASE 5 — CHECK WHETHER THIS IS SYSTEMIC
+==================================================
+
+READ-ONLY inspect the relevant generation instructions/templates/runtime
+contracts.
+
+Determine whether another generated full-stack app using the normal supported
+API pattern would encounter the same failure.
+
+We need to know whether this is:
+
+PROJECT 8-SPECIFIC
+
+or
+
+SYSTEMIC TO GENERATED FULL-STACK PREVIEWS
+
+Do NOT generate another app to answer this.
+
+Use source/contracts/tests.
+
+==================================================
+PHASE 6 — IMPLEMENT THE SMALLEST CORRECT FIX
+==================================================
+
+Once root cause is proven, implement the smallest correct SYSTEM fix.
+
+Do NOT patch Project 8's generated code as the primary solution if the actual
+bug belongs to BuildCustom/VibeSDK preview infrastructure.
+
+Do NOT add a Project 8-specific exception.
+
+Do NOT broadly rewrite arbitrary URLs.
+
+Do NOT weaken preview sandbox security.
+
+Do NOT remove preview isolation.
+
+Do NOT add permissive CORS as a band-aid unless the architecture actually
+requires it.
+
+Do NOT allow arbitrary external URL proxying.
+
+Preserve:
+
+- preview sandbox isolation
+- owner/project authorization
+- private preview scoping
+- generated-app routing isolation
+- Task4B immutable publish behavior
+- Task6A auth/logout behavior
+- current continuous-coding lifecycle
+- public gateway behavior
+
+==================================================
+URL REWRITING SAFETY
+==================================================
+
+If the root cause is URL rewriting:
+
+Define explicit URL classes.
+
+At minimum distinguish:
+
+1. generated-app same-origin relative API paths
+   example:
+   /api/leads
+
+2. relative asset paths
+
+3. already-prefixed private-preview paths
+
+4. absolute http/https external URLs
+
+5. protocol-relative URLs
+
+6. data/blob URLs where relevant
+
+A same-origin generated-app API path may need preview scoping.
+
+An absolute URL must NEVER accidentally become:
+
+<preview-prefix>https://...
+
+Do not solve this with fragile string concatenation.
+
+Use URL-aware/path-aware logic and focused tests.
+
+==================================================
+PHASE 7 — TEST THE FIX LOCALLY/ISOLATED FIRST
+==================================================
+
+Add focused regression tests reproducing the exact Project 8 failure.
+
+At minimum test:
+
+- `/api/leads`
+- `/api/leads?status=Qualified`
+- relative generated-app asset
+- already-prefixed preview path
+- absolute https URL
+- absolute http URL
+- protocol-relative URL
+- malformed URL
+- path containing the text `http`
+- generated full-stack preview API request
+- sandbox isolation remains intact
+
+The exact malformed result:
+
+/_private_preview/<agent>/mainhttps://api/leads
+
+must be impossible after the fix.
+
+Also run the relevant existing:
+
+- preview tests
+- routing tests
+- owner isolation tests
+- sandbox tests
+- lifecycle tests
+- Task4B regression
+- Task6A auth regression
+- gateway regression
+- typecheck
+- build
+
+Do not run unrelated expensive AI generations.
+
+==================================================
+PHASE 8 — DEPLOY ONLY IF VERIFIED
+==================================================
+
+If and ONLY if:
+
+- root cause is proven
+- fix is narrow
+- focused tests pass
+- relevant regressions pass
+- typecheck/build pass
+
+then deploy ONLY the minimum production component required by the fix.
+
+Do not deploy unrelated components.
+
+Record previous version for rollback.
+
+Run non-AI smoke checks.
+
+==================================================
+PHASE 9 — REVERIFY PROJECT 8 WITHOUT NEW AI
+==================================================
+
+After deployment, return to the SAME Project 8.
+
+DO NOT send another coding request yet.
+
+Project 8 already has committed revision:
+
+04395b156f7e43346a240be3d824eef8104b7697
+
+Use that existing revision.
+
+Reopen its normal preview.
+
+Verify:
+
+- CRM loads
+- API request is correctly routed
+- no malformed preview URL
+- no CORS failure
+- leads load
+- seeded leads are visible
+- normal application bootstrap succeeds
+- browser console has no actionable generated-app errors
+
+If the existing committed Project 8 revision works after the infrastructure
+fix, that strongly proves this was a preview infrastructure/system issue.
+
+STOP there and report.
+
+Do NOT send another customer coding instruction under this authorization.
+
+==================================================
+IF PROJECT 8 STILL FAILS
+==================================================
+
+If the system fix is correct but Project 8's committed source itself contains
+invalid generated code requiring an application edit:
+
+DO NOT send an AI repair instruction yet.
+
+Report exactly what remains wrong.
+
+We will separately decide whether to authorize one targeted Project 8 repair.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+FIXED AND PROJECT 8 VERIFIED / SYSTEM FIXED BUT PROJECT 8 NEEDS APP REPAIR /
+ROOT CAUSE FOUND BUT FIX BLOCKED / ROOT CAUSE NOT ESTABLISHED
+
+ROOT CAUSE
+- generated source expression:
+- expected generated-app API contract:
+- preview document URL:
+- transformation/rewrite sequence:
+- first incorrect transformation:
+- classification:
+- Project 8-specific or systemic:
+- confidence:
+
+SYSTEM FIX
+- component:
+- files changed:
+- behavior before:
+- behavior after:
+- URL classes handled:
+- sandbox/security preserved:
+- lifecycle changed: MUST BE NO
+- maxSteps changed: MUST BE NO
+- continuation changed: MUST BE NO
+- gateway changed unless required:
+- Project 8 source changed: MUST BE NO during system fix
+
+TESTS
+- focused regression tests:
+- preview:
+- routing:
+- ownership:
+- sandbox:
+- lifecycle:
+- Task4B:
+- Task6A:
+- gateway:
+- typecheck:
+- build:
+
+DEPLOYMENT
+- component:
+- previous version:
+- new version:
+- rollout:
+- rollback ready:
+
+PROJECT 8 REVERIFICATION
+- revision:
+- new AI requests: MUST BE ZERO
+- preview HTTP:
+- malformed URL observed:
+- API request:
+- API response:
+- seeded leads visible:
+- CORS errors:
+- console errors:
+- browser verification:
+- result:
+
+CONTINUOUS CODING EVIDENCE
+- original customer requests: 1
+- original Think passes: 2
+- original internal continuations: 1
+- boundary crossing proven: YES
+- continuation mechanism modified by this fix: MUST BE NO
+
+PRODUCTION PUBLISH:
+MUST BE NO
+
+PROJECT 9 CREATED:
+MUST BE NO
+
+PROJECT 5 TOUCHED:
+MUST BE NO
+
+Then STOP.

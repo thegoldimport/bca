@@ -729,7 +729,33 @@ export function shapeThinkHistory(messages: unknown): Array<{
   return turns;
 }
 
-type ThinkStatusSnapshot = { shouldBeGenerating: boolean; previewUrl: string | null };
+const NATIVE_TASK_STATUSES = new Set(["RUNNING", "COMPLETE", "BLOCKED", "INCOMPLETE_RESOURCE_LIMIT"]);
+const NATIVE_RESOURCE_REASONS = new Set([
+  "credit_limit", "model_call_limit", "tool_call_limit", "elapsed_time_limit",
+  "available_credits_limit", "continuation_budget_exhausted",
+]);
+
+export function projectOwnerNativeTaskLifecycle(value: unknown):
+  { status: string; updatedAt: number; reason?: string } | undefined {
+  if (value === undefined) return undefined; // Older runtime versions remain compatible.
+  const lifecycle = value as Record<string, unknown> | null;
+  if (!lifecycle || typeof lifecycle.status !== "string" || !NATIVE_TASK_STATUSES.has(lifecycle.status)
+    || typeof lifecycle.updatedAt !== "number" || !Number.isFinite(lifecycle.updatedAt)) {
+    throw new RuntimeIdentityError("The native task status was incomplete.", 502);
+  }
+  return {
+    status: lifecycle.status,
+    updatedAt: lifecycle.updatedAt,
+    ...(typeof lifecycle.reason === "string" && NATIVE_RESOURCE_REASONS.has(lifecycle.reason)
+      ? { reason: lifecycle.reason } : {}),
+  };
+}
+
+type ThinkStatusSnapshot = {
+  shouldBeGenerating: boolean;
+  previewUrl: string | null;
+  nativeTaskLifecycle?: ReturnType<typeof projectOwnerNativeTaskLifecycle>;
+};
 
 async function stockStatusSnapshot(env: Env, request: Request, agentId: string): Promise<ThinkStatusSnapshot> {
   const socket = await openStockAgentWebSocket(env, request, agentId);
@@ -755,6 +781,9 @@ async function stockStatusSnapshot(env: Env, request: Request, agentId: string):
       try { message = JSON.parse(text); } catch {
         return finish(new RuntimeIdentityError("The native Think status returned an invalid frame.", 502));
       }
+      if (message?.type === "error") {
+        return finish(new RuntimeIdentityError("The native task status could not be loaded.", 502));
+      }
       if (message?.type !== "agent_connected") return;
       if (typeof message.state?.shouldBeGenerating !== "boolean") {
         return finish(new RuntimeIdentityError("The native Think status was incomplete.", 502));
@@ -762,9 +791,15 @@ async function stockStatusSnapshot(env: Env, request: Request, agentId: string):
       const previewUrl = message.previewUrl
         ? allowedPreviewUrl(env, agentId, message.previewUrl)
         : null;
+      let nativeTaskLifecycle;
+      try { nativeTaskLifecycle = projectOwnerNativeTaskLifecycle(message.nativeTaskLifecycle); }
+      catch {
+        return finish(new RuntimeIdentityError("The native task status was incomplete.", 502));
+      }
       finish(null, {
         shouldBeGenerating: message.state.shouldBeGenerating,
         previewUrl,
+        ...(nativeTaskLifecycle ? { nativeTaskLifecycle } : {}),
       });
     });
     socket.addEventListener("error", () => finish(new RuntimeIdentityError("The native Think status connection failed.", 502)));
@@ -860,6 +895,7 @@ export async function handleThinkRuntime(
       runtimeStatus: link.initialization_status,
       connected: true,
       files: fileCount,
+      ...(snapshot.nativeTaskLifecycle ? { nativeTaskLifecycle: snapshot.nativeTaskLifecycle } : {}),
       state: {
         shouldBeGenerating: snapshot.shouldBeGenerating,
         generation: { status: snapshot.shouldBeGenerating ? "running" : "idle" },

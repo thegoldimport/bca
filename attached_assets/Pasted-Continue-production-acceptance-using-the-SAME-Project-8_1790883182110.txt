@@ -1,0 +1,502 @@
+Continue production acceptance using the SAME Project 8.
+
+We are now testing the normal SECOND customer interaction with an existing
+generated application:
+
+existing working app
+→ customer asks for a change
+→ agent understands existing code
+→ agent edits existing app
+→ validates it
+→ commits a NEW revision
+→ updates/redeploys the private preview
+→ verifies the requested feature
+→ existing functionality still works
+
+This is the next normal customer workflow.
+
+DO NOT create Project 9.
+
+DO NOT create another fixture.
+
+DO NOT reset Project 8.
+
+DO NOT touch Project 5.
+
+DO NOT retry Project 6.
+
+DO NOT send anything to Project 7.
+
+DO NOT modify runtime/lifecycle infrastructure.
+
+DO NOT modify observability.
+
+DO NOT change maxSteps or continuation limits.
+
+DO NOT production Publish yet.
+
+==================================================
+ACCEPTED PROJECT 8 BASELINE
+==================================================
+
+Project:
+8
+
+Agent:
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Current accepted revision:
+
+04395b156f7e43346a240be3d824eef8104b7697
+
+The original build is accepted.
+
+Original build evidence:
+
+- exactly 1 customer request
+- 2 native Think passes
+- 25 + 16 native step markers
+- 1 internal continuation
+- no duplicate customer request
+- same ThinkAgent
+- same Space
+- committed revision produced
+- private preview deployed
+- preview HTTP 200
+
+The systemic preview routing bug discovered during that build has now been
+fixed.
+
+Current control plane:
+
+363353cd-76d3-4eb1-9df0-5bdd9a859083
+
+The UNCHANGED Project 8 revision was reverified after that fix:
+
+- preview HTTP 200
+- correctly scoped /api/leads HTTP 200
+- all 12 seeded leads loaded
+- seeded leads visible
+- malformed preview URL not observed
+- no generated-app API CORS failures
+- no actionable generated-app console errors
+- sandbox parent access denied
+- production releases = 0
+
+Therefore Project 8 is our accepted working baseline.
+
+==================================================
+STEP 1 — REOPEN PROJECT 8 NORMALLY
+==================================================
+
+Use the same legitimate Project 8 owner account.
+
+Use the normal production customer path:
+
+login
+→ dashboard
+→ Project 8
+→ editor
+
+Do not create another account.
+
+Do not bypass authentication.
+
+Do not create another project.
+
+Before sending the edit, perform ONLY a small customer-path baseline check.
+
+Confirm:
+
+- correct owner
+- Project 8
+- correct mapped agent
+- generation idle
+- current revision =
+  04395b156f7e43346a240be3d824eef8104b7697
+- current preview loads
+- /api/leads succeeds
+- 12 existing seeded leads are visible
+- no current actionable generated-app errors
+
+If those are true:
+
+PROCEED.
+
+Do not perform another broad harness or architecture review.
+
+==================================================
+STEP 2 — SEND EXACTLY ONE EDIT REQUEST
+==================================================
+
+Through the normal conversational BuildCustom editor, send exactly this
+customer request:
+
+"Add a lead details experience to the CRM.
+
+When I click a lead in the leads table, open a detailed view for that lead.
+
+The lead details view should show all of the lead's existing information,
+including name, company, email, status, source, estimated value, and created
+date.
+
+Add a Notes section where I can add and view notes for that lead.
+
+Add an Activity Timeline showing important activity for the lead in
+chronological order.
+
+Make the lead details experience feel like a natural part of the existing CRM
+and keep the same dark navy professional design.
+
+Make sure the existing dashboard, leads table, search, sorting, filtering,
+Add Lead, edit lead, delete lead, newest leads section, seeded data, and
+existing backend functionality continue to work.
+
+Verify the updated application works before completing the task."
+
+Send this ONCE.
+
+Count the instruction as sent only when the outbound customer
+user_suggestion/instruction frame is actually observed.
+
+A click alone does not count.
+
+Do NOT:
+
+- send it twice
+- resend if the UI appears slow
+- send a follow-up
+- automatically repair with another customer instruction
+- manipulate the workspace manually
+- alter lifecycle configuration
+
+==================================================
+STEP 3 — LET THE AGENT HANDLE THE EDIT
+==================================================
+
+This is a normal customer edit.
+
+Let the BuildCustom agent determine what existing files it needs to inspect.
+
+We specifically want to observe whether it can efficiently understand and
+modify an EXISTING generated application.
+
+Record:
+
+- customer request count
+- Think turns
+- total tool steps
+- internal continuations
+- files discovered/read
+- files edited
+- same ThinkAgent
+- same SpaceDO
+- same operation across internal continuations
+- workspace persistence
+- validation/preflight
+- commit
+- preview deployment
+- browser verification
+- finish_task
+- authoritative revision
+- final working-tree state
+- final operation state
+
+Current limits remain unchanged:
+
+Think maxSteps = 25
+Maximum total Think turns = 5
+Maximum internal continuations = 4
+Operation ceiling = 15 minutes
+
+==================================================
+EXPECTED REVISION BEHAVIOR
+==================================================
+
+The starting revision is:
+
+04395b156f7e43346a240be3d824eef8104b7697
+
+A successful code-changing edit MUST result in a NEW authoritative revision.
+
+Do not accept the operation as successful if the revision remains unchanged.
+
+The previous accepted revision must remain available as historical state.
+
+Do not production Publish.
+
+==================================================
+STEP 4 — VERIFY THE NEW FEATURE
+==================================================
+
+After the agent reports completion and the updated preview is available,
+verify the application through the normal preview.
+
+Do not merely inspect source code.
+
+Actually interact with the app.
+
+Verify:
+
+1. CRM loads normally.
+
+2. Existing 12 seeded leads still load.
+
+3. Click an existing lead in the leads table.
+
+4. Lead details experience opens.
+
+5. Correct selected lead data appears:
+   - name
+   - company
+   - email
+   - status
+   - source
+   - estimated value
+   - created date
+
+6. Notes section exists.
+
+7. Add a test note to that lead.
+
+8. Verify the note appears.
+
+9. Reload/reopen as appropriate and verify the note persists if the generated
+   app's intended persistence contract supports it.
+
+10. Activity Timeline exists.
+
+11. Activity entries render correctly.
+
+12. Lead details design matches the existing dark navy CRM.
+
+==================================================
+STEP 5 — REGRESSION CHECK THE EXISTING CRM
+==================================================
+
+Do a concise functional regression check.
+
+We are NOT starting another giant test campaign.
+
+Verify the important existing functionality still works:
+
+- dashboard renders
+- summary cards render
+- 12+ leads remain accessible
+- search works
+- sorting works
+- status filtering works
+- Add Lead opens and can create one test lead
+- editing that test lead works
+- deleting that test lead works with confirmation
+- five newest leads section renders correctly
+- API requests succeed
+- no malformed private-preview URLs
+- no generated-app API CORS failures
+- no actionable generated-app console errors
+
+For the CRUD regression:
+
+Create only ONE temporary test lead.
+
+Use an unmistakable test name such as:
+
+Project 8 Regression Test Lead
+
+Then:
+
+create
+→ verify
+→ edit
+→ verify
+→ delete
+→ verify removed
+
+Do not alter the original 12 seeded leads unnecessarily.
+
+==================================================
+STEP 6 — COMPLETION CONTRACT
+==================================================
+
+For this edit to PASS require:
+
+- exactly ONE new customer edit request
+- requested lead-details feature implemented
+- existing project understood rather than rebuilt from scratch
+- working-tree validation/preflight succeeds
+- NEW revision committed
+- authoritative revision matches deployed preview
+- preview deployment succeeds
+- lead details works
+- notes works
+- activity timeline works
+- existing CRM functionality remains operational
+- generated backend APIs work
+- no actionable browser/runtime errors
+- finish_task occurs
+- working tree ends clean
+- completion gate accepts
+- final operation state COMPLETE
+- production Publish remains NO
+
+==================================================
+IF IT CROSSES AN INTERNAL THINK BOUNDARY
+==================================================
+
+That is fine.
+
+Verify:
+
+- still exactly one customer edit request
+- internal continuation occurs automatically
+- customer request is not duplicated
+- same operation continues
+- same ThinkAgent
+- same SpaceDO
+- pending edits survive
+- eventual validation/commit/preview/verification completes
+
+Do not treat crossing 25 steps as failure.
+
+==================================================
+IF THE EDIT COMPLETES IN ONE THINK TURN
+==================================================
+
+That is also fine.
+
+We already proved continuation with the original Project 8 build.
+
+The purpose of THIS test is:
+
+EDIT EXISTING APP → NEW REVISION → UPDATED WORKING PREVIEW
+
+Do not artificially force a continuation.
+
+==================================================
+IF SOMETHING ACTUALLY FAILS
+==================================================
+
+Do NOT automatically resend the edit.
+
+Do NOT create Project 9.
+
+Do NOT repair manually.
+
+Do NOT send another customer instruction.
+
+Capture the earliest actual failure.
+
+Distinguish:
+
+- generated-code failure
+- lifecycle failure
+- workspace failure
+- validation/preflight failure
+- commit failure
+- preview failure
+- generated API failure
+- browser verification failure
+- provider/RPC failure
+- test-infrastructure-only failure
+
+Then STOP.
+
+==================================================
+IMPORTANT
+==================================================
+
+Optional testing helpers are NOT product gates.
+
+If pretty-tail, screenshots, or another local observer fails but the actual
+customer UI remains healthy, record the helper failure and continue.
+
+Do not create another acceptance-harness project.
+
+We are testing BuildCustom through the same experience a customer uses.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+EDIT + REDEPLOY PASS / REAL PRODUCT FAILURE / CUSTOMER-PATH BLOCKED
+
+PROJECT 8 BASELINE
+- owner:
+- agent:
+- starting revision:
+- preview:
+- initial seeded leads:
+- initial API:
+- initial console:
+
+EDIT OPERATION
+- customer edit requests:
+- outbound instructions observed:
+- Think turns:
+- tool steps:
+- internal continuations:
+- same ThinkAgent:
+- same SpaceDO:
+- existing project inspected:
+- files read:
+- files edited:
+- validation/preflight:
+- commit:
+- starting revision:
+- new revision:
+- revision changed:
+- preview redeployed:
+- finish_task:
+- clean working tree:
+- completion gate:
+- final state:
+
+NEW FEATURE
+- lead click:
+- details opened:
+- correct lead information:
+- Notes section:
+- note creation:
+- note persistence:
+- Activity Timeline:
+- design consistency:
+- result:
+
+EXISTING CRM REGRESSION
+- dashboard:
+- summary cards:
+- leads:
+- search:
+- sorting:
+- filtering:
+- Add Lead:
+- edit lead:
+- delete lead:
+- newest leads:
+- backend API:
+- malformed preview URLs:
+- API CORS:
+- actionable console errors:
+- result:
+
+FINAL PROJECT 8
+- authoritative revision:
+- preview HTTP:
+- generated app working:
+- production releases:
+- production Publish:
+
+EDIT + REDEPLOY WORKFLOW:
+PASS / FAIL
+
+ORIGINAL MULTI-TURN BUILD EVIDENCE:
+PRESERVED / REGRESSED
+
+PROJECT 9 CREATED:
+MUST BE NO
+
+PROJECT 5 TOUCHED:
+MUST BE NO
+
+Then STOP.

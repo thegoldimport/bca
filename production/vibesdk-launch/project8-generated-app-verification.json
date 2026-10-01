@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-01T17:40:26.922Z",
+  "errors": [],
+  "httpFailures": [],
+  "failedRequests": [],
+  "statusHttp": 200,
+  "previewUrlAvailable": true,
+  "failure": {
+    "name": "ProtocolError",
+    "message": "Page.navigate timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed."
+  }
+}

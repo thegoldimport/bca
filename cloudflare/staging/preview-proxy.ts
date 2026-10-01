@@ -1,5 +1,10 @@
 import { RuntimeIdentityError } from "./runtime-identity";
 import { controlOriginForRequest, configuredControlOrigin } from "./control-origin";
+import {
+  previewBranchPrefix,
+  previewRequestSinkBootstrap,
+  rewritePreviewModuleSpecifiers,
+} from "./preview-request-sink";
 
 const LAUNCH_RUNTIME_ORIGIN = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
 const PREVIEW_PATH = "/_private_preview";
@@ -285,7 +290,25 @@ export function rewritePreviewHtml(
   capability: PreviewCapability,
 ): string {
   const rewrite = (value: string) => scopedHtmlUrl(value, requestUrl, origin, capability);
-  let output = html.replace(/<([a-z][a-z0-9:-]*)\b[^>]*>/gi, (tag, tagName: string) => {
+  const protectedBlocks: string[] = [];
+  let placeholderPrefix = "\uE000BC_PREVIEW_BLOCK_";
+  while (html.includes(placeholderPrefix)) placeholderPrefix += "_";
+  const protect = (value: string): string => {
+    const placeholder = `${placeholderPrefix}${protectedBlocks.length}\uE001`;
+    protectedBlocks.push(value);
+    return placeholder;
+  };
+  let output = html.replace(/<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, (block) => {
+    if (block.startsWith("<!--")) return protect(block);
+    const match = block.match(/^(<[^>]+>)([\s\S]*)(<\/(?:script|style)\s*>)$/i);
+    if (!match) return block;
+    const isStyle = /^<style\b/i.test(match[1]);
+    const body = isStyle
+      ? rewritePreviewCss(match[2], requestUrl, origin, capability)
+      : rewritePreviewJavaScript(match[2], requestUrl, origin, capability);
+    return `${match[1]}${protect(body)}${match[3]}`;
+  });
+  output = output.replace(/<([a-z][a-z0-9:-]*)\b[^>]*>/gi, (tag, tagName: string) => {
     const name = tagName.toLowerCase();
     return tag.replace(
       /(\b(href|src|poster|action|formaction|xlink:href)\s*=\s*)(["'])(.*?)\3/gi,
@@ -322,11 +345,23 @@ export function rewritePreviewHtml(
   );
   output = output.replace(/(\bstyle\s*=\s*)(["'])(.*?)\2/gi, (_match, prefix: string, quote: string, value: string) =>
     `${prefix}${quote}${rewritePreviewCss(value, requestUrl, origin, capability)}${quote}`);
-  output = output.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi, (_match, open: string, body: string, close: string) =>
-    `${open}${rewritePreviewCss(body, requestUrl, origin, capability)}${close}`);
-  output = output.replace(/(<script\b[^>]*>)([\s\S]*?)(<\/script\s*>)/gi, (_match, open: string, body: string, close: string) =>
-    `${open}${rewritePreviewJavaScript(body, requestUrl, origin, capability)}${close}`);
-  output = output.replace(/<head\b[^>]*>/i, (head) => `${head}<meta name="referrer" content="no-referrer">`);
+  const bootstrap = capability.token && validToken(capability.token)
+    ? `<meta name="referrer" content="no-referrer"><script>${previewRequestSinkBootstrap(
+      origin,
+      previewBranchPrefix(origin, capability),
+      capability.token,
+    )}</script>`
+    : '<meta name="referrer" content="no-referrer">';
+  if (/<head\b[^>]*>/i.test(output)) {
+    output = output.replace(/<head\b[^>]*>/i, (head) => `${head}${bootstrap}`);
+  } else if (/<html\b[^>]*>/i.test(output)) {
+    output = output.replace(/<html\b[^>]*>/i, (htmlTag) => `${htmlTag}<head>${bootstrap}</head>`);
+  } else {
+    output = `<head>${bootstrap}</head>${output}`;
+  }
+  protectedBlocks.forEach((body, index) => {
+    output = output.replace(`${placeholderPrefix}${index}\uE001`, () => body);
+  });
   return output;
 }
 
@@ -336,28 +371,11 @@ export function rewritePreviewJavaScript(
   origin: string,
   capability: PreviewCapability,
 ): string {
-  const quoted = javascript.replace(/(["'])((?:\/(?!\/)|\.{1,2}\/)[^"'\\\r\n]*(?:\\.[^"'\\\r\n]*)*)\1/g, (match, _quote: string, value: string) => {
-    const rewritten = scopedHtmlUrl(value, requestUrl, origin, capability);
-    return rewritten === value ? match : `${_quote}${rewritten}${_quote}`;
-  });
-  // A template literal can construct its path and query only at runtime.
-  // Resolve the complete URL before adding the capability so dynamic filters,
-  // repeated parameters, and fragments cannot swallow or displace it.
-  if (!capability.token || !validToken(capability.token)) return quoted;
-  const prefixPath = new URL(capabilityPrefix(origin, capability)).pathname;
-  return quoted.replace(/`(?:\\[\s\S]|[^`\\])*`/g, (literal: string, offset: number, source: string) => {
-    const value = literal.slice(1, -1);
-    if (!/^(?:\/(?!\/)|\.{1,2}\/)/.test(value)
-      || (offset > 0 && /[\w$.)\]]/.test(source[offset - 1]))) return literal;
-    const rootRelative = value.startsWith("/");
-    return `(()=>{const u=new URL(${literal},${JSON.stringify(requestUrl.href)});`
-      + `if(u.origin!==${JSON.stringify(origin)})return u.href;`
-      + (rootRelative
-        ? `if(u.pathname==="/"||/^\\/(?:api|_private_preview)(?:\\/|$)/.test(u.pathname))return u.href;`
-          + `u.pathname=${JSON.stringify(prefixPath)}+u.pathname.slice(1);`
-        : "")
-      + `if(!u.pathname.startsWith(${JSON.stringify(prefixPath)})||u.pathname.length===${prefixPath.length})return u.href;`
-      + `u.searchParams.delete("t");u.searchParams.set("t",${JSON.stringify(capability.token)});return u.href})()`;
+  return rewritePreviewModuleSpecifiers(javascript, (specifier) => {
+    const isRootRelative = specifier.startsWith("/") && !specifier.startsWith("//");
+    const isDotRelative = specifier.startsWith("./") || specifier.startsWith("../");
+    if (!isRootRelative && !isDotRelative) return specifier;
+    return scopedHtmlUrl(specifier, requestUrl, origin, capability);
   });
 }
 

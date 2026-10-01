@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "worker": "buildcustom-control-plane-launch",
+  "sourceCommit": "6cea62eacf8ba4eb17fd53fbfc8872e4eed14b8b",
+  "safetyReview": "PASS",
+  "rootCause": {
+    "status": "PROVEN",
+    "component": "control-plane-preview-proxy",
+    "summary": "Broad JavaScript literal rewriting corrupts the slash predicate and fallback in Project 8's getApiUrl helper. The corrupted helper concatenates its preview base with https://api/leads. Dynamic same-branch API URLs also need the preview capability at the request sink.",
+    "evidence": [
+      "Owner-authorized committed public/index.html at 04395b156f7e43346a240be3d824eef8104b7697, helper lines 195-200 and lead fetch line 235",
+      "Unchanged helper local replay: before rewrite main/api/leads; after old rewrite mainhttps://api/leads",
+      "project8-native-preview-bootstrap-verification.json",
+      "preview-fetch-source-parity.json",
+      "tests/cloudflare-preview-request-sink.test.ts"
+    ]
+  },
+  "checks": {
+    "focusedTests": "PASS",
+    "regressionTests": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS"
+  },
+  "testResults": {
+    "focusedPreviewTests": { "passed": 27, "failed": 0 },
+    "rootSuite": { "passed": 281, "failed": 0, "log": "/tmp/preview-fetch-root-tests-final.log" },
+    "ownerAndScope": { "passed": 22, "failed": 0 },
+    "runtimeRegressions": { "passed": 176, "failed": 0, "files": 24, "log": "/tmp/preview-fetch-runtime-regressions.log" },
+    "releaseSafetySelfTest": { "passed": 21, "failed": 0 },
+    "rootTypecheck": "PASS",
+    "rootBuild": "PASS",
+    "launchWorkerDryRun": "PASS"
+  },
+  "candidateModules": [
+    {
+      "name": "worker.js",
+      "sha256": "b401d3be2bbf23e43f89f3be0cc2a2920a9c2285bf8a3d8249346577ec2b98eb"
+    }
+  ],
+  "sourceHashes": {
+    "cloudflare/staging/preview-proxy.ts": "4be60749e49324a3651bed92e281063870ec9b67007072884fa60b0d8ab785d7",
+    "cloudflare/staging/preview-request-sink.ts": "aff5e734ead60ffff8059e4330e9d86973c6eb5a5c7f7cf6fc1f4eed07116071",
+    "package-lock.json": "dc1a821fef182c9d07fff98d3613362b0cd63194542c3caab10c1631e827d627"
+  },
+  "scope": {
+    "project8SourceChanged": false,
+    "newAIRequests": 0,
+    "lifecycleChanged": false,
+    "maxStepsChanged": false,
+    "continuationChanged": false,
+    "authChanged": false,
+    "gatewayChanged": false,
+    "sandboxChanged": false,
+    "assetUpload": false
+  }
+}

@@ -68,3 +68,6 @@
 - [Think Worker test boundary](think-worker-test-boundary.md) — importing the installed Think harness can fail in isolated Worker tests through a bundled shell dependency; test pure contracts separately.
 - [Ignored-source release parity](ignored-source-release-parity.md) — exact new-feature patch parity does not prove the full reconstructed release preserves tested auth behavior.
 - [Diagnostic observer safety](diagnostic-observer-safety.md) — protect metadata collection as well as sinks; arbitrary error and close-reason text is not automatically safe.
+- [Preview transport validation](preview-transport-validation.md) — URL-helper tests do not prove import-map/bootstrap transport; recovery commands must select the correct release receipt.
+- [Native operation evidence](native-operation-evidence.md) — idle summaries, native stream outcomes, auth state, and controller completion are separate acceptance facts.
+- [Split Worker chunk provenance](split-worker-chunk-provenance.md) — source-root comments and hashed import references can change auxiliary bytes without changing executable ASTs.

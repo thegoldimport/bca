@@ -1,0 +1,83 @@
+{
+  "recordedAt": "2026-10-01T17:59:15.768Z",
+  "overallStatus": "REAL PRODUCT FAILURE",
+  "basicProductionLifecycle": "FAIL",
+  "multiTurnProductionLifecycle": "FAIL",
+  "continuationMechanismObserved": true,
+  "projectId": 8,
+  "agentId": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "sendClicks": 1,
+  "outboundCustomerInstructions": 1,
+  "matchingOutboundPromptFrames": 1,
+  "matchingCustomerTurns": 1,
+  "newReopenInstructions": 0,
+  "thinkAssistantPasses": 2,
+  "thinkStepStartsPerPass": [
+    25,
+    16
+  ],
+  "totalThinkStepStarts": 41,
+  "internalContinuations": 1,
+  "recognizedToolCallCount": 27,
+  "allToolTypesCountUnproven": true,
+  "operationIdentity": "Authoritative operation ID unavailable",
+  "sameMappedThinkAndSpace": true,
+  "turnBoundaryDirtyWorkspaceState": "UNAVAILABLE",
+  "workingTreePreflight": "UNPROVEN",
+  "currentBranch": "main",
+  "authoritativeRevision": "04395b156f7e43346a240be3d824eef8104b7697",
+  "spaceGitHead": "04395b156f7e43346a240be3d824eef8104b7697",
+  "spaceDeploymentRevision": "04395b156f7e43346a240be3d824eef8104b7697",
+  "privatePreviewHttpStatus": 200,
+  "browserRuntimeVerification": "FAIL",
+  "finishTaskInvocations": 3,
+  "finishTaskToolStatuses": [
+    "complete"
+  ],
+  "completionGate": "UNPROVEN",
+  "finalWorkingTree": "UNPROVEN",
+  "finalOperationState": "AUTHORITATIVE COORDINATOR STATE UNAVAILABLE",
+  "backendStatus": "idle/ready",
+  "productionPublish": false,
+  "releaseCount": 0,
+  "failure": {
+    "component": "Generated application/private-preview lead API fetch boundary",
+    "observedWindow": {
+      "startedAt": "2026-10-01T17:54:20.035Z",
+      "finishedAt": "2026-10-01T17:54:26.964Z"
+    },
+    "requestPath": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/mainhttps://api/leads",
+    "errorCode": "CORS; net::ERR_FAILED; TypeError: Failed to fetch",
+    "origin": "null",
+    "leadRows": 0,
+    "httpStatus": "NOT EXPOSED FOR BLOCKED FETCH",
+    "telemetryExcluded": true,
+    "productFailureConfirmed": true,
+    "providerFailureEstablished": false,
+    "rpcFailureEstablished": false,
+    "exactResponsibleImplementation": "NOT DETERMINED",
+    "rollbackRecommended": false
+  },
+  "infrastructureLimitations": [
+    "Collector attempted once but no startup stderr or safe events retained.",
+    "Original observer provisionally declared terminal at first changed revision.",
+    "Pausing observer also stalled its request interception; affected UI samples cannot independently establish product failure.",
+    "Terminating local observer also closed its managed browser; same authenticated profile recovered, no resend.",
+    "Decisive product failure captured from normal generated-preview bootstrap, not a synthetic API probe."
+  ],
+  "scope": {
+    "project9Created": false,
+    "newFixtureCreated": false,
+    "project8Reset": false,
+    "preSendWorkspaceModified": false,
+    "project5Touched": false,
+    "project6Retried": false,
+    "project7CodingRequest": false,
+    "productRuntimeLifecycleObservabilityChanged": false,
+    "lifecycleLimitsChanged": false,
+    "forcedProductionCancellationRequest": false
+  },
+  "report": "project8-acceptance-result.html",
+  "customerBrowserLeftOpen": true,
+  "testingStopped": true
+}

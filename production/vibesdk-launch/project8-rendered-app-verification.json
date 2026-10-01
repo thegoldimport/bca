@@ -1,0 +1,112 @@
+{
+  "at": "2026-10-01T17:53:26.394Z",
+  "frameUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+  "consoleErrors": [
+    "Access to fetch at 'https://app.buildcustom.ai/api/leads' from origin 'null' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED"
+  ],
+  "httpFailures": [],
+  "pageErrors": [],
+  "dom": {
+    "title": "Pulse CRM - Mini Sales Dashboard",
+    "headings": [
+      "Pulse CRMMini",
+      "Sales Dashboard",
+      "0",
+      "0",
+      "$0",
+      "$0",
+      "Sales Funnel Stage Distribution",
+      "Five Newest Leads",
+      "Top Opportunities"
+    ],
+    "tableRows": 0,
+    "bodyErrors": [],
+    "inputs": [],
+    "buttons": [
+      {
+        "id": "",
+        "text": "Add New Lead",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Dashboard0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Leads Database0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Pipeline KanbanProposal (0)",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Analytics",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Reset Sample Data",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Export CSV",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Add Lead",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "New0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Contacted0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Qualified0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Proposal0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Won0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Lost0",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "View All (0)",
+        "label": null
+      },
+      {
+        "id": "",
+        "text": "Add another lead to pipeline",
+        "label": null
+      }
+    ]
+  },
+  "apiProbe": {
+    "errorType": "TypeError"
+  }
+}
