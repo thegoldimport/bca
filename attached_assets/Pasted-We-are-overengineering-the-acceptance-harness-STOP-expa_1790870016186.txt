@@ -1,0 +1,340 @@
+We are overengineering the acceptance harness.
+
+STOP expanding the harness into a formal verifier of every theoretically
+contradictory API response.
+
+The purpose of this test is to TEST BUILDCUSTOM.
+
+The safe production observability instrumentation is already deployed and
+accepted.
+
+We now need to exercise the actual customer coding path.
+
+AUTHORIZED:
+
+1. Make ONLY the three obvious harness corrections already identified.
+2. Add focused tests for those three corrections.
+3. If those tests pass, immediately create ONE fresh disposable project and
+   run ONE real customer coding request through the normal BuildCustom UI.
+4. Do not stop for additional hypothetical harness imperfections discovered
+   during another broad source review.
+
+Do NOT touch Project 5.
+Do NOT retry Project 6.
+Do NOT send a coding request to Project 7.
+Do NOT modify production product/runtime behavior.
+Do NOT modify observability.
+Do NOT modify lifecycle behavior.
+Do NOT deploy product code.
+Do NOT invoke production Publish.
+
+==================================================
+FIX THESE THREE HARNESS ISSUES ONLY
+==================================================
+
+Issue 1:
+
+If the owner-scoped native status or revision response explicitly contains:
+
+error
+
+or:
+
+success: false
+
+the harness must reject that response.
+
+Do not accept valid-looking fields alongside an explicit failure indicator.
+
+Issue 2:
+
+Preserve native:
+
+previewUrl
+deploymentUrl
+
+in the status summary.
+
+For a genuinely fresh disposable fixture, reject unexpected pre-existing
+native preview/deployment state.
+
+Issue 3:
+
+Validate the existing product-detail readiness fields already returned by the
+supported product contract.
+
+If:
+
+detail.status
+or
+detail.runtimeStatus
+
+explicitly reports a failure state, reject the fixture.
+
+Do not invent new readiness semantics.
+
+Use the actual currently supported response contract.
+
+==================================================
+FOCUSED TESTS
+==================================================
+
+Add tests proving:
+
+1. status with explicit `error` is rejected
+2. status with `success:false` is rejected
+3. revision with explicit `error` is rejected
+4. revision with `success:false` is rejected
+5. unexpected native previewUrl is rejected for fresh fixture
+6. unexpected native deploymentUrl is rejected for fresh fixture
+7. explicit failed product readiness is rejected
+8. normal legitimate fresh state still passes
+
+Run the existing harness tests too.
+
+If these tests fail:
+STOP.
+
+If they pass:
+PROCEED.
+
+Do NOT perform another open-ended harness architecture review.
+
+Do NOT search for additional theoretical fail-closed conditions before running
+the fixture.
+
+==================================================
+CREATE ONE FRESH DISPOSABLE FIXTURE
+==================================================
+
+Create ONE new disposable production fixture.
+
+Do not use Projects 5, 6, or 7.
+
+Use the normal supported BuildCustom customer flow.
+
+The preflight for THIS acceptance test should answer only:
+
+1. Is this the expected disposable project?
+2. Does the authenticated owner own it?
+3. Does it map to the expected native agent?
+4. Is generation currently idle/not running?
+5. Are there zero previous customer coding turns?
+6. Is there no existing production release?
+7. Is there no unexpected existing preview/deployment state?
+8. Did the required owner-scoped API calls return without explicit failure?
+
+If YES:
+
+RUN THE TEST.
+
+We do not need mathematical proof that every piece of internal state is
+perfect before allowing a disposable test project to receive its first coding
+request.
+
+==================================================
+RUN THE ACTUAL PRODUCT
+==================================================
+
+Open the normal BuildCustom coding UI.
+
+Send exactly ONE customer coding request.
+
+Use a task sufficiently substantial that it has a reasonable chance of
+crossing the native Think 25-step boundary.
+
+Do not artificially force failure.
+
+Do not manipulate internal state.
+
+Do not send a second customer message.
+
+Do not automatically retry.
+
+Current lifecycle configuration remains:
+
+Think maxSteps = 25
+Maximum total Think turns = 5
+Maximum internal continuations = 4
+Wall-clock ceiling = 15 minutes
+
+==================================================
+WHAT WE ACTUALLY CARE ABOUT
+==================================================
+
+Observe:
+
+- exactly one customer request
+- Think turns
+- tool steps
+- internal continuations
+- same ThinkAgent
+- same SpaceDO
+- same customer operation
+- workspace persistence
+- WebSocket behavior
+- RPC behavior
+- provider behavior
+- working-tree preflight
+- commit
+- preview
+- browser verification
+- finish_task
+- authoritative revision
+- clean final working tree
+- COMPLETE
+
+Production Publish must NOT occur.
+
+==================================================
+IF IT COMPLETES IN ONE THINK TURN
+==================================================
+
+That is:
+
+BASIC PRODUCTION LIFECYCLE = PASS
+
+but:
+
+MULTI-TURN CONTINUATION = NOT YET PROVEN
+
+Do not call that a failure.
+
+STOP and report.
+
+==================================================
+IF IT CROSSES THE THINK TURN BOUNDARY
+==================================================
+
+Verify that:
+
+- there was still exactly one customer request
+- the host initiated the internal continuation
+- same operation continued
+- same ThinkAgent continued
+- same SpaceDO continued
+- pending workspace state survived
+- internal continuation was not presented as another customer request
+- eventual preflight/commit/preview/verification occurred
+- finish_task occurred
+- final state became COMPLETE
+
+If so:
+
+MULTI-TURN PRODUCTION LIFECYCLE = PASS
+
+STOP and report.
+
+==================================================
+IF THE CODING OPERATION FAILS
+==================================================
+
+DO NOT RETRY.
+
+DO NOT create another fixture.
+
+DO NOT repair it.
+
+Use the production observability we already built.
+
+Report the earliest retained real error and classify it.
+
+This is exactly why the observability exists.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do not stop this run because you discover another hypothetical weakness in
+the acceptance harness after the eight focused tests pass.
+
+A harness imperfection is not automatically a product safety failure.
+
+Only stop before the coding request for an ACTUAL observed condition in this
+fixture such as:
+
+- wrong owner
+- wrong agent mapping
+- generation already active
+- previous customer coding turn exists
+- existing release exists
+- unexpected existing preview/deployment exists
+- explicit API failure
+- required API call actually fails
+
+Otherwise RUN THE TEST.
+
+==================================================
+RETURN
+==================================================
+
+Return:
+
+OVERALL STATUS:
+MULTI-TURN PASS / BASIC PASS / REAL PRODUCT FAILURE / PREFLIGHT BLOCKED
+
+HARNESS FIXES
+- explicit API failures:
+- native preview/deployment:
+- product readiness:
+- focused tests:
+- existing harness tests:
+
+FIXTURE
+- project:
+- agent:
+- owner correct:
+- mapping correct:
+- idle:
+- prior customer turns:
+- existing release:
+- existing preview/deployment:
+- API calls successful:
+- preflight:
+
+CODING OPERATION
+- customer requests:
+- Think turns:
+- tool steps:
+- internal continuations:
+- same ThinkAgent:
+- same SpaceDO:
+- same operation:
+- workspace survived:
+- WebSocket:
+- RPC:
+- provider:
+- preflight:
+- commit:
+- preview:
+- browser verification:
+- finish_task:
+- revision:
+- working tree:
+- final state:
+- production Publish:
+
+BASIC PRODUCTION LIFECYCLE:
+PASS / FAIL
+
+MULTI-TURN PRODUCTION LIFECYCLE:
+PASS / NOT PROVEN / FAIL
+
+IF REAL FAILURE
+- earliest retained error:
+- component:
+- boundary:
+- classification:
+- candidate caused failure:
+- rollback recommendation:
+
+PROJECT 5 TOUCHED:
+NO
+
+PROJECT 6 RETRIED:
+NO
+
+PROJECT 7 CODING REQUEST:
+NO
+
+Then STOP.

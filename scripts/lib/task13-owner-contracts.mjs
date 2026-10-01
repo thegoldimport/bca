@@ -7,6 +7,15 @@ function reject(message) {
   throw new TypeError(message);
 }
 
+function explicitApiFailure(data) {
+  return data?.success === false || (data?.error !== undefined && data.error !== null);
+}
+
+function checkpointUrl(value) {
+  // Do not persist preview query capabilities in the acceptance checkpoint.
+  return typeof value === "string" ? value.split(/[?#]/, 1)[0] : value ?? null;
+}
+
 function identityKey(value) {
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
     return `n:${value}`;
@@ -30,6 +39,10 @@ export function validateOwnerProjectMapping({
   if (!row || identityKey(row.user_id) !== identityKey(ownerId)) {
     reject("Owner-bound runtime link is missing or mismatched.");
   }
+  if ([detail.status, detail.runtimeStatus].some(value =>
+    ["failed", "blocked", "error"].includes(value))) {
+    reject("Product detail reports failed runtime readiness.");
+  }
   if (row.status === "ready" && row.initialization_status === "ready") {
     if (typeof row.agent_id !== "string" || row.agent_id.length > 120
       || !/^[a-zA-Z0-9_-]+$/.test(row.agent_id)
@@ -49,8 +62,9 @@ export function validateOwnerProjectMapping({
 }
 
 /** An unused new project must not already have a public preview or release. */
-export function validateFreshProjectPreflight(detail, releaseCount) {
+export function validateFreshProjectPreflight(detail, releaseCount, nativeStatus = {}) {
   if (!detail || detail.previewUrl != null || detail.deploymentUrl != null
+    || nativeStatus.previewUrl != null || nativeStatus.deploymentUrl != null
     || !Number.isSafeInteger(releaseCount) || releaseCount !== 0) {
     reject("New project already has a preview or published release.");
   }
@@ -110,6 +124,7 @@ export function validateDurableSelectResult(result, expectedQueryCount) {
  * the separately validated owner mapping supplied by the caller.
  */
 export function summarizeNativeStatus(data, { ownerMappingVerified } = {}) {
+  if (explicitApiFailure(data)) reject("Owner runtime status reported an explicit API failure.");
   const connected = typeof data?.connected === "boolean" ? data.connected : null;
   const nativeThink = data?.nativeThink === true;
   const runtimeStatus = typeof data?.runtimeStatus === "string" ? data.runtimeStatus : null;
@@ -140,6 +155,8 @@ export function summarizeNativeStatus(data, { ownerMappingVerified } = {}) {
     agentMatched,
     shouldBeGenerating,
     generationStatus,
+    previewUrl: checkpointUrl(data?.previewUrl),
+    deploymentUrl: checkpointUrl(data?.deploymentUrl),
     idleNoGeneration,
     terminalNoGeneration,
   };
@@ -171,6 +188,7 @@ export function parseOwnerRevision(response) {
     && !branch.endsWith("/") && !branch.endsWith(".lock")
     && typeof commitHash === "string" && COMMIT_HASH.test(commitHash);
   const schemaValid = (nullPair || committedPair)
+    && !explicitApiFailure(data)
     && !Object.prototype.hasOwnProperty.call(data, "revision");
 
   return {

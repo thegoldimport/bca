@@ -1,43 +1,52 @@
 {
-  "startedAt": "2026-10-01T14:31:53.222Z",
-  "state": "PROJECT_CREATED",
+  "startedAt": "2026-10-01T15:55:43.869Z",
+  "state": "BROWSER_READY",
   "registrationRequestsSent": 1,
   "projectCreationRequestsSent": 1,
   "customerRequestsSent": 0,
   "publishRequestsSent": 0,
-  "requestKey": "observability-fixture-366e0fbe-7a10-46c5-848f-08053aea1e2a",
+  "requestKey": "observability-fixture-b75b5dcf-f2d1-4383-9b20-0184dc148f7f",
   "safeFrameMetadata": [],
-  "registrationReservationAt": "2026-10-01T14:31:54.540Z",
+  "registrationReservationAt": "2026-10-01T15:55:45.332Z",
   "registrationHttpStatus": 200,
-  "ownerId": "595efefa-7003-48bb-8843-49ae74310c62",
-  "projectCreationReservationAt": "2026-10-01T14:31:56.419Z",
-  "projectId": 7,
+  "ownerId": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+  "projectCreationReservationAt": "2026-10-01T15:55:47.071Z",
+  "projectId": 8,
   "projectCreationHttpStatus": 201,
-  "agentId": "914d67b0-7ad9-482e-8825-01a93e272ad3",
+  "agentId": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
   "initialSnapshot": {
-    "at": "2026-10-01T14:32:06.759Z",
+    "at": "2026-10-01T15:55:57.868Z",
     "status": {
-      "state": "unknown",
-      "configured": false,
-      "providerKnown": false,
+      "state": "idle",
       "connected": true,
-      "agentMatched": false,
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "agentMatched": true,
       "shouldBeGenerating": false,
       "generationStatus": "idle",
-      "idleNoGeneration": false,
-      "terminalNoGeneration": false
+      "previewUrl": null,
+      "deploymentUrl": null,
+      "idleNoGeneration": true,
+      "terminalNoGeneration": true
     },
     "revision": {
-      "headCommitHash": null,
+      "branch": "main",
+      "headCommitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
       "statusLastDeployedCommit": null,
       "matchingCustomerTurnCommitHash": null,
       "spaceGitHeadCommitHash": null,
-      "spaceGitReadState": "READ_FAILED",
-      "spaceGitHeadFileSha256": null,
-      "spaceGitRefFileSha256": null,
-      "baselineKnown": false,
-      "committedHeadVerified": false,
-      "workingTreeDirty": null
+      "spaceGitReadState": "NOT_REQUIRED",
+      "committedHeadVerified": true,
+      "workingTreeDirty": null,
+      "baselineKnown": true
+    },
+    "ownerRuntimeRevision": {
+      "httpStatus": 200,
+      "schemaValid": true,
+      "branch": "main",
+      "commitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+      "source": "branch+commitHash",
+      "valid": true
     },
     "turns": {
       "available": true,
@@ -51,83 +60,68 @@
     }
   },
   "baselineRevision": {
-    "headCommitHash": null,
+    "branch": "main",
+    "headCommitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
     "statusLastDeployedCommit": null,
     "matchingCustomerTurnCommitHash": null,
     "spaceGitHeadCommitHash": null,
-    "spaceGitReadState": "READ_FAILED",
-    "spaceGitHeadFileSha256": null,
-    "spaceGitRefFileSha256": null,
-    "baselineKnown": false,
-    "committedHeadVerified": false,
-    "workingTreeDirty": null
+    "spaceGitReadState": "NOT_REQUIRED",
+    "committedHeadVerified": true,
+    "workingTreeDirty": null,
+    "baselineKnown": true
   },
-  "lastFailure": {
-    "phase": "agent-identification",
-    "kind": "operation-failed"
+  "ownerRuntimeRevision": {
+    "httpStatus": 200,
+    "schemaValid": true,
+    "branch": "main",
+    "commitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+    "source": "branch+commitHash",
+    "valid": true,
+    "matchesInitialSnapshot": true
   },
-  "observations": [
-    {
-      "at": "2026-10-01T14:32:36.735Z",
-      "status": {
-        "state": "unknown",
-        "configured": false,
-        "providerKnown": false,
-        "connected": true,
-        "agentMatched": false,
-        "shouldBeGenerating": false,
-        "generationStatus": "idle",
-        "idleNoGeneration": false,
-        "terminalNoGeneration": false
-      },
-      "revision": {
-        "headCommitHash": null,
-        "statusLastDeployedCommit": null,
-        "matchingCustomerTurnCommitHash": null,
-        "spaceGitHeadCommitHash": null,
-        "spaceGitReadState": "READ_FAILED",
-        "spaceGitHeadFileSha256": null,
-        "spaceGitRefFileSha256": null,
-        "baselineKnown": false,
-        "committedHeadVerified": false,
-        "workingTreeDirty": null
-      },
-      "turns": {
-        "available": true,
-        "schemaValid": true,
-        "total": 0,
-        "customerTurnCount": 0,
-        "matchingCustomerPromptCount": 0,
-        "unmatchedPromptCount": 0,
-        "promptSha256": null,
-        "matchingCustomerPromptCommitHash": null
-      }
-    }
-  ],
-  "latestSnapshot": {
-    "at": "2026-10-01T14:32:36.735Z",
+  "preGenerationVerifiedAt": "2026-10-01T15:55:59.937Z",
+  "preBrowserRuntimeRevision": {
+    "httpStatus": 200,
+    "schemaValid": true,
+    "branch": "main",
+    "commitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+    "source": "branch+commitHash",
+    "valid": true,
+    "matchesInitialSnapshot": true
+  },
+  "preBrowserSnapshot": {
+    "at": "2026-10-01T15:57:14.902Z",
     "status": {
-      "state": "unknown",
-      "configured": false,
-      "providerKnown": false,
+      "state": "idle",
       "connected": true,
-      "agentMatched": false,
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "agentMatched": true,
       "shouldBeGenerating": false,
       "generationStatus": "idle",
-      "idleNoGeneration": false,
-      "terminalNoGeneration": false
+      "previewUrl": null,
+      "deploymentUrl": null,
+      "idleNoGeneration": true,
+      "terminalNoGeneration": true
     },
     "revision": {
-      "headCommitHash": null,
+      "branch": "main",
+      "headCommitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
       "statusLastDeployedCommit": null,
       "matchingCustomerTurnCommitHash": null,
       "spaceGitHeadCommitHash": null,
-      "spaceGitReadState": "READ_FAILED",
-      "spaceGitHeadFileSha256": null,
-      "spaceGitRefFileSha256": null,
-      "baselineKnown": false,
-      "committedHeadVerified": false,
-      "workingTreeDirty": null
+      "spaceGitReadState": "NOT_REQUIRED",
+      "committedHeadVerified": true,
+      "workingTreeDirty": null,
+      "baselineKnown": true
+    },
+    "ownerRuntimeRevision": {
+      "httpStatus": 200,
+      "schemaValid": true,
+      "branch": "main",
+      "commitHash": "2a7ecab9e2c7a32c7978e0fcea4f386d7eb53ed8",
+      "source": "branch+commitHash",
+      "valid": true
     },
     "turns": {
       "available": true,
@@ -139,5 +133,9 @@
       "promptSha256": null,
       "matchingCustomerPromptCommitHash": null
     }
+  },
+  "lastFailure": {
+    "phase": "editor-navigation",
+    "kind": "operation-failed"
   }
 }

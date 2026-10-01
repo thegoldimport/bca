@@ -404,7 +404,7 @@ async function identifyAgent() {
   return mapping.ready;
 }
 
-async function assertFreshProjectState() {
+async function assertFreshProjectState(nativeStatus) {
   const projectId = ensureProjectId(report.projectId);
   const project = await appRequest(`/api/projects/${projectId}`);
   assert.equal(project.status, 200, "Owner project preflight read failed.");
@@ -415,7 +415,7 @@ async function assertFreshProjectState() {
   );
   const row = rows?.[0]?.results?.[0];
   assert.equal(Number(row?.project_rows), 1, "Fresh project owner is missing or has an existing release.");
-  validateFreshProjectPreflight(detail, row.release_count);
+  validateFreshProjectPreflight(detail, row.release_count, nativeStatus);
   assert.equal(detail.agentId, report.agentId, "Fresh project agent mapping changed.");
 }
 
@@ -540,7 +540,7 @@ async function setup() {
   assert.equal(report.initialSnapshot.turns.customerTurnCount, 0, "The new owner project already has customer turns.");
   assert.equal(report.initialSnapshot.revision.baselineKnown, true,
     "Initial revision baseline is unavailable or inconsistent; no coding operation is sent.");
-  await assertFreshProjectState();
+  await assertFreshProjectState(report.initialSnapshot.status);
   let ownerRuntimeRevision;
   try {
     ownerRuntimeRevision = await readRuntimeRevision();
@@ -1150,7 +1150,7 @@ async function startBrowserRun() {
   assert.equal(before.turns.schemaValid, true);
   assert.equal(before.turns.customerTurnCount, 0);
   assert.deepEqual(before.revision, report.baselineRevision);
-  await assertFreshProjectState();
+  await assertFreshProjectState(before.status);
   let preBrowserRuntimeRevision;
   try {
     preBrowserRuntimeRevision = await readRuntimeRevision();

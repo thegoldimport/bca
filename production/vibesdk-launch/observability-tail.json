@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "target": {
+    "worker": "buildcustom-vibesdk-launch",
+    "versionId": "f4488693-4424-46a3-9834-30b214645449",
+    "agentId": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e"
+  },
+  "requestedFilter": {
+    "samplingRate": 1,
+    "search": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+    "versionId": "f4488693-4424-46a3-9834-30b214645449",
+    "serverSideSearchRequested": true,
+    "wranglerConfig": "/tmp/buildcustom-safe-observability-build/wrangler.jsonc"
+  },
+  "sessions": {
+    "pretty": {
+      "format": "pretty",
+      "status": "unconfirmed",
+      "connectedAt": null,
+      "exitStatus": {
+        "code": 1,
+        "signal": null
+      },
+      "startedAt": "2026-10-01T15:56:35.840Z"
+    },
+    "json": {
+      "format": "json",
+      "status": "not-started",
+      "startedAt": null,
+      "gracePassedAt": null,
+      "exitStatus": {
+        "code": null,
+        "signal": null
+      }
+    }
+  },
+  "eventCollection": "allowlisted-json-console-info",
+  "startedAt": "2026-10-01T15:56:35.153Z",
+  "finishedAt": "2026-10-01T15:56:38.798Z",
+  "failureCode": "pretty-tail-failed",
+  "counts": {
+    "jsonEnvelopes": 0,
+    "diagnosticCandidates": 0,
+    "rejectedDiagnosticRecords": 0,
+    "invalidJsonFrames": 0,
+    "oversizedJsonFrames": 0,
+    "safeRecords": 0
+  },
+  "events": []
+}

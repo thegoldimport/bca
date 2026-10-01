@@ -1,0 +1,143 @@
+{
+  "startedAt": "2026-10-01T14:31:53.222Z",
+  "state": "PROJECT_CREATED",
+  "registrationRequestsSent": 1,
+  "projectCreationRequestsSent": 1,
+  "customerRequestsSent": 0,
+  "publishRequestsSent": 0,
+  "requestKey": "observability-fixture-366e0fbe-7a10-46c5-848f-08053aea1e2a",
+  "safeFrameMetadata": [],
+  "registrationReservationAt": "2026-10-01T14:31:54.540Z",
+  "registrationHttpStatus": 200,
+  "ownerId": "595efefa-7003-48bb-8843-49ae74310c62",
+  "projectCreationReservationAt": "2026-10-01T14:31:56.419Z",
+  "projectId": 7,
+  "projectCreationHttpStatus": 201,
+  "agentId": "914d67b0-7ad9-482e-8825-01a93e272ad3",
+  "initialSnapshot": {
+    "at": "2026-10-01T14:32:06.759Z",
+    "status": {
+      "state": "unknown",
+      "configured": false,
+      "providerKnown": false,
+      "connected": true,
+      "agentMatched": false,
+      "shouldBeGenerating": false,
+      "generationStatus": "idle",
+      "idleNoGeneration": false,
+      "terminalNoGeneration": false
+    },
+    "revision": {
+      "headCommitHash": null,
+      "statusLastDeployedCommit": null,
+      "matchingCustomerTurnCommitHash": null,
+      "spaceGitHeadCommitHash": null,
+      "spaceGitReadState": "READ_FAILED",
+      "spaceGitHeadFileSha256": null,
+      "spaceGitRefFileSha256": null,
+      "baselineKnown": false,
+      "committedHeadVerified": false,
+      "workingTreeDirty": null
+    },
+    "turns": {
+      "available": true,
+      "schemaValid": true,
+      "total": 0,
+      "customerTurnCount": 0,
+      "matchingCustomerPromptCount": 0,
+      "unmatchedPromptCount": 0,
+      "promptSha256": null,
+      "matchingCustomerPromptCommitHash": null
+    }
+  },
+  "baselineRevision": {
+    "headCommitHash": null,
+    "statusLastDeployedCommit": null,
+    "matchingCustomerTurnCommitHash": null,
+    "spaceGitHeadCommitHash": null,
+    "spaceGitReadState": "READ_FAILED",
+    "spaceGitHeadFileSha256": null,
+    "spaceGitRefFileSha256": null,
+    "baselineKnown": false,
+    "committedHeadVerified": false,
+    "workingTreeDirty": null
+  },
+  "lastFailure": {
+    "phase": "agent-identification",
+    "kind": "operation-failed"
+  },
+  "observations": [
+    {
+      "at": "2026-10-01T14:32:36.735Z",
+      "status": {
+        "state": "unknown",
+        "configured": false,
+        "providerKnown": false,
+        "connected": true,
+        "agentMatched": false,
+        "shouldBeGenerating": false,
+        "generationStatus": "idle",
+        "idleNoGeneration": false,
+        "terminalNoGeneration": false
+      },
+      "revision": {
+        "headCommitHash": null,
+        "statusLastDeployedCommit": null,
+        "matchingCustomerTurnCommitHash": null,
+        "spaceGitHeadCommitHash": null,
+        "spaceGitReadState": "READ_FAILED",
+        "spaceGitHeadFileSha256": null,
+        "spaceGitRefFileSha256": null,
+        "baselineKnown": false,
+        "committedHeadVerified": false,
+        "workingTreeDirty": null
+      },
+      "turns": {
+        "available": true,
+        "schemaValid": true,
+        "total": 0,
+        "customerTurnCount": 0,
+        "matchingCustomerPromptCount": 0,
+        "unmatchedPromptCount": 0,
+        "promptSha256": null,
+        "matchingCustomerPromptCommitHash": null
+      }
+    }
+  ],
+  "latestSnapshot": {
+    "at": "2026-10-01T14:32:36.735Z",
+    "status": {
+      "state": "unknown",
+      "configured": false,
+      "providerKnown": false,
+      "connected": true,
+      "agentMatched": false,
+      "shouldBeGenerating": false,
+      "generationStatus": "idle",
+      "idleNoGeneration": false,
+      "terminalNoGeneration": false
+    },
+    "revision": {
+      "headCommitHash": null,
+      "statusLastDeployedCommit": null,
+      "matchingCustomerTurnCommitHash": null,
+      "spaceGitHeadCommitHash": null,
+      "spaceGitReadState": "READ_FAILED",
+      "spaceGitHeadFileSha256": null,
+      "spaceGitRefFileSha256": null,
+      "baselineKnown": false,
+      "committedHeadVerified": false,
+      "workingTreeDirty": null
+    },
+    "turns": {
+      "available": true,
+      "schemaValid": true,
+      "total": 0,
+      "customerTurnCount": 0,
+      "matchingCustomerPromptCount": 0,
+      "unmatchedPromptCount": 0,
+      "promptSha256": null,
+      "matchingCustomerPromptCommitHash": null
+    }
+  }
+}

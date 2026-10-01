@@ -162,10 +162,12 @@ test("active, malformed, disconnected, or non-native runtime status is not idle"
     { ...IDLE_STATUS, nativeThink: false },
     { ...IDLE_STATUS, runtimeStatus: "starting" },
     { ...IDLE_STATUS, state: { shouldBeGenerating: false, generation: {} } },
-    { error: "runtime unavailable" },
   ]) {
     assert.equal(summarizeNativeStatus(data, { ownerMappingVerified: true }).idleNoGeneration, false);
   }
+  assert.throws(() => summarizeNativeStatus({
+    error: "runtime unavailable",
+  }, { ownerMappingVerified: true }), TypeError);
 
   assert.equal(parseOwnerRevision({
     status: 503,
@@ -245,4 +247,75 @@ test("Durable Object SELECT accepts absent nested success but rejects errors and
   assert.throws(() => validateDurableSelectResult({
     results: [{ columns: [], rows: [], meta: { rows_written: 0 } }],
   }, 0), /positive integer/);
+});
+
+test("status rejects explicit error alongside valid-looking idle fields", () => {
+  assert.throws(() => summarizeNativeStatus({
+    ...IDLE_STATUS, error: { code: "RUNTIME_ERROR" },
+  }, { ownerMappingVerified: true }), TypeError);
+});
+
+test("status rejects success:false alongside valid-looking idle fields", () => {
+  assert.throws(() => summarizeNativeStatus({
+    ...IDLE_STATUS, success: false,
+  }, { ownerMappingVerified: true }), TypeError);
+});
+
+test("revision rejects explicit error alongside a valid-looking revision", () => {
+  assert.equal(parseOwnerRevision({
+    status: 200, data: { branch: "main", commitHash: COMMIT, error: "RUNTIME_ERROR" },
+  }).valid, false);
+});
+
+test("revision rejects success:false alongside a valid-looking revision", () => {
+  assert.equal(parseOwnerRevision({
+    status: 200, data: { branch: null, commitHash: null, success: false },
+  }).valid, false);
+});
+
+test("fresh fixture rejects a preserved native preview URL", () => {
+  const status = summarizeNativeStatus({
+    ...IDLE_STATUS, previewUrl: "https://fixture.invalid/preview?t=private-capability",
+  }, { ownerMappingVerified: true });
+  assert.equal(status.previewUrl, "https://fixture.invalid/preview");
+  assert.throws(() => validateFreshProjectPreflight({
+    ...OWNED_PROJECT, previewUrl: null, deploymentUrl: null,
+  }, 0, status), TypeError);
+});
+
+test("fresh fixture rejects a preserved native deployment URL", () => {
+  const status = summarizeNativeStatus({
+    ...IDLE_STATUS, deploymentUrl: "https://fixture.invalid/deployment",
+  }, { ownerMappingVerified: true });
+  assert.equal(status.deploymentUrl, "https://fixture.invalid/deployment");
+  assert.throws(() => validateFreshProjectPreflight({
+    ...OWNED_PROJECT, previewUrl: null, deploymentUrl: null,
+  }, 0, status), TypeError);
+});
+
+test("explicit failed product-detail readiness is rejected", () => {
+  for (const field of ["status", "runtimeStatus"]) {
+    assert.throws(() => validateOwnerProjectMapping({
+      httpStatus: 200, detail: { ...OWNED_PROJECT, [field]: "failed" },
+      projectId: 7, ownerId: "test-owner", row: OWNED_LINK, expectedAgentId: "test-agent",
+    }), TypeError);
+  }
+});
+
+test("normal legitimate fresh fixture still passes all three corrected gates", () => {
+  assert.equal(validateOwnerProjectMapping({
+    httpStatus: 200,
+    detail: { ...OWNED_PROJECT, status: "ready", runtimeStatus: "ready" },
+    projectId: 7, ownerId: "test-owner", row: OWNED_LINK, expectedAgentId: "test-agent",
+  }).ready, true);
+  const status = summarizeNativeStatus({
+    ...IDLE_STATUS, previewUrl: null, deploymentUrl: null,
+  }, { ownerMappingVerified: true });
+  assert.equal(status.idleNoGeneration, true);
+  assert.equal(validateFreshProjectPreflight({
+    ...OWNED_PROJECT, previewUrl: null, deploymentUrl: null,
+  }, 0, status), true);
+  assert.equal(parseOwnerRevision({
+    status: 200, data: { branch: null, commitHash: null },
+  }).valid, true);
 });
