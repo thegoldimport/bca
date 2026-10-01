@@ -1,0 +1,68 @@
+name: Deploy production marketing site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: production-marketing-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the commit being deployed
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: npm
+
+      - name: Record non-secret install diagnostics
+        run: |
+          uname -srm
+          grep -E '^(NAME|VERSION_ID)=' /etc/os-release
+          node --version
+          npm --version
+          npm config get cache
+          npm config get registry
+          node -p "require('./package-lock.json').lockfileVersion"
+          df -h . /home/runner
+          free -h
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Preserve npm debug logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-debug-logs
+          path: /home/runner/.npm/_logs/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Build production assets
+        run: npm run build
+
+      - name: Verify Pages output
+        run: test -f dist/public/index.html && test -d dist/public/assets
+
+      - name: Upload marketing assets to existing Pages project
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist/public --project-name=bca --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

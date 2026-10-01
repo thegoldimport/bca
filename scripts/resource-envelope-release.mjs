@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { hash as assetHash } from "blake3-wasm";
+import { auditModuleSets } from "./resource-envelope-module-audit.mjs";
 
 // Explicitly authorized infrastructure release, never a generated-project Publish.
 const account = "03ef1e6e42498920987f07059e107538";
 const api = `https://api.cloudflare.com/client/v4/accounts/${account}`;
 const prefix = "production/vibesdk-launch/resource-envelope";
 const checkpoint = `${prefix}-release.json`;
+const auditFile = `${prefix}-release-audit.json`;
+const archiveFile = `${prefix}-release-attempt-archive.json`;
 const targets = [
   ["buildcustom-vibesdk-launch", "/tmp/buildcustom-resource-runtime-upload"],
   ["buildcustom-control-plane-launch", "/tmp/buildcustom-resource-control-upload"],
@@ -40,11 +44,19 @@ async function version(name, id) {
   return cf("GET", `/workers/scripts/${name}/versions/${id}`);
 }
 async function remoteModules(name, id) {
+  const data = await remoteModuleContents(name, id);
+  return { main: data.main, modules: data.modules.map(item => ({
+    name: item.name, sha256: sha(item.bytes),
+  })).sort((a, b) => a.name.localeCompare(b.name)) };
+}
+async function remoteModuleContents(name, id) {
   const data = await cf("GET", `/workers/workers/${name}/versions/${id}?include=modules`);
   assert(Array.isArray(data.modules) && typeof data.main_module === "string", "Missing module provenance");
-  return { main: data.main_module, modules: data.modules.map(item => ({
-    name: item.name, sha256: sha(Buffer.from(item.content_base64, "base64")),
-  })).sort((a, b) => a.name.localeCompare(b.name)) };
+  assert(data.modules.every(item => /\.(js|wasm)$/.test(item.name)),
+    `Unexpected non-executable remote module type for ${name}`);
+  return { main: data.main_module, modules: data.modules
+    .map(item => ({ name: item.name, bytes: Buffer.from(item.content_base64, "base64") }))
+    .sort((a, b) => a.name.localeCompare(b.name)) };
 }
 async function modules(directory) {
   const files = (await readdir(directory, { recursive: true })).filter(name => /\.(js|wasm)$/.test(name)).sort();
@@ -61,6 +73,34 @@ async function assertBaselines(baseline, report, activated = false) {
   }
 }
 async function checkGate() {
+  const validation = await checkValidatedInputs();
+  const audit = await load(auditFile);
+  assert.equal(audit.status, "PASS", "Release module audit is not PASS");
+  assert.equal(audit.kind, "RELEASE", "A release audit is required");
+  assert.equal(stable(audit.canonicalSourceIdentity), stable(await canonicalSourceIdentity(validation)),
+    "Release audit source identity is stale");
+  const assets = await assetFiles("dist/public");
+  assert.equal(stable(audit.assets), stable(assets), "Release audit asset manifest is stale");
+  const baseline = await load(`${prefix}-production-baseline.json`);
+  for (const [name, directory] of targets) {
+    const staged = audit.targets?.[name];
+    assert(staged, `Release audit is missing ${name}`);
+    assert.equal(staged.activeOldVersion, baseline.workers[name].version, `Audited old version changed for ${name}`);
+    assert.equal(staged.latestOldVersion, staged.activeOldVersion, `Audited latest version differs for ${name}`);
+    assert.equal(staged.main, name === targets[0][0] ? "index.js" : "worker.js", `Unexpected audited main module for ${name}`);
+    assert.equal(staged.audit?.status, "PASS", `Module audit did not pass for ${name}`);
+    assert.equal(stable(staged.candidateModules), stable(manifest(await modules(directory))),
+      `Audited candidate modules changed for ${name}`);
+    assert.equal(stable(staged.audit.modules.map(item => ({ name: item.candidate, sha256: item.candidateSha256 }))
+      .sort((a, b) => a.name.localeCompare(b.name))),
+      stable(staged.candidateModules), `Audit module evidence is incomplete for ${name}`);
+    assert.equal(stable(staged.audit.modules.map(item => ({ name: item.old, sha256: item.oldSha256 }))
+      .sort((a, b) => a.name.localeCompare(b.name))),
+    stable(staged.oldModules), `Audited old module evidence is incomplete for ${name}`);
+  }
+  return validation;
+}
+async function checkValidatedInputs() {
   const validation = await load(`${prefix}-validation.json`);
   assert.equal(validation.status, "PASS", "Release validation is not PASS");
   for (const [file, expected] of Object.entries(validation.sourceHashes)) {
@@ -69,6 +109,8 @@ async function checkGate() {
   for (const [directory, expected] of Object.entries(validation.moduleManifests)) {
     assert.equal(stable(manifest(await modules(directory))), stable(expected), "Validated modules changed");
   }
+  const assets = await assetFiles("dist/public");
+  assert.equal(stable(assets), stable(await load(`${prefix}-assets.json`)), "Validated frontend assets changed");
   return validation;
 }
 async function assetFiles(directory) {
@@ -83,6 +125,108 @@ async function assetFiles(directory) {
     };
   }
   return result;
+}
+async function canonicalSourceIdentity(validation) {
+  const gitCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  return {
+    gitCommit,
+    releaseOperatorSha256: sha(await readFile("scripts/resource-envelope-release.mjs")),
+    moduleAuditorSha256: sha(await readFile("scripts/resource-envelope-module-audit.mjs")),
+    moduleAuditTestsSha256: sha(await readFile("scripts/resource-envelope-module-audit.test.mjs")),
+    sourceParitySha256: sha(await readFile("production/vibesdk-launch/resource-envelope-source-parity.json")),
+    sourceHashesSha256: sha(stable(validation.sourceHashes)),
+    moduleManifestsSha256: sha(stable(validation.moduleManifests)),
+    assetManifestSha256: sha(stable(await assetFiles("dist/public"))),
+  };
+}
+async function releaseAudit() {
+  let existing;
+  try { existing = await load(checkpoint); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (existing) {
+    assert(["STAGING_FAILED_OR_UNKNOWN", "RECONCILED_NO_UPLOAD"].includes(existing.state),
+      "A release checkpoint is reserved; do not audit/retry over it");
+    assert.deepEqual(existing.targets, {}, "A reserved or partially staged checkpoint blocks another audit");
+  }
+  const validation = await checkValidatedInputs();
+  const assets = await assetFiles("dist/public");
+  const baseline = await load(`${prefix}-production-baseline.json`);
+  const targetsAudit = {};
+  for (const [name, directory] of targets) {
+    const expectedOld = baseline.workers[name].version;
+    assert.equal(await current(name), expectedOld, `Serving version changed for ${name}`);
+    const latest = await cf("GET", `/workers/scripts/${name}/versions`);
+    assert.equal(latest.items[0]?.id, expectedOld, `Latest binding source changed for ${name}`);
+    const old = await remoteModuleContents(name, expectedOld);
+    const candidate = await modules(directory);
+    const candidateMain = name === targets[0][0] ? "index.js" : "worker.js";
+    assert.equal(old.main, candidateMain, `Main module name changed for ${name}`);
+    const audit = auditModuleSets(old.modules, candidate, old.main);
+    targetsAudit[name] = {
+      activeOldVersion: expectedOld,
+      latestOldVersion: latest.items[0].id,
+      main: old.main,
+      oldModules: manifest(old.modules),
+      candidateModules: manifest(candidate),
+      audit: {
+        status: audit.status,
+        mainExports: audit.mainExports,
+        modules: audit.modules.map(item => {
+          const oldModule = old.modules.find(module => module.name === item.old);
+          const newModule = candidate.find(module => module.name === item.candidate);
+          return {
+            family: item.family, old: item.old, candidate: item.candidate, result: item.result,
+            oldSha256: sha(oldModule.bytes), candidateSha256: sha(newModule.bytes),
+          };
+        }),
+      },
+    };
+  }
+  const report = {
+    kind: "RELEASE", status: "PASS", auditedAt: new Date().toISOString(),
+    canonicalSourceIdentity: await canonicalSourceIdentity(validation),
+    assets,
+    targets: targetsAudit,
+  };
+  await writeFile(auditFile, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
+  console.log(JSON.stringify({
+    status: report.status,
+    oldVersions: Object.fromEntries(Object.entries(targetsAudit).map(([name, item]) => [name, item.activeOldVersion])),
+    moduleCounts: Object.fromEntries(Object.entries(targetsAudit).map(([name, item]) => [name, item.audit.modules.length])),
+  }));
+}
+async function reconcileFailedNoUpload() {
+  const report = await load(checkpoint);
+  assert.equal(report.state, "STAGING_FAILED_OR_UNKNOWN", "Only the failed no-upload checkpoint can be reconciled");
+  assert.deepEqual(report.targets, {}, "A reserved or partially staged checkpoint cannot be archived as no-upload");
+  let priorArchive;
+  try { priorArchive = await readFile(archiveFile); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  assert(!priorArchive, "The failed no-upload attempt was already archived");
+  const baseline = await load(`${prefix}-production-baseline.json`);
+  const observed = {};
+  for (const [name] of targets) {
+    const expected = baseline.workers[name].version;
+    assert.equal(await current(name), expected, `Serving version changed for ${name}`);
+    const latest = await cf("GET", `/workers/scripts/${name}/versions`);
+    assert.equal(latest.items[0]?.id, expected, `Latest version changed for ${name}`);
+    observed[name] = { servingVersion: expected, latestVersion: latest.items[0].id };
+  }
+  const archive = {
+    archivedAt: new Date().toISOString(),
+    outcome: "FAILED_BEFORE_UPLOAD_NO_TARGETS_RESERVED",
+    verifiedServingAndLatestVersions: observed,
+    originalCheckpoint: report,
+  };
+  const archiveBytes = JSON.stringify(archive, null, 2) + "\n";
+  await writeFile(archiveFile, archiveBytes, { mode: 0o600, flag: "wx" });
+  await save({
+    state: "RECONCILED_NO_UPLOAD",
+    reconciledAt: archive.archivedAt,
+    archive: archiveFile,
+    archiveSha256: sha(archiveBytes),
+    verifiedServingAndLatestVersions: observed,
+    targets: {},
+  });
+  console.log(JSON.stringify({ state: "RECONCILED_NO_UPLOAD", archive: archiveFile }));
 }
 async function uploadAssets(name, expectedManifest) {
   const directory = "dist/public";
@@ -120,28 +264,38 @@ if (action === "manifest") {
 } else if (action === "stage") {
   let existing;
   try { existing = await load(checkpoint); } catch (error) { if (error.code !== "ENOENT") throw error; }
-  assert(!existing, "A release checkpoint exists; reconcile it rather than uploading again");
+  if (existing) {
+    assert.equal(existing.state, "RECONCILED_NO_UPLOAD", "A release checkpoint exists; reconcile it rather than uploading again");
+    assert.deepEqual(existing.targets, {}, "A reserved or partially staged checkpoint blocks another stage");
+    const archive = await readFile(archiveFile, "utf8");
+    assert.equal(sha(archive), existing.archiveSha256, "No-upload archive is missing or changed");
+  }
   const validation = await checkGate();
+  const preflight = new Map();
+  for (const [name, directory] of targets) {
+    await assertBaselines(baseline, {});
+    const previous = baseline.workers[name].version;
+    const list = await cf("GET", `/workers/scripts/${name}/versions`);
+    assert.equal(list.items[0]?.id, previous, "Latest binding source is not the accepted serving version");
+    const prior = await version(name, previous);
+    const old = await remoteModuleContents(name, previous);
+    const local = await modules(directory);
+    assert.equal(old.main, name === targets[0][0] ? "index.js" : "worker.js", "Unexpected live main module");
+    auditModuleSets(old.modules, local, old.main);
+    preflight.set(name, { previous, prior, old, local, expected: manifest(local) });
+  }
   const report = { state: "STAGING", startedAt: new Date().toISOString(), validationSha256: sha(stable(validation)), targets: {} };
   await assertBaselines(baseline, report);
   await save(report);
   try {
-    for (const [name, directory] of targets) {
+    for (const [name] of targets) {
       await assertBaselines(baseline, report);
-      const previous = baseline.workers[name].version;
-      const list = await cf("GET", `/workers/scripts/${name}/versions`);
-      assert.equal(list.items[0].id, previous, "Latest binding source is not the accepted serving version");
-      const prior = await version(name, previous);
-      const oldModules = await remoteModules(name, previous);
-      const local = await modules(directory);
-      const expected = manifest(local);
-      assert.equal(stable(expected.filter(item => item.name !== oldModules.main)),
-        stable(oldModules.modules.filter(item => item.name !== oldModules.main)), "Only the main JS module may change");
+      const { previous, prior, old, local, expected } = preflight.get(name);
       const runtime = JSON.parse(JSON.stringify(prior.resources.script_runtime));
       const expectedBindings = JSON.parse(JSON.stringify(prior.resources.bindings));
       const bindings = prior.resources.bindings.map(binding => ({ name: binding.name, type: "inherit", version_id: "latest" }));
       const metadata = {
-        main_module: oldModules.main,
+        main_module: old.main,
         compatibility_date: runtime.compatibility_date, compatibility_flags: runtime.compatibility_flags,
         bindings, keep_assets: true, ...(runtime.containers ? { containers: runtime.containers } : {}),
         annotations: { "workers/message": "250-credit envelope and existing native resource-terminal status; no generated-project changes" },
@@ -161,7 +315,7 @@ if (action === "manifest") {
         };
       }
       const staged = { previousVersion: previous, rollbackVersion: previous, state: "UPLOAD_RESERVED",
-        main: oldModules.main, modules: expected, expectedRuntime: stable(runtime),
+        main: old.main, modules: expected, expectedRuntime: stable(runtime),
         // Store hashes only, never binding plaintext or credentials.
         expectedBindingsSha256: bindingFingerprint(expectedBindings), activated: false };
       report.targets[name] = staged;
@@ -221,4 +375,8 @@ if (action === "manifest") {
   report.activatedAt = new Date().toISOString();
   await save(report);
   console.log(JSON.stringify({ state: report.state, versions: Object.fromEntries(Object.entries(report.targets).map(([k,v])=>[k,v.version])) }));
-} else throw new Error("Use manifest, stage, or activate");
+} else if (action === "audit") {
+  await releaseAudit();
+} else if (action === "reconcile-no-upload") {
+  await reconcileFailedNoUpload();
+} else throw new Error("Use manifest, audit, reconcile-no-upload, stage, or activate");

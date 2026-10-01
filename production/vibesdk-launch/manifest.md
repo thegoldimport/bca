@@ -1,5 +1,10 @@
 # Private launch foundation (accepted for private use)
 
+**Current resource-envelope candidate:** use
+[`resource-envelope-reconstruction.md`](resource-envelope-reconstruction.md)
+for the complete ten-patch ordered recipe and release gates. Earlier recipes
+below document historical releases, not the current final candidate.
+
 Cloudflare account: `03ef1e6e42498920987f07059e107538`. No BuildCustom public domain, route, marketing site, old product D1, or Replit deployment has been changed.
 
 ## Pinned build
