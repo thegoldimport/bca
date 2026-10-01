@@ -28,3 +28,17 @@ mtime_ms = 1790858918939
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/103c3013-c7c4-4d57-970a-66644a3b03db/e3fe3931-be54-4ce3-8042-497656ab14a9"
 storage_version_token = "1790859101855334"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "iiTniSnYApHyTpT-Xetdj"
+uri = "file://production/vibesdk-launch/continuous-coding-observability-report.md"
+type = "text"
+title = "Observability authorization report — BLOCKED"
+description = "Full requested report: local test results, instrumentation safety blockers, no deployment or fixture request, protected projects untouched."
+logical_id = "5882864f-42aa-425b-9518-ec1ec3871659"
+content_hash = "sha256:98fafcb9aa8af2b82d0353725aee17e9e5050700149866ebf927bd493c384fd4"
+size = 7374
+mtime_ms = 1790862446780
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/5882864f-42aa-425b-9518-ec1ec3871659/7a8fffbb-008e-4b95-9597-f4402514e03b"
+storage_version_token = "1790862452898799"
+content_type = "text/markdown"

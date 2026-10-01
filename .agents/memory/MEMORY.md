@@ -67,3 +67,4 @@
 - [Think continuation queue](think-continuation-queue.md) — installed Think's response hook still runs inside the queued RPC turn; awaiting a queued continuation there deadlocks.
 - [Think Worker test boundary](think-worker-test-boundary.md) — importing the installed Think harness can fail in isolated Worker tests through a bundled shell dependency; test pure contracts separately.
 - [Ignored-source release parity](ignored-source-release-parity.md) — exact new-feature patch parity does not prove the full reconstructed release preserves tested auth behavior.
+- [Diagnostic observer safety](diagnostic-observer-safety.md) — protect metadata collection as well as sinks; arbitrary error and close-reason text is not automatically safe.

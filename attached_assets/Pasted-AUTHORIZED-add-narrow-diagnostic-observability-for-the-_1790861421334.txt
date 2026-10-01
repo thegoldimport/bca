@@ -1,0 +1,408 @@
+AUTHORIZED: add narrow diagnostic observability for the existing production
+continuous-coding candidate, then run ONE controlled fresh-fixture retry.
+
+This is NOT authorization to change lifecycle behavior.
+
+DO NOT touch Project 5.
+
+DO NOT repair or retry Project 6.
+
+DO NOT change:
+- Think maxSteps
+- continuation behavior
+- operation limits
+- completion semantics
+- preflight
+- deploy_space behavior
+- auth
+- ownership
+- gateway
+- Publish
+- SpaceDO workspace semantics
+
+Current production runtime candidate remains:
+
+122e2da3-5617-49cc-92ca-5c5723e30af3
+
+==================================================
+WHY WE ARE DOING THIS
+==================================================
+
+The first production fixture produced insufficient root-cause evidence.
+
+Confirmed sequence:
+
+1. Customer request began normally.
+2. Think successfully performed multiple tools.
+3. Browser WebSocket closed abnormally with 1006.
+4. Think continued working after that disconnect.
+5. 12 fully recorded tools succeeded.
+6. Native Think RPC was later recorded canceled.
+7. Another provider request succeeded through AI Gateway.
+8. Provider returned a write for app.js.
+9. That exact app.js reached SpaceDO.
+10. Native Think stream later persisted error.
+11. Original exception/cause was not retained.
+12. No continuation occurred because the first native turn never recorded normal completion.
+13. HEAD remained unchanged.
+14. Dirty work remained preserved.
+15. No preview deployed.
+16. No false COMPLETE occurred.
+17. No production Publish occurred.
+
+All 13 correlated AI Gateway requests were HTTP 200.
+
+Therefore:
+
+- provider failure is not established
+- lifecycle regression is not established
+- transport/RPC/stream-forwarding failure is plausible but unproven
+- rollback is not currently justified
+- speculative code repair is not justified
+
+We now need ONE instrumented reproduction attempt.
+
+==================================================
+PART 1 — ADD OBSERVABILITY ONLY
+==================================================
+
+Add the smallest possible diagnostic instrumentation necessary to retain the
+ORIGINAL error/cause at these boundaries:
+
+1. parent BuildCustom host around stub.chat()
+
+2. Think RPC callback / stream result boundary
+
+3. Think stream forwarding
+
+4. WebSocket close/error handling
+
+5. individual tool execution boundary
+
+6. onStepFinish boundary
+
+7. operation-state persistence boundary
+
+8. post-chat continuation decision
+
+For caught errors record structured diagnostic fields such as:
+
+- timestamp
+- fixture/project/agent identifiers
+- native request ID
+- conversation ID
+- operation ID where safely available
+- component/boundary
+- error name/type
+- message
+- code
+- stack
+- cause
+- nested cause where serializable
+- WebSocket readyState / close code where relevant
+- current Think turn
+- current step
+- last tool name/call ID
+- continuation count
+- operation state
+
+REDACT:
+- passwords
+- auth cookies
+- bearer tokens
+- API keys
+- recovery tokens
+- full sensitive customer content
+
+Do not log hidden model reasoning.
+
+Do not log secrets.
+
+==================================================
+IMPORTANT OBSERVABILITY RULE
+==================================================
+
+Instrumentation must NOT alter control flow.
+
+It must not:
+
+- swallow errors
+- retry errors
+- convert errors to success
+- trigger continuation
+- suppress cancellation
+- keep WebSockets alive artificially
+- change RPC lifetime
+- change Think behavior
+- change tool results
+- change completion gates
+
+LOG AND RETHROW / PRESERVE EXISTING BEHAVIOR.
+
+We are observing the failure, not fixing it yet.
+
+==================================================
+PART 2 — VERIFY INSTRUMENTATION LOCALLY
+==================================================
+
+Add focused tests proving:
+
+- nested error/cause is retained
+- stack/source information is retained when available
+- WebSocket close evidence is retained
+- RPC cancellation evidence is retained
+- tool-boundary failures are attributable
+- continuation-decision failures are attributable
+- secrets are redacted
+- instrumentation does not change success/error behavior
+
+Run:
+
+- focused instrumentation tests
+- lifecycle tests
+- typecheck
+- build
+- Task 4B regression
+- Task 6A regression
+- ownership regression
+- preview sandbox regression
+- gateway/public routing regression
+
+If instrumentation changes behavior or regressions fail:
+
+STOP.
+
+==================================================
+PART 3 — DEPLOY OBSERVABILITY
+==================================================
+
+If tests pass:
+
+Deploy ONLY the minimum runtime/control component required for the
+instrumentation.
+
+Record:
+
+- previous version
+- new version
+- rollout percentage
+- rollback version
+
+Do not change gateway unless genuinely required.
+
+Do not touch Project 5.
+
+==================================================
+PART 4 — ONE NEW DISPOSABLE FIXTURE
+==================================================
+
+Create/use ONE NEW disposable production acceptance fixture.
+
+Do NOT reuse Project 6.
+
+Do NOT use Project 5.
+
+Send exactly ONE customer coding request.
+
+Use the same general acceptance goal as the previous fresh fixture so the
+behavior is comparable.
+
+Do not deliberately disconnect the browser.
+
+Do not deliberately sabotage the request.
+
+Do not force an error.
+
+Do not change maxSteps.
+
+Do not artificially force continuation unless the existing deterministic
+acceptance mechanism naturally does so.
+
+Observe normal customer behavior.
+
+==================================================
+PART 5 — IF THE RETRY SUCCEEDS
+==================================================
+
+If the new fixture completes normally:
+
+Require:
+
+- exactly one customer request
+- same ThinkAgent throughout
+- same SpaceDO
+- preflight before commit
+- preview succeeds
+- browser verification succeeds
+- coherent authoritative revision
+- clean working tree
+- finish_task
+- COMPLETE
+- no production Publish
+
+Also report whether:
+
+- browser WebSocket remained connected
+- any RPC cancellation occurred
+- any native stream error occurred
+- any internal continuation occurred
+
+If the operation completes within the first Think turn, that proves basic
+production behavior but NOT multi-turn continuation.
+
+In that case DO NOT touch Project 5 yet.
+
+We still need one controlled production acceptance that actually crosses an
+internal turn boundary before using Project 5.
+
+==================================================
+PART 6 — IF THE RETRY FAILS
+==================================================
+
+If the new fixture fails:
+
+DO NOT retry again.
+
+DO NOT repair it.
+
+DO NOT touch Project 5.
+
+Use the new instrumentation immediately.
+
+Return the earliest original error with:
+
+- error type
+- message
+- code
+- stack
+- nested cause
+- component
+- exact boundary
+- timeline
+- whether browser disconnected first
+- whether RPC canceled first
+- whether provider succeeded
+- whether tool execution succeeded
+- whether workspace remained safe
+- whether candidate lifecycle code caused the failure
+
+Classify:
+
+LIFECYCLE IMPLEMENTATION DEFECT
+EXISTING THINK/VIBESDK DEFECT
+CLIENT/TRANSPORT FAILURE
+RPC/CALLBACK FAILURE
+TOOL FAILURE
+CLOUDFLARE RUNTIME FAILURE
+PROVIDER FAILURE
+OTHER
+STILL INSUFFICIENT EVIDENCE
+
+If the same class of failure reproduces and instrumentation identifies a
+candidate regression, recommend rollback.
+
+Do not automatically rollback unless the evidence supports it.
+
+==================================================
+PART 7 — PROJECT 5 REMAINS OFF LIMITS
+==================================================
+
+Regardless of this fixture result:
+
+DO NOT read, mutate, repair, reset, commit, deploy, or send an instruction to
+Project 5 during this authorization.
+
+Project 5 remains our later real-world recovery acceptance case.
+
+==================================================
+RETURN
+==================================================
+
+Return:
+
+OVERALL STATUS:
+PASS / FAILED WITH ROOT CAUSE / BLOCKED
+
+OBSERVABILITY
+- files changed:
+- boundaries instrumented:
+- error cause retention:
+- WebSocket diagnostics:
+- RPC diagnostics:
+- tool diagnostics:
+- continuation diagnostics:
+- secret redaction:
+- behavior changed: MUST BE NO
+
+LOCAL VERIFICATION
+- instrumentation tests:
+- lifecycle tests:
+- typecheck:
+- build:
+- Task 4B:
+- Task 6A:
+- ownership:
+- preview sandbox:
+- gateway:
+
+DEPLOYMENT
+- previous runtime:
+- new runtime:
+- control changed:
+- gateway changed:
+- rollback version:
+
+NEW FIXTURE
+- user:
+- project:
+- agent:
+- conversation:
+- operation:
+- exactly one customer request:
+- Think turns:
+- tool steps:
+- continuations:
+- WebSocket remained connected:
+- RPC cancellation:
+- provider errors:
+- native stream errors:
+- preflight:
+- commit:
+- preview:
+- browser verification:
+- finish_task:
+- revision:
+- working tree:
+- final state:
+- production Publish:
+- result:
+
+IF FAILURE
+- earliest original error:
+- type:
+- message:
+- code:
+- stack:
+- nested cause:
+- component:
+- boundary:
+- candidate caused failure:
+- classification:
+- confidence:
+
+IF SUCCESS
+- crossed 25-step/internal-turn boundary:
+- multi-turn continuation proven:
+- lifecycle production acceptance proven:
+
+ROLLBACK RECOMMENDATION:
+
+PROJECT 5 READ OR TOUCHED:
+MUST BE NO
+
+PROJECT 6 RETRIED:
+MUST BE NO
+
+EXACT NEXT RECOMMENDED STEP:
+
+Then STOP.
