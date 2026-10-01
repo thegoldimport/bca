@@ -1,0 +1,506 @@
+AUTHORIZED: narrow read-only validation and correction of the Task 13 production
+acceptance harness against the CURRENT live BuildCustom owner-scoped contracts.
+
+This is a HARNESS investigation.
+
+Do NOT modify production product behavior.
+
+Do NOT change the continuous-coding lifecycle.
+
+Do NOT change observability.
+
+Do NOT deploy anything yet.
+
+Do NOT create another fixture.
+
+Do NOT send any AI/coding request.
+
+Do NOT touch Project 5.
+
+Do NOT retry Project 6.
+
+Do NOT retry Project 7's coding operation.
+
+==================================================
+CURRENT ACCEPTED STATE
+==================================================
+
+Production runtime instrumentation is active:
+
+f4488693-4424-46a3-9834-30b214645449
+
+Rollout:
+100%
+
+Rollback runtime:
+
+122e2da3-5617-49cc-92ca-5c5723e30af3
+
+Control plane:
+unchanged
+
+Gateway:
+unchanged
+
+Observability safety work:
+PASS
+
+Verification:
+
+27 adversarial diagnostics tests PASS
+190 runtime tests PASS
+132 routing/UI regressions PASS
+typecheck PASS
+canonical build PASS
+deployment dry run PASS
+safety review PASS
+
+Instrumentation is now considered accepted.
+
+DO NOT redesign or expand it.
+
+==================================================
+PROJECT 7 RESULT
+==================================================
+
+One new disposable fixture was created:
+
+Project 7
+
+But the acceptance harness stopped BEFORE:
+
+- opening the coding browser
+- sending a customer coding request
+- starting Think
+- generating code
+- exercising continuation
+- crossing the 25-step boundary
+- committing
+- previewing
+- publishing
+
+Customer coding requests:
+0
+
+The owner-scoped preflight could not confirm the required:
+
+- idle baseline
+- revision baseline
+
+against the live response/read-only evidence.
+
+The underlying SpaceDO read failure remains unclassified.
+
+There is currently NO evidence that:
+
+- continuous-coding lifecycle failed
+- instrumentation caused the failure
+- Think failed
+- provider failed
+- continuation failed
+
+Those systems were not exercised by Project 7.
+
+==================================================
+GOAL
+==================================================
+
+Determine whether Project 7 stopped because:
+
+A. the acceptance harness is calling the wrong endpoint
+
+B. the harness expects an outdated response contract
+
+C. the harness is reading the correct response incorrectly
+
+D. authentication/session setup is wrong
+
+E. owner/project/agent mapping is wrong
+
+F. project initialization is legitimately incomplete
+
+G. the owner-scoped product API and underlying runtime disagree
+
+H. SpaceDO is genuinely unavailable
+
+I. a live product regression exists
+
+J. another identifiable cause
+
+We need to validate the HARNESS against the actual live customer/product
+contracts before spending another disposable fixture.
+
+==================================================
+PART 1 — DOCUMENT WHAT THE HARNESS EXPECTS
+==================================================
+
+Inspect the exact Project 7 preflight code.
+
+Document:
+
+1. endpoint(s) called
+2. HTTP method
+3. authentication mechanism
+4. project identifier
+5. agent identifier
+6. expected HTTP status
+7. expected response shape
+8. exact field used to determine idle
+9. exact field used to determine revision
+10. timeout/retry behavior
+11. what condition caused the stop
+12. actual live response received
+
+Do not mutate anything.
+
+==================================================
+PART 2 — COMPARE TO CURRENT CONTROL-PLANE CONTRACT
+==================================================
+
+Inspect the CURRENT production source corresponding to the deployed control
+plane.
+
+Determine the authoritative owner-scoped API contract for:
+
+- project lookup
+- runtime-agent mapping
+- generation status
+- authoritative revision
+- files/workspace readiness
+- preview state where relevant
+
+Compare:
+
+HARNESS EXPECTATION
+
+vs
+
+CURRENT PRODUCT CONTRACT
+
+field by field.
+
+We have changed the BuildCustom/VibeSDK integration substantially during the
+launch work.
+
+Do not assume an older Task 13 harness contract is still correct.
+
+==================================================
+PART 3 — COMPARE WITH REAL UI BEHAVIOR
+==================================================
+
+Inspect how the CURRENT BuildCustom UI obtains the same information when a
+customer opens a project.
+
+Determine:
+
+- what endpoint the UI calls
+- what auth/session it uses
+- how it resolves project → agent
+- how it determines generation state
+- how it determines current revision
+- how it loads files
+- how it handles a newly created project
+- whether it requires SpaceDO readiness before showing the builder
+
+The acceptance harness should emulate the actual supported customer path where
+possible.
+
+It should NOT depend on private/internal state merely because that state is
+convenient for testing.
+
+==================================================
+PART 4 — PROJECT 7 READ-ONLY RECONCILIATION
+==================================================
+
+Project 7 may be inspected READ-ONLY for this harness investigation.
+
+Do NOT send a coding instruction.
+
+Do NOT repair anything.
+
+Do NOT initialize or mutate SpaceDO merely to make the test pass.
+
+Determine:
+
+- product user exists
+- project exists
+- owner matches
+- runtime link exists
+- mapped agent exists
+- current product-side revision metadata
+- current runtime-side revision if safely available
+- current generation state
+- whether SpaceDO exists/is initialized
+- whether files/workspace exist
+- whether preview exists
+- whether this is a valid normal state for a newly created project before its
+  first coding request
+
+If SpaceDO does not yet contain a workspace because no coding request has ever
+run, determine whether that is EXPECTED.
+
+This distinction is important.
+
+Do not classify an uninitialized first-use workspace as broken unless the
+product contract requires it to already exist.
+
+==================================================
+PART 5 — INVESTIGATE THE "SPACEDO READ FAILURE"
+==================================================
+
+Identify exactly what "SpaceDO read failure" means.
+
+Report:
+
+- caller
+- endpoint/RPC
+- method
+- target
+- expected result
+- actual result
+- HTTP/RPC status
+- error type/code if available
+- whether the request reached SpaceDO
+- whether SpaceDO existed
+- whether initialization was expected
+- whether the actual customer UI makes this same call at this stage
+
+Determine whether this is:
+
+REAL PRODUCT FAILURE
+
+or
+
+HARNESS ASSUMPTION FAILURE
+
+or
+
+EXPECTED UNINITIALIZED STATE
+
+or
+
+INSUFFICIENT EVIDENCE
+
+==================================================
+PART 6 — VALIDATE AGAINST AN EXISTING HEALTHY PROJECT
+==================================================
+
+Without generating or mutating anything, use ONE existing disposable healthy
+project that already has an established workspace/revision.
+
+Do NOT use Project 5.
+
+Do NOT use Project 6.
+
+Prefer an existing disposable project whose normal customer path has already
+been accepted.
+
+Run ONLY the same owner-scoped READS used by the Project 7 harness.
+
+Compare:
+
+healthy established project response
+
+vs
+
+Project 7 fresh-project response
+
+vs
+
+harness expectation
+
+This should tell us whether the harness:
+
+- works for established projects
+- incorrectly assumes every new project already has a revision/workspace
+- uses stale fields
+- or is exposing a real product problem
+
+No AI request.
+
+No mutation.
+
+==================================================
+PART 7 — DETERMINE THE CORRECT PREFLIGHT CONTRACT
+==================================================
+
+Define the minimum preflight the production acceptance harness actually needs.
+
+For a NEW project before its first customer coding request, answer:
+
+What MUST be true?
+
+Likely examples:
+
+- authenticated owner
+- product project exists
+- project maps to correct runtime agent
+- generation is not already running
+- no unexpected existing release
+- no unexpected prior customer turn
+
+But DO NOT assume a committed revision must exist if normal first-use behavior
+creates it during the first coding operation.
+
+Likewise do not require an initialized SpaceDO workspace if normal product
+behavior lazily initializes it on first coding use.
+
+Derive this from CURRENT product behavior.
+
+==================================================
+PART 8 — HARNESS FIX
+==================================================
+
+If the issue is confirmed to be harness-only:
+
+Fix ONLY the acceptance harness.
+
+Do not modify runtime/control/product behavior to satisfy the test.
+
+Requirements:
+
+- use supported owner-scoped customer contracts
+- support legitimate fresh-project state
+- distinguish fresh/uninitialized from broken
+- still fail closed on actual ownership mismatch
+- still fail closed if generation is unexpectedly active
+- still fail closed on conflicting existing state
+- do not silently ignore real API errors
+- do not add mutation during preflight
+- do not initialize SpaceDO just to establish a baseline
+
+Add focused tests for:
+
+1. fresh project with no prior revision/workspace
+2. established idle project
+3. active generation
+4. ownership mismatch
+5. missing project
+6. missing runtime mapping
+7. genuine runtime/SpaceDO error
+8. malformed response
+9. stale/outdated response shape
+
+Do not deploy product code.
+
+Harness-only changes do not require a runtime deployment.
+
+==================================================
+PART 9 — DO NOT RUN ANOTHER FIXTURE YET
+==================================================
+
+Even if the harness fix passes:
+
+DO NOT create Project 8.
+
+DO NOT send an AI request.
+
+DO NOT use Project 7 for coding.
+
+We want to review the harness correction before consuming another one-shot
+fixture.
+
+==================================================
+RETURN
+==================================================
+
+Return:
+
+OVERALL STATUS:
+HARNESS FIXED / REAL PRODUCT FAILURE / BLOCKED
+
+PROJECT 7
+- user:
+- project:
+- owner:
+- agent:
+- runtime mapping:
+- customer requests:
+- generation state:
+- product revision:
+- runtime revision:
+- SpaceDO state:
+- workspace/files:
+- expected fresh-project state:
+- result:
+
+HARNESS EXPECTATION
+- endpoints:
+- auth:
+- idle expectation:
+- revision expectation:
+- SpaceDO expectation:
+- exact failing assertion:
+
+CURRENT PRODUCT CONTRACT
+- project:
+- agent mapping:
+- generation state:
+- revision:
+- files:
+- first-use initialization:
+
+CURRENT UI CONTRACT
+- endpoints:
+- auth:
+- idle handling:
+- revision handling:
+- fresh project handling:
+
+SPACEDO READ FAILURE
+- caller:
+- operation:
+- expected:
+- actual:
+- status/error:
+- reached SpaceDO:
+- initialization expected:
+- classification:
+
+HEALTHY PROJECT COMPARISON
+- project:
+- same reads performed:
+- idle result:
+- revision result:
+- SpaceDO result:
+- difference from Project 7:
+
+ROOT CAUSE
+- harness bug:
+- product bug:
+- expected fresh state:
+- confidence:
+- evidence:
+
+HARNESS CORRECTION
+- files changed:
+- production product files changed: MUST BE NO
+- supported owner-scoped contracts used:
+- fresh state supported:
+- fail-closed behavior retained:
+- tests:
+
+OBSERVABILITY CHANGED:
+MUST BE NO
+
+RUNTIME DEPLOYED:
+MUST BE NO
+
+NEW AI REQUESTS:
+MUST BE ZERO
+
+NEW FIXTURES:
+MUST BE ZERO
+
+PROJECT 5 READ OR TOUCHED:
+MUST BE NO
+
+PROJECT 6 RETRIED:
+MUST BE NO
+
+PROJECT 7 CODING REQUEST:
+MUST BE NO
+
+EXACT NEXT RECOMMENDED STEP:
+
+Then STOP.

@@ -15,6 +15,12 @@ Check the SQL result's own error field as well as HTTP status and the outer succ
 
 **How to apply:** Require no nested SQL error and zero rows written. If private lifecycle storage is unavailable, label that limitation and use actual customer-path/tool results rather than inventing a COMPLETE state.
 
+Cloudflare account query/v2 can return successful SELECT result objects with `columns`, `rows`, and `meta.rows_written: 0` but **without a nested `success` property**. Treat an absent nested success as valid only if the expected result count and row/column shape are present, there is no root or nested error or explicit `success: false`, and every nested query reports zero writes.
+
+**Why:** Requiring `queryResult.success === true` misclassified a successful, scoped workspace HEAD read as a SpaceDO failure, hiding a real pre-existing seed commit from a one-shot acceptance harness.
+
+**How to apply:** Normalize the actual query/v2 result envelope before classifying storage health; do not equate a parser assertion with an unavailable Durable Object. Keep native customer revision reads authoritative for acceptance rather than making direct storage inspection a prerequisite.
+
 Installed Think's resumable stream journal can mix single JSON chunk objects with packed arrays of JSON-encoded chunk strings. Decode the segment and then each string before checking chunk types. Extract only operational metadata/error fields, never reasoning/text deltas. A native general error can terminate the stream before that error chunk is persisted; no stored error chunk is not proof of a successful stream.
 
 **Why:** Directly extracting a type from packed rows produced null and concealed the actual step/tool counts. The stream's persisted status still authoritatively recorded an error without a stored error message.

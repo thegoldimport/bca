@@ -8,6 +8,15 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { resolve } from "node:path";
+import {
+  parseOwnerRevision,
+  runtimeRevisionMatchesSnapshot,
+  summarizeNativeRevision,
+  summarizeNativeStatus,
+  validateDurableSelectResult,
+  validateFreshProjectPreflight,
+  validateOwnerProjectMapping,
+} from "./lib/task13-owner-contracts.mjs";
 
 const APP = "https://app.buildcustom.ai";
 const RUNTIME = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
@@ -246,21 +255,7 @@ function assertReadOnlyD1Results(result) {
 }
 
 function assertReadOnlyDurableResults(result, expectedQueryCount) {
-  assert(result
-    && (result.success === undefined || result.success === true)
-    && (result.error === undefined || result.error === null)
-    && Array.isArray(result.results)
-    && result.results.length === expectedQueryCount
-    && expectedQueryCount > 0,
-  "Durable Object SELECT result metadata is missing or reports an error.");
-  for (const queryResult of result.results) {
-    assert(queryResult && queryResult.success === true,
-      "Durable Object SELECT did not report nested success.");
-    assert(queryResult.error === undefined || queryResult.error === null,
-      "Durable Object SELECT reported a nested error.");
-    assert(queryResult.meta && queryResult.meta.rows_written === 0,
-      "Durable Object SELECT metadata is missing or indicates a write.");
-  }
+  validateDurableSelectResult(result, expectedQueryCount);
 }
 
 function ownerIdentityKey(value) {
@@ -287,50 +282,7 @@ async function readRuntimeRevision() {
 }
 
 function runtimeRevisionSummary(response) {
-  const httpStatus = Number.isSafeInteger(response?.status) ? response.status : null;
-  const data = response?.data;
-  const rootHasHash = Boolean(data && typeof data === "object"
-    && Object.prototype.hasOwnProperty.call(data, "commitHash"));
-  const nestedRevision = data?.revision && typeof data.revision === "object"
-    && !Array.isArray(data.revision) ? data.revision : null;
-  const nestedHasHash = Boolean(nestedRevision
-    && Object.prototype.hasOwnProperty.call(nestedRevision, "commitHash"));
-  const parseField = (container, key, present) => {
-    if (!present) return { present: false, valid: true, hash: null };
-    const value = container[key];
-    if (value === null) return { present: true, valid: true, hash: null };
-    if (typeof value !== "string") return { present: true, valid: false, hash: null };
-    const hash = safeCommitHash(value);
-    return { present: true, valid: Boolean(hash), hash };
-  };
-  const root = parseField(data, "commitHash", rootHasHash);
-  const nested = parseField(nestedRevision, "commitHash", nestedHasHash);
-  const fieldsValid = root.valid && nested.valid
-    && (!root.hash || !nested.hash || root.hash === nested.hash)
-    && (root.present || nested.present);
-  const commitHash = root.hash ?? nested.hash ?? null;
-  return {
-    httpStatus,
-    schemaValid: fieldsValid,
-    commitHash,
-    source: root.hash ? "commitHash" : nested.hash ? "revision.commitHash" : "NULL",
-    valid: httpStatus === 200 && fieldsValid,
-  };
-}
-
-function runtimeRevisionMatchesSnapshot(runtimeRevision, revisionSnapshot) {
-  if (!runtimeRevision?.valid || !revisionSnapshot?.baselineKnown) return false;
-  const independentHeads = [
-    revisionSnapshot.statusLastDeployedCommit,
-    revisionSnapshot.matchingCustomerTurnCommitHash,
-    revisionSnapshot.spaceGitHeadCommitHash,
-  ].filter(Boolean);
-  if (independentHeads.length) {
-    return Boolean(runtimeRevision.commitHash)
-      && independentHeads.every(hash => hash === runtimeRevision.commitHash);
-  }
-  return runtimeRevision.commitHash === null
-    && revisionSnapshot.spaceGitReadState === "NO_HEAD";
+  return parseOwnerRevision(response);
 }
 
 function walk(value, callback, depth = 0, seen = new WeakSet()) {
@@ -352,38 +304,8 @@ function safeCommitHash(value) {
     ? value.toLowerCase() : null;
 }
 
-function statusSummary(data, expectedAgentId = report?.agentId) {
-  const generation = data?.state?.generation;
-  const shouldBeGenerating = typeof data?.state?.shouldBeGenerating === "boolean"
-    ? data.state.shouldBeGenerating : null;
-  const generationStatus = typeof generation?.status === "string"
-    && /^(idle|running|complete|completed|success|failed|error|stopped)$/.test(generation.status.toLowerCase())
-    ? generation.status.toLowerCase() : null;
-  const connected = typeof data?.connected === "boolean" ? data.connected : null;
-  const configured = data?.configured === true;
-  const providerKnown = data?.provider === "vibesdk";
-  const agentMatched = typeof expectedAgentId === "string" && expectedAgentId.length > 0
-    && data?.agentId === expectedAgentId;
-  const runtimeReady = configured && providerKnown && connected === true && agentMatched;
-  const generationIdle = shouldBeGenerating === false
-    && generationStatus === "idle"
-    && runtimeReady;
-  const current = shouldBeGenerating === true || generationStatus === "running"
-    ? "generating"
-    : generationIdle ? "idle"
-      : generationStatus && /^(complete|completed|success|failed|error|stopped)$/.test(generationStatus)
-        ? generationStatus : "unknown";
-  return {
-    state: current,
-    configured,
-    providerKnown,
-    connected,
-    agentMatched,
-    shouldBeGenerating,
-    generationStatus,
-    idleNoGeneration: generationIdle,
-    terminalNoGeneration: generationIdle,
-  };
+function statusSummary(data, ownerMappingVerified = false) {
+  return summarizeNativeStatus(data, { ownerMappingVerified });
 }
 
 function exactlyOneNativeSuggestion(observed) {
@@ -431,52 +353,23 @@ function turnsSummary(data) {
   };
 }
 
-function revisionSummary(status, turnsData, spaceGit = { state: "READ_FAILED" }) {
-  const statusHead = safeCommitHash(status?.state?.lastDeployedCommit);
-  const turnList = Array.isArray(turnsData?.turns)
-    ? turnsData.turns : Array.isArray(turnsData) ? turnsData : [];
-  const expectedPromptHash = digest(ACCEPTANCE_PROMPT);
-  const matchingTurns = turnList.filter(turn =>
-    typeof turn?.prompt === "string" && digest(turn.prompt) === expectedPromptHash);
-  const turnsHead = matchingTurns.length === 1
-    ? safeCommitHash(matchingTurns[0].commitHash) : null;
-  const spaceHead = safeCommitHash(spaceGit?.headCommitHash);
-  const hashes = [statusHead, turnsHead, spaceHead].filter(Boolean);
-  const sourcesAgree = new Set(hashes).size <= 1;
-  const headCommitHash = sourcesAgree ? spaceHead ?? statusHead ?? turnsHead : null;
-  const spaceGitReadState = [
-    "VERIFIED", "NO_HEAD", "INVALID_HEAD", "UNRESOLVED_HEAD", "AMBIGUOUS_HEAD", "READ_FAILED",
-  ].includes(spaceGit?.state) ? spaceGit.state : "READ_FAILED";
-  return {
-    headCommitHash,
-    statusLastDeployedCommit: statusHead,
-    matchingCustomerTurnCommitHash: turnsHead,
-    spaceGitHeadCommitHash: spaceHead,
-    spaceGitReadState,
-    spaceGitHeadFileSha256: safeCommitHash(spaceGit?.headFileSha256),
-    spaceGitRefFileSha256: safeCommitHash(spaceGit?.refFileSha256),
-    baselineKnown: Boolean(sourcesAgree
-      && (statusHead || spaceHead || spaceGitReadState === "NO_HEAD")),
-    committedHeadVerified: Boolean(spaceHead && sourcesAgree),
-    workingTreeDirty: null,
-  };
+function revisionSummary(ownerRevision) {
+  return summarizeNativeRevision(ownerRevision);
 }
 
 async function ownerSnapshot() {
-  const [status, turns] = await Promise.all([
+  const ownerMappingVerified = await identifyAgent();
+  assert(ownerMappingVerified, "Owner-bound runtime mapping is unavailable.");
+  const [status, turns, ownerRevision] = await Promise.all([
     readRuntime("status"),
     readRuntime("turns"),
+    readRuntimeRevision(),
   ]);
-  let spaceGit = { state: "READ_FAILED", headCommitHash: null };
-  try {
-    spaceGit = await readOwnAgentGitHead();
-  } catch {
-    // The report records only the failure classification, never SQL response content.
-  }
   return {
     at: new Date().toISOString(),
-    status: statusSummary(status),
-    revision: revisionSummary(status, turns, spaceGit),
+    status: statusSummary(status, ownerMappingVerified),
+    revision: revisionSummary(ownerRevision),
+    ownerRuntimeRevision: ownerRevision,
     turns: turnsSummary(turns),
   };
 }
@@ -496,23 +389,34 @@ async function gatesPass() {
 async function identifyAgent() {
   const projectId = ensureProjectId(report.projectId);
   const project = await appRequest(`/api/projects/${projectId}`);
-  assert.equal(project.status, 200);
-  const returnedId = project.data?.id ?? project.data?.project?.id;
-  assert.equal(Number(returnedId), projectId);
+  const detail = project.data?.project ?? project.data;
+  assert.equal(project.status, 200, "Owner project lookup failed.");
   const rows = await d1Select(
     "SELECT p.user_id, l.agent_id, p.status, l.initialization_status FROM projects p JOIN runtime_project_links l ON l.project_id=p.id WHERE p.id=? AND p.user_id=?",
     [projectId, report.ownerId],
   );
   const row = rows?.[0]?.results?.[0];
-  if (!row || ownerIdentityKey(row.user_id) === null
-    || ownerIdentityKey(row.user_id) !== ownerIdentityKey(report.ownerId)) return false;
-  if (row.status !== "ready" || row.initialization_status !== "ready") {
-    assert(!["failed", "blocked"].includes(row.initialization_status));
-    return false;
-  }
-  assert(safeScalar(row.agent_id, 120), "Owner-bound runtime agent identifier is invalid.");
-  report.agentId = row.agent_id;
-  return true;
+  const mapping = validateOwnerProjectMapping({
+    httpStatus: project.status, detail, row, projectId,
+    ownerId: report.ownerId, expectedAgentId: report.agentId,
+  });
+  if (mapping.ready) report.agentId = mapping.agentId;
+  return mapping.ready;
+}
+
+async function assertFreshProjectState() {
+  const projectId = ensureProjectId(report.projectId);
+  const project = await appRequest(`/api/projects/${projectId}`);
+  assert.equal(project.status, 200, "Owner project preflight read failed.");
+  const detail = project.data?.project ?? project.data;
+  const rows = await d1Select(
+    "SELECT COUNT(r.id) AS release_count, COUNT(p.id) AS project_rows FROM projects p LEFT JOIN runtime_releases r ON r.project_id=p.id WHERE p.id=? AND p.user_id=?",
+    [projectId, report.ownerId],
+  );
+  const row = rows?.[0]?.results?.[0];
+  assert.equal(Number(row?.project_rows), 1, "Fresh project owner is missing or has an existing release.");
+  validateFreshProjectPreflight(detail, row.release_count);
+  assert.equal(detail.agentId, report.agentId, "Fresh project agent mapping changed.");
 }
 
 async function setup() {
@@ -636,6 +540,7 @@ async function setup() {
   assert.equal(report.initialSnapshot.turns.customerTurnCount, 0, "The new owner project already has customer turns.");
   assert.equal(report.initialSnapshot.revision.baselineKnown, true,
     "Initial revision baseline is unavailable or inconsistent; no coding operation is sent.");
+  await assertFreshProjectState();
   let ownerRuntimeRevision;
   try {
     ownerRuntimeRevision = await readRuntimeRevision();
@@ -1245,6 +1150,7 @@ async function startBrowserRun() {
   assert.equal(before.turns.schemaValid, true);
   assert.equal(before.turns.customerTurnCount, 0);
   assert.deepEqual(before.revision, report.baselineRevision);
+  await assertFreshProjectState();
   let preBrowserRuntimeRevision;
   try {
     preBrowserRuntimeRevision = await readRuntimeRevision();
@@ -1730,38 +1636,32 @@ async function evidence() {
 
 function selfTestContracts() {
   const expectedHash = digest(ACCEPTANCE_PROMPT);
-  const mockAgentId = "agent-contract-test";
   const idleStatus = {
-    configured: true,
-    provider: "vibesdk",
-    agentId: mockAgentId,
+    nativeThink: true,
+    runtimeStatus: "ready",
     connected: true,
     state: {
       shouldBeGenerating: false,
       generation: { status: "idle" },
-      lastDeployedCommit: null,
-      previewUrl: null,
     },
   };
-  const idleState = statusSummary(idleStatus, mockAgentId);
+  const idleState = statusSummary(idleStatus, true);
   assert.equal(idleState.idleNoGeneration, true);
-  assert.equal(statusSummary({ ...idleStatus, configured: false }, mockAgentId).idleNoGeneration, false);
-  assert.equal(statusSummary({ ...idleStatus, agentId: "another-agent" }, mockAgentId).idleNoGeneration, false);
+  assert.equal(statusSummary(idleStatus, false).idleNoGeneration, false);
+  assert.equal(statusSummary({ ...idleStatus, nativeThink: false }, true).idleNoGeneration, false);
   assert.equal(statusSummary({
     ...idleStatus,
-    connected: true,
     state: {
       ...idleStatus.state,
       shouldBeGenerating: true,
       generation: { status: "running" },
     },
-  }, mockAgentId).idleNoGeneration, false);
+  }, true).idleNoGeneration, false);
   assert.equal(statusSummary({
-    nativeThink: true,
-    runtimeStatus: "ready",
+    configured: true, provider: "vibesdk", agentId: "old-agent",
     connected: true,
     state: { shouldBeGenerating: false, generation: { status: "idle" } },
-  }, mockAgentId).idleNoGeneration, false);
+  }, true).idleNoGeneration, false);
 
   const emptyTurns = turnsSummary({ turns: [] });
   assert.equal(emptyTurns.available, true);
@@ -1782,39 +1682,27 @@ function selfTestContracts() {
   assert.equal(oneTurn.promptSha256, expectedHash);
   assert(!JSON.stringify(oneTurn).includes("private"));
 
-  const baselineRevision = revisionSummary(
-    idleStatus,
-    { turns: [] },
-    { state: "NO_HEAD", headCommitHash: null },
-  );
-  const committedHash = "b".repeat(40);
-  const afterStatus = {
-    ...idleStatus,
-    state: { ...idleStatus.state, lastDeployedCommit: committedHash },
-  };
-  const afterRevision = revisionSummary(
-    afterStatus,
-    { turns: [] },
-    { state: "VERIFIED", headCommitHash: committedHash },
-  );
   const nullRuntimeRevision = runtimeRevisionSummary({
     status: 200,
-    data: { commitHash: null },
+    data: { branch: null, commitHash: null },
   });
+  const baselineRevision = revisionSummary(nullRuntimeRevision);
+  const committedHash = "b".repeat(40);
   const committedRuntimeRevision = runtimeRevisionSummary({
     status: 200,
-    data: { revision: { commitHash: committedHash } },
+    data: { branch: "main", commitHash: committedHash },
   });
+  const afterRevision = revisionSummary(committedRuntimeRevision);
   assert.equal(nullRuntimeRevision.valid, true);
   assert.equal(runtimeRevisionMatchesSnapshot(nullRuntimeRevision, baselineRevision), true);
   assert.equal(committedRuntimeRevision.valid, true);
   assert.equal(runtimeRevisionMatchesSnapshot(committedRuntimeRevision, afterRevision), true);
   assert.equal(runtimeRevisionMatchesSnapshot(runtimeRevisionSummary({
-    status: 404, data: { commitHash: committedHash },
+    status: 404, data: { branch: "main", commitHash: committedHash },
   }), afterRevision), false);
   assert.equal(runtimeRevisionSummary({
     status: 200,
-    data: { commitHash: "a".repeat(40), revision: { commitHash: committedHash } },
+    data: { branch: null, commitHash: committedHash },
   }).valid, false);
   assert.equal(runtimeRevisionSummary({ status: 200, data: {} }).valid, false);
   const mockObserved = {
@@ -1869,15 +1757,15 @@ function selfTestContracts() {
   }]));
   assert.doesNotThrow(() => assertReadOnlyDurableResults({
     error: null,
-    results: [{ success: true, error: null, meta: { rows_written: 0 } }],
+    results: [{ columns: [], rows: [], error: null, meta: { rows_written: 0 } }],
   }, 1));
   assert.throws(() => assertReadOnlyDurableResults({
     error: null,
-    results: [{ error: null, meta: { rows_written: 0 } }],
+    results: [{ columns: [], rows: [], success: false, error: null, meta: { rows_written: 0 } }],
   }, 1));
   assert.throws(() => assertReadOnlyDurableResults({
     error: null,
-    results: [{ success: true, error: null, meta: {} }],
+    results: [{ columns: [], rows: [], error: null, meta: {} }],
   }, 1));
 
   const proxyLocation = generatedPreviewLocation(
