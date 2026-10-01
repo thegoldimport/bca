@@ -14,14 +14,15 @@ const knownHashedFamilies = new Set([
 const withoutFingerprint = name => {
   const extension = path.extname(name);
   const stem = path.basename(name, extension);
-  const segments = stem.split("-");
-  let changed = false;
-  while (segments.length > 1 && /^[A-Za-z0-9_]{8}$/.test(segments.at(-1))) {
-    segments.pop();
-    changed = true;
+  for (const family of knownHashedFamilies) {
+    const prefix = `${family}-`;
+    if (!stem.startsWith(prefix)) continue;
+    const suffix = stem.slice(prefix.length);
+    if (/^[A-Za-z0-9_-]{8}(?:-[A-Za-z0-9_-]{8})*$/.test(suffix)) {
+      return `${path.dirname(name) === "." ? "" : `${path.dirname(name)}/`}${family}${extension}`;
+    }
   }
-  if (!changed || !knownHashedFamilies.has(segments.join("-"))) return name;
-  return `${path.dirname(name) === "." ? "" : `${path.dirname(name)}/`}${segments.join("-")}${extension}`;
+  return name;
 };
 
 const moduleIdentity = item => /\.(js|wasm)$/.test(item.name) ? withoutFingerprint(item.name) : item.name;

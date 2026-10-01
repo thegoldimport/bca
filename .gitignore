@@ -14,4 +14,5 @@ production/vibesdk-launch/runtime-source/
 .pythonlibs/
 .wrangler/
 coverage/
+production/vibesdk-launch/canonical-*.log
 /attached_assets/Pasted-We-are-at-a-release-provenance-checkpoint-NOT-another-i_1790893949449.txt

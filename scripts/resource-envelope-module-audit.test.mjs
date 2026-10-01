@@ -14,6 +14,8 @@ const oldModules = () => [
   js("assets/hook-proxy-Aaaaaaaa.js", `// old source root: /tmp/old/
     import { marker } from "./version-Bbbbbbbb.js";
     export const run = () => marker("keep this literal");`),
+  js("assets/mimetext.browser.es-oCtx9-6c.js", `// old build comment
+    export const mime = "stable";`),
   js("assets/version-Bbbbbbbb.js", `export const marker = value => value;`),
   js("assets/rolldown-runtime-Cccccccc.js", `/* bundler runtime */\nexport const runtime = 1;`),
   wasm("assets/esbuild-Dddddddd.wasm", [0, 1, 2, 3]),
@@ -28,6 +30,8 @@ const candidateModules = () => [
   js("assets/hook-proxy-Eeeeeeee.js", `// candidate source root: /tmp/new/
     import { marker } from "./version-Ffffffff.js";
     export const run = () => marker("keep this literal");`),
+  js("assets/mimetext.browser.es-zCtx9-6c.js", `// candidate build comment
+    export const mime = "stable";`),
   js("assets/version-Ffffffff.js", `export const marker = value => value;`),
   js("assets/rolldown-runtime-Gggggggg.js", `/* bundler runtime */\nexport const runtime = 1;`),
   wasm("assets/esbuild-Hhhhhhhh.wasm", [0, 1, 2, 3]),
@@ -36,7 +40,7 @@ const candidateModules = () => [
 test("accepts hashed sibling chunks with comment and import-reference churn only", () => {
   const report = auditModuleSets(oldModules(), candidateModules(), "index.js");
   assert.equal(report.status, "PASS");
-  assert.equal(report.modules.filter(item => item.result === "EXECUTABLE_AST_EQUAL").length, 1);
+  assert.equal(report.modules.filter(item => item.result === "EXECUTABLE_AST_EQUAL").length, 2);
   assert.deepEqual(report.mainExports, [
     { local: "run", exported: "execute" },
     { local: "state", exported: "state" },
@@ -71,11 +75,13 @@ test("rejects a same-family-looking import basename absent from both audited man
 
 test("requires exact WASM and bundler-runtime bytes and preserves main exports", () => {
   const changedWasm = candidateModules();
-  changedWasm[4] = wasm(changedWasm[4].name, [0, 1, 2, 4]);
+  const wasmIndex = changedWasm.findIndex(item => item.name.endsWith(".wasm"));
+  changedWasm[wasmIndex] = wasm(changedWasm[wasmIndex].name, [0, 1, 2, 4]);
   assert.throws(() => auditModuleSets(oldModules(), changedWasm, "index.js"), /Byte-exact module changed/);
 
   const changedRuntime = candidateModules();
-  changedRuntime[3] = js(changedRuntime[3].name, "export const runtime = 2;");
+  const runtimeIndex = changedRuntime.findIndex(item => item.name.includes("rolldown-runtime"));
+  changedRuntime[runtimeIndex] = js(changedRuntime[runtimeIndex].name, "export const runtime = 2;");
   assert.throws(() => auditModuleSets(oldModules(), changedRuntime, "index.js"), /Byte-exact module changed/);
 
   const changedExports = candidateModules();

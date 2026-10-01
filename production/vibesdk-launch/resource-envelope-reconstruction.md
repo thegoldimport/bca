@@ -46,13 +46,18 @@ Install the frozen runtime dependencies in the new directory, then run
 `bun run build`. Keep the stock canonical `wrangler.jsonc` while building:
 overwriting it would change a validated source hash. The Vite output is
 `dist/vibesdk_production/`. Build control from the canonical root with its
-frozen npm lock and `npm run build`. Do not borrow workspace-package symlinks
+frozen npm lock and `PUBLIC_APP_URL=https://app.buildcustom.ai npm run build`.
+This explicit input preserves the accepted social-image metadata instead of
+embedding the ambient Replit development hostname. Do not borrow workspace-package symlinks
 from an unrelated checkout.
 
 Create disposable dry-run configurations outside the canonical source,
 pointing at the compiled runtime entry and the committed control entry.
 Use the committed launch metadata and `no_bundle` for the already compiled
-runtime; do not upload with those disposable configurations. Recreate both
+runtime. Set `find_additional_modules=true` and an ESModule rule for
+`**/*.js` to collect every compiled split chunk; resolve the container
+Dockerfile and asset directory to absolute paths in the fresh reconstruction.
+Do not upload with those disposable configurations. Recreate both
 Worker dry-run directories named by the release validator, plus the exact
 control public asset manifest.
 
