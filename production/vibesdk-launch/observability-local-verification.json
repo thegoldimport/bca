@@ -1,0 +1,47 @@
+{
+  "status": "PASS",
+  "safetyReview": "PASS",
+  "at": "2026-10-01T14:10:40.563Z",
+  "observabilityTests": 27,
+  "runtimeTests": 190,
+  "runtimeFiles": 24,
+  "rootTests": 132,
+  "rootFailures": 0,
+  "typecheck": "PASS",
+  "build": "PASS",
+  "canonicalDryRun": "PASS",
+  "task4B": "PASS",
+  "task6A": "PASS",
+  "ownership": "PASS",
+  "previewSandbox": "PASS",
+  "gateway": "PASS",
+  "directDiagnosticCallSites": 38,
+  "operationWrapperUses": 23,
+  "metadataLazy": true,
+  "sourceParity": {
+    "sourcePathsCompared": 857,
+    "differences": [
+      "worker/agents/core/behaviors/think.ts",
+      "worker/agents/core/codingAgent.ts",
+      "worker/agents/think/ThinkAgent.ts",
+      "worker/agents/think/diagnostics.test.ts",
+      "worker/agents/think/diagnostics.ts",
+      "worker/agents/think/finish-task-tool.ts",
+      "worker/agents/think/stream-forwarder.ts"
+    ],
+    "unexpectedDifferences": [],
+    "lockHash": "b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f",
+    "baselineParity": "/tmp/buildcustom-release-source-parity.json",
+    "sourceHashes": {
+      "worker/agents/core/behaviors/think.ts": "4e638c20c697e5355db4275595a65faad41c7f3c2993a72b3f23601b6e4cd5a4",
+      "worker/agents/core/codingAgent.ts": "de3f9426f18b7f73b2ff26ecc99dc7918183bc376474b12f4accb4e23217914b",
+      "worker/agents/think/ThinkAgent.ts": "389f8d719cd26aaf5086b820d68557e1cdafe760257bb30ab42d84efd4301c5b",
+      "worker/agents/think/diagnostics.test.ts": "7c209d6a9747269c72aa4c74a766d5feebb3308845d14aca915fa50a1b5615b5",
+      "worker/agents/think/diagnostics.ts": "1907b1029f3d08778df6b4cf48f6fdf8cedf984757f9977c3ec8a1a162dd178d",
+      "worker/agents/think/finish-task-tool.ts": "f02dd0522141429e5413a747fb4c37081ac7c442803588427f2ca4f4933f005b",
+      "worker/agents/think/stream-forwarder.ts": "614bf494a760133360a78fa9b3c99de08a6b223744c082f717340a39f6c513d1"
+    }
+  },
+  "workerHash": "862f5cfef1e505e1408bbbebad98d3f15d116531e20fe5f9db72ad3e9e3dce13",
+  "patchHash": "40b50ca24f2303fee18367def1ff82062987547f44ff0320c98eeabd605de34b"
+}

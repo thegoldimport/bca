@@ -1,0 +1,749 @@
+AUTHORIZED: narrow local correction of the two observability safety blockers,
+complete the previously required verification, and if ALL gates pass, deploy
+the safe observability instrumentation and run exactly ONE fresh disposable
+production fixture.
+
+Do NOT touch Project 5.
+
+Do NOT retry or repair Project 6.
+
+Do NOT change continuous-coding lifecycle behavior.
+
+Do NOT change:
+- Think maxSteps
+- continuation behavior
+- operation limits
+- completion semantics
+- preflight behavior
+- deploy_space behavior
+- auth behavior
+- ownership behavior
+- gateway behavior
+- production Publish behavior
+
+This authorization is specifically to make diagnostic instrumentation
+NON-INTERFERING and SAFE TO LOG.
+
+==================================================
+CURRENT STATUS
+==================================================
+
+Production continuous-coding candidate remains active.
+
+Previous observability attempt:
+
+Instrumentation tests:
+12 PASS
+
+Runtime regression batch:
+175 PASS across 24 files
+
+Typecheck:
+PASS
+
+Safety review:
+FAIL
+
+Deployment:
+NONE
+
+Fresh fixture:
+NONE
+
+Production mutations:
+NONE
+
+Project 5 touched:
+NO
+
+Project 6 retried:
+NO
+
+Two identified blockers:
+
+1. Diagnostic metadata collection can itself throw and alter application/error
+behavior.
+
+2. Redaction is not sufficiently safe for arbitrary unstructured exception
+text, nested causes, stack headers, or WebSocket close reasons.
+
+Fix ONLY these observability issues.
+
+==================================================
+PART 1 — NON-INTERFERENCE REQUIREMENT
+==================================================
+
+Diagnostic instrumentation must be BEST-EFFORT ONLY.
+
+It must be impossible for diagnostic collection, formatting, serialization,
+redaction, or persistence to:
+
+- replace the original exception
+- suppress the original exception
+- prevent an existing callback
+- prevent an existing finally/cleanup path
+- alter success into failure
+- alter failure into success
+- alter cancellation behavior
+- alter continuation behavior
+- alter WebSocket behavior
+- alter RPC behavior
+- alter tool behavior
+- alter operation state
+- alter completion behavior
+
+The original application behavior always wins.
+
+==================================================
+SAFE DIAGNOSTIC PATTERN
+==================================================
+
+Implement a small safe diagnostic boundary.
+
+Conceptually:
+
+try {
+    bestEffortDiagnostic(...)
+} catch {
+    // diagnostics are dropped
+}
+
+But implement it cleanly for the existing architecture.
+
+Any metadata producer/factory/getter must execute INSIDE that protected
+diagnostic boundary.
+
+Do not evaluate diagnostic metadata before entering the safety boundary.
+
+This includes:
+
+- lazy metadata factories
+- getters
+- stack extraction
+- cause extraction
+- JSON serialization
+- redaction
+- persistence/logging
+- WebSocket metadata
+- RPC metadata
+- tool metadata
+- operation metadata
+
+If ANY diagnostic step fails:
+
+DROP THAT DIAGNOSTIC EVENT OR FIELD.
+
+Continue the original application/error path unchanged.
+
+==================================================
+ORIGINAL ERROR PRESERVATION
+==================================================
+
+Where instrumentation surrounds an existing error path:
+
+capture best-effort diagnostics
+
+then preserve EXACT existing behavior.
+
+If existing behavior is:
+
+throw err
+
+it must remain the SAME original error object where technically applicable.
+
+Do not:
+
+throw diagnosticError
+
+Do not:
+
+throw new Error(err.message)
+
+Do not wrap merely for diagnostics.
+
+Do not replace cause chains.
+
+Do not convert cancellation into another exception type.
+
+==================================================
+PART 2 — SAFE-DATA MODEL
+==================================================
+
+Do NOT attempt to persist arbitrary runtime objects and then redact them.
+
+Invert the model.
+
+Diagnostics should construct a SMALL ALLOWLISTED SAFE RECORD.
+
+Only explicitly approved fields may enter the diagnostic record.
+
+Examples of safe structured fields:
+
+- timestamp
+- diagnostic boundary/component
+- project ID
+- agent ID
+- conversation ID
+- native request ID
+- operation ID if appropriate
+- Think turn number
+- step number
+- tool NAME
+- tool call ID
+- continuation count
+- operation state
+- WebSocket numeric readyState
+- WebSocket numeric close code
+- RPC outcome enum
+- HTTP status code
+- provider name
+- model name
+- known internal source location
+- known internal error classification
+
+Do NOT include:
+
+- tool arguments
+- tool result bodies
+- generated source code
+- prompts
+- customer messages
+- auth headers
+- cookies
+- API keys
+- passwords
+- recovery tokens
+- arbitrary request bodies
+- arbitrary response bodies
+
+==================================================
+PART 3 — ERROR TEXT
+==================================================
+
+We still need enough information to identify the original failure.
+
+Use a SAFE representation.
+
+Prefer:
+
+- error constructor/name from a bounded known representation
+- stable error code where available
+- internal source file/function where derivable safely
+- sanitized stack frames
+- cause TYPE/classification
+- nested cause TYPE/classification
+
+Do NOT blindly persist arbitrary:
+
+error.message
+error.stack
+cause.message
+WebSocket reason
+
+because they may contain user input or credentials.
+
+If retaining message text is necessary for diagnosis:
+
+use a strict bounded sanitizer.
+
+Requirements:
+
+- hard maximum length
+- remove control characters
+- redact obvious authorization/token/key/password/email/URL query material
+- redact high-entropy credential-like substrings
+- redact JWT-like strings
+- redact bearer/basic authorization material
+- redact cookie material
+- redact query-string secrets
+- redact UUID/session/token values where not already represented in approved
+  structured fields
+- fail closed
+
+If sanitizer is uncertain or throws:
+
+store:
+
+"[REDACTED]"
+
+or omit the field.
+
+Do not allow sanitization failure to affect the original application path.
+
+==================================================
+STACK HANDLING
+==================================================
+
+Do not persist an arbitrary raw stack blob.
+
+Parse stack best-effort into bounded frames.
+
+Prefer safe fields such as:
+
+- internal source filename/path
+- function
+- line
+- column
+
+Limit frame count.
+
+Exclude arbitrary first-line message text if it cannot be safely sanitized.
+
+If parsing fails:
+
+omit stack frames.
+
+Do not affect the original error.
+
+==================================================
+WEBSOCKET CLOSE REASON
+==================================================
+
+Numeric close code:
+allowed.
+
+wasClean:
+allowed.
+
+readyState:
+allowed.
+
+Raw close reason:
+DO NOT persist by default.
+
+If absolutely needed, only store a heavily sanitized bounded representation.
+
+For this investigation the numeric close code and timing are sufficient unless
+safe text is guaranteed.
+
+==================================================
+NESTED CAUSES
+==================================================
+
+Do not recursively serialize arbitrary causes.
+
+Use a bounded cause chain.
+
+Example maximum depth:
+3
+
+Each cause should contain only safe fields:
+
+- safe type/name
+- safe code
+- parsed safe internal stack frames
+- optional sanitized bounded message
+
+Circular causes must not fail diagnostics.
+
+Getter-based malicious causes must not fail diagnostics.
+
+==================================================
+PART 4 — ADVERSARIAL TESTS
+==================================================
+
+Add explicit tests for diagnostic safety.
+
+At minimum test:
+
+1. metadata factory throws
+
+Expected:
+original behavior unchanged.
+
+2. metadata getter throws
+
+Expected:
+original behavior unchanged.
+
+3. diagnostic persistence/logging throws
+
+Expected:
+original behavior unchanged.
+
+4. JSON serialization throws
+
+Expected:
+original behavior unchanged.
+
+5. circular cause chain
+
+Expected:
+diagnostics bounded/dropped safely; original behavior unchanged.
+
+6. malicious error getter
+
+Example:
+message getter throws.
+
+Expected:
+diagnostics survive/drop field; original exception behavior unchanged.
+
+7. throwing stack getter
+
+Expected:
+same.
+
+8. secrets in error message
+
+Include examples resembling:
+
+- Bearer token
+- JWT
+- API key
+- password
+- cookie
+- session token
+- recovery token
+- URL query token
+
+Expected:
+secret absent from diagnostic output.
+
+9. SHORT credential-like values
+
+The previous review specifically identified short credentials as a weakness.
+
+Ensure labels/context such as:
+
+password=abc123
+token=shortsecret
+api_key=xyz123
+
+are redacted even when entropy/length heuristics would not catch them.
+
+10. secret in nested cause
+
+Expected:
+absent.
+
+11. secret in stack header
+
+Expected:
+absent.
+
+12. secret in WebSocket close reason
+
+Expected:
+raw reason not persisted or safely redacted.
+
+13. normal known-safe error
+
+Expected:
+useful component/type/code/safe frames retained.
+
+14. diagnostic failure while original callback is scheduled/executing
+
+Expected:
+callback behavior unchanged.
+
+15. diagnostic failure during an existing thrown-error path
+
+Expected:
+the original error remains the application-visible error.
+
+Where technically possible assert object identity:
+
+caught === originalError
+
+==================================================
+PART 5 — REVIEW THE DIAGNOSTIC SURFACE
+==================================================
+
+After implementation, enumerate EVERY new diagnostic call site.
+
+For each show:
+
+- source file
+- boundary
+- safe fields recorded
+- whether any free text is recorded
+- how free text is sanitized
+- what happens if metadata collection throws
+- what happens if diagnostic persistence throws
+
+There must be no diagnostic call site outside the safe wrapper.
+
+Search the candidate for the diagnostic helper/call pattern to verify this.
+
+==================================================
+PART 6 — LOCAL VERIFICATION
+==================================================
+
+Run:
+
+- all observability tests
+- all adversarial diagnostic-safety tests
+- continuous-coding lifecycle tests
+- runtime regression batch
+- typecheck
+- build
+- Task 4B regression
+- Task 6A regression
+- ownership regression
+- preview sandbox regression
+- gateway/public routing regression
+
+Then perform another explicit safety review.
+
+Required safety result:
+
+PASS
+
+Do NOT proceed merely because automated tests pass if review still identifies
+a path where diagnostics can alter application behavior or leak secrets.
+
+==================================================
+PART 7 — DEPLOYMENT AUTHORIZATION
+==================================================
+
+IF AND ONLY IF all local checks and the safety review pass:
+
+deploy the minimum observability change required.
+
+Do not alter lifecycle behavior.
+
+Record:
+
+- previous runtime version
+- new runtime version
+- whether control changed
+- whether gateway changed
+- rollout percentage
+- rollback version
+
+Run basic non-AI smoke checks.
+
+If deployment/smoke fails:
+
+STOP.
+
+==================================================
+PART 8 — ONE FRESH FIXTURE
+==================================================
+
+If deployment and smoke pass:
+
+Run exactly ONE NEW disposable production fixture.
+
+Do NOT use Project 5.
+
+Do NOT use Project 6.
+
+Send exactly ONE customer coding request.
+
+Use the same general lifecycle acceptance goal as the previous fresh fixture
+so results are comparable.
+
+Do not:
+
+- intentionally disconnect the browser
+- force RPC cancellation
+- sabotage the generated app
+- change maxSteps
+- artificially create a failure
+- retry automatically
+
+==================================================
+PART 9 — SUCCESS PATH
+==================================================
+
+If the fixture succeeds, report:
+
+- customer requests = 1
+- Think turns
+- tool steps
+- continuations
+- whether 25-step boundary was crossed
+- WebSocket behavior
+- RPC behavior
+- preflight
+- commit
+- preview
+- browser verification
+- finish_task
+- authoritative revision
+- clean working tree
+- COMPLETE
+- production Publish = NO
+
+If it does NOT cross the internal turn boundary:
+
+basic production behavior may pass,
+
+but multi-turn lifecycle acceptance is NOT YET PROVEN.
+
+Do not touch Project 5.
+
+==================================================
+PART 10 — FAILURE PATH
+==================================================
+
+If fixture fails:
+
+NO RETRY.
+
+Use the safe diagnostics.
+
+Identify the EARLIEST retained original failure.
+
+Report:
+
+- component
+- boundary
+- safe error type
+- safe error code
+- safe stack frames
+- safe cause classification
+- WebSocket code/state
+- RPC outcome
+- tool/step
+- continuation state
+- operation state
+- provider status
+- workspace safety
+
+Classify:
+
+LIFECYCLE IMPLEMENTATION DEFECT
+EXISTING THINK/VIBESDK DEFECT
+CLIENT/TRANSPORT FAILURE
+RPC/CALLBACK FAILURE
+TOOL FAILURE
+CLOUDFLARE RUNTIME FAILURE
+PROVIDER FAILURE
+OTHER
+STILL INSUFFICIENT EVIDENCE
+
+Do not speculate beyond retained evidence.
+
+==================================================
+PART 11 — PROJECT 5
+==================================================
+
+Project 5 remains completely off limits in this authorization.
+
+DO NOT:
+
+- read it
+- inspect it
+- mutate it
+- repair it
+- send an instruction
+- commit it
+- preview it
+- publish it
+
+==================================================
+RETURN
+==================================================
+
+Return:
+
+OVERALL STATUS:
+PASS / FAILED WITH ROOT CAUSE / BLOCKED
+
+SAFETY CORRECTIONS
+- metadata collection fail-safe:
+- original error preserved:
+- allowlisted diagnostic schema:
+- free-text policy:
+- stack policy:
+- cause policy:
+- WebSocket reason policy:
+- persistence failure policy:
+
+ADVERSARIAL TESTS
+- metadata factory throw:
+- getter throw:
+- persistence throw:
+- serialization throw:
+- circular cause:
+- malicious message:
+- malicious stack:
+- bearer/JWT:
+- short credentials:
+- nested cause secret:
+- stack-header secret:
+- WebSocket reason secret:
+- original error identity:
+- result:
+
+DIAGNOSTIC CALL SITES
+- count:
+- all inside safe wrapper:
+- unsafe free-text paths:
+- review result:
+
+LOCAL VERIFICATION
+- observability:
+- lifecycle:
+- runtime regression:
+- typecheck:
+- build:
+- Task 4B:
+- Task 6A:
+- ownership:
+- preview sandbox:
+- gateway:
+- safety review:
+
+DEPLOYMENT
+- previous runtime:
+- new runtime:
+- control changed:
+- gateway changed:
+- rollout:
+- rollback:
+
+FRESH FIXTURE
+- project:
+- agent:
+- exactly one request:
+- Think turns:
+- tool steps:
+- continuations:
+- crossed internal boundary:
+- WebSocket:
+- RPC:
+- provider:
+- preflight:
+- commit:
+- preview:
+- browser verification:
+- finish_task:
+- revision:
+- working tree:
+- final state:
+- production Publish:
+- result:
+
+IF FAILURE
+- earliest retained failure:
+- component:
+- boundary:
+- safe error type:
+- safe code:
+- safe frames:
+- cause:
+- classification:
+- confidence:
+- candidate caused failure:
+
+MULTI-TURN PRODUCTION LIFECYCLE PROVEN:
+YES / NO
+
+ROLLBACK RECOMMENDATION:
+
+PROJECT 5 READ OR TOUCHED:
+MUST BE NO
+
+PROJECT 6 RETRIED:
+MUST BE NO
+
+NEW FIXTURES:
+MAXIMUM 1
+
+EXACT NEXT RECOMMENDED STEP:
+
+Then STOP.

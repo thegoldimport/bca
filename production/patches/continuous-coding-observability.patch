@@ -1,0 +1,1469 @@
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -1,4 +1,6 @@
+ import { RpcTarget } from 'cloudflare:workers';
++import { ThinkStreamForwarder } from '../../think/stream-forwarder';
++import { emitThinkDiagnostic, observeThinkBoundary, withThinkDiagnosticSafety, type ThinkDiagnosticContext } from '../../think/diagnostics';
+ import { getAgentByName } from 'agents';
+ import type { UIMessage } from 'ai';
+ import { ThinkState } from '../state';
+@@ -92,32 +94,6 @@
+ 	| { type: 'finish' }
+ 	| { type: string; [key: string]: unknown };
+ 
+-/**
+- * `RpcTarget` forwarder passed to `ThinkAgent.chat()`. Think streams
+- * `UIMessageChunk` JSON frames into `onEvent`; we hand each to the behavior's
+- * translator which maps them onto VibeSDK WebSocket events.
+- */
+-class ThinkStreamForwarder extends RpcTarget {
+-	constructor(
+-		private readonly onChunkJson: (json: string) => void | Promise<void>,
+-		private readonly onErrorCb: (message: string) => void,
+-		private readonly onDoneCb: () => Promise<void>,
+-	) {
+-		super();
+-	}
+-	onStart(_event: { requestId: string }): void {}
+-	async onEvent(json: string): Promise<void> {
+-		await this.onChunkJson(json);
+-	}
+-	async onDone(): Promise<void> {
+-		await this.onDoneCb();
+-	}
+-	onError(error: string): void {
+-		this.onErrorCb(error);
+-	}
+-	onInterrupted(): void {}
+-}
+-
+ type ThinkStateWithQueueIds = ThinkState & { thinkPendingOperationIds?: string[] };
+ 
+ /**
+@@ -572,6 +548,12 @@
+ 		const seenWrittenFiles = new Set<string>();
+ 		const toolNames = new Map<string, string>();
+ 		const toolInputs = new Map<string, Record<string, unknown>>();
++		let diagnosticPass = 0;
++		const diagnosticContext = (): ThinkDiagnosticContext => ({
++			agentId: this.getAgentId(), sessionId: this.state.sessionId,
++			conversationId, operationId: operation.taskId,
++			turn: diagnosticPass, continuationCount: Math.max(0, diagnosticPass - 1),
++		});
+ 
+ 		const forwarder = new ThinkStreamForwarder(
+ 			(json) => {
+@@ -585,6 +567,7 @@
+ 			},
+ 			(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err }),
+ 			async () => { await stub.markTaskChatResolved(); },
++			diagnosticContext,
+ 		);
+ 
+ 		try {
+@@ -592,13 +575,18 @@
+ 				stub,
+ 				initialOperation: operation,
+ 				initialPrompt: text,
++				diagnosticContext,
+ 				continuationPrompt: (summary) => this.buildContinuationPrompt(summary),
+-				chat: (prompt) => stub.chat(prompt, forwarder),
++				chat: (prompt) => observeThinkBoundary('host.stub.chat', diagnosticContext,
++					() => stub.chat(prompt, forwarder)),
+ 				onPassStart: (kind) => {
++					withThinkDiagnosticSafety(() => { diagnosticPass += 1; });
++					emitThinkDiagnostic('host.pass', 'start', () => ({ ...diagnosticContext(), pendingPromptKind: kind }));
+ 					accumulated.bufferText = kind === 'CONTINUATION';
+ 					accumulated.bufferedText = '';
+ 				},
+ 				onPassEnd: (decision) => {
++					emitThinkDiagnostic('host.pass', 'decision', () => ({ ...diagnosticContext(), decision }));
+ 					if (decision === 'CONTINUE') {
+ 						accumulated.bufferText = false;
+ 						accumulated.bufferedText = '';
+diff --git a/worker/agents/core/codingAgent.ts b/worker/agents/core/codingAgent.ts
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -30,6 +30,7 @@
+ import { ProjectObjective } from "./objectives/base";
+ import { FileOutputType } from "../schemas";
+ import { SecretsClient, type UserSecretsStoreStub } from '../../services/secrets/SecretsClient';
++import { emitThinkDiagnostic } from '../think/diagnostics';
+ import { StateMigration } from './stateMigration';
+ import {
+     ConversationMessageLoader,
+@@ -672,8 +673,24 @@
+     /**
+      * Handle WebSocket close - Agent owns WebSocket lifecycle
+      */
+-    async onClose(connection: Connection): Promise<void> {
++    async onClose(connection: Connection, code?: number, _reason?: string, wasClean?: boolean): Promise<void> {
++        emitThinkDiagnostic('host.websocket', 'close', () => ({
++            agentId: this.getAgentId(), sessionId: this.state.sessionId,
++            closeCode: code, wasClean, readyState: connection.readyState,
++        }));
+         handleWebSocketClose(this, connection);
++    }
++
++    override onError(connection: Connection, error: unknown): void | Promise<void>;
++    override onError(error: unknown): void | Promise<void>;
++    override onError(connectionOrError: unknown, error?: unknown): void | Promise<void> {
++        const hasConnection = arguments.length === 2;
++        const connection = hasConnection ? connectionOrError as Connection : undefined;
++        emitThinkDiagnostic('host.websocket', 'error', () => ({
++            agentId: this.getAgentId(), sessionId: this.state.sessionId,
++            readyState: connection?.readyState,
++        }), hasConnection ? error : connectionOrError);
++        return hasConnection ? super.onError(connectionOrError as Connection, error) : super.onError(connectionOrError);
+     }
+     
+     /**
+diff --git a/worker/agents/think/ThinkAgent.ts b/worker/agents/think/ThinkAgent.ts
+--- a/worker/agents/think/ThinkAgent.ts
++++ b/worker/agents/think/ThinkAgent.ts
+@@ -52,6 +52,8 @@
+ import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
+ import type { RateLimitSettings } from '../../services/rate-limit/config';
+ import { THINK_MODEL_CONFIG } from './model-config';
++import type { ChatErrorContext, ChatResponseResult, StepContext, ToolCallContext, ToolCallResultContext } from '@cloudflare/think';
++import { emitThinkDiagnostic, observeThinkBoundarySync, withThinkDiagnosticSafety, type ThinkDiagnosticContext } from './diagnostics';
+ 
+ /**
+  * Per-instance configuration pushed into a {@link ThinkAgent} by the host
+@@ -203,6 +205,87 @@
+ 	private readonly taskOperationKey = 'think_task_operation';
+ 	private readonly taskForcedStatusKey = 'think_task_forced_status';
+ 	private readonly taskStartIntentKey = 'think_task_start_intent';
++	private diagnosticOperation?: ThinkTaskOperation;
++	private diagnosticState?: ThinkTaskLifecycle['status'];
++	private diagnosticNativeRequestId?: string;
++	private diagnosticUserId?: string;
++	private diagnosticStep?: number;
++	private diagnosticToolName?: string;
++	private diagnosticToolCallId?: string;
++
++	private diagnosticContext(): ThinkDiagnosticContext {
++		const operation = this.diagnosticOperation;
++		return {
++			agentId: this.name, userId: this.diagnosticUserId,
++			nativeRequestId: this.diagnosticNativeRequestId,
++			conversationId: operation?.conversationId, operationId: operation?.taskId,
++			continuationCount: operation?.continuationCount,
++			turn: operation ? operation.continuationCount + 1 : undefined,
++			completedPassCount: operation?.completedPassCount,
++			pendingPromptKind: operation?.pendingPromptKind,
++			modelCalls: operation?.modelCalls, toolCalls: operation?.toolCalls,
++			operationState: this.diagnosticState, step: this.diagnosticStep,
++			toolName: this.diagnosticToolName, toolCallId: this.diagnosticToolCallId,
++		};
++	}
++
++	private putTaskDiagnostic(key: string, value: unknown): void {
++		observeThinkBoundarySync('operation.persistence', () => ({
++			...this.diagnosticContext(), storageKey: key,
++		}), () => this.ctx.storage.kv.put(key, value));
++		withThinkDiagnosticSafety(() => {
++			if (key === this.taskOperationKey) this.diagnosticOperation = value as ThinkTaskOperation;
++			if (key === this.taskLifecycleKey) this.diagnosticState = (value as ThinkTaskLifecycle).status;
++		});
++		emitThinkDiagnostic('operation.persistence', 'put-returned', () => ({
++			...this.diagnosticContext(), storageKey: key,
++		}));
++	}
++
++	override onChatError(error: unknown, context?: ChatErrorContext): unknown {
++		withThinkDiagnosticSafety(() => { this.diagnosticNativeRequestId = context?.requestId; });
++		emitThinkDiagnostic('think.stream-result', 'error', () => ({
++			...this.diagnosticContext(), stage: context?.stage,
++		}), error);
++		return super.onChatError(error, context);
++	}
++
++	override onChatResponse(result: ChatResponseResult): void | Promise<void> {
++		withThinkDiagnosticSafety(() => {
++			this.diagnosticNativeRequestId = result.requestId;
++			emitThinkDiagnostic('think.stream-result', 'response-hook', () => ({
++				...this.diagnosticContext(), streamStatus: result.status,
++			}), result.status === 'error' ? result.error : undefined);
++		});
++		return super.onChatResponse(result);
++	}
++
++	override beforeToolCall(context: ToolCallContext) {
++		withThinkDiagnosticSafety(() => {
++			this.diagnosticToolName = context.toolName;
++			this.diagnosticToolCallId = context.toolCallId;
++			this.diagnosticStep = context.stepNumber === undefined ? undefined : context.stepNumber + 1;
++		});
++		emitThinkDiagnostic('tool.execution', 'start', () => this.diagnosticContext());
++		return super.beforeToolCall(context);
++	}
++
++	override afterToolCall(context: ToolCallResultContext): void | Promise<void> {
++		withThinkDiagnosticSafety(() => {
++			emitThinkDiagnostic('tool.execution', context.success ? 'success' : 'error', () => ({
++				...this.diagnosticContext(), toolName: context.toolName, toolCallId: context.toolCallId,
++			}), context.success ? undefined : context.error);
++		});
++		return super.afterToolCall(context);
++	}
++
++	override onStepFinish(context: StepContext): void | Promise<void> {
++		return observeThinkBoundarySync('think.onStepFinish', () => ({
++			...this.diagnosticContext(), finishReason: context.finishReason,
++			inputTokens: context.usage.inputTokens, outputTokens: context.usage.outputTokens,
++		}),
++			() => super.onStepFinish(context));
++	}
+ 
+ 	private async getTaskEvidence(): Promise<ThinkTaskEvidence> {
+ 		return this.ctx.storage.kv.get<ThinkTaskEvidence>(this.taskEvidenceKey) ?? {
+@@ -226,11 +309,11 @@
+ 
+ 	private async saveTaskEvidence(patch: Partial<ThinkTaskEvidence>): Promise<void> {
+ 		const evidence = { ...(await this.getTaskEvidence()), ...patch };
+-		this.ctx.storage.kv.put(this.taskEvidenceKey, evidence);
++		this.putTaskDiagnostic(this.taskEvidenceKey, evidence);
+ 	}
+ 
+ 	private async saveTaskLifecycle(lifecycle: ThinkTaskLifecycle): Promise<void> {
+-		this.ctx.storage.kv.put(this.taskLifecycleKey, lifecycle);
++		this.putTaskDiagnostic(this.taskLifecycleKey, lifecycle);
+ 	}
+ 
+ 	private resourceLimitSummary(reason: ThinkResourceLimitReason, operation: ThinkTaskOperation): string {
+@@ -256,8 +339,8 @@
+ 			reason,
+ 			updatedAt: Date.now(),
+ 		};
+-		this.ctx.storage.kv.put(this.taskForcedStatusKey, 'INCOMPLETE_RESOURCE_LIMIT');
+-		this.ctx.storage.kv.put(this.taskLifecycleKey, lifecycle);
++		this.putTaskDiagnostic(this.taskForcedStatusKey, 'INCOMPLETE_RESOURCE_LIMIT');
++		this.putTaskDiagnostic(this.taskLifecycleKey, lifecycle);
+ 	}
+ 
+ 	private async refreshMeteredCredits(operation: ThinkTaskOperation): Promise<ThinkTaskOperation> {
+@@ -302,17 +385,17 @@
+ 			resource === 'model' ? THINK_MODEL_CONFIG.creditCost : 0,
+ 		);
+ 		if (reservation.limitExceeded) {
+-			this.ctx.storage.kv.put(this.taskOperationKey, reservation.operation);
++				this.putTaskDiagnostic(this.taskOperationKey, reservation.operation);
+ 			this.stopForResourceLimit(reservation.limitExceeded, reservation.operation);
+ 			throw new Error(`Think operation stopped: ${reservation.limitExceeded}`);
+ 		}
+-		this.ctx.storage.kv.put(this.taskOperationKey, reservation.operation);
++		this.putTaskDiagnostic(this.taskOperationKey, reservation.operation);
+ 	}
+ 
+ 	private async recordOperationFingerprint(fingerprint: string): Promise<void> {
+ 		const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
+ 		if (!operation) return;
+-		this.ctx.storage.kv.put(
++		this.putTaskDiagnostic(
+ 			this.taskOperationKey,
+ 			recordThinkOperation(operation, fingerprint),
+ 		);
+@@ -324,7 +407,7 @@
+ 	): Promise<void> {
+ 		const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
+ 		if (!operation) return;
+-		this.ctx.storage.kv.put(
++		this.putTaskDiagnostic(
+ 			this.taskOperationKey,
+ 			recordThinkDiscoveryOperation(operation, discoveryFingerprint, operationFingerprint),
+ 		);
+@@ -339,10 +422,15 @@
+ 		return {
+ 			...(target as object),
+ 			execute: async (input: unknown, options: unknown) => {
++			try {
+ 				await this.reserveOperationResource('tool');
+ 				const output = await Reflect.apply(execute, target, [input, options]);
+ 				await onOutput?.(output, input);
+ 				return output;
++			} catch (error) {
++				emitThinkDiagnostic('tool.execute-and-evidence', 'error', () => this.diagnosticContext(), error);
++				throw error;
++			}
+ 			},
+ 		} as T;
+ 	}
+@@ -772,6 +860,7 @@
+ 	override async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
+ 		const messages = selectThinkContextMessages(ctx.messages);
+ 		const config = this.getConfig<ThinkAgentConfig>();
++		withThinkDiagnosticSafety(() => { this.diagnosticUserId = config?.userId; });
+ 		this.turnUsage = null;
+ 		if (config) {
+ 			try {
+@@ -840,7 +929,7 @@
+ 			(output: unknown, input: unknown): Promise<void> =>
+ 				this.recordWorkspaceOperation(name, input, output);
+ 		const markUserInputRequired = async (_output: unknown, input: unknown): Promise<void> => {
+-			this.ctx.storage.kv.put(this.taskForcedStatusKey, 'USER_INPUT_REQUIRED');
++			this.putTaskDiagnostic(this.taskForcedStatusKey, 'USER_INPUT_REQUIRED');
+ 			await this.saveTaskLifecycle({
+ 				status: 'USER_INPUT_REQUIRED',
+ 				summary: 'Waiting for answers to clarifying questions.',
+@@ -900,15 +989,15 @@
+ 				this.getConfig<ThinkAgentConfig>()?.operationLimits,
+ 			);
+ 			if (pendingStartIntent === taskId) {
+-				this.ctx.storage.kv.put(this.taskLifecycleKey, {
++				this.putTaskDiagnostic(this.taskLifecycleKey, {
+ 					status: 'RUNNING',
+ 					summary: 'Task is in progress.',
+ 					updatedAt: Date.now(),
+ 				} satisfies ThinkTaskLifecycle);
+-				this.ctx.storage.kv.put(this.taskForcedStatusKey, 'RUNNING');
+-				this.ctx.storage.kv.put(this.taskStartIntentKey, '');
++				this.putTaskDiagnostic(this.taskForcedStatusKey, 'RUNNING');
++				this.putTaskDiagnostic(this.taskStartIntentKey, '');
+ 			}
+-			this.ctx.storage.kv.put(this.taskOperationKey, normalizedOperation);
++			this.putTaskDiagnostic(this.taskOperationKey, normalizedOperation);
+ 			return normalizedOperation;
+ 		}
+ 		let operation = {
+@@ -938,14 +1027,14 @@
+ 		// Persist an explicit start intent before changing the terminal lifecycle.
+ 		// On recovery, a matching intent prevents an old terminal status from
+ 		// acknowledging this new queue item if the worker stopped mid-initialization.
+-		this.ctx.storage.kv.put(this.taskStartIntentKey, taskId);
+-		this.ctx.storage.kv.put(this.taskLifecycleKey, {
++		this.putTaskDiagnostic(this.taskStartIntentKey, taskId);
++		this.putTaskDiagnostic(this.taskLifecycleKey, {
+ 			status: 'RUNNING',
+ 			summary: 'Task is in progress.',
+ 			updatedAt: Date.now(),
+ 		} satisfies ThinkTaskLifecycle);
+-		this.ctx.storage.kv.put(this.taskForcedStatusKey, 'RUNNING');
+-		this.ctx.storage.kv.put(this.taskEvidenceKey, {
++		this.putTaskDiagnostic(this.taskForcedStatusKey, 'RUNNING');
++		this.putTaskDiagnostic(this.taskEvidenceKey, {
+ 			preflightSucceeded: false,
+ 			deploySucceeded: false,
+ 			deployedCommitHash: null,
+@@ -962,8 +1051,8 @@
+ 			deployedPreviewUrl: null,
+ 			deployedBranch: null,
+ 		} satisfies ThinkTaskEvidence);
+-		this.ctx.storage.kv.put(this.taskOperationKey, operation);
+-		this.ctx.storage.kv.put(this.taskStartIntentKey, '');
++		this.putTaskDiagnostic(this.taskOperationKey, operation);
++		this.putTaskDiagnostic(this.taskStartIntentKey, '');
+ 		return operation;
+ 	}
+ 
+@@ -983,7 +1072,7 @@
+ 		const operation = await this.getTaskOperation();
+ 		if (!operation) throw new Error('Cannot continue a Think task before beginTask');
+ 		const advanced = advanceThinkTaskOperation(operation);
+-		this.ctx.storage.kv.put(this.taskOperationKey, advanced);
++		this.putTaskDiagnostic(this.taskOperationKey, advanced);
+ 		return advanced;
+ 	}
+ 
+@@ -992,7 +1081,7 @@
+ 		if (!operation) throw new Error('Cannot start a Think chat before beginTask');
+ 		const messages = await this.getMessages();
+ 		const started = markThinkTaskChatStarted(operation, messages.length);
+-		this.ctx.storage.kv.put(this.taskOperationKey, started);
++		this.putTaskDiagnostic(this.taskOperationKey, started);
+ 		return started;
+ 	}
+ 
+@@ -1015,11 +1104,11 @@
+ 		const checkpoint = reserveThinkTaskResource(operation, 'checkpoint', Date.now());
+ 		if (checkpoint.limitExceeded) {
+ 			this.stopForResourceLimit(checkpoint.limitExceeded, checkpoint.operation);
+-			this.ctx.storage.kv.put(this.taskOperationKey, checkpoint.operation);
++			this.putTaskDiagnostic(this.taskOperationKey, checkpoint.operation);
+ 			return checkpoint.operation;
+ 		}
+ 		const resolved = markThinkTaskChatResolved(checkpoint.operation);
+-		this.ctx.storage.kv.put(this.taskOperationKey, resolved);
++		this.putTaskDiagnostic(this.taskOperationKey, resolved);
+ 		return resolved;
+ 	}
+ 
+@@ -1039,6 +1128,9 @@
+ 	 * user input.
+ 	 */
+ 	override async beforeStep(ctx: PrepareStepContext): Promise<StepConfig | void> {
++		withThinkDiagnosticSafety(() => { this.diagnosticStep = ctx.stepNumber + 1; });
++		emitThinkDiagnostic('think.beforeStep', 'start', () => this.diagnosticContext());
++		try {
+ 		const config = this.getConfig<ThinkAgentConfig>();
+ 		if ((await this.getTaskLifecycle()).status === 'INCOMPLETE_RESOURCE_LIMIT') {
+ 			throw new Error('Think operation stopped at its cumulative resource limit.');
+@@ -1063,6 +1155,10 @@
+ 				toolChoice: 'none',
+ 				messages: [...ctx.messages, { role: 'user', content: PROMPT_MAX_STEPS }],
+ 			};
++		}
++		} catch (error) {
++			emitThinkDiagnostic('think.beforeStep', 'error', () => this.diagnosticContext(), error);
++			throw error;
+ 		}
+ 	}
+ 
+diff --git a/worker/agents/think/diagnostics.test.ts b/worker/agents/think/diagnostics.test.ts
+new file mode 100644
+--- /dev/null
++++ b/worker/agents/think/diagnostics.test.ts
+@@ -0,0 +1,409 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import {
++	emitThinkDiagnostic, observeThinkBoundary, observeThinkBoundarySync,
++	serializeThinkDiagnosticError, withThinkDiagnosticSafety,
++	type ThinkDiagnosticContext,
++} from './diagnostics';
++import { ThinkStreamForwarder } from './stream-forwarder';
++import { createThinkTaskOperation, driveThinkTaskOperation, markThinkTaskChatResolved, type ThinkTaskDriverStub } from './finish-task-tool';
++
++describe('observational Think diagnostics', () => {
++	let info: ReturnType<typeof vi.spyOn>;
++	beforeEach(() => { info = vi.spyOn(console, 'info').mockImplementation(() => {}); });
++	afterEach(() => vi.restoreAllMocks());
++
++	it('retains exact safe error name/code and known internal frames without message text', () => {
++		const original = Object.assign(new Error('private RPC text'), { code: 'ERR_RPC_CANCELED' });
++		original.stack = 'Error: private stack header\n at ThinkAgent.onChatError (worker/agents/think/ThinkAgent.ts:41:2)\n at user.function (/private/home/customer.ts:99:4)';
++		const outer = new Error('private forwarding text', { cause: new Error('private wrapper text', { cause: original }) });
++		expect(serializeThinkDiagnosticError(outer)).toEqual({
++			name: 'Error',
++			cause: {
++				name: 'Error',
++				cause: {
++					name: 'Error',
++					code: 'ERR_RPC_CANCELED',
++					frames: [{ file: 'ThinkAgent.ts', line: 41, column: 2 }],
++				},
++			},
++		});
++	});
++
++	it('discards arbitrary messages, unsupported context keys, and credential-like fields', () => {
++		const secret = 'sensitive-credential-value';
++		const error = Object.assign(new Error(`password=${secret}; Bearer bearer-value https://host/path?ticket=ticket-value`), {
++			cause: new Error('private customer prompt and hidden reasoning'),
++			password: secret, input: { prompt: secret }, apiKey: secret,
++		});
++		emitThinkDiagnostic('host.stub.chat', 'error', {
++			agentId: 'agent-1',
++			password: secret,
++			reasoning: secret,
++		} as unknown as ThinkDiagnosticContext, error);
++		const text = JSON.stringify(info.mock.calls);
++		for (const value of [secret, 'bearer-value', 'ticket-value', 'private customer prompt', 'hidden reasoning']) {
++			expect(text).not.toContain(value);
++		}
++		expect(text).toContain('agent-1');
++		expect(text).toContain('"name":"Error"');
++		expect(text).not.toContain('message');
++	});
++
++	it('bounds circular and nested causes and omits AggregateError member text', () => {
++		const circular: { cause?: unknown; message: string } = { message: 'private circular message' };
++		circular.cause = circular;
++		expect(serializeThinkDiagnosticError(circular)).toEqual({
++			name: 'UnknownError',
++			cause: { circular: true },
++		});
++
++		const chain = new Error('root', {
++			cause: new Error('one', {
++				cause: new Error('two', { cause: new Error('three', { cause: new Error('four') }) }),
++			}),
++		});
++		const serialized = serializeThinkDiagnosticError(chain);
++		expect(serialized).toMatchObject({
++			name: 'Error',
++			cause: {
++				name: 'Error',
++				cause: {
++					name: 'Error',
++					cause: { name: 'Error' },
++				},
++			},
++		});
++		expect(JSON.stringify(serialized)).not.toContain('four');
++		expect(serializeThinkDiagnosticError(new AggregateError([new Error('private inner text')], 'private aggregate')))
++			.toEqual({ name: 'AggregateError' });
++	});
++
++	it('returns exact successful result and preserves exact thrown error identity', async () => {
++		const result = {};
++		expect(await observeThinkBoundary('host.stub.chat', {}, async () => result)).toBe(result);
++		const error = new DOMException('private cancellation text', 'AbortError');
++		await expect(observeThinkBoundary('host.stub.chat', {}, async () => { throw error; })).rejects.toBe(error);
++		expect(info.mock.calls.some(call => JSON.stringify(call).includes('AbortError'))).toBe(true);
++		expect(JSON.stringify(info.mock.calls)).not.toContain('private cancellation text');
++	});
++
++	it('drops diagnostics when the sink throws without changing success or error identity', async () => {
++		info.mockImplementation(() => { throw new Error('sink private failure'); });
++		expect(await observeThinkBoundary('host.stub.chat', {}, async () => 7)).toBe(7);
++		const error = new Error('original private error');
++		await expect(observeThinkBoundary('host.stub.chat', {}, async () => { throw error; })).rejects.toBe(error);
++		expect(() => observeThinkBoundarySync('operation.persistence', {}, () => { throw error; })).toThrow(error);
++	});
++
++	it('records numeric WebSocket metadata and omits every close reason', () => {
++		emitThinkDiagnostic('host.websocket', 'close', {
++			agentId: 'agent-1', closeCode: 1006, wasClean: false, readyState: 3,
++			closeReason: 'Bearer ws-private-token https://host/ws?ticket=private',
++		} as unknown as ThinkDiagnosticContext);
++		expect(info.mock.calls[0][1]).toMatchObject({ closeCode: 1006, wasClean: false, readyState: 3 });
++		expect(JSON.stringify(info.mock.calls)).not.toContain('ws-private-token');
++		expect(JSON.stringify(info.mock.calls)).not.toContain('ticket=private');
++		expect(info.mock.calls[0][1]).not.toHaveProperty('closeReason');
++	});
++
++	it('attributes tool and synchronous persistence failures without retrying', async () => {
++		const execute = vi.fn(async () => { throw new Error('private write failure'); });
++		await expect(observeThinkBoundary('tool.execute-and-evidence', {
++			toolName: 'write', toolCallId: 'call-1',
++		}, execute)).rejects.toThrow('private write failure');
++		expect(execute).toHaveBeenCalledTimes(1);
++		const put = vi.fn(() => { throw new Error('private put failure'); });
++		expect(() => observeThinkBoundarySync('operation.persistence', { operationId: 'operation-1' }, put)).toThrow('private put failure');
++		expect(put).toHaveBeenCalledTimes(1);
++		expect(info.mock.calls.at(-1)?.[1]).toMatchObject({ boundary: 'operation.persistence', operationId: 'operation-1' });
++	});
++
++	it('forwards exact chunks including invalid JSON and never logs reasoning or tool arguments', async () => {
++		const chunks: string[] = [];
++		const forwarder = new ThinkStreamForwarder(json => { chunks.push(json); }, () => {}, async () => {}, () => ({ agentId: 'agent-1' }));
++		forwarder.onStart({ requestId: 'native-1' });
++		const inputs = ['invalid-json', '{"type":"reasoning-delta","delta":"private reasoning"}',
++			'{"type":"tool-input-available","toolName":"write","toolCallId":"call-1","input":{"content":"private code"}}',
++			'{"type":"tool-output-available","toolCallId":"call-1","output":{"secret":"private result"}}'];
++		for (const json of inputs) await forwarder.onEvent(json);
++		expect(chunks).toEqual(inputs);
++		const logged = JSON.stringify(info.mock.calls);
++		for (const value of ['private reasoning', 'private code', 'private result']) expect(logged).not.toContain(value);
++		expect(info.mock.calls.at(-1)?.[1]).toMatchObject({ nativeRequestId: 'native-1', toolCallId: 'call-1', toolName: 'write' });
++	});
++
++	it('captures callback rejection with its original nested RPC classification', async () => {
++		const cause = Object.assign(new Error('private RPC text'), { code: 'RPC_CANCELED' });
++		const original = new Error('private callback failure', { cause });
++		const callback = vi.fn(async () => { throw original; });
++		const forwarder = new ThinkStreamForwarder(callback, () => {}, async () => {}, () => ({ operationId: 'operation-1' }));
++		await expect(forwarder.onEvent('{"type":"finish-step"}')).rejects.toBe(original);
++		expect(callback).toHaveBeenCalledTimes(1);
++		expect(info.mock.calls.at(-1)?.[1]).toMatchObject({
++			boundary: 'stream.forwarding', error: { cause: { code: 'RPC_CANCELED' } },
++		});
++		expect(JSON.stringify(info.mock.calls)).not.toContain('private callback failure');
++	});
++
++	it('onDone, onError, and interruption retain original callback behavior without logging text', async () => {
++		const done = vi.fn(async () => {});
++		const error = vi.fn();
++		const forwarder = new ThinkStreamForwarder(() => {}, error, done, () => ({}));
++		await forwarder.onDone();
++		forwarder.onError('Bearer private-token');
++		forwarder.onInterrupted();
++		expect(done).toHaveBeenCalledTimes(1);
++		expect(error).toHaveBeenCalledTimes(1);
++		expect(error).toHaveBeenCalledWith('Bearer private-token');
++		expect(JSON.stringify(info.mock.calls)).not.toContain('private-token');
++	});
++
++	function driverStub(): { operation: ReturnType<typeof createThinkTaskOperation>; stub: ThinkTaskDriverStub } {
++		const operation = createThinkTaskOperation('operation-1', 'conversation-1', 4);
++		return {
++			operation,
++			stub: {
++				getTaskLifecycle: async () => ({ status: 'RUNNING', summary: '', updatedAt: 1 }),
++				getTaskOperation: async () => markThinkTaskChatResolved(operation),
++				markTaskChatStarted: async () => operation,
++				markTaskChatResolved: async () => markThinkTaskChatResolved(operation),
++				recoverPendingTaskChat: async () => 'NOT_PERSISTED',
++				advanceTaskOperation: async () => operation,
++				stopTask: async () => {},
++			},
++		};
++	}
++
++	it('attributes post-chat continuation failures and keeps identical failure identity', async () => {
++		const { operation, stub } = driverStub();
++		const error = new Error('private post-chat failure');
++		let calls = 0;
++		stub.getTaskLifecycle = async () => {
++			if (++calls > 1) throw error;
++			return { status: 'RUNNING', summary: '', updatedAt: 1 };
++		};
++		const chat = vi.fn(async () => {});
++		await expect(driveThinkTaskOperation({
++			stub, initialOperation: operation, initialPrompt: 'private prompt',
++			continuationPrompt: () => 'private continuation', chat,
++		})).rejects.toBe(error);
++		expect(chat).toHaveBeenCalledTimes(1);
++		expect(info.mock.calls.at(-1)?.[1]).toMatchObject({ boundary: 'driver.post-chat-lifecycle', operationId: 'operation-1' });
++		expect(JSON.stringify(info.mock.calls)).not.toContain('private prompt');
++	});
++
++	it('does not convert an errored chat into a continuation or success', async () => {
++		const { operation, stub } = driverStub();
++		const original = new Error('private chat RPC cancellation');
++		const chat = vi.fn(async () => { throw original; });
++		const advance = vi.fn(stub.advanceTaskOperation);
++		stub.advanceTaskOperation = advance;
++		await expect(driveThinkTaskOperation({
++			stub, initialOperation: operation, initialPrompt: 'prompt',
++			continuationPrompt: () => 'continuation', chat,
++		})).rejects.toBe(original);
++		expect(chat).toHaveBeenCalledTimes(1);
++		expect(advance).not.toHaveBeenCalled();
++		expect(info.mock.calls.some(call => call[1]?.boundary === 'driver.chat')).toBe(true);
++	});
++
++	// Adversarial diagnostic-safety cases.
++	it('runs lazy metadata factories only inside a safe boundary and drops a throwing factory', () => {
++		const factory = vi.fn((): ThinkDiagnosticContext => { throw new Error('factory private failure'); });
++		expect(() => emitThinkDiagnostic('host.stub.chat', 'error', factory)).not.toThrow();
++		expect(factory).toHaveBeenCalledTimes(1);
++		expect(info).not.toHaveBeenCalled();
++	});
++
++	it('omits a throwing context getter while retaining unrelated allowlisted metadata', () => {
++		const context = { projectId: 'project-1' } as ThinkDiagnosticContext;
++		Object.defineProperty(context, 'agentId', { get() { throw new Error('getter private failure'); } });
++		expect(() => emitThinkDiagnostic('host.stub.chat', 'start', context)).not.toThrow();
++		expect(info.mock.calls[0][1]).toMatchObject({ projectId: 'project-1' });
++		expect(info.mock.calls[0][1]).not.toHaveProperty('agentId');
++	});
++
++	it('withThinkDiagnosticSafety catches diagnostic-only exceptions', () => {
++		expect(() => withThinkDiagnosticSafety(() => { throw new Error('diagnostic private failure'); })).not.toThrow();
++	});
++
++	it('does not inspect malicious message getters and safely omits a throwing stack getter', () => {
++		const messageGetter = vi.fn(() => { throw new Error('message getter private failure'); });
++		const stackGetter = vi.fn(() => { throw new Error('stack getter private failure'); });
++		const error = Object.assign(new Error(), { code: 'RPC_CANCELED' });
++		Object.defineProperty(error, 'message', { get: messageGetter });
++		Object.defineProperty(error, 'stack', { get: stackGetter });
++		expect(() => emitThinkDiagnostic('host.stub.chat', 'error', {}, error)).not.toThrow();
++		expect(messageGetter).not.toHaveBeenCalled();
++		expect(stackGetter).toHaveBeenCalledTimes(1);
++		expect(info.mock.calls[0][1]).toMatchObject({ error: { name: 'Error', code: 'RPC_CANCELED' } });
++		expect(JSON.stringify(info.mock.calls)).not.toContain('getter private failure');
++	});
++
++	it('drops causes whose getters throw without changing the observed error', async () => {
++		const original = new Error('private original text');
++		Object.defineProperty(original, 'cause', { get() { throw new Error('cause getter private text'); } });
++		await expect(observeThinkBoundary('host.stub.chat', {}, async () => { throw original; })).rejects.toBe(original);
++		expect(info.mock.calls.at(-1)?.[1]).toMatchObject({ error: { name: 'Error' } });
++		expect(info.mock.calls.at(-1)?.[1]?.error).not.toHaveProperty('cause');
++		expect(JSON.stringify(info.mock.calls)).not.toContain('cause getter private text');
++	});
++
++	it('rejects unsafe names/codes and arbitrary or external stack locations', () => {
++		const error = new Error('private stack-header UUID 123e4567-e89b-12d3-a456-426614174000');
++		error.name = 'CustomerTokenName';
++		Object.assign(error, { code: 'api_key=xyz123' });
++		error.stack = [
++			'CustomerTokenName: private header with queryToken=header-secret',
++			' at customer.function (/private/customer.ts:8:9)',
++			' at ThinkAgent.onChatError (worker/agents/think/ThinkAgent.ts:12:3)',
++		].join('\n');
++		emitThinkDiagnostic('host.stub.chat', 'error', {}, error);
++		expect(info.mock.calls[0][1]).toMatchObject({
++			error: { name: 'UnknownError', frames: [{ file: 'ThinkAgent.ts', line: 12, column: 3 }] },
++		});
++		expect(info.mock.calls[0][1]?.error).not.toHaveProperty('code');
++		for (const value of ['CustomerTokenName', 'header-secret', 'customer.function', '/private/customer.ts']) {
++			expect(JSON.stringify(info.mock.calls)).not.toContain(value);
++		}
++	});
++
++	it('retains only exact built-worker and native Think runtime frames', () => {
++		const error = Object.assign(new Error('private SDK failure'), { name: 'AI_APICallError' });
++		error.stack = [
++			'AI_APICallError: private stack header',
++			' at fetch (index.js:123:7)',
++			' at Think.run (node_modules/@cloudflare/think/dist/think.js:456:8)',
++			' at customer.fetch (/customer/workspace/index.js:9:2)',
++			' at remote.fetch (https://host/node_modules/@cloudflare/think/dist/think.js?token=private:2:3)',
++		].join('\n');
++		expect(serializeThinkDiagnosticError(error)).toEqual({
++			name: 'AI_APICallError',
++			frames: [
++				{ file: 'index.js', line: 123, column: 7 },
++				{ file: 'think.js', line: 456, column: 8 },
++			],
++		});
++	});
++
++	it('retains verified AI SDK error class names from the exact allowlist', () => {
++		const names = [
++			'AI_APICallError',
++			'AI_RetryError',
++			'AI_TypeValidationError',
++			'AI_InvalidResponseDataError',
++			'AI_NoOutputGeneratedError',
++			'AI_JSONParseError',
++			'AI_InvalidToolInputError',
++		];
++		for (const name of names) {
++			expect(serializeThinkDiagnosticError({ name })).toEqual({ name });
++		}
++	});
++
++	it('retains only exact SDK stages, stream outcomes, and Think storage keys', () => {
++		emitThinkDiagnostic('think.stream-result', 'response-hook', {
++			stage: 'stream',
++			streamStatus: 'aborted',
++			storageKey: 'think_task_operation',
++		});
++		expect(info.mock.calls[0][1]).toMatchObject({
++			stage: 'stream',
++			streamStatus: 'aborted',
++			storageKey: 'think_task_operation',
++		});
++
++		emitThinkDiagnostic('think.stream-result', 'response-hook', {
++			stage: 'customer-token',
++			streamStatus: 'success',
++			storageKey: 'customer_secret',
++		} as unknown as ThinkDiagnosticContext);
++		expect(info.mock.calls[1][1]).not.toHaveProperty('stage');
++		expect(info.mock.calls[1][1]).not.toHaveProperty('streamStatus');
++		expect(info.mock.calls[1][1]).not.toHaveProperty('storageKey');
++	});
++
++	it('omits unlabelled arbitrary content and common credentials from error text', () => {
++		const sensitiveText = [
++			'private unlabelled generated content',
++			'Bearer bearer-secret-value',
++			'Basic dXNlcjpwYXNz',
++			'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature',
++			'sk-live-api-key-value',
++			'password=hunter2',
++			'cookie=sessionid=cookie-secret',
++			'session=short-session',
++			'recovery_token=recovery-secret',
++			'https://example.test/path?token=query-secret',
++			'123e4567-e89b-12d3-a456-426614174000',
++		].join(' ');
++		emitThinkDiagnostic('host.stub.chat', 'error', {}, new Error(sensitiveText));
++		const logged = JSON.stringify(info.mock.calls);
++		for (const value of [
++			'private unlabelled generated content', 'bearer-secret-value', 'dXNlcjpwYXNz',
++			'eyJhbGciOiJIUzI1NiJ9', 'sk-live-api-key-value', 'hunter2', 'cookie-secret',
++			'short-session', 'recovery-secret', 'query-secret', '123e4567-e89b-12d3-a456-426614174000',
++		]) expect(logged).not.toContain(value);
++		expect(logged).toContain('"name":"Error"');
++	});
++
++	it('omits short labeled credential values instead of relying on entropy heuristics', () => {
++		const error = new Error('password=abc123 token=shortsecret api_key=xyz123');
++		emitThinkDiagnostic('host.stub.chat', 'error', {}, error);
++		const logged = JSON.stringify(info.mock.calls);
++		for (const value of ['abc123', 'shortsecret', 'xyz123']) expect(logged).not.toContain(value);
++	});
++
++	it('does not serialize nested cause messages containing secrets', () => {
++		const error = new Error('outer safe-looking classification', {
++			cause: new Error('password=abc123; recovery_token=secret-in-cause'),
++		});
++		emitThinkDiagnostic('host.stub.chat', 'error', {}, error);
++		const logged = JSON.stringify(info.mock.calls);
++		expect(logged).not.toContain('abc123');
++		expect(logged).not.toContain('secret-in-cause');
++		expect(info.mock.calls[0][1]).toMatchObject({ error: { cause: { name: 'Error' } } });
++	});
++
++	it('drops the event on JSON formatting failure without changing result, callback count, or error identity', async () => {
++		const stringify = vi.spyOn(JSON, 'stringify').mockImplementation(() => { throw new Error('json private failure'); });
++		const callback = vi.fn(async () => 'scheduled result');
++		const result = await observeThinkBoundary('host.stub.chat', {}, callback);
++		expect(result).toBe('scheduled result');
++		expect(callback).toHaveBeenCalledTimes(1);
++
++		const original = new Error('original private failure');
++		const rejected = vi.fn(async () => { throw original; });
++		await expect(observeThinkBoundary('host.stub.chat', {}, rejected)).rejects.toBe(original);
++		expect(rejected).toHaveBeenCalledTimes(1);
++		stringify.mockRestore();
++	});
++
++	it('preserves scheduling and execution when metadata construction and logging fail', async () => {
++		info.mockImplementation(() => { throw new Error('logging private failure'); });
++		let scheduled = false;
++		let executions = 0;
++		const operation = vi.fn(() => new Promise<number>(resolve => {
++			queueMicrotask(() => {
++				scheduled = true;
++				executions += 1;
++				resolve(42);
++			});
++		}));
++		const result = await observeThinkBoundary('host.stub.chat', () => {
++			throw new Error('metadata private failure');
++		}, operation);
++		expect(result).toBe(42);
++		expect(scheduled).toBe(true);
++		expect(executions).toBe(1);
++		expect(operation).toHaveBeenCalledTimes(1);
++	});
++
++	it('preserves the original error when metadata getters, serialization, and the sink all fail', async () => {
++		info.mockImplementation(() => { throw new Error('sink private failure'); });
++		const context = {} as ThinkDiagnosticContext;
++		Object.defineProperty(context, 'operationId', { get() { throw new Error('metadata getter private failure'); } });
++		const original = new Error('original application failure');
++		await expect(observeThinkBoundary('host.stub.chat', context, async () => { throw original; })).rejects.toBe(original);
++	});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/diagnostics.ts b/worker/agents/think/diagnostics.ts
+new file mode 100644
+--- /dev/null
++++ b/worker/agents/think/diagnostics.ts
+@@ -0,0 +1,462 @@
++/**
++ * Best-effort, metadata-only diagnostics. Arbitrary error messages, stack
++ * headers, WebSocket reasons, and runtime objects are never written to logs.
++ */
++export interface ThinkDiagnosticContext {
++	agentId?: string;
++	userId?: string;
++	projectId?: string;
++	sessionId?: string;
++	nativeRequestId?: string;
++	conversationId?: string;
++	operationId?: string;
++	turn?: number;
++	step?: number;
++	toolName?: string;
++	toolCallId?: string;
++	continuationCount?: number;
++	completedPassCount?: number;
++	pendingPromptKind?: 'INITIAL' | 'CONTINUATION' | null;
++	operationState?: 'RUNNING' | 'COMPLETE' | 'BLOCKED' | 'USER_INPUT_REQUIRED' | 'INCOMPLETE_RESOURCE_LIMIT';
++	modelCalls?: number;
++	toolCalls?: number;
++	checkpointCount?: number;
++	readyState?: number;
++	closeCode?: number;
++	wasClean?: boolean;
++	decision?: 'STOP' | 'CONTINUE' | 'BLOCKED' | 'INCOMPLETE_RESOURCE_LIMIT';
++	streamStatus?: 'completed' | 'aborted' | 'error';
++	stage?: 'parse' | 'persist' | 'turn' | 'stream' | 'recovery' | 'transcript';
++	chunkType?: string;
++	aborted?: boolean;
++	httpStatus?: number;
++	finishReason?: string;
++	inputTokens?: number;
++	outputTokens?: number;
++	storageKey?: string;
++}
++
++export type ThinkDiagnosticContextSource =
++	| ThinkDiagnosticContext
++	| (() => ThinkDiagnosticContext);
++
++interface SafeThinkDiagnosticFrame {
++	file: string;
++	line: number;
++	column: number;
++}
++
++interface SafeThinkDiagnosticError {
++	name: string;
++	code?: string;
++	frames?: SafeThinkDiagnosticFrame[];
++	cause?: SafeThinkDiagnosticError | { circular: true } | { truncated: true };
++}
++
++const boundaryNames = new Set([
++	'operation.persistence',
++	'think.stream-result',
++	'tool.execution',
++	'think.onStepFinish',
++	'tool.execute-and-evidence',
++	'think.beforeStep',
++	'rpc.callback',
++	'stream.forwarding',
++	'rpc.callback.onDone',
++	'rpc.callback.onError',
++	'rpc.callback.onError.delivery',
++	'driver.initial-lifecycle',
++	'driver.recover-pending-chat',
++	'driver.recovery-decision',
++	'driver.mark-chat-started',
++	'driver.chat',
++	'driver.error-lifecycle',
++	'driver.mark-chat-resolved',
++	'driver.post-chat-lifecycle',
++	'driver.post-chat-operation',
++	'driver.post-chat-decision',
++	'driver.onPassEnd',
++	'host.websocket',
++	'host.stub.chat',
++	'host.pass',
++]);
++
++const eventNames = new Set([
++	'start',
++	'resolved',
++	'error',
++	'close',
++	'decision',
++	'forwarded',
++	'interrupted',
++	'response-hook',
++	'put-returned',
++	'success',
++]);
++
++const errorNames = new Set([
++	'Error',
++	'TypeError',
++	'RangeError',
++	'ReferenceError',
++	'SyntaxError',
++	'URIError',
++	'EvalError',
++	'AggregateError',
++	'DOMException',
++	'AbortError',
++	'DataCloneError',
++	'NetworkError',
++	'TimeoutError',
++	'NotFoundError',
++	'InvalidStateError',
++	'OperationError',
++	'SecurityError',
++	'AI_APICallError',
++	'AI_RetryError',
++	'AI_TypeValidationError',
++	'AI_InvalidResponseDataError',
++	'AI_NoOutputGeneratedError',
++	'AI_JSONParseError',
++	'AI_InvalidToolInputError',
++]);
++
++const errorCodes = new Set([
++	'ERR_RPC_CANCELED',
++	'RPC_CANCELED',
++	'ABORT_ERR',
++	'ECONNRESET',
++	'ETIMEDOUT',
++	'EPIPE',
++]);
++
++const toolNames = new Set([
++	'read',
++	'write',
++	'edit',
++	'list',
++	'find',
++	'grep',
++	'delete',
++	'ask_questions',
++	'browser_console_logs',
++	'deploy_space',
++	'commit',
++	'set_title',
++	'finish_task',
++]);
++
++const operationStates = new Set([
++	'RUNNING',
++	'COMPLETE',
++	'BLOCKED',
++	'USER_INPUT_REQUIRED',
++	'INCOMPLETE_RESOURCE_LIMIT',
++]);
++const decisions = new Set(['STOP', 'CONTINUE', 'BLOCKED', 'INCOMPLETE_RESOURCE_LIMIT']);
++const chunkTypes = new Set(['start-step', 'finish-step', 'tool-output-available']);
++const finishReasons = new Set(['stop', 'length', 'tool-calls', 'content-filter', 'unknown']);
++const sdkStages = new Set(['parse', 'persist', 'turn', 'stream', 'recovery', 'transcript']);
++const storageKeys = new Set([
++	'think_task_lifecycle',
++	'think_task_evidence',
++	'think_task_operation',
++	'think_task_forced_status',
++	'think_task_start_intent',
++]);
++const internalSourceFiles = new Set([
++	'ThinkAgent.ts',
++	'stream-forwarder.ts',
++	'finish-task-tool.ts',
++	'diagnostics.ts',
++	'context-selector.ts',
++	'browser-evidence.ts',
++	'browser-logs-tool.ts',
++	'deploy-tool.ts',
++	'commit-tool.ts',
++	'ask-questions-tool.ts',
++	'set-title-tool.ts',
++	'space-workspace-ops.ts',
++]);
++const internalWorkerFiles = new Set(['index.js']);
++const internalThinkPackageFile = 'node_modules/@cloudflare/think/dist/think.js';
++
++const contextKeys = [
++	'agentId',
++	'userId',
++	'projectId',
++	'sessionId',
++	'nativeRequestId',
++	'conversationId',
++	'operationId',
++	'turn',
++	'step',
++	'toolName',
++	'toolCallId',
++	'continuationCount',
++	'completedPassCount',
++	'pendingPromptKind',
++	'operationState',
++	'modelCalls',
++	'toolCalls',
++	'checkpointCount',
++	'readyState',
++	'closeCode',
++	'wasClean',
++	'decision',
++	'streamStatus',
++	'stage',
++	'chunkType',
++	'aborted',
++	'httpStatus',
++	'finishReason',
++	'inputTokens',
++	'outputTokens',
++	'storageKey',
++] as const;
++
++const identifierKeys = new Set([
++	'agentId',
++	'userId',
++	'projectId',
++	'sessionId',
++	'nativeRequestId',
++	'conversationId',
++	'operationId',
++	'toolCallId',
++]);
++
++const numericKeys = new Set([
++	'turn',
++	'step',
++	'continuationCount',
++	'completedPassCount',
++	'modelCalls',
++	'toolCalls',
++	'checkpointCount',
++	'readyState',
++	'closeCode',
++	'httpStatus',
++	'inputTokens',
++	'outputTokens',
++]);
++
++function isBoundedInteger(value: unknown, min = 0, max = 1_000_000): value is number {
++	return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
++}
++
++function safeContextValue(key: string, value: unknown): string | number | boolean | undefined {
++	if (identifierKeys.has(key)) {
++		return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)
++			? value
++			: undefined;
++	}
++	if (numericKeys.has(key)) {
++		if (key === 'readyState') return isBoundedInteger(value, 0, 3) ? value : undefined;
++		if (key === 'closeCode') return isBoundedInteger(value, 0, 4999) ? value : undefined;
++		if (key === 'httpStatus') return isBoundedInteger(value, 100, 599) ? value : undefined;
++		return isBoundedInteger(value) ? value : undefined;
++	}
++	if (key === 'wasClean' || key === 'aborted') {
++		return typeof value === 'boolean' ? value : undefined;
++	}
++	if (key === 'toolName') {
++		return typeof value === 'string' && toolNames.has(value) ? value : undefined;
++	}
++	if (key === 'operationState') {
++		return typeof value === 'string' && operationStates.has(value) ? value : undefined;
++	}
++	if (key === 'decision') {
++		return typeof value === 'string' && decisions.has(value) ? value : undefined;
++	}
++	if (key === 'pendingPromptKind') {
++		return value === 'INITIAL' || value === 'CONTINUATION' ? value : undefined;
++	}
++	if (key === 'streamStatus') {
++		return value === 'completed' || value === 'aborted' || value === 'error' ? value : undefined;
++	}
++	if (key === 'chunkType') {
++		return typeof value === 'string' && chunkTypes.has(value) ? value : undefined;
++	}
++	if (key === 'finishReason') {
++		return typeof value === 'string' && finishReasons.has(value) ? value : undefined;
++	}
++	if (key === 'stage') {
++		return typeof value === 'string' && sdkStages.has(value) ? value : undefined;
++	}
++	if (key === 'storageKey') {
++		return typeof value === 'string' && storageKeys.has(value) ? value : undefined;
++	}
++	return undefined;
++}
++
++function safeFrames(stack: unknown): SafeThinkDiagnosticFrame[] | undefined {
++	if (typeof stack !== 'string') return undefined;
++	const frames: SafeThinkDiagnosticFrame[] = [];
++	const lines = stack.slice(0, 12_000).split('\n');
++	for (const line of lines) {
++		if (frames.length === 5) break;
++		const trimmed = line.trim();
++		if (!trimmed.startsWith('at ')) continue;
++		let location = trimmed.slice(3);
++		const openParen = location.lastIndexOf(' (');
++		if (openParen >= 0 && location.endsWith(')')) {
++			location = location.slice(openParen + 2, -1);
++		}
++		const match = location.match(/^(.*):([1-9]\d{0,5}):([1-9]\d{0,5})$/);
++		if (!match) continue;
++		const sourceLocation = match[1];
++		let file: string | undefined;
++		if (internalWorkerFiles.has(sourceLocation)) {
++			file = sourceLocation;
++		} else if (
++			sourceLocation === internalThinkPackageFile ||
++			(sourceLocation.endsWith(`/${internalThinkPackageFile}`) &&
++				/^[A-Za-z0-9_./-]+$/.test(sourceLocation) &&
++				!sourceLocation.split('/').includes('..'))
++		) {
++			file = 'think.js';
++		} else {
++			const sourceMatch = sourceLocation.match(/^(?:\.\/)?worker\/agents\/think\/([A-Za-z0-9-]+\.ts)$/);
++			if (sourceMatch && internalSourceFiles.has(sourceMatch[1])) file = sourceMatch[1];
++		}
++		if (!file) continue;
++		const lineNumber = Number(match[2]);
++		const column = Number(match[3]);
++		if (!Number.isSafeInteger(lineNumber) || !Number.isSafeInteger(column)) continue;
++		frames.push({ file, line: lineNumber, column });
++	}
++	return frames.length ? frames : undefined;
++}
++
++function readProperty(value: object, key: string): { read: true; value: unknown } | { read: false } {
++	try {
++		return { read: true, value: (value as Record<string, unknown>)[key] };
++	} catch {
++		return { read: false };
++	}
++}
++
++function serializeErrorAtDepth(
++	error: unknown,
++	depth: number,
++	seen: Set<object>,
++): SafeThinkDiagnosticError | { circular: true } | { truncated: true } {
++	if (depth > 3) return { truncated: true };
++	if (error === null) return { name: 'UnknownError' };
++	if (typeof error !== 'object' && typeof error !== 'function') {
++		return { name: typeof error === 'string' ? 'ThrownString' : 'UnknownError' };
++	}
++	if (seen.has(error)) return { circular: true };
++	seen.add(error);
++
++	const record: SafeThinkDiagnosticError = { name: 'UnknownError' };
++	const name = readProperty(error, 'name');
++	if (name.read && typeof name.value === 'string' && errorNames.has(name.value)) {
++		record.name = name.value;
++	}
++	const code = readProperty(error, 'code');
++	if (code.read && typeof code.value === 'string' && errorCodes.has(code.value)) {
++		record.code = code.value;
++	}
++	const stack = readProperty(error, 'stack');
++	if (stack.read) {
++		const frames = safeFrames(stack.value);
++		if (frames) record.frames = frames;
++	}
++	if (depth < 3) {
++		const cause = readProperty(error, 'cause');
++		if (cause.read && cause.value !== undefined) {
++			record.cause = serializeErrorAtDepth(cause.value, depth + 1, seen);
++		}
++	}
++	return record;
++}
++
++/**
++ * Returns an allowlisted error classification only. Message text and arbitrary
++ * properties are never read or emitted.
++ */
++export function serializeThinkDiagnosticError(error: unknown): SafeThinkDiagnosticError | undefined {
++	try {
++		const safeError = serializeErrorAtDepth(error, 0, new Set());
++		return 'name' in safeError ? safeError : { name: 'UnknownError' };
++	} catch {
++		return undefined;
++	}
++}
++
++/** Run diagnostic-only work without allowing it to escape into application flow. */
++export function withThinkDiagnosticSafety(fn: () => void): void {
++	try {
++		fn();
++	} catch {
++		// Diagnostics are best-effort; application behavior always wins.
++	}
++}
++
++export function emitThinkDiagnostic(
++	boundary: string,
++	event: string,
++	context: ThinkDiagnosticContextSource = {},
++	error?: unknown,
++): void {
++	withThinkDiagnosticSafety(() => {
++		if (!boundaryNames.has(boundary) || !eventNames.has(event)) return;
++
++		const record: Record<string, unknown> = {
++			schema: 1,
++			timestamp: new Date().toISOString(),
++			boundary,
++			event,
++		};
++		const metadata = typeof context === 'function' ? context() : context;
++		if (metadata !== null && typeof metadata === 'object') {
++			for (const key of contextKeys) {
++				const candidate = readProperty(metadata, key);
++				if (!candidate.read) continue;
++				const safeValue = safeContextValue(key, candidate.value);
++				if (safeValue !== undefined) record[key] = safeValue;
++			}
++		}
++		if (error !== undefined) {
++			const safeError = serializeThinkDiagnosticError(error);
++			if (safeError !== undefined) record.error = safeError;
++		}
++
++		// Validate JSON formatting while still inside the non-interference boundary.
++		const json = JSON.stringify(record);
++		if (json !== undefined) console.info('THINK_DIAGNOSTIC', record);
++	});
++}
++
++export async function observeThinkBoundary<T>(
++	boundary: string,
++	context: ThinkDiagnosticContextSource,
++	operation: () => Promise<T>,
++): Promise<T> {
++	emitThinkDiagnostic(boundary, 'start', context);
++	try {
++		const result = await operation();
++		emitThinkDiagnostic(boundary, 'resolved', context);
++		return result;
++	} catch (error) {
++		emitThinkDiagnostic(boundary, 'error', context, error);
++		throw error;
++	}
++}
++
++export function observeThinkBoundarySync<T>(
++	boundary: string,
++	context: ThinkDiagnosticContextSource,
++	operation: () => T,
++): T {
++	try {
++		const result = operation();
++		emitThinkDiagnostic(boundary, 'resolved', context);
++		return result;
++	} catch (error) {
++		emitThinkDiagnostic(boundary, 'error', context, error);
++		throw error;
++	}
++}
+\ No newline at end of file
+diff --git a/worker/agents/think/finish-task-tool.ts b/worker/agents/think/finish-task-tool.ts
+--- a/worker/agents/think/finish-task-tool.ts
++++ b/worker/agents/think/finish-task-tool.ts
+@@ -1,4 +1,5 @@
+ import { tool, type Tool } from 'ai';
++import { emitThinkDiagnostic, observeThinkBoundarySync, type ThinkDiagnosticContext } from './diagnostics';
+ import { z } from 'zod';
+ import { THINK_INTERNAL_CONTINUATION_PREFIX } from './context-selector';
+ 
+@@ -499,9 +500,18 @@
+ 	continuationPrompt(summary: string): string;
+ 	onPassStart?(kind: 'INITIAL' | 'CONTINUATION'): void;
+ 	onPassEnd?(decision: 'STOP' | 'CONTINUE' | 'BLOCKED' | 'INCOMPLETE_RESOURCE_LIMIT'): void;
++diagnosticContext?: ThinkDiagnosticContext | (() => ThinkDiagnosticContext);
+ }): Promise<{ operation: ThinkTaskOperation; lifecycle: ThinkTaskLifecycle }> {
+ 	const { stub } = options;
+ 	let operation = options.initialOperation;
++let diagnosticBoundary = 'driver.initial-lifecycle';
++const diagnosticContext = (): ThinkDiagnosticContext => ({
++...(typeof options.diagnosticContext === 'function' ? options.diagnosticContext() : options.diagnosticContext), operationId: operation.taskId,
++conversationId: operation.conversationId, continuationCount: operation.continuationCount,
++turn: operation.continuationCount + 1, completedPassCount: operation.completedPassCount,
++pendingPromptKind: operation.pendingPromptKind, modelCalls: operation.modelCalls, toolCalls: operation.toolCalls,
++});
++try {
+ 	let lifecycle = await stub.getTaskLifecycle();
+ 	if (lifecycle.status !== 'RUNNING') return { operation, lifecycle };
+ 
+@@ -509,6 +519,7 @@
+ 		const pendingPrompt = operation.pendingPromptKind === 'INITIAL'
+ 			? options.initialPrompt
+ 			: options.continuationPrompt('Resume the interrupted task from its durable operation state.');
++diagnosticBoundary = 'driver.recover-pending-chat';
+ 		const recovery = await stub.recoverPendingTaskChat(pendingPrompt);
+ 		if (recovery !== 'NOT_PERSISTED') {
+ 			const recovered = await stub.getTaskOperation();
+@@ -534,7 +545,10 @@
+ 	}
+ 
+ 	if (operation.pendingPromptKind === null && operation.completedPassCount > 0) {
+-		const decision = decideThinkTaskContinuation(lifecycle.status, operation);
++diagnosticBoundary = 'driver.recovery-decision';
++const decision = observeThinkBoundarySync(diagnosticBoundary, diagnosticContext,
++() => decideThinkTaskContinuation(lifecycle.status, operation));
++emitThinkDiagnostic(diagnosticBoundary, 'decision', () => ({ ...diagnosticContext(), decision, operationState: lifecycle.status }));
+ 		if (decision !== 'CONTINUE') {
+ 			if (decision === 'BLOCKED') {
+ 				await stub.stopTask('BLOCKED', 'The task made no concrete progress before reconnect.', 'no_progress');
+@@ -560,22 +574,40 @@
+ 			? options.initialPrompt
+ 			: options.continuationPrompt(lifecycle.summary);
+ 		options.onPassStart?.(kind);
++diagnosticBoundary = 'driver.mark-chat-started';
+ 		await stub.markTaskChatStarted();
+ 		try {
++diagnosticBoundary = 'driver.chat';
+ 			await options.chat(prompt);
+ 		} catch (error) {
++emitThinkDiagnostic(diagnosticBoundary, 'error', diagnosticContext, error);
++diagnosticBoundary = 'driver.error-lifecycle';
+ 			lifecycle = await stub.getTaskLifecycle();
+-			if (lifecycle.status !== 'INCOMPLETE_RESOURCE_LIMIT') throw error;
++if (lifecycle.status !== 'INCOMPLETE_RESOURCE_LIMIT') {
++diagnosticBoundary = 'driver.chat';
++throw error;
++}
+ 			options.onPassEnd?.('INCOMPLETE_RESOURCE_LIMIT');
+ 			return {
+ 				operation: (await stub.getTaskOperation()) ?? operation,
+ 				lifecycle,
+ 			};
+ 		}
++diagnosticBoundary = 'driver.mark-chat-resolved';
+ 		await stub.markTaskChatResolved();
++diagnosticBoundary = 'driver.post-chat-lifecycle';
+ 		lifecycle = await stub.getTaskLifecycle();
++diagnosticBoundary = 'driver.post-chat-operation';
+ 		const afterPass = await stub.getTaskOperation();
+-		const decision = decideThinkTaskContinuation(lifecycle.status, afterPass);
++diagnosticBoundary = 'driver.post-chat-decision';
++const decision = observeThinkBoundarySync(diagnosticBoundary, diagnosticContext,
++() => decideThinkTaskContinuation(lifecycle.status, afterPass));
++emitThinkDiagnostic(diagnosticBoundary, 'decision', () => ({
++...diagnosticContext(), decision, operationState: lifecycle.status,
++modelCalls: afterPass?.modelCalls, toolCalls: afterPass?.toolCalls,
++completedPassCount: afterPass?.completedPassCount, continuationCount: afterPass?.continuationCount,
++}));
++diagnosticBoundary = 'driver.onPassEnd';
+ 		options.onPassEnd?.(decision);
+ 		if (decision === 'STOP') return { operation: afterPass ?? operation, lifecycle };
+ 		if (decision === 'BLOCKED') {
+@@ -600,6 +632,10 @@
+ 		}
+ 		operation = await stub.advanceTaskOperation();
+ 	}
++} catch (error) {
++emitThinkDiagnostic(diagnosticBoundary, 'error', diagnosticContext, error);
++throw error;
++}
+ }
+ 
+ export function hasCompleteThinkTaskEvidence(evidence: ThinkTaskEvidence): boolean {
+diff --git a/worker/agents/think/stream-forwarder.ts b/worker/agents/think/stream-forwarder.ts
+new file mode 100644
+--- /dev/null
++++ b/worker/agents/think/stream-forwarder.ts
+@@ -0,0 +1,66 @@
++import { RpcTarget } from 'cloudflare:workers';
++import { emitThinkDiagnostic, observeThinkBoundary, withThinkDiagnosticSafety, type ThinkDiagnosticContext } from './diagnostics';
++
++/** Original RPC forwarding semantics, with metadata-only diagnostics. */
++export class ThinkStreamForwarder extends RpcTarget {
++	private nativeRequestId?: string;
++	private lastToolName?: string;
++	private lastToolCallId?: string;
++
++	constructor(
++		private readonly onChunkJson: (json: string) => void | Promise<void>,
++		private readonly onErrorCb: (message: string) => void,
++		private readonly onDoneCb: () => Promise<void>,
++		private readonly diagnosticContext: () => ThinkDiagnosticContext,
++	) { super(); }
++
++	private context(): ThinkDiagnosticContext {
++		return {
++			...this.diagnosticContext(), nativeRequestId: this.nativeRequestId,
++			toolName: this.lastToolName, toolCallId: this.lastToolCallId,
++		};
++	}
++
++	onStart(event: { requestId: string }): void {
++		withThinkDiagnosticSafety(() => { this.nativeRequestId = event.requestId; });
++		emitThinkDiagnostic('rpc.callback', 'start', () => this.context());
++	}
++
++	async onEvent(json: string): Promise<void> {
++		let chunkType: string | undefined;
++		withThinkDiagnosticSafety(() => {
++			const chunk = JSON.parse(json) as Record<string, unknown>;
++			chunkType = typeof chunk.type === 'string' ? chunk.type : undefined;
++			if (chunk.type === 'tool-input-start' || chunk.type === 'tool-input-available') {
++				this.lastToolName = typeof chunk.toolName === 'string' ? chunk.toolName : undefined;
++				this.lastToolCallId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : undefined;
++			}
++		});
++		try {
++			await this.onChunkJson(json);
++			if (chunkType === 'start-step' || chunkType === 'finish-step' || chunkType === 'tool-output-available') {
++				emitThinkDiagnostic('stream.forwarding', 'forwarded', () => ({ ...this.context(), chunkType }));
++			}
++		} catch (error) {
++			emitThinkDiagnostic('stream.forwarding', 'error', () => ({ ...this.context(), chunkType }), error);
++			throw error;
++		}
++	}
++
++	async onDone(): Promise<void> {
++		await observeThinkBoundary('rpc.callback.onDone', () => this.context(), () => this.onDoneCb());
++	}
++
++	onError(error: string): void {
++		emitThinkDiagnostic('rpc.callback.onError', 'error', () => this.context(), error);
++		try { this.onErrorCb(error); }
++		catch (cause) {
++			emitThinkDiagnostic('rpc.callback.onError.delivery', 'error', () => this.context(), cause);
++			throw cause;
++		}
++	}
++
++	onInterrupted(): void {
++		emitThinkDiagnostic('rpc.callback', 'interrupted', () => this.context());
++	}
++}
+\ No newline at end of file

@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-10-01T14:15:11.250Z",
+  "status": "PASS",
+  "checks": {
+    "runtimeHealth": {
+      "httpStatus": 200,
+      "status": "PASS"
+    },
+    "publicCapabilities": {
+      "httpStatus": 200,
+      "registrationEnabled": true,
+      "publicGeneratedAppsEnabled": true,
+      "status": "PASS"
+    },
+    "runtimeAuthProviders": {
+      "httpStatus": 200,
+      "registrationEnabled": true,
+      "status": "PASS"
+    },
+    "anonymousIdentity": {
+      "httpStatus": 200,
+      "anonymous": true,
+      "status": "PASS"
+    },
+    "anonymousOwnershipGate": {
+      "httpStatus": 401,
+      "projectIdWasImpossibleProbe": true,
+      "status": "PASS"
+    }
+  },
+  "finishedAt": "2026-10-01T14:15:12.948Z"
+}

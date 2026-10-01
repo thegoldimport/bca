@@ -1,0 +1,433 @@
+{
+  "directCallCount": 38,
+  "operationWrapperUses": 23,
+  "calls": [
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 233,
+      "helper": "observeThinkBoundarySync",
+      "boundary": "operation.persistence",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 236,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 240,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 246,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 247,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "think.stream-result",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 254,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 256,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "think.stream-result",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 264,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 269,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "tool.execution",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 274,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 275,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "tool.execution",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 283,
+      "helper": "observeThinkBoundarySync",
+      "boundary": "think.onStepFinish",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 312,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 316,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 342,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 343,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 388,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 392,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 398,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 410,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 431,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "tool.execute-and-evidence",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 863,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 932,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 992,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 997,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 998,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1000,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1030,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1031,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1036,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1037,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1054,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1055,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1075,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1084,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1107,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1111,
+      "helper": "this.putTaskDiagnostic",
+      "boundary": "operation.persistence",
+      "metadataLazy": null
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1131,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1132,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "think.beforeStep",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/ThinkAgent.ts",
+      "line": 1160,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "think.beforeStep",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 25,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 26,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "rpc.callback",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 31,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 42,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "stream.forwarding",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 45,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "stream.forwarding",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 51,
+      "helper": "observeThinkBoundary",
+      "boundary": "rpc.callback.onDone",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 55,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "rpc.callback.onError",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 58,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "rpc.callback.onError.delivery",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/stream-forwarder.ts",
+      "line": 64,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "rpc.callback",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/finish-task-tool.ts",
+      "line": 549,
+      "helper": "observeThinkBoundarySync",
+      "boundary": "diagnosticBoundary",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/finish-task-tool.ts",
+      "line": 551,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "diagnosticBoundary",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/finish-task-tool.ts",
+      "line": 583,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "diagnosticBoundary",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/finish-task-tool.ts",
+      "line": 603,
+      "helper": "observeThinkBoundarySync",
+      "boundary": "diagnosticBoundary",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/finish-task-tool.ts",
+      "line": 605,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "diagnosticBoundary",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/think/finish-task-tool.ts",
+      "line": 636,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "diagnosticBoundary",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/core/behaviors/think.ts",
+      "line": 580,
+      "helper": "observeThinkBoundary",
+      "boundary": "host.stub.chat",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/core/behaviors/think.ts",
+      "line": 583,
+      "helper": "withThinkDiagnosticSafety",
+      "boundary": "metadata guard",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/core/behaviors/think.ts",
+      "line": 584,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "host.pass",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/core/behaviors/think.ts",
+      "line": 589,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "host.pass",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/core/codingAgent.ts",
+      "line": 677,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "host.websocket",
+      "metadataLazy": true
+    },
+    {
+      "file": "worker/agents/core/codingAgent.ts",
+      "line": 689,
+      "helper": "emitThinkDiagnostic",
+      "boundary": "host.websocket",
+      "metadataLazy": true
+    }
+  ]
+}
