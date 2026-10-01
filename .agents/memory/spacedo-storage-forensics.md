@@ -20,3 +20,15 @@ Installed Think's resumable stream journal can mix single JSON chunk objects wit
 **Why:** Directly extracting a type from packed rows produced null and concealed the actual step/tool counts. The stream's persisted status still authoritatively recorded an error without a stored error message.
 
 **How to apply:** Check the installed agents stream decoder when interpreting journal rows, count decoded step/tool types, and independently verify stream status, owner-visible revision/preview, and finish evidence.
+
+When an operator API result is projected through a tool response, a long file-content field can be replaced with a `--- TRUNCATED ---` marker while the surrounding SQL still reports success and zero writes. Do not run syntax checks or calculate hashes on such a projection as if it were the complete file. Read long values in bounded SQL substrings, verify their combined character length against SQL's `length(content)`, and compare the reconstructed byte hash to prior evidence before interpreting it.
+
+**Why:** A live workspace inspection initially produced syntactically plausible but incomplete copies of three generated modules. The full copies only matched the preserved fixture hashes after bounded reassembly.
+
+**How to apply:** For read-only SpaceDO forensic exports that cross an API/tool output limit, keep each projected field small and validate total length, encoding, and hash. A syntax result from a truncated export is not evidence of the live file's syntax.
+
+Cloudflare's retained Worker logs can correlate a host Durable Object and a Think Durable Object by shared trace on the original RPC, but scheduled/alarm work may continue under separate trace IDs after that RPC is reported canceled. A provider Gateway HTTP 200 can likewise coexist with a later native Think stream error.
+
+**Why:** The original RPC's canceled outcome preceded a persisted workspace write and terminal stream error, while all correlated provider requests succeeded. Neither the RPC outcome nor the provider status alone identified the original exception.
+
+**How to apply:** Correlate narrowly by the confirmed object IDs and invocation time, project only safe metadata from logs and provider `streamed_data`, and report an unknown cause if no scoped exception or nested cause is retained. Never print raw WebSocket URLs, gateway response bodies, or reasoning fields.

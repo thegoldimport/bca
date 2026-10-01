@@ -1,0 +1,541 @@
+AUTHORIZED: read-only diagnosis of the failed fresh production continuation fixture.
+
+DO NOT run another AI generation.
+
+DO NOT retry the failed fixture.
+
+DO NOT touch Project 5.
+
+DO NOT rollback yet.
+
+DO NOT deploy anything.
+
+DO NOT change code, configuration, patches, maxSteps, operation limits, runtime vars, or production versions.
+
+DO NOT invoke production Publish.
+
+This is diagnosis only.
+
+==================================================
+CURRENT STATE
+==================================================
+
+Continuous-coding candidate is currently active:
+
+Runtime:
+122e2da3-5617-49cc-92ca-5c5723e30af3
+100%
+
+Control plane:
+0e01f7dc-51c4-4736-9873-ea431abc823c
+unchanged
+
+Gateway:
+9d80432b-4e53-4fe7-950a-2b53f0213eff
+unchanged
+
+Predeployment reconstruction:
+PASS
+
+All 853 compared source paths:
+exact match
+
+Tests/typecheck/build:
+PASS
+
+Post-deploy smoke:
+PASS
+
+Production operation configuration:
+
+Think maxSteps:
+25
+
+Maximum total Think turns:
+5
+
+Maximum continuations:
+4
+
+Wall-clock operation ceiling:
+15 minutes
+
+==================================================
+FAILED FRESH FIXTURE
+==================================================
+
+Observed:
+
+- exactly ONE customer coding request
+- ONE native Think turn
+- ZERO internal continuations
+- 12 tool outputs
+- native Think stream then errored
+- pending workspace edits persisted
+- authoritative HEAD remained unchanged
+- no preview deployed
+- no finish_task
+- no COMPLETE acceptance
+- production Publish not invoked
+
+The failure happened before continuation acceptance could be demonstrated.
+
+Project 5 has NOT been read or touched.
+
+==================================================
+GOAL
+==================================================
+
+Determine the EARLIEST authoritative cause of the native Think stream error using ONLY evidence already produced by the failed operation and existing production logs/state.
+
+We need to know whether the failure originated in:
+
+A. model/provider response
+
+B. Think SDK/runtime
+
+C. BuildCustom continuous-coding lifecycle changes
+
+D. Think stream forwarding
+
+E. tool execution/result serialization
+
+F. SpaceDO/workspace operation
+
+G. Cloudflare Worker/runtime limitation
+
+H. network/client disconnect
+
+I. resource/timeout/CPU/memory limit
+
+J. operation-state handling
+
+K. another identifiable source
+
+L. insufficient evidence
+
+Do not infer causation merely from the last visible browser error.
+
+Trace the failure from the earliest authoritative evidence available.
+
+==================================================
+1. PRESERVE THE FAILED FIXTURE
+==================================================
+
+Before investigation, identify and record read-only:
+
+- fixture user
+- project
+- agent
+- conversation/session
+- operation ID if present
+- starting HEAD
+- current HEAD
+- operation state
+- working-tree dirty/clean status if safely observable read-only
+- modified files if safely observable
+- continuation counter
+- resource counters
+- last successful tool
+- last persisted Think/session message
+- last persisted operation evidence
+
+Do not mutate or repair the fixture.
+
+Do not commit/reset its dirty tree.
+
+==================================================
+2. INSPECT EXISTING ERROR EVIDENCE
+==================================================
+
+Inspect evidence already created by the failed operation.
+
+Use existing:
+
+- runtime logs
+- Cloudflare logs/tail history if retained
+- Think persisted session/messages
+- operation state
+- tool results
+- stream-forwarder evidence
+- SpaceDO state
+- Worker exception/error records
+- provider/Gateway response metadata if already available
+- existing acceptance harness captures
+- browser/network captures already saved
+- durable evidence/checkpoints from the fixture
+
+Do NOT create another generation merely to obtain better telemetry.
+
+If some telemetry no longer exists, say so.
+
+==================================================
+3. BUILD AN EXACT TIMELINE
+==================================================
+
+Produce the chronological sequence from:
+
+customer request accepted
+
+through:
+
+Think start
+
+each observable tool call/result
+
+up to:
+
+native stream error
+
+and:
+
+host handling after error
+
+At minimum identify:
+
+- Think turn started
+- model stream established
+- tool calls 1 through N
+- successful/failed status of each tool
+- tool #12 identity and result
+- whether another model request occurred after tool #12
+- whether provider response began
+- whether Think emitted an error
+- whether stream forwarder emitted an error
+- whether host caught an exception
+- whether operation state changed
+- whether continuation logic was evaluated
+- why continuation count remained zero
+- whether client remained connected
+- whether workspace remained available
+
+Do not provide hidden chain-of-thought.
+
+We want observable runtime/tool/lifecycle events only.
+
+==================================================
+4. FIND THE ORIGINAL ERROR
+==================================================
+
+Locate the most original available exception/error object.
+
+Report:
+
+ERROR TYPE:
+ERROR MESSAGE:
+ERROR CODE:
+STACK:
+SOURCE FILE:
+SOURCE FUNCTION:
+RUNTIME COMPONENT:
+
+If wrapped, trace:
+
+outer error
+→ cause
+→ nested cause
+
+until reaching the earliest available cause.
+
+Do not stop at a generic message such as:
+
+"stream failed"
+
+if an underlying exception is available.
+
+==================================================
+5. DETERMINE WHETHER OUR NEW LIFECYCLE RAN
+==================================================
+
+Specifically determine whether any of the new lifecycle code caused or participated in the failure.
+
+Check:
+
+- operation initialization
+- resource accounting
+- onStepFinish handling
+- finish_task registration
+- continuation-aware context
+- stream forwarding
+- operation-state persistence
+- completion evidence handling
+- continuation driver
+- working-tree fingerprinting
+- preflight
+- deploy_space
+
+For each relevant component classify:
+
+NOT REACHED
+REACHED AND SUCCEEDED
+REACHED AND FAILED
+UNKNOWN
+
+Important:
+
+The fact that continuation count is zero does NOT by itself mean continuation logic failed.
+
+Determine whether the first native Think turn errored before the continuation driver had a normal completed turn to evaluate.
+
+==================================================
+6. TOOL #12
+==================================================
+
+Pay special attention to the final successful/attempted tool event.
+
+Identify:
+
+- tool name
+- arguments shape, redacting secrets
+- result shape
+- result size
+- success/failure
+- serialization behavior
+- whether result returned to Think
+- whether the next model step started
+
+Determine whether a malformed/oversized/unserializable tool result could have caused the subsequent stream failure.
+
+Do not speculate if evidence does not support it.
+
+==================================================
+7. PROVIDER / AI GATEWAY
+==================================================
+
+Using existing evidence only, determine whether the final model/provider request:
+
+- reached AI Gateway
+- reached provider
+- received HTTP response
+- streamed tokens
+- returned provider error
+- timed out
+- disconnected
+- hit rate/resource limits
+
+Report any existing:
+
+- status code
+- provider error code
+- Gateway error
+- request ID
+- model
+- timing
+- token/usage metadata
+
+Do not make another provider request.
+
+==================================================
+8. CLOUDFLARE RUNTIME
+==================================================
+
+Check existing evidence for:
+
+- Worker exception
+- CPU limit
+- wall-time issue
+- memory issue
+- Durable Object exception
+- WebSocket close
+- RPC failure
+- fiber/recovery failure
+- service-binding failure
+
+If none exists, say NONE OBSERVED.
+
+Do not infer a Cloudflare limit solely because the stream ended.
+
+==================================================
+9. WORKSPACE SAFETY
+==================================================
+
+Read-only determine whether the failed fixture's workspace is currently:
+
+- dirty
+- malformed or syntactically valid
+- same starting HEAD
+- containing partial requested work
+
+This is NOT authorization to repair it.
+
+We want to verify that the new lifecycle did not:
+
+- commit malformed work
+- reset pending edits
+- deploy stale HEAD
+- falsely mark COMPLETE
+
+==================================================
+10. CLASSIFY THE FAILURE
+==================================================
+
+Choose ONE primary classification if evidence supports it:
+
+LIFECYCLE IMPLEMENTATION DEFECT
+
+EXISTING VIBESDK/THINK DEFECT
+
+PROVIDER/GATEWAY FAILURE
+
+CLOUDFLARE RUNTIME FAILURE
+
+TOOL/WORKSPACE FAILURE
+
+CLIENT/TRANSPORT FAILURE
+
+TEST HARNESS FAILURE
+
+TRANSIENT EXTERNAL FAILURE
+
+INSUFFICIENT EVIDENCE
+
+Then give:
+
+CONFIDENCE:
+HIGH / MEDIUM / LOW
+
+And explain the direct evidence.
+
+If multiple contributing issues exist, identify:
+
+PRIMARY CAUSE
+SECONDARY CONTRIBUTOR
+
+Do not force a classification if evidence is insufficient.
+
+==================================================
+11. ROLLBACK DECISION
+==================================================
+
+Based on the diagnosis, recommend one of:
+
+KEEP CANDIDATE ACTIVE
+
+ROLL BACK CANDIDATE
+
+NEED MORE READ-ONLY EVIDENCE BEFORE DECIDING
+
+A rollback should be recommended if there is evidence that the deployed lifecycle candidate introduced a real production regression or unsafe state.
+
+Do NOT recommend rollback merely because the acceptance fixture did not finish.
+
+==================================================
+12. SMALLEST NEXT ACTION
+==================================================
+
+After identifying the cause, specify the smallest next action.
+
+Possible categories:
+
+- no code change; controlled retry later
+- narrow lifecycle fix
+- narrow Think/VibeSDK fix
+- narrow tool fix
+- provider/Gateway issue
+- runtime configuration issue
+- harness-only fix
+- more read-only evidence required
+
+Do NOT perform the action.
+
+Diagnosis only.
+
+==================================================
+RETURN
+==================================================
+
+Return:
+
+DIAGNOSIS STATUS:
+CONFIRMED / PROBABLE / INSUFFICIENT EVIDENCE
+
+FAILED FIXTURE
+- user:
+- project:
+- agent:
+- conversation/session:
+- operation:
+- starting HEAD:
+- current HEAD:
+- operation state:
+- dirty files:
+- continuation count:
+
+TIMELINE
+1.
+2.
+3.
+...
+
+LAST TOOL
+- name:
+- result:
+- returned to Think:
+- next model step started:
+
+ORIGINAL ERROR
+- type:
+- message:
+- code:
+- stack/source:
+- nested cause:
+
+PROVIDER/GATEWAY
+- request reached gateway:
+- provider reached:
+- response:
+- stream:
+- status/error:
+- request ID:
+- timing/usage:
+
+CLOUDFLARE RUNTIME
+- Worker exception:
+- CPU:
+- memory:
+- DO:
+- WebSocket:
+- RPC:
+- other:
+
+NEW LIFECYCLE COMPONENTS
+- operation initialization:
+- resource accounting:
+- step handling:
+- stream forwarding:
+- continuation driver:
+- preflight:
+- deploy_space:
+- completion gate:
+
+WORKSPACE SAFETY
+- HEAD unchanged:
+- dirty work preserved:
+- malformed:
+- unintended commit:
+- preview deployment:
+- false COMPLETE:
+
+PRIMARY CLASSIFICATION:
+
+CONFIDENCE:
+
+DIRECT EVIDENCE:
+
+DID THE CANDIDATE CAUSE THE FAILURE:
+YES / NO / NOT ESTABLISHED
+
+ROLLBACK RECOMMENDATION:
+
+SMALLEST NEXT ACTION:
+
+PROJECT 5 READ OR TOUCHED:
+MUST BE NO
+
+NEW AI GENERATIONS:
+MUST BE ZERO
+
+PRODUCTION MUTATIONS:
+MUST BE ZERO
+
+Then STOP.
