@@ -65,6 +65,26 @@
       "status": "PASS",
       "sha256": "9b2a9a5eac0cefc80580010399e9456498dcb9b3e97d315ec8b5537a2da10bdf",
       "log": "/tmp/resource-control-dryrun-guarded.log"
+    },
+    "canonical-runtime-build": {
+      "status": "PASS",
+      "sha256": "9b791af445b87379d6c86094b94530f58c0d022ebedf051b96ad0a43b2809cd5",
+      "log": "production/vibesdk-launch/canonical-runtime-build.log"
+    },
+    "canonical-runtime-dryrun": {
+      "status": "PASS",
+      "sha256": "8349a411c282ad414c68117fae9c9a7412e577fa060d439a9e53f02b1ec28aec",
+      "log": "production/vibesdk-launch/canonical-runtime-dryrun.log"
+    },
+    "canonical-root-build": {
+      "status": "PASS",
+      "sha256": "bc787b135f6bfb72b77c3ff780046d9f7dc6f391e6fb41ff0a671b9ba59bf94b",
+      "log": "production/vibesdk-launch/canonical-control-build.log"
+    },
+    "canonical-control-dryrun": {
+      "status": "PASS",
+      "sha256": "9687f4dc46cf4d44260b274aaa8fb137cbc728fa36561b7383de56e644cf9154",
+      "log": "production/vibesdk-launch/canonical-control-dryrun.log"
     }
   },
   "sourceParity": {
@@ -936,11 +956,14 @@
     "cloudflare/staging/think-runtime.ts": "bae18d8e67c7b7e7f54eb134dd13892c9a1ad38c6b794833bd42cdaa0638e013",
     "tests/native-task-lifecycle-status.test.ts": "acfc523da2f58b81dcf5be8a6b1d4ca41314a39d5630f5ad142d9c8f10369d21",
     "tests/native-completion.browser.test.js": "be7201c5bb8ee4aef4694dbcbb26f5bcc9f5675465bd1592d9ba22123f006243",
-    "scripts/resource-envelope-release.mjs": "d3563e4bdf4e5305f4069aa29e230d8a9ab1aeb1c1fb44db83b520367b9b5908",
+    "scripts/resource-envelope-release.mjs": "eb4a61934522fcbabc3f2c05f7f93cfbafcbda0f7dfd0a88ee5abb5798b3ac1b",
     "production/vibesdk-launch/wrangler.jsonc": "4d5e1dc96211ac716471f8817b5c3cc427ae799cd14252e15f0ecf023610493e",
     "production/vibesdk-launch/resource-envelope-source-parity.json": "54e52229514a8d350aa5efd14234811fa6fc8dbe65ede817fc3f80a73ad608a1",
     "production/patches/resource-envelope-terminal-state.patch": "5f2cb679111ed37be2af583cdde4a0790ce466ced3c685599190375dcc3773cb",
-    "production/vibesdk-launch/resource-envelope-assets.json": "b56d56d8916d8fa1ceb28825f319cafd7ccfede4b9fcbc71a51130664a677bbf"
+    "production/vibesdk-launch/resource-envelope-assets.json": "b56d56d8916d8fa1ceb28825f319cafd7ccfede4b9fcbc71a51130664a677bbf",
+    "scripts/resource-envelope-module-audit.mjs": "c4fc7388e77724168e3e1ef4455efe89b05ca88fe7ee54eaf140cb9969f568b7",
+    "scripts/resource-envelope-module-audit.test.mjs": "3335a2e9e3e8c208ae3c766c548a557bb9990d9180c58075976cd987a00c07f4",
+    "scripts/reconstruct-resource-runtime.mjs": "1152f6e09a2935fd21850cad81bd0dae94b6e79d1d24fcd8a69f5019523656f4"
   },
   "moduleManifests": {
     "/tmp/buildcustom-resource-runtime-upload": [
@@ -982,5 +1005,15 @@
   },
   "assetManifestCount": 19,
   "creditArithmetic": "25 * 5 * 2 = 250; safety margin 0",
-  "nativeSdkTestBoundary": "Actual policy method compiled from source and run with a simulated SDK config store; pure driver contracts and source wiring supplement this. Full Think Worker harness cannot collect through its shell dependency; no real generation was performed."
+  "nativeSdkTestBoundary": "Actual policy method compiled from source and run with a simulated SDK config store; pure driver contracts and source wiring supplement this. Full Think Worker harness cannot collect through its shell dependency; no real generation was performed.",
+  "canonicalReconstruction": {
+    "commit": "6a8e6dc7dd5e32ee976f3e92f4be363240a598a7",
+    "upstream": "9da158d82c597a0e8f4bf033cdccd1053fb6fb15",
+    "patches": 10,
+    "exactRuntimePaths": 860,
+    "applicationSourceChanged": false,
+    "allEightCandidateModulesByteIdentical": true,
+    "fullSuitesRepeated": false,
+    "recordedAt": "2026-10-01T23:07:19.494Z"
+  }
 }

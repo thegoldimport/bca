@@ -1,0 +1,371 @@
+{
+  "startedAt": "2026-10-01T23:12:16.750Z",
+  "browserSession": "NEW_FRESH_OWNED_CHROMIUM",
+  "originalBrowserRetained": false,
+  "projectId": 8,
+  "ownerId": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+  "agentId": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "expectedRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+  "authenticationMethod": "normal production login UI",
+  "login": {
+    "reservedAttempts": 1,
+    "clicks": 1,
+    "requests": 1,
+    "retries": 0,
+    "reservedAt": "2026-10-01T23:12:19.824Z",
+    "status": 200
+  },
+  "readOnlyContract": {
+    "allowedNonGet": "one reserved POST /api/auth/login",
+    "projectMutations": 0,
+    "generatedApiMutations": 0,
+    "noteSubmissionClicks": 0,
+    "leadCreateClicks": 0,
+    "leadUpdateClicks": 0,
+    "leadDeleteClicks": 0,
+    "publishRequests": 0,
+    "aiWebSocketEvents": 2,
+    "platformTelemetryBlocked": 7
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/csrf-token",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/revision",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/blog-posts",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-settings",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "tokenCount": 0,
+      "resourceType": "document"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns",
+      "tokenCount": 0,
+      "resourceType": "fetch"
+    },
+    {
+      "method": "GET",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "tokenCount": 1,
+      "resourceType": "fetch"
+    }
+  ],
+  "responses": [
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/csrf-token",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/revision",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/blog-posts",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-settings",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200
+    }
+  ],
+  "consoleErrors": [
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/api/projects/8/blog-posts",
+      "apiCors": false,
+      "message": "Failed to load resource: the server responded with a status of 404 ()"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    },
+    {
+      "category": "platform-or-editor",
+      "sourcePath": "/cdn-cgi/rum",
+      "apiCors": false,
+      "message": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT"
+    }
+  ],
+  "malformedPrivatePreviewUrls": [],
+  "guardViolations": [
+    {
+      "at": "2026-10-01T23:12:35.023Z",
+      "kind": "ai-websocket-received",
+      "eventDetected": true
+    },
+    {
+      "at": "2026-10-01T23:12:35.033Z",
+      "kind": "ai-websocket-received",
+      "eventDetected": true
+    },
+    {
+      "at": "2026-10-01T23:12:36.054Z",
+      "kind": "blocked-non-get-request",
+      "method": "OPTIONS",
+      "path": "/cdn-cgi/rum",
+      "publish": false
+    }
+  ],
+  "checks": {
+    "authenticatedOwner": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+    "projectAgent": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+    "runtimeStatusGet": {
+      "status": 200,
+      "state": {
+        "shouldBeGenerating": false,
+        "generation": {
+          "status": "idle"
+        }
+      }
+    },
+    "initialRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+  },
+  "state": "FAIL_STOPPED",
+  "driverSha256": "1556cac4022804436559d1a62c4cf3a76d5a96604898a445f80da3e5464db040",
+  "freshUserDataDir": "/tmp/canonical-resource-project8-fresh-UoUB2F",
+  "loginPath": "/login",
+  "projectName": "Isolated observability acceptance",
+  "failure": {
+    "name": "AssertionError",
+    "message": "Read-only/network guard tripped; stopping without repair or retry.\n\ntrue !== false\n"
+  },
+  "finishedAt": "2026-10-01T23:12:36.674Z"
+}

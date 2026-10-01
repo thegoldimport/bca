@@ -71,3 +71,4 @@
 - [Preview transport validation](preview-transport-validation.md) — URL-helper tests do not prove import-map/bootstrap transport; recovery commands must select the correct release receipt.
 - [Native operation evidence](native-operation-evidence.md) — idle summaries, native stream outcomes, auth state, and controller completion are separate acceptance facts.
 - [Split Worker chunk provenance](split-worker-chunk-provenance.md) — source-root comments and hashed import references can change auxiliary bytes without changing executable ASTs.
+- [Non-AI smoke evidence](non-ai-smoke-evidence.md) — distinguish outgoing instructions from incoming replay; preserve one-login recovery state until all checks finish.

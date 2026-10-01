@@ -1,0 +1,17 @@
+{
+  "recordedAt": "2026-10-01T23:10:35.626Z",
+  "variables": {
+    "buildcustom-vibesdk-launch": {
+      "THINK_OPERATION_MAX_CONTINUATIONS": "4",
+      "THINK_OPERATION_MAX_CREDITS": "250",
+      "THINK_OPERATION_MAX_ELAPSED_MS": "900000"
+    },
+    "buildcustom-control-plane-launch": {}
+  },
+  "maxSteps": 25,
+  "maximumThinkTurns": 5,
+  "maximumInternalContinuations": 4,
+  "elapsedCeilingMs": 900000,
+  "operationCreditBudget": 250,
+  "maxStepsAndTurnsEvidence": "Accepted identical source/config, not a new AI execution"
+}
