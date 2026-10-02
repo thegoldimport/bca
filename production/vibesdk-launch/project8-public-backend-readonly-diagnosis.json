@@ -1,0 +1,455 @@
+{
+  "startedAt": "2026-10-02T00:18:23.313Z",
+  "requests": [],
+  "public": {
+    "root": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f87f25a69329a-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "api": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f87f2bba3329a-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "apiJsonAccept": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f8dd4c9d906d1-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "index": {
+      "status": 307,
+      "contentType": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "html": false,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f8dd5cc8d06d1-ATL",
+        "server": "cloudflare",
+        "location": "/",
+        "cache-control": null,
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "details": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f90f64ca0bfff-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "notes": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f90f69cd0bfff-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "activities": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f90f6fd14bfff-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    }
+  },
+  "private": {
+    "root": {
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 108169,
+      "sha256": "344a90bda3ecf061e57eb322ba3d19c52fd73dffeb29166241589aabbc0ca26a",
+      "html": true,
+      "json": false
+    },
+    "api": {
+      "status": 200,
+      "contentType": "application/json",
+      "bytes": 3451,
+      "sha256": "08aeb1965c7b077ec33d34501d5c46adcc8a6b77072397c5eede23a8aaf72635",
+      "html": false,
+      "json": {
+        "type": "array",
+        "count": 12
+      }
+    }
+  },
+  "immutable": {
+    "settings": {
+      "http": 200,
+      "success": true,
+      "bindings": [
+        {
+          "name": "ASSETS",
+          "type": "assets"
+        },
+        {
+          "name": "VIBE_APP",
+          "type": "durable_object_namespace",
+          "class_name": "App",
+          "namespace_id": "134f5fb85375410388241b965ccae7f4"
+        }
+      ],
+      "compatibilityDate": "2025-04-01"
+    },
+    "modules": [
+      {
+        "name": "bundle.js",
+        "bytes": 72193,
+        "sha256": "164798bb56f180d87dc1a4e17b55925d6bf874a432051f91b10aeb6e4a41957c"
+      },
+      {
+        "name": "index.js",
+        "bytes": 574,
+        "sha256": "3ca4a9f40ea3d5d2592aa6e773d1e878751732844d11d42d25f829ed416344ce"
+      }
+    ],
+    "detail": {
+      "http": 200,
+      "success": true,
+      "etag": "84f415ba7fb9ef119f8e0829617ca6ef9ea417e5437b707f48d277dbc709e44e",
+      "createdOn": "2026-10-02T00:08:19.132659Z",
+      "modifiedOn": "2026-10-02T00:08:21.573119Z"
+    }
+  },
+  "gateway": {
+    "settings": {
+      "http": 200,
+      "bindings": [
+        {
+          "name": "DISPATCHER",
+          "namespace": "buildcustom-vibesdk-launch-dispatch",
+          "outbound": null,
+          "type": "dispatch_namespace"
+        },
+        {
+          "name": "ROUTES",
+          "namespace_id": "248ac5b6821a475794a7fe3d2b0c3718",
+          "type": "kv_namespace"
+        }
+      ],
+      "vars": []
+    },
+    "modules": [
+      {
+        "name": "buildcustom-apps-gateway.js",
+        "bytes": 9251,
+        "sha256": "2f3465087c658a969dfc3d4896b2e6f704bd06ba2ff408bf0d6bae728b8618d1"
+      }
+    ],
+    "contentHttp": 200
+  },
+  "route": {
+    "http": 200,
+    "scriptName": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+    "metadata": {}
+  },
+  "internal": {
+    "root": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f8dd3ca0ac158-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "api": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f8dd42b48c158-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    },
+    "apiWildcard": {
+      "status": 200,
+      "contentType": "text/html",
+      "bytes": 105070,
+      "sha256": "ebe66ec25fa40b72a2a5d39bd3cf9d639a7c79742a9251fc0543f1bee180420e",
+      "html": true,
+      "json": false,
+      "headers": {
+        "cf-ray": "a43f8dd46bf1c158-ATL",
+        "server": "cloudflare",
+        "location": null,
+        "cache-control": "public, max-age=0, must-revalidate",
+        "etag": null,
+        "x-buildcustom-script": null,
+        "x-buildcustom-slug": null
+      }
+    }
+  },
+  "dns": {
+    "CNAME": {
+      "code": "ENODATA"
+    },
+    "A": [
+      "104.21.17.13",
+      "172.67.218.202"
+    ],
+    "AAAA": [
+      "2606:4700:3036::6815:110d",
+      "2606:4700:3030::ac43:daca"
+    ]
+  },
+  "authoritativeFiles": [
+    {
+      "path": "public/index.html",
+      "http": 200,
+      "bytes": 104938,
+      "sha256": "09696d030e21f69477780d0c82acb16ed0faaa19a522f5ac675b6425e503db39"
+    },
+    {
+      "path": "src/index.ts",
+      "http": 200,
+      "bytes": 18426,
+      "sha256": "dd5c148a8c01f29ca043fee9edd0bd8664285ae9b00f03b9fd39d194ab197018"
+    },
+    {
+      "path": "wrangler.json",
+      "http": 200,
+      "bytes": 211,
+      "sha256": "18ec11fa994f6da382092f1a1099cd4fb65a89bdbb5692548a99893ba46e5051"
+    }
+  ],
+  "zone": {
+    "id": "56e85999af2d246ac01bfa9ccac5d805",
+    "status": "active",
+    "records": [
+      {
+        "type": "A",
+        "name": "*.apps.buildcustom.ai",
+        "content": "192.0.2.1",
+        "proxied": true
+      }
+    ],
+    "workerRoutes": [
+      {
+        "id": "b868cb4091c448c99b225250a0ec8b8b",
+        "pattern": "*.apps.buildcustom.ai/*",
+        "script": "buildcustom-apps-gateway",
+        "request_limit_fail_open": false
+      },
+      {
+        "id": "86ded3299c9f41f78d66c8009e66f475",
+        "pattern": "*/*",
+        "script": "buildcustom-apps-gateway",
+        "request_limit_fail_open": false
+      }
+    ]
+  },
+  "htmlProducer": {
+    "injectedMetadataBytes": 132,
+    "sourceIndexBytes": 104938,
+    "normalizedPublicBytes": 104938,
+    "normalizedPublicSha256": "09696d030e21f69477780d0c82acb16ed0faaa19a522f5ac675b6425e503db39",
+    "exactSourceIndexMatch": true
+  },
+  "generatedConfig": {
+    "main": "src/index.ts",
+    "compatibility_date": "2025-04-01",
+    "assets": {
+      "directory": "./public",
+      "html_handling": "auto-trailing-slash",
+      "not_found_handling": "single-page-application"
+    }
+  },
+  "overall": "ROOT CAUSE PROVEN",
+  "classification": "PLATFORM PUBLISHED ROUTING / GENERATED PUBLISH-ADAPTER ARTIFACT",
+  "rootCause": "Published index.js calls ASSETS.fetch first and returns any non-404 result. SPA not-found fallback returns generated index HTML for non-HTML API GETs, so VIBE_APP is not reached. Private worker-bundler asset helper declines SPA fallback when Accept does not include text/html, then SpaceDO forwards to the App Facet.",
+  "trace": [
+    {
+      "boundary": "Cloudflare proxied wildcard DNS and Worker route",
+      "hostname": "isolated-observability-acceptance.apps.buildcustom.ai",
+      "pathname": "/api/leads",
+      "method": "GET",
+      "target": "buildcustom-apps-gateway",
+      "evidence": "Live zone DNS record *.apps.buildcustom.ai proxied A and matching Worker route"
+    },
+    {
+      "boundary": "Production generated-app gateway",
+      "hostname": "isolated-observability-acceptance.apps.buildcustom.ai",
+      "pathname": "/api/leads",
+      "method": "GET",
+      "accept": "application/json (also reproduced with */*)",
+      "slug": "isolated-observability-acceptance",
+      "script": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+      "forwardedUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai/api/leads",
+      "headerPolicy": "Copy headers; remove four caller-supplied X-BuildCustom hostname/domain-context headers; managed slug path has no hostname substitution",
+      "body": "none for GET",
+      "responseStatus": 200,
+      "responseContentType": "text/html",
+      "evidence": "Downloaded active gateway module lines72-88,155-166; live KV route"
+    },
+    {
+      "boundary": "Workers for Platforms dispatch",
+      "namespace": "buildcustom-vibesdk-launch-dispatch",
+      "script": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+      "pathname": "/api/leads",
+      "method": "GET",
+      "responseStatus": 200,
+      "responseContentType": "text/html",
+      "evidence": "Existing launch gateway /c/script/api/leads forwards stripped pathname to named script and reproduces identical response hash"
+    },
+    {
+      "boundary": "Published generated entry / ASSETS binding",
+      "module": "index.js",
+      "pathname": "/api/leads",
+      "method": "GET",
+      "decision": "Unconditional ASSETS fetch then return any non-404 response before VIBE_APP",
+      "responseStatus": 200,
+      "responseContentType": "text/html",
+      "responder": "Cloudflare Worker Static Assets SPA fallback serving public/index.html",
+      "evidence": "Downloaded deployed index.js line2; generated wrangler config SPA; body matches original generated index after removing gateway metadata"
+    },
+    {
+      "boundary": "App Durable Object backend",
+      "binding": "VIBE_APP",
+      "route": "/api/leads",
+      "reachableFromObservedPublishedGet": false,
+      "expectedResponse": "JSON",
+      "evidence": "Backend exists in bundle.js lines2026-2029; published wrapper prevents forwarding for observed requests; no separate DO-only network endpoint was invoked"
+    }
+  ],
+  "previewTrace": {
+    "browserPath": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+    "controlTarget": "AUTH_RUNTIME service binding",
+    "runtimePath": "/space/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/preview/main/api/leads",
+    "backendPath": "/api/leads",
+    "chain": "owner-scoped private preview proxy -> runtime Space preview route -> SpaceDO.servePreview -> non-HTML asset miss -> app:main Facet -> App.fetch -> Hono /api/leads -> SQLite",
+    "auth": "Existing owner session; scoped capability forwarded internally; no credential values recorded",
+    "source": "preview-proxy.ts:521,581; SpaceDO durable-object.ts:1018-1046; worker-bundler handleAssetRequest acceptsHtml test"
+  },
+  "firstDivergentBoundary": {
+    "published": "think-user-deploy.ts buildEntryModule lines51-62; deployed index.js line2",
+    "private": "SpaceDO.servePreview lines1029-1046 -> worker-bundler handleAssetRequest/notFound Accept check",
+    "difference": "Published Cloudflare ASSETS SPA fallback consumes a non-HTML API request; preview helper returns null and reaches backend"
+  },
+  "blastRadius": {
+    "confirmed": [
+      "Project8 GET /api/leads",
+      "Project8 GET /api/leads/1",
+      "Project8 GET /api/leads/1/notes",
+      "Project8 GET /api/leads/1/activities"
+    ],
+    "sourceInferred": "Any App-plus-static-assets release using this shared publish wrapper with SPA fallback can swallow dynamic GET routes that are not actual assets. Not limited to immutable naming; static-only apps and App-only releases are outside this evidenced failure mode.",
+    "otherMethods": "No mutation methods tested. Source also returns non-404 asset errors before backend, a review requirement for proposed fix, not a live-tested finding."
+  },
+  "proposedFix": {
+    "applied": false,
+    "layer": "Existing shared Think publish adapter and artifact identity",
+    "routing": "Prevent binding-level unconditional SPA fallback from consuming backend requests. For App-backed SPA releases, use true asset misses (not_found_handling none) and retain navigation-only SPA handling in existing wrapper; forward non-asset API/backend requests to VIBE_APP. Preserve method/body/headers and avoid sending non-GET/HEAD requests through the static-assets handler. Keep preview and published routing semantics consistent.",
+    "project8SourceChangeRequired": false,
+    "gatewayChangeRequired": false,
+    "runtimePublishChangeRequired": true,
+    "afterFix": "CREATE NEW IMMUTABLE RELEASE",
+    "identityRequirement": "Current script identity hashes only agent+source commit; same-source publish reuses existing release. A versioned adapter/artifact identity is needed for corrected packaging of the unchanged commit without overwriting release4.",
+    "immutableRelease4": "Keep original script, history and route unchanged until a newly identified candidate passes public backend and asset checks and a separately authorized publish switches route."
+  },
+  "finalRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+  "finalReleaseCount": 1,
+  "safety": {
+    "readOnlyProductionRequests": true,
+    "customerAIInstructions": 0,
+    "newReleases": 0,
+    "publishClicks": 0,
+    "publishUpdates": 0,
+    "release4Mutated": false,
+    "generatedSourceChanged": false,
+    "gatewayChanged": false,
+    "runtimeChanged": false,
+    "authChanged": false,
+    "runtimeLimitsChanged": false,
+    "project9Created": false,
+    "project5Touched": false,
+    "leadMutations": 0
+  },
+  "finishedAt": "2026-10-02T00:27:02.345Z"
+}

@@ -1,0 +1,516 @@
+We have a REAL production product failure in the SAME Project 8.
+
+Do NOT continue the customer lifecycle yet.
+
+Do NOT send the Recent Activity AI instruction.
+
+Do NOT click Publish again.
+
+Do NOT click Publish Updates.
+
+Do NOT create another release.
+
+Do NOT modify Project 8 source.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+Do NOT change auth.
+
+Do NOT change runtime limits.
+
+Do NOT immediately implement a fix.
+
+FIRST perform a focused READ-ONLY diagnosis of why the generated backend works
+in private preview but fails after immutable production Publish.
+
+==================================================
+KNOWN FAILURE
+==================================================
+
+Project:
+
+8
+
+Agent:
+
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Private preview:
+
+PASS
+
+/api/leads:
+HTTP 200
+correct JSON
+12 leads
+
+Initial production Publish:
+
+PASS
+
+Release ID:
+
+4
+
+Source revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Immutable script:
+
+bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8
+
+Slug:
+
+isolated-observability-acceptance
+
+Public URL:
+
+https://isolated-observability-acceptance.apps.buildcustom.ai
+
+Route KV correctly maps the slug to the immutable script.
+
+Public root document:
+
+HTTP 200
+CRM frontend renders
+
+PUBLIC BACKEND FAILURE:
+
+GET /api/leads
+
+returns:
+
+HTTP 200
+Content-Type: text/html
+
+The response body is an HTML document.
+
+Expected:
+
+application/json
+generated backend response
+12 leads or the appropriate production data result
+
+Observed UI:
+
+0 leads
+
+Private preview continues to work with 12 leads after Publish.
+
+No customer edit has been sent.
+
+No Publish Updates has occurred.
+
+There is exactly one production release.
+
+==================================================
+PRIMARY QUESTION
+==================================================
+
+Why does:
+
+PRIVATE PREVIEW
+GET /api/leads
+
+reach the generated backend handler,
+
+while:
+
+PUBLIC GENERATED APP
+GET /api/leads
+
+returns the generated app's HTML document instead?
+
+We need the exact routing/dispatch path identified before changing code.
+
+==================================================
+PART 1 — TRACE THE PUBLIC REQUEST READ-ONLY
+==================================================
+
+Trace this exact request:
+
+https://isolated-observability-acceptance.apps.buildcustom.ai/api/leads
+
+through every relevant production boundary.
+
+Determine the actual path:
+
+DNS/custom hostname/wildcard
+→ generated-app gateway
+→ slug lookup
+→ immutable script dispatch
+→ generated Worker fetch handler/router
+→ API route or frontend fallback
+
+For EACH boundary record:
+
+- incoming hostname
+- pathname
+- method
+- relevant headers
+- routing decision
+- target Worker/script
+- pathname forwarded downstream
+- response status
+- response Content-Type
+
+Do not mutate anything.
+
+==================================================
+PART 2 — IDENTIFY WHO RETURNS THE HTML
+==================================================
+
+Determine exactly which component generated the HTML response.
+
+Do not merely say "routing issue."
+
+Identify whether the HTML came from:
+
+A. generated immutable Worker itself
+
+B. BuildCustom generated-app gateway
+
+C. Cloudflare routing/fallback
+
+D. generated frontend SPA fallback
+
+E. another component
+
+Compare the public `/api/leads` response body/hash against:
+
+- public `/`
+- generated app index HTML
+- immutable Worker frontend response
+- gateway fallback response if one exists
+
+Establish the producer of the HTML.
+
+==================================================
+PART 3 — INSPECT THE IMMUTABLE SCRIPT
+==================================================
+
+Read-only inspect the deployed immutable script:
+
+bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8
+
+Determine whether the deployed artifact actually contains the generated
+backend/API logic required for `/api/leads`.
+
+Answer explicitly:
+
+1. Does the immutable Worker contain the API route?
+2. Does it contain the backend implementation?
+3. Does it contain/receive the required bindings?
+4. Is `/api/leads` reachable when the immutable Worker is invoked directly
+   through the appropriate internal dispatch mechanism?
+5. Does its routing order evaluate API routes BEFORE frontend/static fallback?
+6. Is the immutable artifact materially different from what private preview
+   executes?
+
+Do NOT upload or replace the script.
+
+==================================================
+PART 4 — COMPARE PREVIEW VS PUBLISHED EXECUTION
+==================================================
+
+Map the two paths side by side.
+
+PRIVATE PREVIEW:
+
+browser
+→ ?
+→ ?
+→ generated application backend
+→ JSON
+
+PUBLISHED:
+
+browser
+→ apps.buildcustom.ai gateway
+→ ?
+→ ?
+→ HTML
+
+Identify the FIRST point where behavior diverges.
+
+Pay special attention to:
+
+- pathname rewriting
+- hostname rewriting
+- Request reconstruction
+- service bindings
+- Workers for Platforms dispatch
+- dispatch namespace behavior
+- environment/bindings
+- static asset fallback
+- SPA fallback
+- API route detection
+- generated Worker entrypoint
+- preview-only routing adapters
+- production-only routing adapters
+
+==================================================
+PART 5 — CHECK THE GATEWAY WITHOUT CHANGING IT
+==================================================
+
+The gateway was intentionally unchanged during the previous deployment.
+
+Inspect its current source and production configuration.
+
+Determine whether it forwards the original Request to the immutable script or
+constructs a new Request.
+
+If it constructs or rewrites the Request, record EXACTLY:
+
+- original URL
+- resulting URL
+- original pathname
+- resulting pathname
+- original hostname
+- resulting hostname
+- method preservation
+- body preservation
+- header preservation
+
+Check specifically whether `/api/leads` can become `/`, `/index.html`, or
+another frontend path before reaching the immutable Worker.
+
+Do not modify the gateway yet.
+
+==================================================
+PART 6 — CHECK PUBLISH ARTIFACT CONSTRUCTION
+==================================================
+
+Trace how immutable Publish creates:
+
+bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8
+
+from revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Determine whether Publish packages:
+
+- frontend only
+- frontend + backend
+- generated Worker
+- static assets
+- bindings
+- generated application configuration
+
+Compare this with what private preview executes.
+
+We need to know whether this is:
+
+ROUTING FAILURE
+
+or
+
+PUBLISH PACKAGING FAILURE
+
+or
+
+BINDING/ENVIRONMENT FAILURE
+
+or
+
+GENERATED WORKER ROUTER FAILURE
+
+or something else proven by evidence.
+
+==================================================
+PART 7 — TEST THE FAILURE WITHOUT MUTATION
+==================================================
+
+Use read-only requests only.
+
+At minimum compare:
+
+PUBLIC:
+
+GET /
+GET /api/leads
+
+PRIVATE PREVIEW:
+
+GET /
+GET /api/leads
+
+If safe internal dispatch inspection exists, also invoke the immutable script
+read-only with:
+
+GET /
+GET /api/leads
+
+Do not create/update/delete any lead.
+
+Record status, Content-Type, and a small identifying body signature/hash.
+
+Do not treat HTTP 200 alone as success.
+
+For `/api/leads` success requires the expected API response type.
+
+==================================================
+PART 8 — DETERMINE BLAST RADIUS
+==================================================
+
+Determine whether this appears to affect:
+
+- only Project 8
+- every generated app with backend routes
+- only immutable production releases
+- only this generated architecture
+- all `/api/*` routes
+- only GET API routes
+
+Use source/configuration evidence where possible.
+
+Do NOT publish another application merely to test blast radius.
+
+==================================================
+PART 9 — PROPOSE THE SMALLEST FIX
+==================================================
+
+ONLY AFTER root cause is proven:
+
+Propose the smallest architectural fix.
+
+Prefer fixing the shared BuildCustom production publishing/routing layer if
+that is where the defect exists.
+
+Do NOT patch Project 8 generated source to compensate for a BuildCustom
+platform bug.
+
+Do NOT create preview-only/public-only hacks.
+
+Do NOT create a second routing system.
+
+Do NOT weaken immutable release behavior.
+
+Do NOT mutate release 4's immutable script.
+
+If a platform fix is required, release 4 must remain immutable.
+
+Explain whether, after the platform fix, we should:
+
+A. simply reload the same public release because routing is fixed upstream
+
+or
+
+B. create a NEW immutable release because packaging/runtime artifact behavior
+must change.
+
+Do not perform either yet.
+
+==================================================
+IMPORTANT
+==================================================
+
+This is NOT a request for another giant acceptance framework.
+
+We have one concrete failing request:
+
+PUBLIC GET /api/leads
+→ HTTP 200 text/html
+
+while:
+
+PRIVATE GET /api/leads
+→ HTTP 200 JSON
+
+Find the first divergent boundary and the component responsible.
+
+Do not spend time changing optional telemetry/harness code.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL DIAGNOSIS:
+ROOT CAUSE PROVEN / ROOT CAUSE NOT YET PROVEN
+
+PUBLIC REQUEST TRACE
+- hostname:
+- pathname entering gateway:
+- slug:
+- mapped immutable script:
+- pathname leaving gateway:
+- immutable Worker reached:
+- final responder:
+- response:
+- Content-Type:
+
+HTML PRODUCER
+- component:
+- evidence:
+- matches public root/index:
+- confidence:
+
+IMMUTABLE SCRIPT
+- API code present:
+- backend present:
+- required bindings present:
+- direct/internal GET /:
+- direct/internal GET /api/leads:
+- routing order:
+- artifact difference from preview:
+
+PREVIEW PATH
+- request path:
+- routing chain:
+- backend target:
+- response:
+
+PUBLIC PATH
+- request path:
+- routing chain:
+- backend target:
+- response:
+
+FIRST DIVERGENT BOUNDARY:
+[exact component/function/line or equivalent]
+
+ROOT CAUSE:
+[precise technical explanation]
+
+CLASSIFICATION:
+ROUTING / PACKAGING / BINDING / GENERATED ROUTER / OTHER
+
+BLAST RADIUS:
+[what is affected]
+
+SMALLEST FIX:
+[precise proposed change]
+
+PROJECT 8 SOURCE CHANGE REQUIRED:
+YES / NO
+
+GATEWAY CHANGE REQUIRED:
+YES / NO
+
+RUNTIME/PUBLISH CHANGE REQUIRED:
+YES / NO
+
+EXISTING RELEASE 4 MUTATED:
+MUST BE NO
+
+AFTER FIX:
+RELOAD SAME RELEASE / CREATE NEW IMMUTABLE RELEASE
+
+CUSTOMER AI INSTRUCTIONS SENT:
+MUST BE ZERO
+
+NEW RELEASES CREATED:
+MUST BE ZERO
+
+PUBLISH UPDATES:
+MUST BE ZERO
+
+Then STOP.
