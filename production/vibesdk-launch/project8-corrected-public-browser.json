@@ -1,0 +1,62 @@
+{
+  "state": "PUBLIC_FULL_STACK_PASS",
+  "startedAt": "2026-10-02T14:06:18.456Z",
+  "signedOut": true,
+  "checks": {
+    "leadCount": 12,
+    "crm": true,
+    "dashboard": true,
+    "summaryCards": true,
+    "fiveNewestLeads": true,
+    "search": true,
+    "sorting": {
+      "ascending": true,
+      "descending": true
+    },
+    "filtering": {
+      "source": true,
+      "status": true
+    },
+    "leadDetails": {
+      "opened": true,
+      "sevenFields": {
+        "name": true,
+        "company": true,
+        "email": true,
+        "status": true,
+        "source": true,
+        "estimatedValue": true,
+        "createdDate": true
+      }
+    },
+    "notes": true,
+    "activityTimeline": true,
+    "backend": true,
+    "noPrivatePreviewURLs": true,
+    "noApiCorsErrors": true
+  },
+  "apiResponses": [
+    {
+      "path": "/api/leads",
+      "method": "GET",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "path": "/api/leads",
+      "method": "GET",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "path": "/api/leads/1",
+      "method": "GET",
+      "status": 200,
+      "contentType": "application/json"
+    }
+  ],
+  "errors": [],
+  "privatePreviewRequests": 0,
+  "leadMutations": 0,
+  "finishedAt": "2026-10-02T14:06:25.691Z"
+}

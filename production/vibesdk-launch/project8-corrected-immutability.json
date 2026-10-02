@@ -1,0 +1,39 @@
+{
+  "checkedAt": "2026-10-02T14:00:52.747Z",
+  "oldExists": true,
+  "oldETag": "84f415ba7fb9ef119f8e0829617ca6ef9ea417e5437b707f48d277dbc709e44e",
+  "oldETagUnchanged": true,
+  "oldModules": [
+    {
+      "name": "bundle.js",
+      "bytes": 72193,
+      "sha256": "164798bb56f180d87dc1a4e17b55925d6bf874a432051f91b10aeb6e4a41957c"
+    },
+    {
+      "name": "index.js",
+      "bytes": 574,
+      "sha256": "3ca4a9f40ea3d5d2592aa6e773d1e878751732844d11d42d25f829ed416344ce"
+    }
+  ],
+  "newModules": [
+    {
+      "name": "bundle.js",
+      "bytes": 72193,
+      "sha256": "164798bb56f180d87dc1a4e17b55925d6bf874a432051f91b10aeb6e4a41957c"
+    },
+    {
+      "name": "index.js",
+      "bytes": 712,
+      "sha256": "2a6684f8c8a5fb7e021e8fea079599eb7e35ca2cf1374ca1fc56bf8642b47d65"
+    }
+  ],
+  "newScript": "bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca",
+  "route": {
+    "scriptName": "bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca",
+    "metadata": {}
+  },
+  "oldBytesUnchanged": true,
+  "generatedBundleUnchanged": true,
+  "stableURLUnchanged": true,
+  "status": "PASS"
+}

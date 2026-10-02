@@ -1,0 +1,58 @@
+{
+  "state": "ACTIVE",
+  "canonicalCommit": "a6e446ee041015bbde56df74075dcb945deb7699",
+  "validationHash": "47a0fb74d2a29c8f13e0b659e17242f7acc93f117e9a30b515b1e08583879334",
+  "targets": {
+    "buildcustom-control-plane-launch": {
+      "previousVersion": "dd40f46c-cd23-4e82-8679-83460169570f",
+      "state": "VERIFIED_INACTIVE",
+      "modules": [
+        {
+          "name": "worker.js",
+          "sha256": "e5bfe26d7e0edfb9be6c4a51fdf805a9b85f058453ae8535ade3ffeaf4bc4f50"
+        }
+      ],
+      "version": "c5e18eab-1b8b-49d4-adc0-62dfb0e5e6ac",
+      "deployment": "472ce920-7181-4f3a-bc91-ac1cc9d0b5a8",
+      "activated": true
+    },
+    "buildcustom-vibesdk-launch": {
+      "previousVersion": "5a964dd5-db65-4cde-83f8-22a17f4d909f",
+      "state": "VERIFIED_INACTIVE",
+      "modules": [
+        {
+          "name": "assets/esbuild-B4PnW_4U.wasm",
+          "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+        },
+        {
+          "name": "assets/hook-proxy-CkF0EhRO-odPdDpPH.js",
+          "sha256": "403143888a602947a183c6fa8c72073a67da42b4c96c340ef3b580cf71273286"
+        },
+        {
+          "name": "assets/mimetext.browser.es-CF8iqyB7.js",
+          "sha256": "325c98348fe2301cd3062c944f7b3221ef0712eb4e1cd09b4d8607ba6f4fd894"
+        },
+        {
+          "name": "assets/NodeWebSocketTransport-BntJgCj_.js",
+          "sha256": "ff0416528695d05574e54b0c37a8e1b2a3142ead1b35a3e81c41c2a5fc836928"
+        },
+        {
+          "name": "assets/rolldown-runtime-BzI350Cx.js",
+          "sha256": "f2868774669a0e4fd09238692bdeff8f8fa83db87f2d12af1efb94d9fcb0510e"
+        },
+        {
+          "name": "assets/version-BHTiQTUJ.js",
+          "sha256": "09204dcb53adbb5608b861d1ff434d0099e6691d6de9e5a923fdfcede304992d"
+        },
+        {
+          "name": "index.js",
+          "sha256": "80f5a1b98169bbd8cede9d08a5484d91f8b81d7c9bd8ad7df5f0f1ebdd466ece"
+        }
+      ],
+      "version": "517b0fb2-e4f4-462f-a6aa-93d813fbe46b",
+      "deployment": "f91137eb-63ff-412d-a7b2-c50dfd638cfe",
+      "activated": true
+    }
+  },
+  "activatedAt": "2026-10-02T13:54:18.843Z"
+}

@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-10-02T14:00:03.092Z",
+  "root": {
+    "status": 200,
+    "contentType": "text/html",
+    "array": false,
+    "count": null
+  },
+  "api": {
+    "status": 200,
+    "contentType": "application/json",
+    "array": true,
+    "count": 12
+  },
+  "apiGeneric": {
+    "status": 200,
+    "contentType": "application/json",
+    "array": true,
+    "count": 12
+  }
+}

@@ -20,3 +20,9 @@ Do not suspend a browser automation process that owns request interception to de
 **Why:** Suspending an observer left browser verification requests pending and made later UI samples unreliable. Terminating that observer also closed its managed browser, despite no direct browser signal. The production agent's independently persisted transcript remained available.
 
 **How to apply:** Keep interception owners responsive and give browser cleanup a genuine lifecycle condition. If local tooling interferes, label the affected samples as infrastructure evidence, preserve single-send checkpoints, and recover the same authenticated profile without resending. Confirm a generated-app failure through normal bootstrap traffic, not through a synthetic API probe alone.
+
+Treat a browser locator or click failure as observer evidence until a normal request or visible application failure confirms a product problem. Rendered `innerText` can reflect CSS capitalization; a click at the center of a table row can hit an embedded control that stops propagation.
+
+**Why:** Read-only public acceptance passed backend, search, sorting and filtering checks, while its initial text matching and row-center click failed without any application error or detail request. Those were observer failures, not evidence that the published app was broken.
+
+**How to apply:** Inspect rendered controls, normalize casing where appropriate, and click the intended visible target. Preserve successful checks and one-way mutation checkpoints; a pre-click navigation failure with recorded zero requests is distinct from a failed or unknown Publish.

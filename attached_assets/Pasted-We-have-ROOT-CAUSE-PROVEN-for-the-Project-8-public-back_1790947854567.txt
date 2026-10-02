@@ -1,0 +1,634 @@
+We have ROOT CAUSE PROVEN for the Project 8 public backend failure.
+
+This task is authorized to IMPLEMENT the smallest shared platform fix, deploy
+it safely, and create ONE NEW immutable Project 8 release from the SAME source
+revision to prove the corrected publishing adapter.
+
+Do NOT send a customer AI instruction yet.
+
+Do NOT perform the Recent Activity edit yet.
+
+Do NOT modify Project 8 generated source.
+
+Do NOT modify the generated-app gateway.
+
+Do NOT change auth.
+
+Do NOT change runtime limits.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+Do NOT mutate or overwrite release 4 or its immutable script.
+
+==================================================
+PROVEN FAILURE
+==================================================
+
+Project 8:
+
+agent:
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+source revision:
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+release 4:
+
+immutable script:
+bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8
+
+slug:
+isolated-observability-acceptance
+
+public URL:
+https://isolated-observability-acceptance.apps.buildcustom.ai
+
+Release 4 MUST remain immutable and unchanged.
+
+Proven public failure:
+
+GET /api/leads
+
+→ HTTP 200
+→ Content-Type text/html
+→ generated public/index.html
+
+Private preview:
+
+GET /api/leads
+
+→ HTTP 200
+→ application/json
+→ 12 leads
+
+==================================================
+PROVEN ROOT CAUSE
+==================================================
+
+Shared production publish adapter:
+
+runtime-source/worker/services/deployer/think-user-deploy.ts
+
+currently generates an entrypoint equivalent to:
+
+const assetResponse = await env.ASSETS.fetch(request);
+if (assetResponse.status !== 404) return assetResponse;
+
+For App-backed SPA releases, Cloudflare ASSETS SPA fallback converts unknown
+paths such as:
+
+/api/leads
+
+into index.html with HTTP 200.
+
+Therefore VIBE_APP is never reached.
+
+Private preview does not behave this way.
+
+The generated backend exists and is correct.
+
+The gateway preserves /api/leads correctly.
+
+This is a shared production publish-adapter defect.
+
+==================================================
+GOAL
+==================================================
+
+Correct the EXISTING publish adapter so App-backed generated applications route
+backend/API requests to VIBE_APP while preserving correct static asset and SPA
+navigation behavior.
+
+Also correct immutable artifact identity so a packaging/adapter change can
+produce a NEW immutable artifact even when generated source revision is
+unchanged.
+
+Then:
+
+deploy the minimum platform component required,
+create ONE new immutable release for Project 8 from the SAME source revision,
+and verify the public full-stack application.
+
+==================================================
+PART 1 — FIX PUBLISHED ROUTING
+==================================================
+
+Implement the smallest fix in the existing shared publish adapter.
+
+Required behavior for an App-backed generated application:
+
+1. Backend/API requests must reach VIBE_APP.
+
+2. Non-GET/HEAD requests must not be consumed by static asset handling.
+
+3. Real static asset requests must still work.
+
+Examples:
+
+/assets/*
+/favicon*
+/known emitted files
+
+4. Browser navigation requests should retain SPA behavior where appropriate.
+
+Examples:
+
+GET /
+GET /leads
+GET /some/client/route
+
+with an HTML navigation Accept should still be able to receive index.html.
+
+5. An API/backend request such as:
+
+GET /api/leads
+Accept: application/json
+
+must NOT receive SPA index fallback.
+
+6. Request method, headers, query string and body must be preserved when
+forwarding to VIBE_APP.
+
+7. Do not create a second routing system.
+
+8. Align published behavior with the already-correct private-preview semantics
+where practical.
+
+==================================================
+IMPORTANT ROUTING DESIGN
+==================================================
+
+Do not merely special-case the literal string "/api/".
+
+Generated apps may have backend routes that are not necessarily under /api.
+
+The routing contract should distinguish:
+
+- actual static assets
+- browser HTML navigation / SPA fallback
+- application/backend requests
+
+using the existing generated application/publish metadata and request
+semantics where possible.
+
+Inspect the generated architecture before selecting the smallest robust rule.
+
+Do not solve only Project 8.
+
+==================================================
+PART 2 — STATIC ASSET FALLBACK
+==================================================
+
+The current defect exists because the Cloudflare ASSETS binding itself has SPA
+fallback enabled before the wrapper can observe a true asset miss.
+
+Correct this architecture.
+
+For App-backed SPA releases, the wrapper must be capable of distinguishing a
+real asset hit from a miss BEFORE navigation fallback occurs.
+
+The intended conceptual behavior is:
+
+request
+→ determine whether request is a real static asset
+→ if real asset: ASSETS
+→ otherwise allow application/backend handling
+→ if appropriate browser navigation is still unhandled: SPA index fallback
+
+Do not let binding-level SPA fallback preempt VIBE_APP.
+
+Preserve static-only generated applications appropriately.
+
+==================================================
+PART 3 — IMMUTABLE ARTIFACT IDENTITY
+==================================================
+
+Current immutable script identity is derived only from:
+
+agent UUID + generated source revision
+
+That is insufficient because the immutable artifact also includes BuildCustom's
+publish adapter/packaging behavior.
+
+Release 4 proves why.
+
+We must NOT overwrite:
+
+bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8
+
+Design the smallest deterministic versioned artifact identity.
+
+The identity must incorporate BOTH:
+
+- generated source identity/revision
+- publisher/adapter artifact version
+
+or an equivalent deterministic packaging identity.
+
+Requirements:
+
+- same generated revision + same adapter version
+  → same immutable script identity
+
+- same generated revision + NEW adapter version
+  → NEW immutable script identity
+
+- changed generated revision
+  → NEW immutable script identity
+
+- retries of the exact same artifact
+  → same identity
+
+- old immutable scripts are never overwritten
+
+- release 4 remains unchanged
+
+Prefer an explicit deterministic publisher/artifact version over timestamps,
+random IDs, or other nondeterministic identity.
+
+Do NOT weaken Task 4B immutability.
+
+==================================================
+PART 4 — COMPATIBILITY WITH TASK 4B
+==================================================
+
+Preserve all existing immutable-release protections:
+
+- candidate-first release
+- stable slug
+- existence check before upload
+- no unsafe PUT retry
+- per-agent lock
+- capability guard
+- recovery cannot deploy
+- last-known-good retained until candidate verification
+- same exact artifact retry does not redeploy
+- old script unchanged
+- route changes only after successful candidate verification
+
+Update tests that currently assume identity is only:
+
+agent + revision
+
+The identity is now for the complete deployable artifact, not merely generated
+source.
+
+Document the new identity formula precisely.
+
+==================================================
+PART 5 — FOCUSED TESTS
+==================================================
+
+Add focused tests for published routing.
+
+At minimum:
+
+APP + SPA:
+
+GET /
+→ HTML
+
+GET known static asset
+→ asset
+
+GET client-side navigation route with HTML navigation Accept
+→ SPA HTML
+
+GET /api/leads with JSON Accept
+→ VIBE_APP JSON
+
+GET /api/leads with generic Accept
+→ backend rather than SPA HTML where routing metadata identifies it as app
+traffic
+
+POST /api/leads
+→ VIBE_APP
+
+PATCH backend route
+→ VIBE_APP
+
+DELETE backend route
+→ VIBE_APP
+
+query strings preserved
+
+headers preserved
+
+request body preserved
+
+backend 404 behavior does not accidentally become frontend HTML unless it is a
+legitimate browser SPA navigation
+
+Also verify static-only generated applications retain intended behavior.
+
+==================================================
+PART 6 — IDENTITY TESTS
+==================================================
+
+Test:
+
+same agent + same revision + same adapter version
+→ same script
+
+same agent + same revision + different adapter version
+→ different script
+
+same agent + different revision + same adapter version
+→ different script
+
+exact retry
+→ no duplicate upload
+
+existing old identity remains untouched
+
+route remains old release until candidate verification succeeds
+
+candidate failure leaves release 4 active
+
+candidate success can switch route to new release
+
+==================================================
+PART 7 — REGRESSION
+==================================================
+
+Run the relevant existing suites for:
+
+- publish adapter
+- immutable Task 4B release behavior
+- release/recovery
+- generated app routing
+- preview routing where shared assumptions exist
+- runtime
+- owner/authorization
+- gateway regression if required by dependency boundaries
+- typecheck
+- build
+- Worker dry-run
+
+Do not create another enormous unrelated acceptance framework.
+
+==================================================
+PART 8 — SOURCE OF TRUTH
+==================================================
+
+GitHub is canonical.
+
+Current canonical baseline:
+
+cd59fe6274d7a359c5f27ccfcbb6361fc9c146ea
+
+Keep the accepted source reproducible from GitHub.
+
+Commit the accepted fix and tests.
+
+Push deliberately.
+
+Do not leave authoritative source only in Replit.
+
+Report the new canonical commit.
+
+==================================================
+PART 9 — DEPLOY MINIMUM PLATFORM CHANGE
+==================================================
+
+If all focused and relevant regression checks pass:
+
+deploy ONLY the platform component(s) required for the corrected publisher.
+
+Do not change:
+
+- generated-app gateway
+- auth
+- lifecycle limits
+- 250-credit budget
+- Project 8 source
+
+Record previous/new serving versions and rollback target.
+
+==================================================
+PART 10 — CREATE ONE CORRECTED PROJECT 8 RELEASE
+==================================================
+
+After the platform fix is serving:
+
+Use the normal authenticated Project 8 customer Publish path to create ONE new
+immutable release from the SAME generated source revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+This is authorized.
+
+Because the publisher/adapter artifact version changed, this MUST create a NEW
+immutable script identity.
+
+Do not overwrite release 4.
+
+Expected after success:
+
+release count = 2
+
+release 4:
+historical, unchanged, old immutable script
+
+new release:
+same generated source revision
+new adapter/artifact version
+new immutable script
+
+stable slug:
+isolated-observability-acceptance
+
+stable public URL:
+https://isolated-observability-acceptance.apps.buildcustom.ai
+
+Route should switch to the new release ONLY after candidate verification.
+
+==================================================
+PART 11 — VERIFY PUBLIC FULL-STACK APP
+==================================================
+
+After the corrected release is current, verify the SAME public URL.
+
+Require:
+
+GET /
+→ 200 HTML
+
+GET /api/leads
+→ 200 application/json
+→ expected 12 leads if production data contract uses the existing generated
+state
+
+Verify:
+
+- CRM renders
+- dashboard renders
+- summary cards render
+- leads load
+- Five Newest Leads populates
+- search works
+- sorting works
+- filtering works
+- lead details works
+- seven fields render
+- Notes renders
+- Activity Timeline renders
+- generated backend API works
+- no private-preview URLs
+- no generated-app API CORS errors
+- no actionable generated-app console errors
+
+If production data is intentionally separate, verify correct production API
+behavior according to the intended contract rather than forcing preview data
+identity.
+
+But /api/leads MUST return the backend response, not frontend HTML.
+
+==================================================
+PART 12 — VERIFY RELEASE 4 IMMUTABILITY
+==================================================
+
+After successful release 2/current release:
+
+Confirm release 4's script:
+
+bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8
+
+still has its original bytes/ETag.
+
+Confirm:
+
+- old script exists
+- old script unchanged
+- old release record preserved
+- new script identity differs
+- same stable slug
+- route points to new release
+- no mutation of old immutable artifact occurred
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+If implementation tests fail:
+STOP before production deployment.
+
+If production platform deployment fails:
+STOP before Project 8 Publish.
+
+If new Publish fails:
+STOP without retry.
+
+If public /api/leads still returns HTML:
+STOP.
+
+If old immutable script changes:
+STOP immediately.
+
+Do NOT send the Recent Activity edit during this task.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+PLATFORM FIX PASS / IMPLEMENTATION FAILURE / DEPLOYMENT FAILURE /
+CORRECTED PUBLISH FAILURE / PUBLIC BACKEND STILL FAILS /
+IMMUTABILITY FAILURE
+
+ROOT CAUSE FIX
+- file/component:
+- old behavior:
+- new behavior:
+- routing rule:
+- SPA behavior:
+- backend behavior:
+- static-only behavior:
+
+ARTIFACT IDENTITY
+- old formula:
+- new formula:
+- adapter/artifact version:
+- same source + same adapter:
+- same source + new adapter:
+- old identities preserved:
+
+TESTS
+- focused routing:
+- identity:
+- Task 4B:
+- runtime:
+- other relevant regressions:
+- typecheck:
+- build:
+- dry-run:
+
+GITHUB
+- previous canonical:
+- new canonical:
+- pushed:
+- reproducible:
+
+PLATFORM DEPLOYMENT
+- component:
+- previous version:
+- new version:
+- rollout:
+- gateway changed:
+- auth changed:
+- lifecycle limits changed:
+
+CORRECTED PROJECT 8 RELEASE
+- publish clicks:
+- source revision:
+- old release ID:
+- new release ID:
+- old immutable script:
+- new immutable script:
+- adapter version:
+- slug:
+- public URL:
+- route switched:
+- release count:
+
+PUBLIC APP
+- GET /:
+- GET /api/leads:
+- Content-Type:
+- lead count:
+- CRM:
+- dashboard:
+- backend:
+- search:
+- sorting:
+- filtering:
+- lead details:
+- Notes:
+- Activity Timeline:
+- console:
+- result:
+
+IMMUTABILITY
+- release 4 exists:
+- release 4 ETag unchanged:
+- release 4 bytes unchanged:
+- new script differs:
+- old release preserved:
+- stable URL unchanged:
+- result:
+
+CUSTOMER AI INSTRUCTIONS:
+MUST BE ZERO
+
+RECENT ACTIVITY EDIT:
+MUST NOT BE SENT
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

@@ -73,3 +73,4 @@
 - [Split Worker chunk provenance](split-worker-chunk-provenance.md) — source-root comments and hashed import references can change auxiliary bytes without changing executable ASTs.
 - [Non-AI smoke evidence](non-ai-smoke-evidence.md) — distinguish outgoing instructions from incoming replay; preserve one-login recovery state until all checks finish.
 - [Public generated API acceptance](public-generated-api-acceptance.md) — public HTML and route success can coexist with an API returning HTML; check body shape as a signed-out visitor.
+- [GitHub Git transport fallback](github-git-transport-fallback.md) — a healthy connected App can preserve exact Git objects when configured HTTPS push authentication fails.
