@@ -1,0 +1,356 @@
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index c659e9a..eaaead8 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -549,6 +549,7 @@ export class ThinkCodingBehavior
+ 		// the persisted limits of an operation recovered by beginTask.
+ 		await stub.configureOperationLimits(this.operationLimitsFromEnvironment());
+ 		const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId());
++		if (operation.replayOnly) return;
+ 		const initialLifecycle = await stub.getTaskLifecycle();
+ 		if (initialLifecycle.status !== 'RUNNING') return;
+ 		const conversationId = operation.conversationId;
+@@ -559,6 +560,7 @@ export class ThinkCodingBehavior
+ 		});
+ 
+ 		const accumulated = { text: '', bufferText: false, bufferedText: '' };
++		let streamError: string | undefined;
+ 		const seenWrittenFiles = new Set<string>();
+ 		const toolNames = new Map<string, string>();
+ 		const toolInputs = new Map<string, Record<string, unknown>>();
+@@ -579,13 +581,15 @@ export class ThinkCodingBehavior
+ 				}
+ 				return this.translateChunk(chunk, conversationId, accumulated, seenWrittenFiles, toolNames, toolInputs);
+ 			},
+-			(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err }),
++			// The stream error is provisional. The persisted lifecycle owns the
++			// terminal reason, and an older queued task must not stop a newer UI turn.
++			(err) => { streamError = err; },
+ 			async () => { await stub.markTaskChatResolved(); },
+ 			diagnosticContext,
+ 		);
+ 
+ 		try {
+-			await driveThinkTaskOperation({
++			const result = await driveThinkTaskOperation({
+ 				stub,
+ 				initialOperation: operation,
+ 				initialPrompt: text,
+@@ -609,6 +613,21 @@ export class ThinkCodingBehavior
+ 					}
+ 				},
+ 			});
++			if (result.lifecycle.status === 'INCOMPLETE_RESOURCE_LIMIT') {
++				const queueIds = this.getPendingTaskQueueIds();
++				if (createThinkTaskQueueIdentity(queueIds.slice(-1)) === taskId) {
++					this.broadcast(WebSocketMessageResponses.ERROR, {
++						error: result.lifecycle.summary,
++						code: result.lifecycle.status,
++						reason: result.lifecycle.reason,
++						nativeTaskLifecycle: result.lifecycle,
++						operationId: taskId,
++						conversationId,
++					});
++				}
++			} else if (streamError) {
++				this.broadcast(WebSocketMessageResponses.ERROR, { error: streamError, operationId: taskId, conversationId });
++			}
+ 		} finally {
+ 			this.broadcast(WebSocketMessageResponses.USAGE_UPDATED, {
+ 				message: 'Usage data updated',
+diff --git a/worker/agents/think/ThinkAgent.ts b/worker/agents/think/ThinkAgent.ts
+index f8c350e..4a98afd 100644
+--- a/worker/agents/think/ThinkAgent.ts
++++ b/worker/agents/think/ThinkAgent.ts
+@@ -34,6 +34,7 @@ import {
+ 	markThinkTaskChatStarted,
+ 	recordThinkOperation,
+ 	resolveThinkTaskStart,
++resolveThinkCompletedTaskReplay,
+ 	reserveThinkTaskResource,
+ parseThinkOperationLimits,
+ 	recoverThinkTaskOperation,
+@@ -50,7 +51,7 @@ parseThinkOperationLimits,
+ } from './finish-task-tool';
+ import { getUserConfigurableSettings } from '../../config';
+ import { RateLimitService } from '../../services/rate-limit/rateLimits';
+-import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
++import { hasCloudflareConfigured, isCloudflareGatewayLimitsEnabled } from '../../services/rate-limit/usageChecker';
+ import type { RateLimitSettings } from '../../services/rate-limit/config';
+ import { THINK_MODEL_CONFIG } from './model-config';
+ import type { ChatErrorContext, ChatResponseResult, StepContext, ToolCallContext, ToolCallResultContext } from '@cloudflare/think';
+@@ -314,6 +315,8 @@ export class ThinkAgent extends Think<Env> {
+ 	}
+ 
+ 	private async saveTaskLifecycle(lifecycle: ThinkTaskLifecycle): Promise<void> {
++const existing = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey);
++if (existing?.status === 'INCOMPLETE_RESOURCE_LIMIT') return;
+ 		this.putTaskDiagnostic(this.taskLifecycleKey, lifecycle);
+ 	}
+ 
+@@ -333,6 +336,8 @@ export class ThinkAgent extends Think<Env> {
+ 	}
+ 
+ 	private stopForResourceLimit(reason: ThinkResourceLimitReason, operation: ThinkTaskOperation): void {
++const existing = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey);
++if (existing?.status === 'INCOMPLETE_RESOURCE_LIMIT') return;
+ 		const summary = this.resourceLimitSummary(reason, operation);
+ 		const lifecycle: ThinkTaskLifecycle = {
+ 			status: 'INCOMPLETE_RESOURCE_LIMIT',
+@@ -349,7 +354,7 @@ export class ThinkAgent extends Think<Env> {
+ 		const config = this.getConfig<ThinkAgentConfig>();
+ 		if (!usage || !config) return operation;
+ 		const llmConfig = usage.config.llmCalls;
+-		const metered = !(usage.hasCloudflareConfigured && llmConfig.excludeCloudflareConnected);
++const metered = llmConfig.enabled && !(usage.hasCloudflareConfigured && llmConfig.excludeCloudflareConnected);
+ 		if (!metered) {
+ 			if (operation.meteredCreditsInitialized) return operation;
+ 			return { ...operation, meteredCreditsInitialized: true, availableMeteredCredits: null };
+@@ -863,7 +868,10 @@ export class ThinkAgent extends Think<Env> {
+ 		const config = this.getConfig<ThinkAgentConfig>();
+ 		withThinkDiagnosticSafety(() => { this.diagnosticUserId = config?.userId; });
+ 		this.turnUsage = null;
+-		if (config) {
++// The same policy gates customer admission. A self-deployed runtime without
++// this feature must not silently enforce the stock account-wide daily bucket.
++// Its persisted per-operation resource ceilings still apply.
++if (config && isCloudflareGatewayLimitsEnabled(this.env)) {
+ 			try {
+ 				const userConfig = await getUserConfigurableSettings(this.env, config.userId);
+ 				this.turnUsage = {
+@@ -975,6 +983,10 @@ export class ThinkAgent extends Think<Env> {
+ 	}
+ 
+ 	async beginTask(taskId: string, candidateConversationId: string): Promise<ThinkTaskOperation> {
++const receipt = resolveThinkCompletedTaskReplay(
++taskId, this.ctx.storage.kv.get<ThinkTaskOperation>(`think_completed_task:${taskId}`),
++);
++if (receipt) return receipt;
+ 		const existingOperation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
+ 		const existingLifecycle = await this.getTaskLifecycle();
+ 		const pendingStartIntent = this.ctx.storage.kv.get<string>(this.taskStartIntentKey);
+@@ -1001,6 +1013,11 @@ export class ThinkAgent extends Think<Env> {
+ 			this.putTaskDiagnostic(this.taskOperationKey, normalizedOperation);
+ 			return normalizedOperation;
+ 		}
++// Keep a durable receipt before replacing the current task. Replaying an older
++// persisted customer turn after a newer one must not create another allowance.
++if (existingOperation && existingLifecycle.status !== 'RUNNING') {
++this.ctx.storage.kv.put(`think_completed_task:${existingOperation.taskId}`, existingOperation);
++}
+ 		let operation = {
+ 			...createThinkTaskOperation(
+ 				taskId,
+@@ -1137,7 +1154,7 @@ export class ThinkAgent extends Think<Env> {
+ 			throw new Error('Think operation stopped at its cumulative resource limit.');
+ 		}
+ 		await this.reserveOperationResource('model');
+-		if (this.turnUsage && config) {
++if (this.turnUsage?.config.llmCalls.enabled && config) {
+ 			await RateLimitService.enforceLLMCallsRateLimit(
+ 				this.env,
+ 				this.turnUsage.config,
+diff --git a/worker/agents/think/finish-task-tool.ts b/worker/agents/think/finish-task-tool.ts
+index fa4fde2..597a53f 100644
+--- a/worker/agents/think/finish-task-tool.ts
++++ b/worker/agents/think/finish-task-tool.ts
+@@ -54,6 +54,10 @@ export interface ThinkTaskOperation {
+ 	creditsConsumed: number;
+ 	availableMeteredCredits: number | null;
+ 	meteredCreditsInitialized: boolean;
++resourceLimitReason?: ThinkResourceLimitReason;
++resourceLimitAt?: number;
++/** Historical delivery receipt: acknowledge without running the current task. */
++replayOnly?: boolean;
+ 	lastWorkspaceFingerprint: string | null;
+ 	lastValidationFingerprint: string | null;
+ }
+@@ -158,6 +162,13 @@ export function createThinkTaskQueueIdentity(queueItemIds: string[]): string {
+ 	return `think-queue:${queueItemIds.join(':')}`;
+ }
+ 
++export function resolveThinkCompletedTaskReplay(
++taskId: string,
++receipt: ThinkTaskOperation | undefined,
++): ThinkTaskOperation | undefined {
++return receipt?.taskId === taskId ? { ...receipt, replayOnly: true } : undefined;
++}
++
+ export function resolveThinkTaskStart(
+ 	taskId: string,
+ 	status: ThinkTaskStatus,
+@@ -398,23 +409,32 @@ export function reserveThinkTaskResource(
+ 		lastWorkspaceFingerprint: operation.lastWorkspaceFingerprint ?? null,
+ 		lastValidationFingerprint: operation.lastValidationFingerprint ?? null,
+ 	};
++const stopped = (reason: ThinkResourceLimitReason) => ({
++operation: {
++...normalized,
++resourceLimitReason: normalized.resourceLimitReason ?? reason,
++resourceLimitAt: normalized.resourceLimitAt ?? now,
++},
++limitExceeded: normalized.resourceLimitReason ?? reason,
++});
++if (normalized.resourceLimitReason) return stopped(normalized.resourceLimitReason);
+ 	if (now - normalized.startedAt >= limits.maxElapsedMs) {
+-		return { operation: normalized, limitExceeded: 'elapsed_time_limit' };
++return stopped('elapsed_time_limit');
+ 	}
+ 	if (resource === 'checkpoint') return { operation: normalized };
+ 	if (resource === 'model') {
+ 		if (normalized.modelCalls >= limits.maxModelCalls) {
+-			return { operation: normalized, limitExceeded: 'model_call_limit' };
++return stopped('model_call_limit');
+ 		}
+ 		if (normalized.creditsConsumed + creditCost > limits.maxCredits) {
+-			return { operation: normalized, limitExceeded: 'credit_limit' };
++return stopped('credit_limit');
+ 		}
+ 		if (
+ 			normalized.meteredCreditsInitialized &&
+ 			normalized.availableMeteredCredits !== null &&
+ 			normalized.availableMeteredCredits < creditCost
+ 		) {
+-			return { operation: normalized, limitExceeded: 'available_credits_limit' };
++return stopped('available_credits_limit');
+ 		}
+ 		return {
+ 			operation: {
+@@ -428,7 +448,7 @@ export function reserveThinkTaskResource(
+ 		};
+ 	}
+ 	if (normalized.toolCalls >= limits.maxToolCalls) {
+-		return { operation: normalized, limitExceeded: 'tool_call_limit' };
++return stopped('tool_call_limit');
+ 	}
+ 	return { operation: { ...normalized, toolCalls: normalized.toolCalls + 1 } };
+ }
+diff --git a/production/vibesdk-launch/runtime-source/worker/agents/think/customer-operation.test.ts b/worker/agents/think/customer-operation.test.ts
+new file mode 100644
+index 0000000..47eac66
+--- /dev/null
++++ b/worker/agents/think/customer-operation.test.ts
+@@ -0,0 +1,122 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import agentSource from './ThinkAgent.ts?raw';
++import behaviorSource from '../core/behaviors/think.ts?raw';
++import {
++  advanceThinkTaskOperation,
++  createThinkTaskOperation,
++  createThinkTaskQueueIdentity,
++  recoverThinkTaskOperation,
++  reserveThinkTaskResource,
++  resolveThinkTaskStart,
++  resolveThinkCompletedTaskReplay,
++} from './finish-task-tool';
++
++const limits = { maxContinuations: 4, maxCredits: 250, maxElapsedMs: 900_000 };
++const savedTurnA = 'persisted-customer-turn-a';
++const savedTurnB = 'persisted-customer-turn-b';
++const operationId = (turn: string) => createThinkTaskQueueIdentity([turn]);
++
++afterEach(() => vi.useRealTimers());
++
++describe('persisted customer operation boundaries', () => {
++  it.each(['credit_limit', 'elapsed_time_limit'] as const)(
++    'starts a fresh B after A stops on %s, without changing limits or workspace',
++    (reason) => {
++      vi.useFakeTimers();
++      vi.setSystemTime(1_000_000);
++      const a = {
++        ...createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits),
++        creditsConsumed: 250, modelCalls: 125, toolCalls: 200,
++        continuationCount: 4, completedPassCount: 5,
++        resourceLimitReason: reason, resourceLimitAt: 1_000_000,
++        lastOperationFingerprint: 'old-progress',
++      };
++      vi.setSystemTime(3_000_000);
++      expect(resolveThinkTaskStart(operationId(savedTurnB), 'INCOMPLETE_RESOURCE_LIMIT', a))
++        .toBe('START_NEW');
++      const b = createThinkTaskOperation(operationId(savedTurnB), 'response-b', a.limits);
++      expect(b.taskId).not.toBe(a.taskId);
++      expect(b).toMatchObject({
++        creditsConsumed: 0, modelCalls: 0, toolCalls: 0,
++        continuationCount: 0, completedPassCount: 0, startedAt: 3_000_000,
++        pendingPromptKind: 'INITIAL', lastOperationFingerprint: '',
++        availableMeteredCredits: null, meteredCreditsInitialized: false,
++      });
++      expect(b.resourceLimitReason).toBeUndefined();
++      expect(b.limits).toEqual(a.limits);
++      expect(reserveThinkTaskResource(b, 'model', 3_000_000, 2).limitExceeded).toBeUndefined();
++      // beginTask only appends/reads Think messages and current revision evidence.
++      const beginTask = agentSource.slice(agentSource.indexOf('async beginTask('),
++        agentSource.indexOf('async getTaskLifecycle('));
++      expect(beginTask).not.toMatch(/resetWorkspace|clearMessages|clearConversation|deleteBranch/);
++    },
++  );
++
++  it('keeps the same persisted identity, elapsed window and counters through continuation/recovery', () => {
++    const a = createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits);
++    const used = reserveThinkTaskResource(a, 'model', a.startedAt, 2).operation;
++    const continuation = recoverThinkTaskOperation(advanceThinkTaskOperation(used), {}, a.startedAt + 100);
++    expect(continuation).toMatchObject({
++      taskId: a.taskId, startedAt: a.startedAt, creditsConsumed: 2,
++      modelCalls: 1, continuationCount: 1, pendingPromptKind: 'CONTINUATION',
++    });
++    expect(continuation.limits).toEqual(a.limits);
++  });
++
++  it('acknowledges a duplicate persisted A without a new budget, including after B', () => {
++    const a = createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits);
++    expect(resolveThinkTaskStart(operationId(savedTurnA), 'RUNNING', a)).toBe('RESUME');
++    expect(resolveThinkTaskStart(operationId(savedTurnA), 'COMPLETE', a)).toBe('ACK_TERMINAL');
++    // Historical receipts are checked before current-operation selection, and
++    // the host acknowledges them without driving the newer task.
++    const usedA = { ...a, creditsConsumed: 250, continuationCount: 4, modelCalls: 125 };
++    const replay = resolveThinkCompletedTaskReplay(operationId(savedTurnA), usedA);
++    expect(replay).toMatchObject({ taskId: a.taskId, creditsConsumed: 250, continuationCount: 4, modelCalls: 125, replayOnly: true });
++    expect(resolveThinkCompletedTaskReplay(operationId(savedTurnB), usedA)).toBeUndefined();
++    expect(agentSource.indexOf('if (receipt) return receipt;'))
++      .toBeLessThan(agentSource.indexOf('const existingOperation =', agentSource.indexOf('async beginTask(')));
++    expect(agentSource).toContain('`think_completed_task:${existingOperation.taskId}`');
++    expect(behaviorSource).toContain('if (operation.replayOnly) return;');
++  });
++
++  it.each(['credit_limit', 'elapsed_time_limit', 'available_credits_limit'] as const)(
++    'preserves first terminal cause %s during later checkpoint guards',
++    (reason) => {
++      const a = {
++        ...createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits),
++        resourceLimitReason: reason, resourceLimitAt: 123,
++      };
++      const checkpoint = reserveThinkTaskResource(a, 'checkpoint', a.startedAt + 999_999);
++      expect(checkpoint.limitExceeded).toBe(reason);
++      expect(checkpoint.operation.resourceLimitAt).toBe(123);
++      expect(checkpoint.operation.creditsConsumed).toBe(0);
++      expect(recoverThinkTaskOperation(checkpoint.operation).resourceLimitReason).toBe(reason);
++    },
++  );
++
++  it('records the first credit guard rather than replacing it with a later elapsed guard', () => {
++    const a = { ...createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits), creditsConsumed: 250 };
++    const stopped = reserveThinkTaskResource(a, 'model', a.startedAt + 1, 2);
++    expect(stopped.limitExceeded).toBe('credit_limit');
++    expect(reserveThinkTaskResource(stopped.operation, 'checkpoint', a.startedAt + 900_000).limitExceeded)
++      .toBe('credit_limit');
++  });
++
++  it('uses the admission policy for stock account metering without increasing operation ceilings', () => {
++    expect(agentSource).toContain('if (config && isCloudflareGatewayLimitsEnabled(this.env))');
++    expect(agentSource).toContain('if (this.turnUsage?.config.llmCalls.enabled && config)');
++    const a = createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits);
++    const atCeiling = { ...a, creditsConsumed: 250 };
++    expect(reserveThinkTaskResource(atCeiling, 'model', a.startedAt, 2).limitExceeded).toBe('credit_limit');
++    const metered = { ...a, availableMeteredCredits: 0, meteredCreditsInitialized: true };
++    expect(reserveThinkTaskResource(metered, 'model', a.startedAt, 2).limitExceeded)
++      .toBe('available_credits_limit');
++  });
++
++  it('reports the persisted lifecycle only for the newest queued customer operation', () => {
++    expect(behaviorSource).toContain('if (createThinkTaskQueueIdentity(queueIds.slice(-1)) === taskId)');
++    expect(behaviorSource).toContain('nativeTaskLifecycle: result.lifecycle');
++    expect(behaviorSource).toContain('reason: result.lifecycle.reason');
++    expect(behaviorSource).not.toContain('(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err })');
++  });
++});
+\ No newline at end of file
