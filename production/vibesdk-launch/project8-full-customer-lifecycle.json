@@ -1,0 +1,481 @@
+{
+  "startedAt": "2026-10-02T00:06:22.842Z",
+  "projectId": 8,
+  "agentId": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "startingRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+  "initialPublish": {
+    "clicks": 1,
+    "reservedAt": "2026-10-02T00:08:12.623Z",
+    "http": 201,
+    "response": {
+      "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+      "release": {
+        "id": 4,
+        "projectId": 8,
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+        "scriptName": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+        "subdomainSlug": "isolated-observability-acceptance",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true,
+        "status": "published",
+        "createdAt": "2026-10-02 00:08:27"
+      },
+      "alreadyPublished": false,
+      "publicAvailable": true
+    },
+    "releaseCount": 1,
+    "route": {
+      "http": 200,
+      "scriptName": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+      "metadata": {}
+    },
+    "scriptDetail": {
+      "http": 200,
+      "success": true,
+      "etag": "84f415ba7fb9ef119f8e0829617ca6ef9ea417e5437b707f48d277dbc709e44e",
+      "createdOn": "2026-10-02T00:08:19.132659Z",
+      "modifiedOn": "2026-10-02T00:08:21.573119Z"
+    }
+  },
+  "edit": {
+    "instructions": 0,
+    "result": "NOT STARTED due public backend failure"
+  },
+  "updatePublish": {
+    "clicks": 0,
+    "result": "NOT STARTED"
+  },
+  "http": [
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/auth/me"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/revision"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/revision",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/blog-posts"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/public/capabilities"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/blog-posts",
+      "status": 404
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/public/capabilities"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-settings"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-settings",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/public/capabilities"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-settings"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases"
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/public/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-settings",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/status",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/turns",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/auth/csrf-token"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/auth/csrf-token",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-capabilities"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/publishing-capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "PUT",
+      "path": "/api/projects/8/runtime/publishing-settings"
+    },
+    {
+      "kind": "response",
+      "method": "PUT",
+      "path": "/api/projects/8/runtime/publishing-settings",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "POST",
+      "path": "/api/projects/8/runtime/publish-immutable-v2"
+    },
+    {
+      "kind": "response",
+      "method": "POST",
+      "path": "/api/projects/8/runtime/publish-immutable-v2",
+      "status": 201
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/releases",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/revision"
+    },
+    {
+      "kind": "response",
+      "method": "GET",
+      "path": "/api/projects/8/runtime/revision",
+      "status": 200
+    }
+  ],
+  "outgoingTypes": {
+    "get_conversation_state": 1
+  },
+  "operationEvents": [],
+  "telemetry": [
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum"
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/cdn-cgi/rum"
+    }
+  ],
+  "generatedErrors": [],
+  "publicChecks": {
+    "initial": {
+      "http": 200,
+      "crmRendered": true,
+      "dashboardRendered": true,
+      "displayedLeadCount": "0",
+      "backend": {
+        "status": 200,
+        "contentType": "text/html",
+        "htmlDocument": true,
+        "json": false,
+        "length": 105067
+      },
+      "consoleErrors": [
+        {
+          "path": "",
+          "kind": "runtime"
+        }
+      ],
+      "privateUrlsObserved": 0,
+      "result": "PUBLIC APP FAILURE",
+      "remainingFunctionalChecks": "Blocked by public leads API returning HTML"
+    }
+  },
+  "state": "PUBLIC_APP_FAILURE_STOPPED",
+  "baseline": {
+    "ownerMatches": true,
+    "agent": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+    "revision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+    "generation": {
+      "shouldBeGenerating": false,
+      "generation": {
+        "status": "idle"
+      }
+    },
+    "releaseCount": 0,
+    "session": "Retained same-owner normal-login browser profile"
+  },
+  "finalReleaseCount": 1,
+  "finalReleases": [
+    {
+      "id": 4,
+      "projectId": 8,
+      "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+      "scriptName": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+      "subdomainSlug": "isolated-observability-acceptance",
+      "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+      "publicAvailable": true,
+      "status": "published",
+      "createdAt": "2026-10-02 00:08:27"
+    }
+  ],
+  "finishedAt": "2026-10-02T00:10:43.612Z",
+  "safety": {
+    "project9Created": false,
+    "project5Touched": false,
+    "infrastructureChanged": false,
+    "authChanged": false,
+    "runtimeLimitsChanged": false,
+    "gatewayChanged": false,
+    "publicDataMutations": 0
+  },
+  "privatePreviewAfterPublish": {
+    "http": 200,
+    "leadCount": 12
+  },
+  "finalRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+}

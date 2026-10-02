@@ -1,0 +1,520 @@
+Continue with SAME Project 8.
+
+We have completed and accepted the production builder/edit/preview workflow.
+
+This task tests the FINAL customer application lifecycle:
+
+working private preview
+→ Publish
+→ working public apps.buildcustom.ai application
+→ make ONE small conversational edit
+→ verify updated private preview
+→ Publish Updates
+→ same public URL serves updated revision
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+Do NOT change BuildCustom infrastructure unless an ACTUAL product failure is
+observed.
+
+Do NOT change runtime limits.
+
+Do NOT change auth.
+
+Do NOT change gateway configuration preemptively.
+
+Do NOT build another acceptance harness.
+
+Use the normal customer UI.
+
+==================================================
+ACCEPTED PRODUCTION BASELINE
+==================================================
+
+GitHub canonical commit:
+
+cd59fe6274d7a359c5f27ccfcbb6361fc9c146ea
+
+Runtime:
+
+5a964dd5-db65-4cde-83f8-22a17f4d909f
+
+Control:
+
+dd40f46c-cd23-4e82-8679-83460169570f
+
+Both:
+100%
+
+Production lifecycle:
+
+credits = 250
+maxSteps = 25
+Think turns = 5
+internal continuations = 4
+elapsed ceiling = 900000 ms
+
+Project:
+
+8
+
+Agent:
+
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Current accepted revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Current accepted state:
+
+- owner login works
+- editor works
+- generation idle
+- input available
+- private preview HTTP 200
+- 12 seeded leads
+- generated backend API works
+- lead details works
+- all seven lead fields work
+- Notes works
+- persisted note works
+- Activity Timeline works
+- dashboard works
+- search works
+- sorting works
+- filtering works
+- newest leads works
+- no actionable generated-app errors
+
+Production releases currently:
+
+0
+
+==================================================
+PART 1 — INITIAL PRODUCTION PUBLISH
+==================================================
+
+Use the normal authenticated Project 8 customer UI.
+
+Click the normal Publish button ONCE.
+
+This is an authorized production Publish for Project 8.
+
+Do not call internal deployment APIs directly unless that is what the normal
+customer UI itself calls.
+
+Observe the customer path.
+
+Record:
+
+- Publish clicks
+- publish HTTP request
+- HTTP result
+- release ID
+- source revision
+- immutable script identity
+- public slug
+- public URL
+- route mapping
+- release status
+
+Expected source revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Require exactly ONE production release from this initial Publish.
+
+==================================================
+PART 2 — VERIFY PUBLIC APPLICATION
+==================================================
+
+Open the resulting public apps.buildcustom.ai URL as a normal visitor.
+
+Verify the actual public application.
+
+Require:
+
+- public URL HTTP 200
+- CRM renders
+- dashboard renders
+- summary cards render
+- 12 seeded leads load
+- public generated backend API works
+- search works
+- sorting works
+- status filtering works
+- five newest leads works
+- lead details opens
+- seven lead fields render
+- Notes section renders
+- existing persisted note is present if the generated application's production
+  data contract shares/preserves that state as designed
+- Activity Timeline renders
+- no private-preview URLs appear
+- no generated-app API CORS failure
+- no actionable generated-app console errors
+
+IMPORTANT:
+
+If production generated-app data is intentionally isolated from private-preview
+data, do NOT classify absence of the preview test note as a failure.
+
+Determine the intended data contract and verify accordingly.
+
+Do not mutate public production data during this verification unless required
+for a minimal functional check.
+
+==================================================
+PART 3 — VERIFY IMMUTABLE RELEASE
+==================================================
+
+Confirm the initial public release points to an immutable script corresponding
+to revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Record:
+
+- release ID
+- immutable script
+- route KV mapping
+- public slug
+- public URL
+
+Confirm:
+
+- production release count = 1
+- public route resolves to that release
+- previous private-preview behavior remains unaffected
+
+Do not republish the same revision just for testing.
+
+==================================================
+PART 4 — ONE SMALL CUSTOMER EDIT
+==================================================
+
+Return to the normal authenticated Project 8 editor.
+
+Send exactly ONE new customer instruction:
+
+"Add a small Recent Activity card to the main dashboard underneath the Five
+Newest Leads section.
+
+Show the five most recent lead activity events with the lead name, activity
+type, and date/time.
+
+Keep the existing dark navy design and make the card visually consistent with
+the rest of the dashboard.
+
+Do not remove or redesign any existing functionality.
+
+Verify the updated application works before completing the task."
+
+Send exactly ONCE.
+
+Count it as sent only when the outbound customer instruction/user_suggestion
+is observed.
+
+Do NOT resend.
+
+Do NOT send a follow-up.
+
+Let the normal BuildCustom lifecycle handle the edit.
+
+==================================================
+PART 5 — VERIFY THE UPDATED PRIVATE PREVIEW
+==================================================
+
+Require a NEW authoritative revision different from:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Verify:
+
+- operation completes normally
+- validation/preflight succeeds
+- new commit exists
+- private preview redeploys
+- Recent Activity card appears
+- exactly five recent events appear when sufficient activity exists
+- lead name appears
+- activity type appears
+- date/time appears
+- visual design matches existing CRM
+- existing dashboard remains
+- Five Newest Leads remains
+- leads remain
+- lead details remains
+- Notes remains
+- Activity Timeline remains
+- generated API works
+- no actionable generated-app errors
+
+Record:
+
+- customer instructions
+- Think turns
+- internal continuations
+- starting revision
+- new revision
+- finish_task
+- completion state
+- preview result
+
+If the AI operation fails:
+
+STOP.
+
+Do NOT Publish Updates.
+
+Do NOT resend.
+
+==================================================
+PART 6 — VERIFY PUBLIC APP HAS NOT CHANGED YET
+==================================================
+
+Before clicking Publish Updates, reopen the PUBLIC URL.
+
+This is important.
+
+Confirm the public route still points to the ORIGINAL immutable release.
+
+The new Recent Activity dashboard card should NOT be live publicly yet.
+
+Require:
+
+- same public URL
+- same original release
+- original immutable script
+- public application still works
+- unpublished private-preview change has not leaked into production
+
+If the public app changed before Publish Updates:
+
+STOP.
+
+That is a real immutable-release isolation failure.
+
+==================================================
+PART 7 — PUBLISH UPDATES
+==================================================
+
+If the new private revision is verified and the existing public release is
+still unchanged:
+
+Click the normal:
+
+Publish Updates
+
+ONCE.
+
+Observe:
+
+- request
+- result
+- new release ID
+- expected revision
+- new immutable script identity
+- route update
+
+Require:
+
+- NEW immutable script
+- NEW production release
+- route switches from old script to new script only after successful candidate
+  verification
+- same stable public slug
+- same stable public URL
+- old immutable script remains available/unchanged
+- release count becomes 2
+- last-known-good behavior preserved until route switch
+
+==================================================
+PART 8 — VERIFY UPDATED PUBLIC APP
+==================================================
+
+Open the SAME public apps.buildcustom.ai URL.
+
+Verify:
+
+- HTTP 200
+- same slug
+- same URL
+- Recent Activity card now appears
+- recent events render
+- lead name renders
+- activity type renders
+- date/time renders
+- existing CRM remains functional
+- generated backend API works
+- lead details works
+- Notes works
+- Activity Timeline works
+- dashboard works
+- search/sort/filtering remain functional
+- no malformed preview URLs
+- no generated-app API CORS errors
+- no actionable generated-app console errors
+
+Confirm route now points to the NEW immutable script.
+
+==================================================
+PART 9 — IMMUTABILITY RECEIPT
+==================================================
+
+At the end record both releases.
+
+RELEASE 1:
+
+- release ID
+- revision
+- immutable script
+- created time
+- public slug
+
+RELEASE 2:
+
+- release ID
+- revision
+- immutable script
+- created time
+- public slug
+
+Confirm:
+
+- revisions differ
+- immutable script identities differ
+- old script was not mutated
+- stable public URL remained the same
+- route changed only to point to release 2
+- release 1 remains historical
+- release 2 is current
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+Do not stop for optional test-tool failures if the normal customer path works.
+
+STOP for an ACTUAL product failure:
+
+- initial Publish fails
+- public app fails
+- public backend fails
+- immutable release mapping is wrong
+- customer edit fails
+- private preview fails
+- public app changes before Publish Updates
+- Publish Updates fails
+- same-revision script is mutated
+- old release is destroyed
+- updated public app fails
+- stable URL changes unexpectedly
+
+Do not automatically repair or retry a failed mutation.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+FULL CUSTOMER LOOP PASS / INITIAL PUBLISH FAILURE / EDIT FAILURE /
+IMMUTABILITY FAILURE / PUBLISH UPDATES FAILURE / PUBLIC APP FAILURE
+
+INITIAL PUBLISH
+- clicks:
+- source revision:
+- HTTP:
+- release ID:
+- immutable script:
+- slug:
+- public URL:
+- route:
+- release count:
+
+INITIAL PUBLIC APP
+- HTTP:
+- CRM:
+- backend API:
+- seeded data:
+- dashboard:
+- search:
+- sorting:
+- filtering:
+- newest leads:
+- lead details:
+- Notes:
+- Activity Timeline:
+- console:
+- result:
+
+NEW CUSTOMER EDIT
+- instructions:
+- starting revision:
+- Think turns:
+- continuations:
+- new revision:
+- finish_task:
+- completion:
+- private preview:
+- Recent Activity:
+- regression:
+- result:
+
+PRE-PUBLISH ISOLATION
+- public URL:
+- public release:
+- original script:
+- Recent Activity visible before Publish Updates:
+- isolation result:
+
+PUBLISH UPDATES
+- clicks:
+- HTTP:
+- release ID:
+- revision:
+- immutable script:
+- route switched:
+- stable slug:
+- stable URL:
+- old script preserved:
+- release count:
+
+UPDATED PUBLIC APP
+- HTTP:
+- Recent Activity:
+- backend:
+- lead details:
+- Notes:
+- Activity Timeline:
+- dashboard:
+- search/sort/filter:
+- console:
+- result:
+
+IMMUTABILITY
+- release 1:
+- release 2:
+- revisions differ:
+- scripts differ:
+- release 1 preserved:
+- release 2 current:
+- stable URL unchanged:
+- result:
+
+FULL CUSTOMER LOOP:
+PASS / FAIL
+
+PROJECT 9 CREATED:
+MUST BE NO
+
+PROJECT 5 TOUCHED:
+MUST BE NO
+
+INFRASTRUCTURE CHANGED:
+MUST BE NO unless an actual failure separately requires authorization
+
+Then STOP.
