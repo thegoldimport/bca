@@ -32,3 +32,15 @@ A native stream can have terminal metadata status `error` without an explicit er
 **Why:** A customer update produced a new commit, but its last native pass ended with error metadata, no error chunk, and no observed finish_task. Authentication subsequently blocked normal owner reads and sign-in; the evidence did not establish a common cause.
 
 **How to apply:** Inspect stream metadata independently of chunk-level errors, require the finish_task/controller completion gates before publishing, and keep native failure, session loss, and login failure separately attributable. Do not assume a successful earlier pass or new revision proves the whole operation completed.
+
+A green editor success badge is not authoritative evidence of native completion.
+
+**Why:** A later customer repair returned control with supported native lifecycle `BLOCKED`, while the editor claimed that the build, authoritative files, and preview were verified. The rendered app still had zero leads and a failing leads request.
+
+**How to apply:** Check the native lifecycle and rendered customer requirements independently of the badge. Keep a misleading status badge separate from generated-app defects, and do not publish a failed private repair.
+
+An operation ending `BLOCKED` does not by itself prove that customer iteration is blocked.
+
+**Why:** A subsequent normal customer correction was accepted, performed coding work, and created new private revisions after a `BLOCKED` result. The customer confirmed that remaining application defects should be handled through normal corrections, not automatic platform forensics.
+
+**How to apply:** Check whether the chat remains usable and a new customer request can start working. Keep application-health verification separate from operation status. If the basic data/API gate fails after control returns, stop without publishing or inspecting checkpoints.

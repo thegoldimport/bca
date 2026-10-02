@@ -76,3 +76,4 @@
 - [GitHub Git transport fallback](github-git-transport-fallback.md) — a healthy connected App can preserve exact Git objects when configured HTTPS push authentication fails.
 - [Sentry Worker test observation](sentry-worker-test-observation.md) — transitive core mocks may miss SDK calls; validate with a real client and memory transport.
 - [Customer-loop testing](customer-loop-testing.md) — let BuildCustom's agent repair generated-app bugs through normal customer chat; stop for actual platform blockers.
+- [Customer operation diagnosis](customer-operation-diagnosis.md) — distinguish stale queue errors from fresh counters; account metering must match admission policy.

@@ -1,0 +1,357 @@
+Continue the Project 8 customer acceptance test.
+
+Do NOT modify BuildCustom platform code.
+
+Do NOT investigate the previous operation internally.
+
+Do NOT manually edit the generated CRM.
+
+Do NOT manually repair /api/leads.
+
+Do NOT inspect or manipulate task checkpoints.
+
+Do NOT change resource limits.
+
+Do NOT fix the separate green "Build complete" vs BLOCKED UI issue yet.
+
+Do NOT publish anything yet.
+
+Do NOT start Hot Leads yet.
+
+Do NOT test revert yet.
+
+We are now testing the normal iterative customer workflow.
+
+==================================================
+CURRENT PLATFORM STATE
+==================================================
+
+Canonical:
+
+aaaa1749
+
+Production runtime:
+
+2ce0e373
+
+The operation/resource fix is accepted for purposes of this test.
+
+The latest customer repair request:
+
+- received a fresh operation
+- entered RUNNING normally
+- agent performed work
+- agent read files
+- agent created two new private revisions
+- did NOT immediately fail on stale operation limits
+- eventually returned control as BLOCKED
+
+That means we now treat the remaining CRM problems as GENERATED APP problems
+unless new evidence shows BuildCustom itself prevents another normal customer
+operation.
+
+Do not reopen the resource-accounting investigation.
+
+==================================================
+CURRENT CUSTOMER-VISIBLE PROBLEMS
+==================================================
+
+Private preview still has:
+
+- dashboard showing zero leads
+- leads not loading
+- /api/leads failing
+- Recent Activity card now exists but is empty
+- Add Lead opens and can be cancelled
+
+Public production remains healthy:
+
+- 12 leads
+- previous working release
+- both published releases unchanged
+
+Do not manually compare/fix generated source before giving the coding agent
+another chance.
+
+==================================================
+NORMAL CUSTOMER MESSAGE
+==================================================
+
+Through Project 8's NORMAL customer chat box, send exactly ONE new message:
+
+"The preview still isn't working. The dashboard shows zero leads, my leads
+aren't loading, and the Recent Activity card is empty. Please keep working on
+it until the existing CRM data loads again and Recent Activity actually shows
+the recent activity. Check the preview and fix any errors you find before you
+finish."
+
+Send exactly one user_suggestion.
+
+Do not add internal technical hints.
+
+Do not tell it:
+
+- which source files to edit
+- what Cloudflare export it needs
+- what Durable Objects are
+- what database implementation to use
+- what previous commit was good
+- what error we discovered previously
+
+Let BuildCustom's coding agent diagnose the application.
+
+==================================================
+LET THE AGENT WORK
+==================================================
+
+Allow the normal BuildCustom workflow to proceed.
+
+The agent may:
+
+- inspect its project
+- read files
+- inspect errors
+- edit code
+- build
+- deploy private revisions
+- open/check preview
+- discover another error
+- fix it
+- check again
+- use normal internal continuations
+- create additional private revisions
+
+Do NOT stop because an intermediate generated-app attempt fails.
+
+That is normal coding-agent behavior.
+
+Do NOT intervene in its code.
+
+==================================================
+WHEN THE AGENT RETURNS CONTROL
+==================================================
+
+Check the PRIVATE preview as a normal customer.
+
+First establish the basic application health:
+
+1. /api/leads returns successfully
+2. the existing 12 leads load
+3. dashboard counts/data populate
+
+If those three fail:
+
+STOP.
+
+Do NOT enter platform forensics.
+
+Do NOT manually inspect/fix generated source.
+
+Return:
+
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX
+
+unless BuildCustom itself prevented the new customer operation from functioning.
+
+If basic data loading works, continue checking:
+
+- Five Newest Leads populated
+- search
+- sorting
+- filtering
+- Add Lead
+- lead details
+- all seven existing lead fields
+- Notes
+- Activity Timeline
+- Recent Activity card
+- Recent Activity contains actual events
+- lead name shown
+- activity type shown
+- date/time shown
+- dark navy styling retained
+- no application-breaking console error
+
+Use non-destructive verification where possible.
+
+==================================================
+IMPORTANT PRODUCT PHILOSOPHY
+==================================================
+
+Do NOT classify imperfect generated code as PLATFORM FAILURE.
+
+Examples:
+
+Agent writes a bad API route:
+GENERATED APP FAILURE.
+
+Agent forgets to populate Recent Activity:
+GENERATED APP FAILURE.
+
+Agent introduces a JavaScript bug:
+GENERATED APP FAILURE.
+
+Agent's first repair doesn't work:
+GENERATED APP FAILURE.
+
+These are fixed by another normal customer conversation.
+
+PLATFORM FAILURE means something like:
+
+- new customer message cannot start
+- new operation incorrectly inherits exhausted limits
+- agent cannot access its project
+- workspace corrupts
+- private preview infrastructure fails on otherwise-valid generated code
+- auth breaks
+- customer cannot continue chatting
+- lifecycle machinery permanently traps the project
+- publishing/revision system fails
+
+==================================================
+BLOCKED STATUS
+==================================================
+
+Do not investigate BLOCKED internally during this task.
+
+Simply record:
+
+- previous operation ended BLOCKED
+- whether the chat input remained usable
+- whether THIS new customer message was accepted
+- whether it received a fresh operation
+- whether the agent actually worked
+
+If another normal customer message can start and work, BLOCKED is not preventing
+the iterative customer workflow.
+
+We can clean up status semantics later.
+
+==================================================
+IF THIS REPAIR PASSES
+==================================================
+
+If the private CRM now works:
+
+Publish Updates ONCE through the normal customer UI.
+
+Then verify:
+
+- new immutable release
+- release count increments by one
+- stable public URL unchanged
+- public /api/leads returns JSON
+- 12 leads load
+- Recent Activity works publicly
+- previous releases remain immutable
+
+Then continue the customer-product test:
+
+1. send the normal Hot Leads request
+2. let agent work
+3. verify private app
+4. Publish Updates
+5. verify public app
+6. test customer-facing revert to the release before Hot Leads
+7. verify public app reverted
+8. verify newer release remains in history
+9. verify whether customer can continue editing from reverted state
+
+==================================================
+IF THIS REPAIR STILL DOES NOT PASS
+==================================================
+
+If BuildCustom successfully accepts the message and the agent performs normal
+coding work but the generated CRM is still wrong:
+
+STOP.
+
+Return:
+
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX
+
+Tell us only what remains visibly broken.
+
+Do NOT launch another forensic investigation automatically.
+
+We can simply give the agent another customer correction.
+
+That is the product workflow we're testing.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+CUSTOMER REPAIR PASS /
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX /
+PLATFORM FAILURE /
+FULL CUSTOMER LOOP PASS
+
+CUSTOMER ITERATION
+- previous BLOCKED state:
+- chat usable:
+- instructions sent:
+- new operation started:
+- fresh operation:
+- agent worked:
+- internal passes:
+- private revisions created:
+- final lifecycle:
+- customer returned control:
+- result:
+
+PRIVATE APP
+- /api/leads:
+- lead count:
+- dashboard:
+- Five Newest:
+- search:
+- sorting:
+- filtering:
+- Add Lead:
+- lead details:
+- seven fields:
+- Notes:
+- Activity Timeline:
+- Recent Activity card:
+- Recent Activity populated:
+- lead name:
+- activity type:
+- date/time:
+- console:
+- result:
+
+PUBLISH
+- performed:
+- release:
+- release count:
+- stable URL:
+- public app:
+- previous releases:
+- result:
+
+HOT LEADS
+- performed:
+- result:
+
+REVERT
+- performed:
+- result:
+
+PLATFORM FAILURES:
+[only actual BuildCustom platform failures]
+
+GENERATED APP ISSUES:
+[customer-visible generated-app issues]
+
+MANUAL GENERATED-SOURCE EDITS:
+MUST BE ZERO
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

@@ -1,0 +1,118 @@
+{
+  "overallStatus": "GENERATED APP NEEDS ANOTHER CUSTOMER FIX",
+  "canonical": "aaaa1749c96d3c6f2a80f77a71c550d6db362b51",
+  "runtime": {
+    "previous": "76484c0e-ff6d-42ae-865e-2c51d2c39837",
+    "current": "2ce0e373-1a98-471c-b21f-3b66d28c4d73",
+    "rollbackTarget": "76484c0e-ff6d-42ae-865e-2c51d2c39837",
+    "activePercent": 100
+  },
+  "unchanged": [
+    "control",
+    "gateway",
+    "publisher",
+    "marketing",
+    "Project 5"
+  ],
+  "project9Created": false,
+  "limits": {
+    "maxSteps": 25,
+    "thinkTurns": 5,
+    "maxContinuations": 4,
+    "maxCredits": 250,
+    "maxElapsedMs": 900000
+  },
+  "tests": {
+    "customerOperation": 10,
+    "runtimeFiles": 61,
+    "passed": 682,
+    "skipped": 1,
+    "typecheck": "PASS",
+    "build": "PASS",
+    "workerDryRun": "PASS",
+    "canonicalReconstruction": "PASS, 863 paths",
+    "control": "Not changed; not rerun",
+    "duplicateScope": "Same persisted queue identity, including historical completed-task replay; unkeyed network retransmission not verified"
+  },
+  "repair": {
+    "instructionCount": 1,
+    "exactRequestedPrompt": true,
+    "historicalAttemptConfirmed": true,
+    "editorReady": true,
+    "persistedTurnId": 5,
+    "persistedQueueIdentity": "conv-1790977451157-zox2fz0",
+    "operationId": "think-queue:conv-1790977451157-zox2fz0",
+    "operationIdEvidence": "Derived using deployed deterministic identity function from observed persisted host queue; private Think operation record remains protected",
+    "acceptedAt": 1790977448410,
+    "firstRunningLifecycleAt": 1790977451310,
+    "endedAt": "2026-10-02T21:48:08.993Z",
+    "finalLifecycle": "BLOCKED",
+    "newPrivateRevisions": [
+      "d68f24fd6d0c9dfd3b79b040eeb57de956f610d0",
+      "dc231ef74fe4e9b648c11219e9f038f1335927c9"
+    ],
+    "finalPrivateRevision": "dc231ef74fe4e9b648c11219e9f038f1335927c9",
+    "immediateResourceStop": false,
+    "exactLiveResourceCounters": "Not independently read from protected native KV",
+    "freshInitialization": "Unit tests prove zero counters and fresh elapsed window",
+    "internalPassCount": "Not independently counted"
+  },
+  "privateApp": {
+    "backend": "FAIL: leads fetch fails",
+    "leadsApi": "Failed to fetch in private generated-app frame",
+    "existingLeads": 0,
+    "expectedLeads": 12,
+    "dashboard": "FAIL: zero totals",
+    "fiveNewest": "FAIL: empty",
+    "search": "Control present, data-backed behavior blocked",
+    "sorting": "Data-backed behavior blocked",
+    "filtering": "Controls present, data-backed behavior blocked",
+    "addLead": "PASS: form opens and cancels; no record created",
+    "tableHeaders": [
+      "Lead Name",
+      "Company",
+      "Status",
+      "Source",
+      "Estimated Value",
+      "Created Date",
+      "Actions"
+    ],
+    "sevenFields": "Contact/email controls remain in Add Lead form; existing-row field verification blocked by missing leads",
+    "notes": "Input present in Add Lead form; existing-lead functionality blocked",
+    "activityTimeline": "Blocked by missing leads",
+    "recentActivity": "Card added, but empty; event content requirements not verified",
+    "darkNavy": "Retained",
+    "console": "Private fetch fails; clean-console acceptance not established"
+  },
+  "publicApp": {
+    "release": 5,
+    "releaseCount": 2,
+    "releasesUnchanged": true,
+    "leadsApiStatus": 200,
+    "leadsApiContentType": "application/json",
+    "leadCount": 12
+  },
+  "publishChangeRevert": {
+    "firstRepairedPublish": "NOT RUN",
+    "hotLeadsChange": "NOT RUN",
+    "secondPublish": "NOT RUN",
+    "revert": "NOT RUN",
+    "continuedEditingAfterRevert": "NOT RUN",
+    "reason": "Private repair failed; required publish gate held"
+  },
+  "platformFailures": {
+    "fixed": [
+      "Think metering disagreed with disabled admission policy",
+      "Older queued resource error could stop latest customer UI"
+    ],
+    "observedUnfixed": [
+      "Editor shows green verified-success badge with supported lifecycle BLOCKED"
+    ]
+  },
+  "generatedAppIssues": [
+    "Private leads request fails",
+    "Existing 12 leads missing from private app",
+    "Dashboard, newest leads, and Recent Activity are empty"
+  ],
+  "sourceTraceLimits": "Original exact private task checkpoint, timer and credits value could not be read safely; retained diagnostics showed a fresh two-call operation after an older exhausted one."
+}

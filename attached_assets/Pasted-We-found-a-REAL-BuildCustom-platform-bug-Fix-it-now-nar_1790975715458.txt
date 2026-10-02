@@ -1,0 +1,645 @@
+We found a REAL BuildCustom platform bug.
+
+Fix it now, narrowly, then continue the normal Project 8 customer test.
+
+Do NOT investigate Cloudflare architecture again.
+
+Do NOT manually repair the generated CRM.
+
+Do NOT manually edit Project 8 source.
+
+Do NOT increase the configured limits.
+
+Do NOT reset the whole conversation/workspace.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+THE BUG
+==================================================
+
+Project 8 had an older customer operation that consumed substantial resources.
+
+Later, through the NORMAL BuildCustom customer UI, we sent a BRAND-NEW customer
+message:
+
+"The preview is broken now. My leads aren't loading and the Recent Activity
+card I asked for still isn't showing. Please fix the app, make sure my existing
+CRM functionality still works, and verify everything is working before you
+finish."
+
+Exactly one new user_suggestion was persisted.
+
+Timestamp:
+
+2026-10-02 21:07:24 UTC
+
+BuildCustom accepted the new customer message.
+
+But instead of giving this NEW customer operation a fresh operation budget, it
+immediately stopped before observable coding work.
+
+Customer-visible reason:
+
+Think operation stopped: elapsed_time_limit
+
+Supported status:
+
+INCOMPLETE_RESOURCE_LIMIT
+reason: available_credits_limit
+
+Generation returned idle.
+
+Private revision remained:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+THIS IS A PLATFORM BUG.
+
+==================================================
+EXPECTED PRODUCT SEMANTICS
+==================================================
+
+Resource limits belong to ONE CUSTOMER OPERATION.
+
+They do NOT belong permanently to:
+
+- the project
+- the workspace
+- the agent
+- the conversation
+
+A customer must be able to do:
+
+CUSTOMER MESSAGE 1
+→ fresh operation
+→ up to configured operation limits
+→ operation completes/stops
+
+CUSTOMER MESSAGE 2
+→ NEW fresh operation
+→ SAME conversation
+→ SAME project
+→ SAME workspace
+→ SAME existing files
+→ NEW operation counters/budget
+
+CUSTOMER MESSAGE 3
+→ another fresh operation
+
+etc.
+
+This is fundamental to BuildCustom.
+
+Users will constantly say:
+
+"change this"
+
+"fix that"
+
+"make this button bigger"
+
+"that broke, fix it"
+
+"add another page"
+
+Each NEW customer message must be able to start another coding operation.
+
+==================================================
+IMPORTANT DISTINCTION
+==================================================
+
+INTERNAL CONTINUATIONS of one customer request:
+
+SHARE the same operation budget.
+
+NEW CUSTOMER MESSAGE:
+
+starts a NEW operation budget.
+
+Therefore:
+
+One customer request may use:
+
+maxSteps per Think pass = 25
+Think turns = 5
+internal continuations = 4
+credits = 250
+elapsed = 900000 ms
+
+If that operation exhausts those limits, it stops.
+
+But when the customer later sends another genuine new user_suggestion:
+
+the new operation starts with fresh:
+
+- elapsed timer
+- credit accounting
+- Think-turn accounting
+- continuation accounting
+- model-call accounting
+- tool-call accounting where operation-scoped
+- progress/no-progress state where operation-scoped
+- completion state
+- terminal/resource-limit state
+
+while preserving:
+
+- project
+- conversation history
+- workspace
+- files
+- Git history
+- current revision
+- private preview state
+- customer context
+
+==================================================
+PART 1 — FIND THE EXACT BUG
+==================================================
+
+Trace the new Project 8 customer submission at:
+
+2026-10-02 21:07:24 UTC
+
+Determine:
+
+- new persisted customer turn identity
+- conversation identity
+- task identity selected
+- whether beginTask() returned RESUME or START_NEW
+- task-operation checkpoint selected
+- operation start timestamp used
+- credits-used value used
+- Think-turn count used
+- continuation count used
+- model/tool counters used
+- terminal/resource-limit state inherited
+- exact guard that stopped execution
+
+Explain why a NEW customer message inherited or collided with old operation
+resource state.
+
+Also explain the disagreement:
+
+customer-visible:
+elapsed_time_limit
+
+supported status:
+available_credits_limit
+
+Find the source of truth and why the two surfaces diverged.
+
+Do not stop after diagnosis.
+
+==================================================
+PART 2 — FIX OPERATION BOUNDARIES
+==================================================
+
+Implement the smallest correct fix.
+
+A NEW persisted customer user_suggestion must create/select a NEW operation
+identity.
+
+The operation identity must distinguish separate customer requests even when
+they occur in:
+
+- same project
+- same agent
+- same conversation
+- same workspace
+
+Internal continuations must continue using the SAME operation identity.
+
+Do NOT solve this by generating a new conversation for every message.
+
+Do NOT create a new workspace.
+
+Do NOT wipe chat history.
+
+Do NOT wipe Git history.
+
+Do NOT simply raise limits.
+
+Do NOT special-case Project 8.
+
+==================================================
+PART 3 — FRESH RESOURCE ACCOUNTING
+==================================================
+
+For a NEW customer operation prove initialization of:
+
+credits used = 0
+
+Think turns used = 0
+
+continuations used = 0
+
+operation elapsed timer = fresh operation start
+
+operation completion state = fresh
+
+resource-limit terminal state = none
+
+Other operation-scoped counters should likewise initialize appropriately.
+
+Configured ceilings remain exactly:
+
+maxSteps = 25 per Think pass
+Think turns = 5
+maxContinuations = 4
+maxCredits = 250
+maxElapsedMs = 900000
+
+Do not increase them.
+
+==================================================
+PART 4 — INTERNAL CONTINUATION REGRESSION
+==================================================
+
+Do NOT break the continuous-coding behavior we already proved.
+
+Within ONE customer operation:
+
+pass 1
+→ internal continuation
+→ pass 2
+→ internal continuation
+→ etc.
+
+must continue sharing:
+
+- operation identity
+- resource counters
+- elapsed window
+- progress state
+- completion state
+
+A model must NOT obtain a fresh 250 credits by internally continuing.
+
+Only a genuinely new persisted customer input starts a new operation.
+
+==================================================
+PART 5 — IDEMPOTENCY / DUPLICATE DELIVERY
+==================================================
+
+Protect against duplicate submission/replay.
+
+The SAME customer turn delivered twice must NOT create two fresh operations.
+
+Operation identity should be deterministically associated with the persisted
+customer turn/request identity.
+
+Prove:
+
+new customer turn A
+→ operation A
+
+internal continuation A
+→ operation A
+
+duplicate/replay of customer turn A
+→ operation A, NOT another fresh budget
+
+new customer turn B
+→ operation B with fresh budget
+
+==================================================
+PART 6 — RESOURCE REASON CONSISTENCY
+==================================================
+
+Fix the contradictory limit reporting if it is part of the same state problem.
+
+There must be one authoritative terminal/resource-limit reason for an operation.
+
+If credits stop it:
+
+customer UI/status should report credits.
+
+If elapsed time stops it:
+
+customer UI/status should report elapsed time.
+
+Do not allow one operation to simultaneously surface stale:
+
+elapsed_time_limit
+
+while supported status reports:
+
+available_credits_limit
+
+unless both genuinely occurred and the product has an explicit deterministic
+precedence rule.
+
+Prefer reporting the actual first terminal cause.
+
+==================================================
+PART 7 — TESTS
+==================================================
+
+Add focused tests for the actual customer workflow.
+
+TEST A — NEW MESSAGE AFTER CREDIT EXHAUSTION
+
+operation A consumes/exhausts credits
+
+customer sends new persisted message B
+
+require:
+
+operation B != operation A
+credits B = 0
+turns B = 0
+continuations B = 0
+fresh elapsed timer
+B can start coding
+
+TEST B — NEW MESSAGE AFTER ELAPSED LIMIT
+
+operation A reaches elapsed limit
+
+new customer message B
+
+require fresh operation B and successful start
+
+TEST C — INTERNAL CONTINUATION
+
+operation A internal continuation
+
+require SAME operation ID and accumulated counters
+
+TEST D — DUPLICATE CUSTOMER DELIVERY
+
+same persisted customer turn delivered twice
+
+require SAME operation identity
+no fresh second budget
+
+TEST E — SAME CONVERSATION
+
+two different customer messages in same conversation
+
+require separate operation IDs but preserved conversation/workspace
+
+TEST F — RESOURCE REASON
+
+credit exhaustion reports credit reason consistently
+
+elapsed exhaustion reports elapsed reason consistently
+
+TEST G — EXISTING CONTINUOUS CODING
+
+preserve existing 25-step continuation behavior.
+
+Run relevant:
+
+- task-operation tests
+- lifecycle tests
+- resource-budget tests
+- continuation tests
+- pending-chat tests
+- conversation tests
+- runtime suite
+- control tests if touched
+- typecheck
+- build
+- Worker dry-run
+
+==================================================
+PART 8 — CANONICAL SOURCE / DEPLOYMENT
+==================================================
+
+If tests pass:
+
+commit and push the fix to canonical GitHub.
+
+Be aware that the repository previously had an unconditional marketing
+production workflow on main pushes.
+
+If that workflow still exists unchanged, use the safest supported process to
+avoid an unrelated marketing production deployment.
+
+Do not make unrelated marketing changes.
+
+Deploy ONLY the BuildCustom component(s) required for this operation-boundary
+fix.
+
+Record previous/new versions and rollback targets.
+
+Do not deploy generated Project 8 code manually.
+
+==================================================
+PART 9 — VERIFY WITH A CONTROLLED NORMAL CUSTOMER MESSAGE
+==================================================
+
+After deployment, DO NOT immediately resend anything.
+
+First confirm through supported state that the failed repair attempt remains
+historical and the editor can accept a NEW customer operation.
+
+Then send exactly ONE new normal customer instruction through Project 8:
+
+"Please continue fixing the preview. My leads still aren't loading and the
+Recent Activity card is still missing. Make sure the existing CRM features keep
+working, verify the app when you're done, and fix any errors you encounter
+before finishing."
+
+This is intentionally a NEW customer request.
+
+It SHOULD receive a fresh operation budget.
+
+Count it as exactly one customer instruction.
+
+==================================================
+PART 10 — LET THE AGENT WORK
+==================================================
+
+Let BuildCustom operate normally.
+
+Do NOT manually assist the generated code.
+
+The agent may:
+
+- inspect files
+- diagnose the broken backend
+- edit
+- build
+- preview
+- encounter errors
+- inspect those errors
+- fix them
+- continue internally
+- verify again
+
+Do not stop on an intermediate generated-app error.
+
+Stop only on another actual BuildCustom platform blocker.
+
+==================================================
+PART 11 — VERIFY REPAIR
+==================================================
+
+When the agent returns control, inspect the private app.
+
+Require:
+
+- backend loads
+- /api/leads works
+- existing 12 leads load
+- dashboard data loads
+- Five Newest works
+- search works
+- sorting works
+- filtering works
+- Add Lead exists
+- lead details work
+- seven fields exist
+- Notes work
+- Activity Timeline works
+- Recent Activity card exists
+- placed underneath Five Newest Leads
+- up to five recent activity events
+- lead name
+- activity type
+- date/time
+- dark navy design retained
+- no application-breaking console error
+
+If generated code is still imperfect but BuildCustom successfully returned
+control:
+
+DO NOT diagnose platform internals.
+
+Report:
+
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX
+
+and describe the customer-visible defect.
+
+That is acceptable product behavior.
+
+==================================================
+PART 12 — IF REPAIR PASSES, CONTINUE CUSTOMER LOOP
+==================================================
+
+ONLY if the private repair passes:
+
+Publish Updates once through normal customer UI.
+
+Verify immutable release and public app.
+
+Then continue the previously defined customer loop:
+
+1. send normal Hot Leads change
+2. agent works
+3. verify private
+4. Publish Updates
+5. verify public
+6. test customer-facing revert to the release before Hot Leads
+7. verify old release restored without mutating immutable artifacts
+8. verify whether editing can continue from reverted state
+
+Do NOT invent forensic gates between these normal customer actions.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+FULL CUSTOMER LOOP PASS / OPERATION-BOUNDARY FIX PASS /
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX /
+PLATFORM FAILURE / TEST FAILURE / DEPLOYMENT FAILURE
+
+ROOT CAUSE
+- old operation:
+- new customer turn:
+- operation identity collision:
+- inherited credits:
+- inherited elapsed:
+- exact stopping guard:
+- reason disagreement:
+- proven cause:
+
+FIX
+- operation identity rule:
+- new-message behavior:
+- continuation behavior:
+- duplicate behavior:
+- resource initialization:
+- reason consistency:
+
+TESTS
+- new after credits:
+- new after elapsed:
+- continuation:
+- duplicate delivery:
+- same conversation:
+- reason consistency:
+- runtime:
+- control:
+- typecheck:
+- build:
+- dry-run:
+- result:
+
+DEPLOYMENT
+- canonical:
+- previous runtime:
+- new runtime:
+- control changed:
+- gateway changed:
+- publisher changed:
+- marketing changed:
+- result:
+
+NORMAL CUSTOMER REPAIR
+- new instruction count:
+- new operation ID:
+- fresh credits:
+- fresh elapsed:
+- agent started:
+- internal passes:
+- edits:
+- agent self-corrected:
+- final private revision:
+- result:
+
+PRIVATE APP
+- backend:
+- /api/leads:
+- 12 leads:
+- dashboard:
+- Five Newest:
+- search:
+- sorting:
+- filtering:
+- Add Lead:
+- lead details:
+- Notes:
+- Activity Timeline:
+- Recent Activity:
+- result:
+
+PUBLISH / CHANGE / REVERT LOOP
+- first repaired publish:
+- Hot Leads change:
+- second publish:
+- revert:
+- continue after revert:
+- result:
+
+PLATFORM FAILURES:
+[list only actual BuildCustom failures]
+
+GENERATED APP ISSUES:
+[list separately]
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.
