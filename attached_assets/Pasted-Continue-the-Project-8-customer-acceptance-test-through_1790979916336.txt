@@ -1,0 +1,495 @@
+Continue the Project 8 customer acceptance test through the NORMAL BuildCustom
+customer workflow.
+
+Do NOT modify BuildCustom platform code.
+
+Do NOT manually inspect or repair generated source through Replit.
+
+Do NOT diagnose the generated backend outside BuildCustom.
+
+Do NOT manipulate checkpoints or lifecycle state.
+
+Do NOT change resource limits.
+
+Do NOT publish unless the repaired private application actually works.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+CURRENT STATE
+==================================================
+
+The previous customer iteration was successful as a BuildCustom workflow:
+
+- customer sent one normal correction
+- a fresh operation started
+- agent worked normally
+- three private revisions were created
+- customer regained control
+- chat remains usable
+
+Current private revision:
+
+f6eaace1bf1b7aec418be972a7354dc3cc5d79c7
+
+The generated application improved substantially.
+
+Customer-visible state:
+
+- dashboard visibly shows 12 leads
+- dashboard counts and financial totals populate
+- Five Newest Leads is populated
+- Recent Activity card exists
+- Recent Activity is populated
+- entries visibly contain lead name
+- activity type is visible
+- date/time is visible
+
+But:
+
+- private /api/leads still fails to fetch
+
+Therefore this is currently classified as:
+
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX
+
+No BuildCustom platform failure was established by the previous iteration.
+
+==================================================
+SEND ONE NORMAL CUSTOMER MESSAGE
+==================================================
+
+Through Project 8's normal customer chat box send exactly ONE message:
+
+"The app is looking much better now, but something is still broken. The leads
+show on the dashboard, but /api/leads is still failing when the app tries to
+fetch it. Please fix that remaining issue and then check the whole CRM to make
+sure everything works together before you finish."
+
+Do not add technical instructions.
+
+Do not tell the agent:
+
+- which file to edit
+- which backend architecture to use
+- what Cloudflare requires
+- what Durable Objects are
+- what previous revisions contained
+- what code Replit thinks is wrong
+- how to implement the fix
+
+The BuildCustom coding agent must inspect and repair its own generated
+application.
+
+==================================================
+LET THE AGENT WORK
+==================================================
+
+Allow the normal BuildCustom coding workflow to run.
+
+The agent may:
+
+- inspect files
+- inspect its application
+- inspect preview errors
+- edit code
+- build
+- create private revisions
+- test APIs
+- test the browser
+- encounter intermediate errors
+- repair those errors
+- use internal continuations
+- verify again
+
+Do not intervene because an intermediate attempt fails.
+
+Do not manually assist its coding.
+
+Do not stop merely because lifecycle eventually says BLOCKED if the customer
+has regained control and the generated application can still be inspected.
+
+Record the lifecycle result, but judge the generated application separately.
+
+==================================================
+WHEN THE AGENT RETURNS CONTROL
+==================================================
+
+Now test the WHOLE private CRM as a customer.
+
+Do not stop at the first failed check.
+
+We want a complete customer-visible picture of the resulting application.
+
+Verify:
+
+BACKEND
+
+- /api/leads responds
+- response is the application's expected API response
+- 12 existing leads are available
+- no private-preview routing corruption
+- no application-breaking API error
+
+DASHBOARD
+
+- dashboard renders
+- total leads is correct
+- financial totals populate
+- pipeline/status counts populate
+- Five Newest Leads contains five leads
+- Recent Activity card exists
+- Recent Activity is populated
+- lead name shown
+- activity type shown
+- date/time shown
+
+LEADS
+
+- Leads Database opens
+- 12 existing leads visible
+- search works
+- ascending sorting works
+- descending sorting works
+- filtering works
+
+LEAD DETAILS
+
+Open an existing lead.
+
+Verify all seven expected fields remain available.
+
+Verify:
+
+- lead details render
+- Notes works
+- existing notes/activity remain accessible
+- Activity Timeline renders
+
+Do not unnecessarily alter existing customer data.
+
+ADD / EDIT / DELETE
+
+Perform a minimal temporary customer test only if needed.
+
+If used:
+
+- create one uniquely named temporary lead
+- verify it appears
+- edit it
+- verify edit persists
+- delete it
+- verify deletion
+- confirm original 12 leads remain
+
+Clean up the temporary record.
+
+RECENT ACTIVITY
+
+After normal application interaction, verify Recent Activity still behaves
+coherently and does not break the rest of the CRM.
+
+CONSOLE
+
+Check for application-breaking errors.
+
+Do not fail merely for harmless development/CDN warnings.
+
+==================================================
+CLASSIFY THE RESULT CORRECTLY
+==================================================
+
+If BuildCustom accepted the message, the coding agent worked, returned control,
+and the generated app still has defects:
+
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX
+
+That is NOT automatically a platform failure.
+
+Report all remaining customer-visible defects together.
+
+Do not launch forensic investigation.
+
+If BuildCustom itself prevents the normal customer iteration from happening,
+report:
+
+PLATFORM FAILURE
+
+and stop.
+
+==================================================
+IF THE PRIVATE CRM PASSES
+==================================================
+
+If the entire private CRM works:
+
+Publish Updates exactly ONCE through the normal BuildCustom customer UI.
+
+Do not publish manually.
+
+Verify:
+
+- new immutable release created
+- release count changes from 2 to 3
+- stable public URL remains unchanged
+- public app loads
+- public /api/leads works
+- public app contains the 12 leads
+- dashboard works
+- Recent Activity works
+- previous releases 4 and 5 remain preserved
+- previous immutable scripts were not modified
+
+If public verification passes, continue immediately.
+
+==================================================
+NEXT NORMAL CUSTOMER CHANGE
+==================================================
+
+Send exactly ONE new customer instruction:
+
+"Add a small Hot Leads summary card to the dashboard that shows how many leads
+currently have Hot status. Keep it consistent with the existing dashboard
+design and make sure everything else keeps working."
+
+Let the BuildCustom agent work normally.
+
+Do not assist it manually.
+
+When it returns control, test the private application again.
+
+Verify:
+
+- Hot Leads card exists
+- value comes from actual lead data
+- existing dashboard works
+- leads work
+- Recent Activity works
+- lead details work
+- backend works
+
+If the generated app needs another correction:
+
+STOP and report:
+
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX
+
+Do not manually fix it.
+
+If it passes:
+
+Publish Updates exactly ONCE.
+
+Verify:
+
+- another immutable release
+- release count increments
+- stable URL unchanged
+- public Hot Leads card works
+- previous releases preserved
+
+==================================================
+THEN TEST REVERT
+==================================================
+
+Now behave like a customer who dislikes the latest published change.
+
+Use ONLY BuildCustom's customer-facing release/version functionality.
+
+Do not use Cloudflare directly.
+
+Do not manipulate KV.
+
+Do not manually alter release records.
+
+Attempt to revert to the immediately previous published version, the version
+that contains the repaired CRM + Recent Activity but predates Hot Leads.
+
+If there is NO customer-facing revert/restore feature:
+
+STOP.
+
+Return:
+
+REVERT FEATURE MISSING
+
+That is a real BuildCustom product gap.
+
+If revert exists, use it normally.
+
+Verify:
+
+- stable public URL remains unchanged
+- public application returns to selected older version
+- Recent Activity remains
+- Hot Leads disappears
+- older immutable artifact was not modified
+- newer immutable release still exists in history
+- release history remains intact
+
+==================================================
+CONTINUE AFTER REVERT
+==================================================
+
+After revert, inspect the normal editor.
+
+Do NOT send another AI instruction.
+
+Determine whether the customer can actually continue building from the
+reverted version.
+
+Verify:
+
+- editor usable
+- private workspace corresponds to the reverted version
+- private preview corresponds to reverted version
+- source revision corresponds to reverted version
+- future customer work would branch from the reverted state
+
+If revert changes ONLY public routing while the editor remains on the newer
+source, record:
+
+PUBLIC-ONLY REVERT
+
+Do not silently treat that as full source/workspace restore.
+
+==================================================
+IMPORTANT
+==================================================
+
+We are no longer trying to prove that the coding agent never makes mistakes.
+
+We are proving this customer loop:
+
+PROMPT
+→ BUILD
+→ CHECK
+→ CUSTOMER CORRECTION
+→ FIX
+→ CHECK
+→ CUSTOMER CORRECTION
+→ FIX
+→ PUBLISH
+→ CHANGE
+→ PUBLISH
+→ REVERT
+→ CONTINUE BUILDING
+
+Generated-app mistakes are allowed inside that loop.
+
+BuildCustom must allow the customer to keep iterating.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+FULL CUSTOMER LOOP PASS /
+CUSTOMER REPAIR PASS /
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX /
+PLATFORM FAILURE /
+PUBLISH FAILURE /
+REVERT FEATURE MISSING /
+REVERT FAILURE
+
+CUSTOMER ITERATION
+- instructions sent:
+- new operation:
+- agent worked:
+- private revisions:
+- final lifecycle:
+- chat usable afterward:
+- result:
+
+PRIVATE BACKEND
+- /api/leads:
+- content:
+- lead count:
+- result:
+
+PRIVATE DASHBOARD
+- dashboard:
+- totals:
+- pipeline/status:
+- Five Newest:
+- Recent Activity:
+- lead name:
+- activity type:
+- date/time:
+- result:
+
+PRIVATE CRM
+- Leads Database:
+- search:
+- ascending sort:
+- descending sort:
+- filtering:
+- lead details:
+- seven fields:
+- Notes:
+- Activity Timeline:
+- Add Lead:
+- edit:
+- delete:
+- original 12 preserved:
+- console:
+- result:
+
+REPAIRED PUBLISH
+- performed:
+- release:
+- release count:
+- immutable script:
+- stable URL:
+- public /api/leads:
+- public CRM:
+- previous releases preserved:
+- result:
+
+HOT LEADS ITERATION
+- instruction:
+- agent worked:
+- private result:
+- publish:
+- release:
+- release count:
+- public result:
+
+REVERT
+- feature available:
+- selected release:
+- stable URL:
+- public version restored:
+- Recent Activity:
+- Hot Leads:
+- old artifact modified:
+- newer release preserved:
+- history preserved:
+- result:
+
+CONTINUE AFTER REVERT
+- editor:
+- workspace:
+- source revision:
+- private preview:
+- future work starts from reverted state:
+- result:
+
+PLATFORM FAILURES:
+[list only genuine BuildCustom failures]
+
+GENERATED APP ISSUES:
+[list separately]
+
+MANUAL GENERATED-SOURCE EDITS:
+MUST BE ZERO
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

@@ -43,4 +43,4 @@ An operation ending `BLOCKED` does not by itself prove that customer iteration i
 
 **Why:** A subsequent normal customer correction was accepted, performed coding work, and created new private revisions after a `BLOCKED` result. The customer confirmed that remaining application defects should be handled through normal corrections, not automatic platform forensics.
 
-**How to apply:** Check whether the chat remains usable and a new customer request can start working. Keep application-health verification separate from operation status. If the basic data/API gate fails after control returns, stop without publishing or inspecting checkpoints.
+**How to apply:** Check whether the chat remains usable and a new customer request can start working. Keep application-health verification separate from operation status. Follow the user's requested verification scope: a whole-CRM check continues after a failed basic data/API gate and reports the remaining customer-visible defects together. Failed private verification blocks publishing; do not inspect checkpoints or enter platform forensics to repair generated-app defects.
