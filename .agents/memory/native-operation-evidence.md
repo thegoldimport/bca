@@ -26,3 +26,9 @@ Separate a chat RPC resolving from successful model execution. A callback-delive
 **Why:** A zero-step failed continuation increased the completed-pass counter even though its journal had no completed assistant message. Retained production diagnostics located the failure in a cumulative-resource guard before provider invocation.
 
 **How to apply:** Correlate pass counters with stream statuses and step markers. Starting a stream does not prove a provider request was reached. Match retained stack locations to the active deployed bundle when private lifecycle getters have no safe owner endpoint; never bypass protected KV to obtain them.
+
+A native stream can have terminal metadata status `error` without an explicit error chunk. A partial source commit or private deploy call does not turn that into accepted completion.
+
+**Why:** A customer update produced a new commit, but its last native pass ended with error metadata, no error chunk, and no observed finish_task. Authentication subsequently blocked normal owner reads and sign-in; the evidence did not establish a common cause.
+
+**How to apply:** Inspect stream metadata independently of chunk-level errors, require the finish_task/controller completion gates before publishing, and keep native failure, session loss, and login failure separately attributable. Do not assume a successful earlier pass or new revision proves the whole operation completed.

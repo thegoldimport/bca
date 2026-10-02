@@ -1,0 +1,35 @@
+{
+  "canonicalCommit": "646a599e1e022358d29ab47df750a3c11227d684",
+  "localRequestedChecks": "PASS",
+  "canonicalSourceReconstruction": "PASS: 862 source paths",
+  "noDeploymentRequirementSatisfied": false,
+  "marketingAutomation": {
+    "run": 37040149617,
+    "trigger": "canonical main ref update",
+    "status": "completed",
+    "conclusion": "success",
+    "productionUploadStep": "Upload marketing assets to existing Pages project",
+    "productionUploadConclusion": "success",
+    "productionUploadCompletedAt": "2026-10-02T17:22:08Z",
+    "cancelled": false,
+    "reasonNotCancelled": "Already completed when inspected"
+  },
+  "stagingAutomation": {
+    "run": 37040149652,
+    "status": "completed",
+    "conclusion": "failure",
+    "failedStep": "Run npm test",
+    "stagingDryRunStep": "skipped",
+    "failureDiagnosis": "Not investigated; stopped without further source or production changes"
+  },
+  "directRuntimeDeployment": false,
+  "project8Access": false,
+  "project8Changes": 0,
+  "thinkRpcChanges": 0,
+  "customerAiInstructions": 0,
+  "publishUpdates": 0,
+  "generatedAppNewReleases": 0,
+  "rollbackPerformed": false,
+  "furtherPushPerformed": false,
+  "evidenceFileCommitted": false
+}

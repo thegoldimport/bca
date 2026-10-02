@@ -14,3 +14,9 @@ Do not assume Cloudflare's ASSETS binding and worker-bundler's preview asset hel
 **Why:** Read-only comparison proved that Cloudflare SPA fallback returned the generated index for an API GET even with `Accept: application/json`; the preview helper only selected SPA fallback when Accept included `text/html`. An assets-first published adapter therefore intercepted the backend despite the backend code and storage binding being present. Removing the gateway's known metadata insertion yielded an exact generated-index match.
 
 **How to apply:** Compare non-HTML API requests at both execution paths and inspect the active deployed entry, not just local candidate source. A successful asset response is not proof of an actual static-file match. A packaging correction must preserve old release bytes; the source revision alone cannot distinguish a rebuilt artifact using a different publish adapter.
+
+The user accepted the initial full-stack production publishing lifecycle on 2026-10-02, before requesting a separate normal post-publish customer update test.
+
+**Why:** The corrected publication passed public backend/UI checks while preserving historical immutable artifacts. The subsequent customer update exposed native completion and authentication failures, not a newly proven published-routing failure.
+
+**How to apply:** Treat initial publication acceptance and later conversational-update acceptance as separate facts. Preserve the accepted publisher baseline when investigating a later agent or authentication failure unless new evidence and authorization require changing it.

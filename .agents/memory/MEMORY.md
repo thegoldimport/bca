@@ -74,3 +74,5 @@
 - [Non-AI smoke evidence](non-ai-smoke-evidence.md) — distinguish outgoing instructions from incoming replay; preserve one-login recovery state until all checks finish.
 - [Public generated API acceptance](public-generated-api-acceptance.md) — public HTML and route success can coexist with an API returning HTML; check body shape as a signed-out visitor.
 - [GitHub Git transport fallback](github-git-transport-fallback.md) — a healthy connected App can preserve exact Git objects when configured HTTPS push authentication fails.
+- [Sentry Worker test observation](sentry-worker-test-observation.md) — transitive core mocks may miss SDK calls; validate with a real client and memory transport.
+- [Customer-loop testing](customer-loop-testing.md) — let BuildCustom's agent repair generated-app bugs through normal customer chat; stop for actual platform blockers.

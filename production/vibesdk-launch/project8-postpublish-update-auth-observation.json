@@ -1,0 +1,23 @@
+{
+  "at": "2026-10-02T15:08:39.558Z",
+  "requests": {
+    "auth/me": {
+      "status": 200,
+      "authenticated": false
+    },
+    "projects/8": {
+      "status": 401
+    },
+    "projects/8/runtime/status": {
+      "status": 401
+    },
+    "projects/8/runtime/revision": {
+      "status": 401
+    }
+  },
+  "ui": {
+    "state": "recovering",
+    "stop": true,
+    "inputDisabled": true
+  }
+}

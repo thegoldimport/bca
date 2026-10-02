@@ -1,0 +1,532 @@
+We are changing the testing philosophy now.
+
+STOP treating Project 8 like a forensic infrastructure exercise.
+
+We are testing BuildCustom AS THE PRODUCT A CUSTOMER WILL ACTUALLY USE.
+
+A coding agent is allowed to make mistakes.
+
+The requirement is NOT:
+
+"the agent must always generate perfect code."
+
+The requirement IS:
+
+"user asks for work
+→ agent works
+→ user previews it
+→ if something is wrong, user tells the agent
+→ agent fixes it
+→ user checks again
+→ repeat as necessary
+→ user publishes
+→ user makes more changes
+→ publishes again
+→ user can revert to an older published version if needed
+→ continues working from that point."
+
+That is the product we need to prove.
+
+==================================================
+CURRENT PROJECT
+==================================================
+
+Continue using Project 8.
+
+Do NOT create Project 9.
+
+Do NOT manually edit Project 8 source.
+
+Do NOT repair generated source from Replit.
+
+Do NOT manipulate internal task checkpoints.
+
+Do NOT add another diagnostic endpoint.
+
+Do NOT manually change lifecycle state.
+
+Do NOT use Replit to code the CRM.
+
+BuildCustom's own coding agent must perform the repair.
+
+==================================================
+CURRENT PLATFORM STATE
+==================================================
+
+Production runtime:
+
+76484c0e-ff6d-42ae-865e-2c51d2c39837
+
+Auth:
+
+PASS
+
+Publishing:
+
+PASS
+
+Public Release 5:
+
+healthy
+
+Release count:
+
+2
+
+Public production currently remains the previous working CRM.
+
+Current private working revision:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+The current PRIVATE working version is broken.
+
+Known symptoms visible to a customer:
+
+- CRM preview loads
+- data does not load
+- dashboard shows empty/zero data
+- Recent Activity card requested previously is missing
+
+We happen to know from diagnosis that the generated backend was damaged, but
+DO NOT put the internal diagnosis into the customer instruction.
+
+The point is to test whether the agent can inspect and repair its own project.
+
+==================================================
+TEST 1 — NORMAL CUSTOMER REPAIR LOOP
+==================================================
+
+Open Project 8 through the normal authenticated BuildCustom customer UI.
+
+Use the normal chat/input box.
+
+Send EXACTLY ONE new customer instruction:
+
+"The preview is broken now. My leads aren't loading and the Recent Activity
+card I asked for still isn't showing. Please fix the app, make sure my existing
+CRM functionality still works, and verify everything is working before you
+finish."
+
+That is the ONLY customer instruction.
+
+Do NOT tell the agent:
+
+- which files to edit
+- that App extends DurableObject is missing
+- that SQLite was replaced
+- which commit caused it
+- how Cloudflare works
+- what code to write
+
+The coding agent should diagnose its own generated project.
+
+==================================================
+LET THE PRODUCT WORK
+==================================================
+
+After sending that instruction, allow BuildCustom's NORMAL existing coding
+workflow to run.
+
+This includes normal internal agent behavior such as:
+
+- reading files
+- inspecting code
+- editing files
+- building
+- using preview
+- inspecting errors
+- fixing errors
+- checking again
+- internal continuations
+- committing/deploying private working revisions
+- browser verification
+
+Do NOT intervene merely because the first attempted fix fails.
+
+If the agent sees an error and continues working on it:
+
+LET IT WORK.
+
+That is exactly what we're testing.
+
+Do NOT stop because:
+
+- an intermediate build fails
+- an intermediate preview fails
+- an intermediate API request fails
+- the agent needs another internal pass
+- the agent edits the wrong thing and then corrects itself
+
+Only stop for an actual PLATFORM failure preventing the normal customer loop
+from continuing.
+
+==================================================
+WHAT COUNTS AS PLATFORM FAILURE
+==================================================
+
+Examples:
+
+- customer instruction cannot be sent
+- agent cannot start
+- agent gets permanently stuck due to BuildCustom lifecycle machinery
+- private preview infrastructure cannot serve otherwise-valid generated code
+- agent cannot access its own files/tools
+- normal continuation machinery breaks
+- auth breaks
+- workspace/revision corruption occurs
+- the UI permanently prevents the customer from continuing
+- a BuildCustom platform exception prevents the agent from doing its job
+
+A GENERATED APPLICATION BUG is NOT automatically a platform failure.
+
+The agent should be allowed to fix generated application bugs.
+
+==================================================
+AFTER AGENT STOPS
+==================================================
+
+When BuildCustom's agent says it is finished or returns control to the user,
+inspect the private preview like a normal customer.
+
+Do NOT require perfection beyond the customer's requested functionality.
+
+Verify:
+
+- CRM loads
+- existing 12 leads load
+- dashboard data loads
+- Five Newest Leads works
+- search works
+- sorting works
+- filtering works
+- Add Lead still exists
+- lead details still work
+- seven lead fields still exist
+- Notes still work
+- Activity Timeline still works
+- Recent Activity card exists
+- Recent Activity is underneath Five Newest Leads
+- it shows up to five recent activity events
+- each displayed event has lead name
+- activity type
+- date/time
+- visual style remains consistent with dark navy CRM
+- generated backend responds normally
+- no application-breaking console error
+
+Do not mutate production data unnecessarily.
+
+If a tiny normal customer-created test record is absolutely required to verify
+a feature, clean it up afterward.
+
+==================================================
+IF SOMETHING IS STILL WRONG
+==================================================
+
+THIS IS IMPORTANT.
+
+If the agent finishes but the app is still wrong:
+
+DO NOT GO BACK INTO FORENSICS.
+
+DO NOT MANUALLY FIX THE SOURCE.
+
+DO NOT CHANGE PLATFORM CODE merely because generated code is imperfect.
+
+Instead report exactly what a normal customer would see.
+
+We will send another normal conversational customer instruction such as:
+
+"Everything is working except Recent Activity isn't showing the activity type."
+
+Then the agent gets another chance to fix it.
+
+That is the product.
+
+==================================================
+IF PRIVATE APP WORKS
+==================================================
+
+If the repaired private version satisfies the request:
+
+use the NORMAL customer Publish Updates action exactly once.
+
+Do not publish through Replit or Cloudflare manually.
+
+Verify:
+
+- Publish Updates succeeds
+- new immutable release created
+- release count increments from 2 to 3
+- public stable URL remains the same
+- public site now serves the repaired version
+- public /api/leads returns backend JSON
+- 12 leads remain
+- Recent Activity is public
+- previous releases remain immutable
+
+This becomes Release 6 if that is the next actual release ID.
+
+Use the actual returned release ID rather than assuming.
+
+==================================================
+TEST 2 — MAKE ANOTHER CHANGE AFTER PUBLISH
+==================================================
+
+If publishing succeeds, stay in Project 8.
+
+Send ONE normal customer instruction:
+
+"Add a small 'Hot Leads' summary card to the dashboard that shows how many
+leads currently have Hot status. Keep it consistent with the existing dashboard
+design and make sure everything else keeps working."
+
+Let BuildCustom's agent perform the work normally.
+
+Again:
+
+agent can inspect
+agent can edit
+agent can preview
+agent can encounter errors
+agent can fix them
+agent can verify
+
+Do not manually assist its coding.
+
+When it returns control, inspect the private preview.
+
+Require:
+
+- existing CRM still works
+- Recent Activity still works
+- Hot Leads card exists
+- count is based on actual lead data
+- backend remains functional
+
+If wrong, STOP and report the customer-visible problem.
+
+Do not enter forensic mode automatically.
+
+If correct:
+
+Publish Updates ONCE through the normal customer UI.
+
+Verify:
+
+- another immutable release is created
+- release count increments again
+- stable URL remains unchanged
+- public version includes Hot Leads
+- prior releases remain available and immutable
+
+==================================================
+TEST 3 — REVERT AN OLDER PUBLISHED VERSION
+==================================================
+
+Now test the feature we actually care about:
+
+a customer realizing:
+
+"I liked an older version better."
+
+Use BuildCustom's NORMAL release/version UI.
+
+Do NOT manipulate KV.
+
+Do NOT manually change routing.
+
+Do NOT use Cloudflare dashboard/API directly to fake the result.
+
+Select the published release from BEFORE the Hot Leads change.
+
+Use the normal customer revert/restore/redeploy mechanism that BuildCustom
+currently provides.
+
+If no customer-facing revert mechanism exists:
+
+STOP and report:
+
+CUSTOMER RELEASE REVERT MISSING
+
+That is a real product gap we need to build.
+
+If it exists:
+
+revert to the previous published release through the normal UI.
+
+Verify:
+
+- stable public URL remains the same
+- public app now serves the selected older release
+- Recent Activity remains because that release contained it
+- Hot Leads disappears because that release predates it
+- selected old immutable artifact was NOT modified
+- newer immutable release remains preserved in release history
+- release history remains understandable
+- user can continue working afterward
+
+==================================================
+TEST 4 — CONTINUE BUILDING AFTER REVERT
+==================================================
+
+If BuildCustom supports continuing from the reverted version, verify the
+customer can return to the editor and continue building from that selected
+state.
+
+Do NOT send another AI instruction yet.
+
+We only need to establish that the product provides a coherent path to continue
+editing after reverting.
+
+Determine whether:
+
+- workspace/source is restored to the selected release's source revision
+- private preview matches it
+- editor is usable
+- future customer instruction would build from that restored state
+
+If reverting ONLY changes public routing while the editor remains on the newer
+source, report that clearly.
+
+That may be a product design gap depending on the intended semantics of
+"revert."
+
+==================================================
+DO NOT OVERENGINEER FAILURES
+==================================================
+
+From this point forward distinguish:
+
+GENERATED APP FAILURE
+
+from:
+
+BUILDCUSTOM PLATFORM FAILURE
+
+Generated app failure:
+
+give the coding agent a chance to fix it through normal customer chat.
+
+Platform failure:
+
+diagnose/fix BuildCustom.
+
+Do not create platform infrastructure merely to make one generated test app
+perfect.
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+Stop immediately for:
+
+- security/ownership failure
+- data corruption
+- release immutability violation
+- wrong customer's project/release accessible
+- public production unexpectedly changes before Publish Updates
+- BuildCustom cannot continue a normal customer coding operation
+- publishing overwrites an old immutable release
+- revert destroys release history
+
+Otherwise let the normal product workflow proceed.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+FULL CUSTOMER LOOP PASS / CUSTOMER LOOP PARTIAL /
+PLATFORM FAILURE / GENERATED APP NEEDS ANOTHER CUSTOMER FIX /
+REVERT FEATURE MISSING
+
+REPAIR LOOP
+- customer instructions sent:
+- agent started:
+- internal passes:
+- agent self-diagnosed:
+- agent edited:
+- intermediate failures:
+- agent self-corrected:
+- final private revision:
+- CRM:
+- 12 leads:
+- dashboard:
+- Five Newest:
+- search:
+- sorting:
+- filtering:
+- Add Lead:
+- lead details:
+- seven fields:
+- Notes:
+- Activity Timeline:
+- Recent Activity:
+- backend:
+- result:
+
+FIRST PUBLISH UPDATE
+- clicked:
+- release ID:
+- release count:
+- immutable script:
+- stable URL:
+- public backend:
+- Recent Activity public:
+- previous releases preserved:
+- result:
+
+SECOND CUSTOMER CHANGE
+- instruction sent:
+- agent completed:
+- private revision:
+- Hot Leads:
+- existing functionality:
+- result:
+
+SECOND PUBLISH UPDATE
+- clicked:
+- release ID:
+- release count:
+- immutable script:
+- stable URL:
+- previous releases preserved:
+- result:
+
+REVERT
+- customer-facing revert available:
+- selected release:
+- method:
+- stable URL:
+- public version:
+- Recent Activity:
+- Hot Leads:
+- old artifact mutated:
+- newer release preserved:
+- result:
+
+CONTINUE AFTER REVERT
+- workspace revision:
+- private preview:
+- editor usable:
+- builds from reverted source:
+- result:
+
+PLATFORM FAILURES FOUND:
+[list only actual BuildCustom platform failures]
+
+GENERATED APP FAILURES FOUND:
+[list separately]
+
+SOURCE/PLATFORM CHANGES MADE OUTSIDE NORMAL BUILDCUSTOM CUSTOMER FLOW:
+MUST BE ZERO unless an actual platform failure required stopping.
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

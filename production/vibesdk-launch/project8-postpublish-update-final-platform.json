@@ -1,0 +1,41 @@
+{
+  "checkedAt": "2026-10-02T15:11:11.303Z",
+  "unchanged": true,
+  "versions": {
+    "buildcustom-control-plane-launch": [
+      {
+        "version_id": "c5e18eab-1b8b-49d4-adc0-62dfb0e5e6ac",
+        "percentage": 100
+      }
+    ],
+    "buildcustom-vibesdk-launch": [
+      {
+        "version_id": "517b0fb2-e4f4-462f-a6aa-93d813fbe46b",
+        "percentage": 100
+      }
+    ],
+    "buildcustom-apps-gateway": [
+      {
+        "version_id": "9d80432b-4e53-4fe7-950a-2b53f0213eff",
+        "percentage": 100
+      }
+    ],
+    "buildcustom-apps-gateway-launch": [
+      {
+        "version_id": "26ac7a8c-695f-49d9-845a-8fe79ec2c28e",
+        "percentage": 100
+      }
+    ]
+  },
+  "scripts": {
+    "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8": {
+      "etag": "84f415ba7fb9ef119f8e0829617ca6ef9ea417e5437b707f48d277dbc709e44e",
+      "modifiedOn": "2026-10-02T00:08:21.573119Z"
+    },
+    "bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca": {
+      "etag": "cbe827d72d90337f8b52df209fcca6ac6d96722aafd124f42701e9a3c907e378",
+      "modifiedOn": "2026-10-02T13:59:30.479547Z"
+    }
+  },
+  "route": "{\"scriptName\":\"bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca\",\"metadata\":{}}"
+}

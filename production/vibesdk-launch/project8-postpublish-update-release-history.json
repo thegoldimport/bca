@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-02T15:12:21.314Z",
+  "releases": [
+    {
+      "id": 4,
+      "revision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+      "script_name": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+      "status": "published"
+    },
+    {
+      "id": 5,
+      "revision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+      "script_name": "bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca",
+      "status": "published"
+    }
+  ],
+  "meta": {
+    "rows_read": 4,
+    "rows_written": 0,
+    "changes": 0
+  }
+}

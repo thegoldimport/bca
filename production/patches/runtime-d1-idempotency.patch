@@ -1,0 +1,373 @@
+diff --git a/worker/database/database.ts b/worker/database/database.ts
+index e9c103f..89e179a 100644
+--- a/worker/database/database.ts
++++ b/worker/database/database.ts
+@@ -4,7 +4,7 @@
+  */
+ 
+ import { drizzle } from 'drizzle-orm/d1';
+-import * as Sentry from '@sentry/cloudflare';
++import { instrumentD1Once } from './d1-instrumentation';
+ import * as schema from './schema';
+ import type { DrizzleD1Database } from 'drizzle-orm/d1';
+ 
+@@ -36,7 +36,7 @@ export class DatabaseService {
+     private readonly enableReplicas: boolean;
+ 
+     constructor(env: Env) {
+-        const instrumented = Sentry.instrumentD1WithSentry(env.DB);
++        const instrumented = instrumentD1Once(env.DB);
+         this.d1 = instrumented;
+         this.db = drizzle(instrumented, { schema });
+         this.enableReplicas = env.ENABLE_READ_REPLICAS === 'true';
+diff --git a/worker/database/d1-instrumentation.ts b/worker/database/d1-instrumentation.ts
+new file mode 100644
+index 0000000..29251ff
+--- /dev/null
++++ b/worker/database/d1-instrumentation.ts
+@@ -0,0 +1,19 @@
++import { instrumentD1WithSentry } from '@sentry/cloudflare';
++
++// D1 bindings are shared across service instances in a Worker isolate. Sentry
++// mutates prepare(), so invoking it per service constructor builds proxy chains.
++// Its statement-query instrumentation already guards first/all/run/raw; guarding
++// the binding also ensures each fresh statement's bind() is wrapped only once.
++const instrumentedBindings = new WeakMap<D1Database, D1Database>();
++
++export function instrumentD1Once(binding: D1Database): D1Database {
++    const existing = instrumentedBindings.get(binding);
++    if (existing) return existing;
++
++    const instrumented = instrumentD1WithSentry(binding);
++    // Only record successful instrumentation. Preserve the SDK's return value
++    // and recognize it too if a future SDK returns a distinct binding.
++    instrumentedBindings.set(binding, instrumented);
++    instrumentedBindings.set(instrumented, instrumented);
++    return instrumented;
++}
+\ No newline at end of file
+diff --git a/worker/database/d1-instrumentation.test.ts b/worker/database/d1-instrumentation.test.ts
+new file mode 100644
+index 0000000..acb4147
+--- /dev/null
++++ b/worker/database/d1-instrumentation.test.ts
+@@ -0,0 +1,318 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import {
++    CloudflareClient, getClient, getCurrentScope, instrumentD1WithSentry, spanToJSON,
++} from '@sentry/cloudflare';
++import type { Client, Envelope } from '@sentry/core';
++import { eq } from 'drizzle-orm';
++import { instrumentD1Once } from './d1-instrumentation';
++import { DatabaseService } from './database';
++import { users } from './schema';
++
++// Spy only on the application/SDK boundary. The real implementation and its
++// internal core imports remain untouched, including span/error handling.
++vi.mock('@sentry/cloudflare', async (importOriginal) => {
++    const actual = await importOriginal<typeof import('@sentry/cloudflare')>();
++    return { ...actual, instrumentD1WithSentry: vi.fn(actual.instrumentD1WithSentry) };
++});
++
++const telemetry = {
++    spans: [] as Array<Record<string, unknown>>,
++    started: [] as Array<Record<string, unknown>>,
++    breadcrumbs: [] as Array<Record<string, unknown>>,
++    envelopes: [] as Envelope[],
++};
++let client: CloudflareClient;
++let previousClient: Client | undefined;
++
++function fixture(options: { selfBinding?: boolean; failure?: Error; success?: boolean } = {}) {
++    const row = { id: 'fixture-owner', email: 'owner@example.invalid' };
++    const executions: Array<{ query: string; params: unknown[]; method: string }> = [];
++    const meta = { duration: 1, rows_read: 1, rows_written: 0 };
++    class Statement {
++        constructor(readonly query: string, private params: unknown[] = []) {}
++        bind(...params: unknown[]) {
++            if (options.selfBinding) {
++                this.params = params;
++                return this;
++            }
++            return new Statement(this.query, params);
++        }
++        execute(method: string) {
++            executions.push({ query: this.query, params: this.params, method });
++            if (options.failure) throw options.failure;
++        }
++        async first(column?: keyof typeof row) {
++            this.execute('first');
++            return column ? row[column] : row;
++        }
++        async all() {
++            this.execute('all');
++            return { success: options.success ?? true, results: [row], meta };
++        }
++        async run() {
++            this.execute('run');
++            return { success: options.success ?? true, results: [], meta };
++        }
++        async raw() {
++            this.execute('raw');
++            return [Object.values(row)];
++        }
++    }
++    const binding = {
++        prepare(query: string) {
++            expect(this).toBe(binding);
++            return new Statement(query);
++        },
++        batch: vi.fn(),
++        exec: vi.fn(),
++        withSession: vi.fn(),
++    } as unknown as D1Database;
++    return { binding, row, executions };
++}
++
++beforeEach(() => {
++    telemetry.spans.length = 0;
++    telemetry.started.length = 0;
++    telemetry.breadcrumbs.length = 0;
++    telemetry.envelopes.length = 0;
++    vi.mocked(instrumentD1WithSentry).mockClear();
++    previousClient = getClient();
++    client = new CloudflareClient({
++        dsn: 'https://fixture@sentry.invalid/1',
++        integrations: [],
++        tracesSampleRate: 1,
++        stackParser: () => [],
++        beforeBreadcrumb: (breadcrumb) => {
++            telemetry.breadcrumbs.push(breadcrumb);
++            return breadcrumb;
++        },
++        // No real Sentry project or network transport.
++        transport: () => ({
++            send: async (envelope) => {
++                telemetry.envelopes.push(envelope);
++                return { statusCode: 200 };
++            },
++            flush: async () => true,
++        }),
++    });
++    client.on('spanStart', (span) => telemetry.started.push(spanToJSON(span)));
++    client.on('spanEnd', (span) => telemetry.spans.push(spanToJSON(span)));
++    client.init();
++    getCurrentScope().setClient(client);
++    expect(getClient()).toBe(client);
++});
++
++afterEach(async () => {
++    await client.close(1000);
++    getCurrentScope().setClient(previousClient);
++});
++
++describe('D1 telemetry observation controls', () => {
++    it('validates real one-time SDK spans, breadcrumbs, error status and transport', async () => {
++        const options: { failure?: Error; success?: boolean } = {};
++        const { binding, row, executions } = fixture(options);
++        const originalPrepare = binding.prepare;
++        instrumentD1WithSentry(binding);
++        expect(binding.prepare).not.toBe(originalPrepare);
++        await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).first())
++            .resolves.toEqual(row);
++        await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).all())
++            .resolves.toMatchObject({ results: [row] });
++        await expect(binding.prepare('UPDATE users SET display_name = ?').bind('fixture').run())
++            .resolves.toMatchObject({ success: true });
++        const failure = new Error('Baseline controlled query error');
++        options.failure = failure;
++        await expect(binding.prepare('SELECT id FROM users').first()).rejects.toBe(failure);
++
++        options.failure = undefined;
++        options.success = false;
++        await expect(binding.prepare('UPDATE users SET display_name = ?').bind('fixture').run())
++            .resolves.toMatchObject({ success: false });
++        expect(executions).toHaveLength(5);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        expect(telemetry.started).toHaveLength(5);
++        expect(telemetry.spans).toHaveLength(5);
++        expect(telemetry.breadcrumbs).toHaveLength(4);
++        expect(telemetry.spans[3]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++        expect(telemetry.spans[4]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++        await client.flush(1000);
++        const transactions = telemetry.envelopes.flatMap(([, items]) =>
++            items.filter(([header]) => header.type === 'transaction').map(([, payload]) => payload));
++        expect(transactions).toHaveLength(5);
++        expect(transactions[3]).toMatchObject({
++            contexts: { trace: { op: 'db.query', status: 'internal_error' } },
++        });
++    });
++
++    it.each(['raw', 'sdk-once', 'candidate-once', 'candidate-repeated'] as const)(
++        'compares the %s control against genuine SDK telemetry', async (mode) => {
++            const options: { failure?: Error } = {};
++            const { binding, row, executions } = fixture(options);
++            const rawPrepare = binding.prepare;
++            const rawStatement = binding.prepare('SELECT id, email FROM users WHERE id = ?');
++            let returned = binding;
++            if (mode === 'sdk-once') returned = instrumentD1WithSentry(binding);
++            if (mode === 'candidate-once' || mode === 'candidate-repeated') returned = instrumentD1Once(binding);
++            const prepare = binding.prepare;
++            const statement = binding.prepare('SELECT id, email FROM users WHERE id = ?');
++            const methods = [statement.bind, statement.first, statement.all, statement.run, statement.raw];
++            if (mode === 'candidate-repeated') {
++                for (let i = 0; i < 10_000; i++) instrumentD1Once(returned);
++            }
++            expect(returned).toBe(binding);
++            expect(binding.prepare).toBe(prepare);
++            expect([statement.bind, statement.first, statement.all, statement.run, statement.raw]).toEqual(methods);
++            if (mode === 'raw') {
++                expect(prepare).toBe(rawPrepare);
++                expect(statement.bind).toBe(rawStatement.bind);
++                expect(statement.first).toBe(rawStatement.first);
++            } else {
++                expect(prepare).not.toBe(rawPrepare);
++                expect(statement.bind).not.toBe(rawStatement.bind);
++                expect(statement.first).not.toBe(rawStatement.first);
++            }
++            await expect(statement.bind(row.id).first()).resolves.toEqual(row);
++            await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).all())
++                .resolves.toMatchObject({ results: [row] });
++            await expect(binding.prepare('UPDATE users SET display_name = ?').bind('fixture').run())
++                .resolves.toMatchObject({ success: true });
++            const failure = new Error('Controlled query failure');
++            options.failure = failure;
++            await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).first())
++                .rejects.toBe(failure);
++            expect(executions.map(({ params }) => params))
++                .toEqual([[row.id], [row.id], ['fixture'], [row.id]]);
++            expect(instrumentD1WithSentry).toHaveBeenCalledTimes(mode === 'raw' ? 0 : 1);
++            expect(telemetry.started).toHaveLength(mode === 'raw' ? 0 : 4);
++            expect(telemetry.spans).toHaveLength(mode === 'raw' ? 0 : 4);
++            expect(telemetry.breadcrumbs).toHaveLength(mode === 'raw' ? 0 : 3);
++            if (mode !== 'raw') {
++                expect(telemetry.spans.map(({ op, status, data }) => ({
++                    op, status, type: (data as Record<string, unknown>)['cloudflare.d1.query_type'],
++                }))).toEqual([
++                    { op: 'db.query', status: undefined, type: 'first' },
++                    { op: 'db.query', status: undefined, type: 'all' },
++                    { op: 'db.query', status: undefined, type: 'run' },
++                    { op: 'db.query', status: 'internal_error', type: 'first' },
++                ]);
++            }
++        },
++    );
++});
++
++describe('D1 binding cache identity', () => {
++    it('recognizes both identities if the SDK returns a distinct instrumented binding', async () => {
++        const original = fixture().binding;
++        const returned = fixture().binding;
++        const actualSdk = vi.mocked(instrumentD1WithSentry).getMockImplementation()!;
++        vi.mocked(instrumentD1WithSentry).mockImplementationOnce(() => actualSdk(returned));
++        expect(instrumentD1Once(original)).toBe(returned);
++        const prepare = returned.prepare;
++        expect(instrumentD1Once(original)).toBe(returned);
++        expect(instrumentD1Once(returned)).toBe(returned);
++        expect(returned.prepare).toBe(prepare);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        await returned.prepare('SELECT id FROM users').first();
++        expect(telemetry.spans).toHaveLength(1);
++    });
++});
++
++describe('D1 instrumentation idempotency', () => {
++    it('reproduces the unguarded SDK proxy-chain stack overflow', () => {
++        const { binding } = fixture();
++        for (let i = 0; i < 10_000; i++) instrumentD1WithSentry(binding);
++        expect(() => binding.prepare('SELECT id FROM users WHERE id = ?').bind('fixture-owner'))
++            .toThrow(RangeError);
++    });
++
++    it.each([1, 2, 10_000])('instruments a shared binding %i times without proxy growth', async (count) => {
++        const { binding, row, executions } = fixture();
++        const untouched = [binding.batch, binding.exec, binding.withSession];
++        expect(instrumentD1Once(binding)).toBe(binding);
++        const prepare = binding.prepare;
++        const statement = binding.prepare('SELECT id, email FROM users WHERE id = ?');
++        const methods = [statement.bind, statement.first, statement.all, statement.run, statement.raw];
++        for (let i = 1; i < count; i++) expect(instrumentD1Once(binding)).toBe(binding);
++        expect(binding.prepare).toBe(prepare);
++        expect([statement.bind, statement.first, statement.all, statement.run, statement.raw]).toEqual(methods);
++        expect([binding.batch, binding.exec, binding.withSession]).toEqual(untouched);
++
++        const bound = statement.bind(row.id);
++        await expect(bound.first()).resolves.toEqual(row);
++        await expect(bound.first('id')).resolves.toBe(row.id);
++        await expect(bound.all()).resolves.toMatchObject({ success: true, results: [row] });
++        await expect(bound.run()).resolves.toMatchObject({ success: true });
++        await expect(bound.raw()).resolves.toEqual([[row.id, row.email]]);
++        expect(executions).toHaveLength(5);
++        expect(executions.every(({ params }) => params[0] === row.id)).toBe(true);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        expect(telemetry.started).toHaveLength(5);
++        expect(telemetry.spans).toHaveLength(5);
++        expect(telemetry.breadcrumbs).toHaveLength(5);
++        expect(telemetry.spans.every(({ op }) => op === 'db.query')).toBe(true);
++        expect(telemetry.spans.map(({ data }) =>
++            (data as Record<string, unknown>)['cloudflare.d1.query_type']))
++            .toEqual(['first', 'first', 'all', 'run', 'raw']);
++        expect(telemetry.spans.some(({ status }) => status === 'internal_error')).toBe(false);
++    });
++
++    it('does not rewrap query operations when bind returns the same statement', async () => {
++        const { binding, row } = fixture({ selfBinding: true });
++        const statement = instrumentD1Once(binding).prepare('SELECT id FROM users WHERE id = ?');
++        const methods = [statement.bind, statement.first, statement.all, statement.run, statement.raw];
++        for (let i = 0; i < 10_000; i++) {
++            instrumentD1Once(binding);
++            expect(statement.bind(row.id)).toBe(statement);
++        }
++        expect([statement.bind, statement.first, statement.all, statement.run, statement.raw]).toEqual(methods);
++        await expect(statement.first()).resolves.toEqual(row);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        expect(telemetry.spans).toHaveLength(1);
++    });
++
++    it.each(['first', 'all', 'run', 'raw'] as const)('preserves %s errors at the Sentry span boundary', async (method) => {
++        const failure = new Error('Fixture D1 query failure');
++        const { binding } = fixture({ failure });
++        for (let i = 0; i < 500; i++) instrumentD1Once(binding);
++        const statement = binding.prepare('SELECT id FROM users WHERE id = ?').bind('fixture-owner');
++        await expect(statement[method]()).rejects.toBe(failure);
++        expect(telemetry.started).toHaveLength(1);
++        expect(telemetry.spans).toHaveLength(1);
++        expect(telemetry.spans[0]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++    });
++
++    it('retains the SDK error status for unsuccessful D1 results', async () => {
++        const { binding } = fixture({ success: false });
++        await instrumentD1Once(binding).prepare('UPDATE users SET display_name = ?').bind('fixture').run();
++        expect(telemetry.spans[0]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++        expect(telemetry.spans).toHaveLength(1);
++    });
++
++    it('keeps separate bindings independently instrumented', async () => {
++        const a = fixture();
++        const b = fixture();
++        instrumentD1Once(a.binding);
++        instrumentD1Once(b.binding);
++        await a.binding.prepare('SELECT 1').first();
++        await b.binding.prepare('SELECT 1').first();
++        expect(telemetry.spans).toHaveLength(2);
++    });
++
++    it('survives repeated DatabaseService construction and the real Drizzle owner lookup', async () => {
++        const { binding, row } = fixture();
++        const env = { DB: binding, ENABLE_READ_REPLICAS: 'false' } as Env;
++        const original = new DatabaseService(env);
++        const prepare = binding.prepare;
++        let latest = original;
++        for (let i = 0; i < 5_000; i++) latest = new DatabaseService(env);
++        expect(binding.prepare).toBe(prepare);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        for (const service of [original, latest]) {
++            await expect(service.db.select({ id: users.id, email: users.email })
++                .from(users).where(eq(users.id, row.id)).get()).resolves.toEqual(row);
++            expect(service.getReadDb()).toBe(service.db);
++        }
++        expect(telemetry.spans).toHaveLength(2);
++        expect(telemetry.spans.some(({ status }) => status === 'internal_error')).toBe(false);
++    });
++});
+\ No newline at end of file

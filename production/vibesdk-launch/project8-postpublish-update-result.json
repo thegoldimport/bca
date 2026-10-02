@@ -1,0 +1,102 @@
+{
+  "overallStatus": "AGENT EDIT FAILURE",
+  "recordedAt": "2026-10-02T15:16:50.491Z",
+  "customerEdit": {
+    "outboundInstructions": 1,
+    "exactMatches": 1,
+    "startingRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+    "thinkPasses": 4,
+    "stepMarkersPerPass": [
+      25,
+      25,
+      25,
+      23
+    ],
+    "totalStepMarkers": 98,
+    "internalContinuations": 3,
+    "credits": "NOT OBSERVABLE",
+    "finishTaskObserved": false,
+    "completionAccepted": false,
+    "nativeStreamStatuses": [
+      "completed",
+      "completed",
+      "completed",
+      "error"
+    ],
+    "nativeErrorAt": "2026-10-02T15:08:50.166Z",
+    "lastVerifiedNewRevision": "baa899414e0ea0a185b627404cd24743a624c049",
+    "revisionIsPartialNotAcceptedCompletion": true,
+    "privateDeployToolCalls": 2
+  },
+  "authentication": {
+    "ownerReads": 401,
+    "normalLoginAttemptCount": 1,
+    "normalLoginHTTP": 502,
+    "nativeFailurePredatesLoginAttempt": true,
+    "commonCauseEstablished": false
+  },
+  "privatePreview": {
+    "result": "NOT VERIFIED: operation failed and authentication unavailable",
+    "regressions": "NOT VERIFIED",
+    "persistedTestNote": "NOT VERIFIED"
+  },
+  "productionIsolation": {
+    "release": 5,
+    "releaseCount": 2,
+    "route": "{\"scriptName\":\"bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca\",\"metadata\":{}}",
+    "recentActivityPubliclyVisible": false,
+    "root": {
+      "status": 200,
+      "contentType": "text/html"
+    },
+    "api": {
+      "status": 200,
+      "contentType": "application/json",
+      "leadCount": 12
+    },
+    "result": "PASS"
+  },
+  "publishUpdates": {
+    "clicks": 0,
+    "requests": 0,
+    "http": "NOT ATTEMPTED",
+    "newRelease": null,
+    "reason": "Required completion and private-preview gates not passed"
+  },
+  "immutability": {
+    "releases": [
+      {
+        "id": 4,
+        "revision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+        "script_name": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+        "status": "published"
+      },
+      {
+        "id": 5,
+        "revision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+        "script_name": "bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca",
+        "status": "published"
+      }
+    ],
+    "bytesUnchanged": true,
+    "etagsUnchanged": true,
+    "stableSlugUnchanged": true,
+    "stableURLUnchanged": true,
+    "currentRelease": 5,
+    "result": "PASS"
+  },
+  "constraints": {
+    "infrastructureChanges": 0,
+    "authImplementationChanges": 0,
+    "publisherChanges": 0,
+    "gatewayChanges": 0,
+    "limitChanges": 0,
+    "budgetChanges": 0,
+    "newTestHarnesses": 0,
+    "customerInstructions": 1,
+    "project9": false,
+    "project5Touched": false,
+    "leadVerificationMutations": 0
+  },
+  "stoppedWithoutRetry": true
+}

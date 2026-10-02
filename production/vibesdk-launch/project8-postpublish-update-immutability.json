@@ -1,0 +1,41 @@
+{
+  "at": "2026-10-02T15:13:28.214Z",
+  "scripts": [
+    {
+      "name": "bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8",
+      "modules": [
+        {
+          "name": "index.js",
+          "sha256": "3ca4a9f40ea3d5d2592aa6e773d1e878751732844d11d42d25f829ed416344ce"
+        },
+        {
+          "name": "bundle.js",
+          "sha256": "164798bb56f180d87dc1a4e17b55925d6bf874a432051f91b10aeb6e4a41957c"
+        }
+      ]
+    },
+    {
+      "name": "bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca",
+      "modules": [
+        {
+          "name": "bundle.js",
+          "sha256": "164798bb56f180d87dc1a4e17b55925d6bf874a432051f91b10aeb6e4a41957c"
+        },
+        {
+          "name": "index.js",
+          "sha256": "2a6684f8c8a5fb7e021e8fea079599eb7e35ca2cf1374ca1fc56bf8642b47d65"
+        }
+      ]
+    }
+  ],
+  "historicalBytesUnchanged": true,
+  "publicRoot": {
+    "status": 200,
+    "contentType": "text/html"
+  },
+  "publicAPI": {
+    "status": 200,
+    "contentType": "application/json",
+    "leadCount": 12
+  }
+}

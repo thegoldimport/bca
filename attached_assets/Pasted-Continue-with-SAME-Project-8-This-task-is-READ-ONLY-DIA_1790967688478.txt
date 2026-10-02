@@ -1,0 +1,707 @@
+Continue with SAME Project 8.
+
+This task is READ-ONLY DIAGNOSIS ONLY.
+
+Do NOT modify source.
+
+Do NOT modify the workspace.
+
+Do NOT send another AI instruction.
+
+Do NOT manually continue the agent.
+
+Do NOT trigger recovery.
+
+Do NOT change lifecycle state.
+
+Do NOT change operation state.
+
+Do NOT redeploy the private preview.
+
+Do NOT Publish Updates.
+
+Do NOT create a generated release.
+
+Do NOT change runtime.
+
+Do NOT change control plane.
+
+Do NOT change gateway.
+
+Do NOT change publisher.
+
+Do NOT change auth.
+
+Do NOT change the 250-credit budget or lifecycle limits.
+
+Do NOT commit or push anything.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+CURRENT ACCEPTED PLATFORM STATE
+==================================================
+
+Canonical source:
+
+646a599e1e022358d29ab47df750a3c11227d684
+
+Current production runtime:
+
+76484c0e-ff6d-42ae-865e-2c51d2c39837
+
+Runtime D1/Sentry idempotency fix:
+
+PASS
+
+Normal login:
+
+PASS
+
+Repeated authenticated owner reads:
+
+PASS
+
+No observed:
+
+- auth 401
+- auth 502
+- D1 RangeError
+- recursive instrumentation
+
+Freeze this runtime unless this diagnosis discovers directly relevant evidence.
+
+==================================================
+PROJECT 8
+==================================================
+
+Agent:
+
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Current authoritative HEAD:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Confirmed history:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+→ baa899414e0ea0a185b627404cd24743a624c049
+→ 50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Working tree:
+
+clean
+
+Uncommitted changes:
+
+none
+
+Private deployed revision:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Native lifecycle:
+
+RUNNING
+
+Generation:
+
+idle
+
+shouldBeGenerating:
+
+false
+
+Editor/input:
+
+enabled
+
+Safe same-operation resume:
+
+UNKNOWN
+
+==================================================
+CURRENT PRIVATE PREVIEW FAILURE
+==================================================
+
+Private preview document:
+
+HTTP 200
+
+CRM shell:
+
+renders
+
+But:
+
+GET /api/leads
+→ HTTP 502
+
+As a result:
+
+- leads do not load
+- dashboard counts show empty/zero data
+- Five Newest is empty
+- data-backed regressions cannot be verified
+- lead details cannot be verified
+- Notes cannot be verified
+- Activity Timeline cannot be verified
+
+Recent Activity card:
+
+ABSENT
+
+The private feature is therefore NOT accepted.
+
+==================================================
+CURRENT PUBLIC PRODUCTION
+==================================================
+
+Release:
+
+5
+
+Script:
+
+bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca
+
+Release count:
+
+2
+
+Public /api/leads:
+
+HTTP 200
+application/json
+12 leads
+
+Recent Activity public:
+
+NO
+
+Production remains healthy and unchanged.
+
+==================================================
+GOAL
+==================================================
+
+Answer TWO questions with evidence:
+
+1. Why does the CURRENT private preview at revision 50b27d... return 502 for
+   /api/leads?
+
+2. Does BuildCustom's EXISTING native operation/recovery system provide a
+   supported, safe way to resume this SAME unfinished customer operation
+   WITHOUT resending the customer's instruction?
+
+Do not fix either issue yet.
+
+==================================================
+PART 1 — TRACE PRIVATE /api/leads 502
+==================================================
+
+Make ONE normal authenticated read-only request to the existing private:
+
+GET /api/leads
+
+Capture the request correlation needed to trace it.
+
+Follow the request through the actual private-preview path.
+
+Identify each relevant hop, such as:
+
+browser
+→ control/private preview route
+→ preview routing
+→ SpaceDO/App Facet
+→ generated application backend
+→ generated application storage/database
+
+Use the actual architecture rather than assuming this exact chain.
+
+Find the FIRST component that produces the failure.
+
+Return:
+
+- request timestamp
+- request/correlation IDs
+- HTTP status at each observable boundary
+- originating component
+- exact exception/error
+- stack location if available
+- upstream/downstream status
+- whether generated application code was entered
+- whether the `/api/leads` handler was entered
+- whether its database/storage operation was reached
+
+Do not stop at "502 Bad Gateway."
+
+Find the deepest retained cause.
+
+==================================================
+PART 2 — COMPARE PRIVATE REVISION WITH WORKING PUBLIC RELEASE
+==================================================
+
+Public Release 5 uses source revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Private current revision:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Read-only compare the generated app changes across:
+
+020de27...
+→ baa899...
+→ 50b27d...
+
+Focus on changes capable of affecting:
+
+- /api/leads
+- application initialization
+- database/storage initialization
+- bindings
+- routes
+- imports
+- middleware
+- global/module state
+- Recent Activity
+- activity storage/querying
+
+Determine whether the private 502 is caused by:
+
+A. generated source regression
+
+B. private-preview platform/routing failure
+
+C. private generated-app state/storage failure
+
+D. missing/incompatible binding
+
+E. runtime exception
+
+F. other proven cause
+
+Do not infer from the fact that public release works.
+
+==================================================
+PART 3 — INSPECT BOTH NEW COMMITS
+==================================================
+
+Inspect:
+
+baa899414e0ea0a185b627404cd24743a624c049
+
+and:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Report what each commit actually changed.
+
+We previously know the overall changed files include:
+
+public/index.html
+src/index.ts
+
+Determine:
+
+- what baa899 added/changed
+- what 50b27d added/changed
+- why the second commit was made
+- whether Recent Activity backend route exists at final HEAD
+- whether Recent Activity frontend rendering exists at final HEAD
+- whether it is actually invoked/rendered
+- whether any code path can explain why the card is absent
+- whether either commit can explain /api/leads 502
+
+Do not edit either commit.
+
+==================================================
+PART 4 — DETERMINE WHY RECENT ACTIVITY IS ABSENT
+==================================================
+
+The final private preview lacks the requested Recent Activity card.
+
+Determine from source + runtime evidence whether this is because:
+
+- frontend implementation was never completed
+- frontend exists but does not render
+- frontend rendering depends on failed data/API initialization
+- frontend code is unreachable
+- second commit removed/replaced it
+- preview is serving an unexpected artifact despite metadata
+- another proven cause
+
+Confirm the exact HTML/JS/source responsible.
+
+Do not use visual absence alone.
+
+==================================================
+PART 5 — VERIFY PRIVATE DEPLOYMENT IDENTITY
+==================================================
+
+Confirm the preview actually serves the expected deployment corresponding to:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Compare where possible:
+
+- deployment record
+- main module identity/hash
+- relevant static asset hashes
+- generated backend module identity/hash
+- source revision metadata
+
+Determine whether preview metadata and actual served artifact agree.
+
+If stale/mismatched:
+
+report it.
+
+Do NOT redeploy.
+
+==================================================
+PART 6 — RECONSTRUCT NATIVE OPERATION STATE
+==================================================
+
+Now investigate the EXISTING unfinished operation.
+
+Known customer operation:
+
+one customer instruction only
+
+Original instruction requested:
+
+Add a small Recent Activity card to the main dashboard underneath the Five
+Newest Leads section.
+
+Show the five most recent lead activity events with the lead name, activity
+type, and date/time.
+
+Keep the existing dark navy design and make the card visually consistent with
+the rest of the dashboard.
+
+Do not remove or redesign any existing functionality.
+
+Verify the updated application works before completing the task.
+
+Observed execution:
+
+Think pass 1: 25
+Think pass 2: 25
+Think pass 3: 25
+Think pass 4: 23
+
+Internal continuations:
+
+3
+
+Server diagnostics showed finish_task executing during pass 4.
+
+Persisted native stream ended:
+
+error
+
+Latest lifecycle persistence evidence from that execution:
+
+RUNNING
+
+Current supported status still says:
+
+lifecycle RUNNING
+generation idle
+shouldBeGenerating false
+
+Find all EXISTING persisted state that the normal native recovery mechanism
+uses to decide whether an operation may continue.
+
+Inspect only through legitimate read-only access.
+
+Do NOT bypass authorization protections.
+
+Look for existing concepts such as:
+
+- conversation/task identity
+- operation ID
+- pending turn
+- pending chat
+- lifecycle record
+- recovery record
+- continuation count
+- last processed native request
+- last completed pass
+- expected revision
+- completion target
+- recovery eligibility
+- terminal reason
+- generation lease/state
+
+Use actual implementation names discovered in source.
+
+==================================================
+PART 7 — TRACE THE NATIVE RECOVERY DECISION
+==================================================
+
+Read the CURRENT canonical implementation responsible for:
+
+- reopening a project
+- reconciling RUNNING state
+- handling stream failure
+- handling generation idle while lifecycle RUNNING
+- automatic recovery
+- manual recovery if such a supported concept exists
+- continuing the same native operation
+- preventing duplicate customer instructions
+
+Trace the decision tree using the actual current Project 8 persisted state.
+
+We need to know:
+
+IF Project 8 were opened normally and recovery were allowed to proceed,
+what would BuildCustom do?
+
+Determine whether it would:
+
+A. continue the SAME native operation with the same task identity
+
+B. verify/reconcile existing revision without another model call
+
+C. begin another internal Think continuation
+
+D. require another customer message
+
+E. mark the existing operation terminal/incomplete
+
+F. do nothing because required recovery state is missing
+
+G. another precisely identified behavior
+
+Do NOT execute that behavior.
+
+==================================================
+PART 8 — DETERMINE WHETHER A MODEL CALL IS EVEN NECESSARY
+==================================================
+
+Given:
+
+- finish_task executed server-side
+- final stream errored
+- lifecycle remains RUNNING
+- final source is not currently accepted
+- Recent Activity is absent
+- private API currently returns 502
+
+determine whether the native recovery system would first:
+
+- reconcile/verify existing work,
+
+or:
+
+- invoke the model again.
+
+If a model call would occur, determine:
+
+- whether it is an INTERNAL continuation of the original operation
+- whether the original customer instruction is reused from persisted state
+- whether another customer instruction is required
+- current continuation/Think-turn accounting that would apply
+- whether the operation still has allowed capacity
+
+Do not call the model.
+
+==================================================
+PART 9 — SAFE RESUME CLASSIFICATION
+==================================================
+
+Classify recovery as exactly one:
+
+SAFE NATIVE RESUME
+
+SAFE RECONCILIATION WITHOUT MODEL CALL
+
+NOT NATIVELY RESUMABLE
+
+UNSAFE / DUPLICATE-WORK RISK
+
+UNKNOWN
+
+SAFE NATIVE RESUME requires evidence that:
+
+- same original customer operation is retained
+- same task identity is retained
+- same workspace is retained
+- progress is preserved
+- no new customer instruction is created
+- native continuation accounting is preserved
+- system will not restart the request from scratch
+
+If any of these cannot be established:
+
+do not classify SAFE.
+
+==================================================
+PART 10 — DETERMINE SMALLEST NEXT ACTION
+==================================================
+
+Recommend ONE next action only.
+
+Examples:
+
+- fix a proven private-preview platform defect first
+- fix generated source through supported native continuation
+- allow safe native reconciliation
+- allow safe native continuation
+- repair recovery-state defect
+- another evidence-supported action
+
+Do NOT perform it.
+
+We are trying to avoid modifying platform code for a generated-app bug and
+avoid resending customer work when native recovery can safely continue it.
+
+==================================================
+PRODUCTION SAFETY
+==================================================
+
+Throughout diagnosis verify:
+
+release 5 remains current
+
+script remains:
+
+bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca
+
+release count remains:
+
+2
+
+public /api/leads remains:
+
+200 JSON
+
+Do not modify production.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL DIAGNOSIS:
+ROOT CAUSE PROVEN / PARTIAL ROOT CAUSE / INSUFFICIENT EVIDENCE
+
+PRIVATE API 502
+- request:
+- timestamp:
+- request IDs:
+- failing boundary:
+- generated backend entered:
+- handler entered:
+- storage reached:
+- exact error:
+- stack:
+- classification:
+- root cause:
+
+REVISION DIFF
+- 020de27 → baa899:
+- baa899 → 50b27d:
+- /api/leads changed:
+- initialization changed:
+- storage changed:
+- bindings assumption changed:
+- relevant result:
+
+RECENT ACTIVITY
+- backend route exists:
+- frontend implementation exists:
+- render path:
+- why absent:
+- result:
+
+PRIVATE DEPLOYMENT
+- expected revision:
+- actual revision:
+- deployment identity:
+- frontend hashes:
+- backend hashes:
+- stale/mismatch:
+- result:
+
+NATIVE OPERATION STATE
+- original operation retained:
+- task identity:
+- lifecycle:
+- generation:
+- pending state:
+- continuation count:
+- Think turns used:
+- remaining capacity:
+- terminal reason:
+- recovery eligibility:
+
+RECOVERY DECISION
+- reopen behavior:
+- reconciliation behavior:
+- model call required:
+- same operation:
+- same task:
+- same workspace:
+- original customer instruction reused:
+- new customer instruction required:
+- duplicate-work risk:
+
+RECOVERY CLASSIFICATION:
+SAFE NATIVE RESUME / SAFE RECONCILIATION WITHOUT MODEL CALL /
+NOT NATIVELY RESUMABLE / UNSAFE-DUPLICATE-WORK RISK / UNKNOWN
+
+PRODUCTION
+- release:
+- script:
+- release count:
+- /api/leads:
+- changed:
+- result:
+
+SMALLEST NEXT ACTION:
+[one precise recommendation]
+
+CHANGES MADE:
+MUST BE ZERO
+
+SOURCE CHANGES:
+MUST BE ZERO
+
+COMMITS:
+MUST BE ZERO
+
+PUSHES:
+MUST BE ZERO
+
+DEPLOYMENTS:
+MUST BE ZERO
+
+AI INSTRUCTIONS:
+MUST BE ZERO
+
+MANUAL CONTINUATIONS:
+MUST BE ZERO
+
+RECOVERY TRIGGERS:
+MUST BE ZERO
+
+PUBLISH UPDATES:
+MUST BE ZERO
+
+NEW RELEASES:
+MUST BE ZERO
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

@@ -1,0 +1,397 @@
+The D1/Sentry idempotency source candidate is now ACCEPTED LOCALLY and canonical
+at:
+
+646a599e1e022358d29ab47df750a3c11227d684
+
+Do NOT modify the accepted WeakMap implementation unless this investigation
+proves an actual source regression.
+
+The focused telemetry harness defect was corrected.
+
+Accepted local evidence:
+
+- real CloudflareClient used
+- real Sentry span hooks used
+- in-memory transport only
+- no production Sentry destination
+- 5 spans observed
+- 4 breadcrumbs observed
+- 5 transaction envelopes observed
+- genuine internal_error status observed
+- focused suite: 18 passed
+- D1/DatabaseService/auth/session/logout: PASS
+- control auth/owner fixtures: 6 passed
+- complete runtime: 672 passed, 1 pre-existing skip
+- typecheck: PASS
+- build: PASS
+- Worker dry-run: PASS
+- source reconstruction: 862 exact paths
+- WeakMap implementation unchanged
+
+==================================================
+IMPORTANT EXCEPTION
+==================================================
+
+The push unintentionally triggered an existing GitHub marketing production
+workflow.
+
+It completed at:
+
+2026-10-02 17:22:08 UTC
+
+It uploaded marketing assets.
+
+Do NOT roll this back merely because it violated the intended "no deployment"
+boundary.
+
+Do NOT redeploy marketing.
+
+Do NOT push another commit during this task.
+
+Separately, the staging workflow failed at:
+
+npm test
+
+Its dry-run step was therefore skipped.
+
+No runtime deployment occurred.
+
+==================================================
+GOAL
+==================================================
+
+Perform a focused READ-ONLY diagnosis of the staging CI npm test failure.
+
+Determine whether it is:
+
+A. a real source/test regression in canonical commit 646a599...
+
+B. a staging-only environment/configuration issue
+
+C. a dependency/install/runtime-version difference
+
+D. an unrelated pre-existing test failure
+
+E. workflow configuration/path/package-selection issue
+
+F. another precisely proven cause
+
+Do NOT deploy the runtime until this is classified.
+
+==================================================
+PART 1 — INSPECT THE EXACT FAILED WORKFLOW
+==================================================
+
+Read the completed staging workflow run associated with canonical commit:
+
+646a599e1e022358d29ab47df750a3c11227d684
+
+Record:
+
+- workflow name
+- workflow file
+- run ID
+- triggering event
+- commit SHA
+- runner environment
+- Node version
+- npm version
+- install command
+- working directory
+- exact npm test command
+- environment variables relevant to tests
+- exact failing test file(s)
+- exact assertion/error
+- exit code
+- first meaningful failure
+
+Do not summarize this as merely "npm test failed."
+
+Find the first actual test failure.
+
+==================================================
+PART 2 — COMPARE WITH LOCAL ACCEPTANCE
+==================================================
+
+Compare the staging CI command/environment with the accepted local tests.
+
+Local accepted evidence included:
+
+- focused D1 suite
+- D1/DatabaseService
+- auth
+- sessions
+- logout
+- control auth/owner fixtures
+- complete runtime suite
+- typecheck
+- build
+- Worker dry-run
+
+Determine whether CI's:
+
+npm test
+
+runs the SAME tests, MORE tests, or a DIFFERENT package/workspace.
+
+Explicitly compare:
+
+- repository root
+- package.json
+- workspace selection
+- test runner
+- test config
+- Node version
+- npm version
+- dependency installation
+- lockfile usage
+- environment variables
+- Cloudflare bindings/mocks
+- generated/reconstructed runtime source availability
+
+==================================================
+PART 3 — REPRODUCE WITHOUT CHANGING SOURCE
+==================================================
+
+Using an exact clean checkout of:
+
+646a599e1e022358d29ab47df750a3c11227d684
+
+attempt to reproduce the staging workflow locally using the same:
+
+- Node version
+- npm version
+- install command
+- working directory
+- npm test command
+- relevant non-secret environment configuration
+
+Do NOT modify source to make the reproduction pass.
+
+Do NOT use the dirty/provisional runtime checkout as the source of truth.
+
+Use the canonical Git commit.
+
+Report:
+
+CI failure reproduced:
+YES / NO
+
+If YES:
+identify the exact failing test and why it was not exercised or did not fail in
+the earlier accepted local regression set.
+
+If NO:
+identify the meaningful environmental/workflow difference.
+
+==================================================
+PART 4 — CHECK WHETHER D1 PATCH IS INVOLVED
+==================================================
+
+Determine whether the failing test actually executes any of these three accepted
+patch paths:
+
+runtime-source/worker/database/database.ts
+runtime-source/worker/database/d1-instrumentation.ts
+runtime-source/worker/database/d1-instrumentation.test.ts
+
+or reconstructed equivalents.
+
+Classify:
+
+DIRECTLY RELATED
+
+INDIRECTLY RELATED
+
+UNRELATED
+
+Do not infer relation merely because the failure occurred after this commit.
+
+==================================================
+PART 5 — INSPECT MARKETING DEPLOYMENT READ-ONLY
+==================================================
+
+Do NOT modify or redeploy marketing.
+
+Record what the accidental workflow actually deployed.
+
+Determine:
+
+- workflow name
+- target Worker/Pages project
+- commit SHA
+- asset/source scope
+- whether the deployed marketing artifact differs from the previously serving
+  marketing artifact
+- whether it touched app.buildcustom.ai
+- whether it touched runtime
+- whether it touched control plane
+- whether it touched generated-app gateway
+- whether it touched generated-app dispatch
+- whether it touched Project 8
+
+This is bookkeeping only.
+
+If marketing is currently healthy, leave it alone.
+
+==================================================
+PART 6 — CHECK PUSH WORKFLOW POLICY
+==================================================
+
+Read the repository workflow configuration.
+
+Identify why pushing canonical source automatically caused a production marketing
+deployment.
+
+Report the exact trigger, such as:
+
+on:
+  push:
+    branches:
+      - main
+
+or its actual equivalent.
+
+Also identify whether future runtime/source-only pushes will continue to trigger
+marketing production deploys.
+
+Do NOT change the workflow in this task.
+
+Recommend the smallest later workflow correction if appropriate, such as path
+filters or separating validation from production deployment.
+
+But do not implement it now.
+
+==================================================
+PART 7 — DECIDE WHETHER RUNTIME IS READY
+==================================================
+
+After diagnosis classify:
+
+RUNTIME READY TO DEPLOY
+
+or
+
+RUNTIME NOT READY TO DEPLOY
+
+Runtime may be classified READY only if:
+
+- the staging npm test failure is proven unrelated/environmental/workflow-only,
+  OR
+- it is a pre-existing/non-blocking failure with clear evidence,
+
+AND:
+
+- accepted D1 source remains unchanged,
+- canonical source remains reproducible,
+- no new relevant regression is discovered.
+
+If the CI failure is a real relevant source regression:
+
+RUNTIME NOT READY TO DEPLOY.
+
+Do not fix it in this task.
+
+==================================================
+NO MUTATIONS
+==================================================
+
+Do NOT:
+
+- edit source
+- commit
+- push
+- deploy runtime
+- deploy control
+- redeploy marketing
+- rollback marketing
+- touch Project 8
+- login as the Project 8 customer
+- resume the agent
+- send AI instructions
+- Publish Updates
+- create releases
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+RUNTIME READY TO DEPLOY / RUNTIME NOT READY TO DEPLOY /
+INSUFFICIENT EVIDENCE
+
+STAGING CI FAILURE
+- workflow:
+- run:
+- commit:
+- environment:
+- command:
+- first failing test:
+- exact error:
+- exit code:
+- classification:
+- D1 patch related:
+- root cause:
+
+LOCAL REPRODUCTION
+- clean checkout:
+- environment matched:
+- command matched:
+- reproduced:
+- result:
+
+ACCEPTED D1 FIX
+- canonical commit:
+- source changed during diagnosis:
+- focused evidence still valid:
+- runtime regressions still valid:
+- result:
+
+MARKETING DEPLOYMENT
+- workflow:
+- trigger:
+- target:
+- commit:
+- artifact changed:
+- marketing health:
+- app hostname touched:
+- runtime touched:
+- control touched:
+- gateway touched:
+- Project 8 touched:
+- rollback required:
+
+WORKFLOW POLICY
+- production marketing trigger:
+- runtime-only pushes trigger marketing:
+- recommended later correction:
+
+RUNTIME DEPLOYMENT READINESS
+- classification:
+- reason:
+
+CHANGES MADE:
+MUST BE ZERO
+
+COMMITS:
+MUST BE ZERO
+
+PUSHES:
+MUST BE ZERO
+
+RUNTIME DEPLOYMENTS:
+MUST BE ZERO
+
+MARKETING DEPLOYMENTS:
+MUST BE ZERO ADDITIONAL
+
+PROJECT 8 CHANGES:
+MUST BE ZERO
+
+AI INSTRUCTIONS:
+MUST BE ZERO
+
+PUBLISH UPDATES:
+MUST BE ZERO
+
+Then STOP.

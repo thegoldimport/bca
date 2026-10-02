@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-02T15:09:56.901Z",
+  "loginClicks": 1,
+  "outboundInstructions": 0,
+  "publishRequests": 0,
+  "loginHttp": 502,
+  "failure": {
+    "name": "AssertionError",
+    "message": "Expected values to be strictly equal:\n\n502 !== 200\n"
+  }
+}

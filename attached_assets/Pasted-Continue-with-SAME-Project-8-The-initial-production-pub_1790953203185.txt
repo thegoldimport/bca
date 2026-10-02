@@ -1,0 +1,549 @@
+Continue with SAME Project 8.
+
+The initial production publishing lifecycle is now ACCEPTED.
+
+This task tests ONLY the normal post-publish customer update lifecycle:
+
+existing published application
+→ ONE conversational edit
+→ updated private preview
+→ confirm public production remains unchanged
+→ Publish Updates ONCE
+→ new immutable release
+→ same public URL serves the update
+
+Do NOT modify BuildCustom infrastructure.
+
+Do NOT modify the publisher.
+
+Do NOT modify the gateway.
+
+Do NOT modify auth.
+
+Do NOT change runtime limits.
+
+Do NOT change the 250-credit budget.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+Do NOT create another test harness.
+
+Use the normal authenticated customer UI.
+
+==================================================
+ACCEPTED BASELINE
+==================================================
+
+GitHub canonical commit:
+
+a6e446ee041015bbde56df74075dcb945deb7699
+
+Control:
+
+c5e18eab-1b8b-49d4-adc0-62dfb0e5e6ac
+
+Runtime:
+
+517b0fb2-e4f4-462f-a6aa-93d813fbe46b
+
+Publisher adapter:
+
+app-routing-v2
+
+Project:
+
+8
+
+Agent:
+
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+Current generated source revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Current production release:
+
+5
+
+Current production immutable script:
+
+bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca
+
+Stable slug:
+
+isolated-observability-acceptance
+
+Stable public URL:
+
+https://isolated-observability-acceptance.apps.buildcustom.ai
+
+Release count:
+
+2
+
+Release 4 is historical and immutable.
+
+Release 5 is current.
+
+Current public application:
+
+FULL-STACK PASS
+
+/api/leads:
+200 application/json
+
+lead count:
+12
+
+CRM/dashboard/backend/search/sorting/filtering/lead details/Notes/
+Activity Timeline:
+PASS
+
+==================================================
+PART 1 — SEND EXACTLY ONE CUSTOMER EDIT
+==================================================
+
+Use the normal authenticated Project 8 editor.
+
+Send exactly this customer instruction ONCE:
+
+"Add a small Recent Activity card to the main dashboard underneath the Five
+Newest Leads section.
+
+Show the five most recent lead activity events with the lead name, activity
+type, and date/time.
+
+Keep the existing dark navy design and make the card visually consistent with
+the rest of the dashboard.
+
+Do not remove or redesign any existing functionality.
+
+Verify the updated application works before completing the task."
+
+Count this instruction as sent ONLY when the outbound customer
+instruction/user_suggestion is actually observed.
+
+Do not resend it.
+
+Do not send clarification or follow-up instructions.
+
+Allow the normal BuildCustom lifecycle to handle the work, including native
+continuations if necessary.
+
+==================================================
+PART 2 — OBSERVE NORMAL AGENT LIFECYCLE
+==================================================
+
+Record:
+
+- outbound customer instructions
+- Think passes
+- step count per pass
+- internal continuations
+- total credit usage if observable
+- operation state transitions
+- finish_task signal
+- starting revision
+- resulting revision
+- commit
+- private preview deployment
+
+Do not interfere with the operation.
+
+Do not manually continue it.
+
+Do not treat an internal continuation as another customer instruction.
+
+The operation must remain within the accepted production limits:
+
+maxSteps = 25
+Think turns = 5
+internal continuations = 4
+credits = 250
+elapsed ceiling = 900000 ms
+
+If the operation ends in a genuine failure state:
+
+STOP.
+
+Do NOT resend.
+
+Do NOT Publish Updates.
+
+==================================================
+PART 3 — VERIFY UPDATED PRIVATE PREVIEW
+==================================================
+
+Require a NEW generated revision different from:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Verify the private preview.
+
+Require:
+
+- preview HTTP 200
+- CRM renders
+- Recent Activity card exists underneath Five Newest Leads
+- card visually matches the existing dark navy dashboard
+- up to five most recent activity events display
+- lead name displays
+- activity type displays
+- date/time displays
+
+Also verify existing functionality remains:
+
+- dashboard
+- summary cards
+- 12 leads
+- Five Newest Leads
+- leads table
+- search
+- sorting
+- status/source filtering
+- lead details
+- seven lead fields
+- Notes
+- persisted test note
+- Activity Timeline
+- generated backend API
+- no malformed preview URLs
+- no generated-app API CORS errors
+- no actionable application errors
+
+Do not mutate lead data merely for verification.
+
+If fewer than five activity events exist, verify the correct available events
+rather than manufacturing data.
+
+==================================================
+PART 4 — PROVE PRODUCTION IS STILL RELEASE 5
+==================================================
+
+BEFORE clicking Publish Updates, open the existing public URL:
+
+https://isolated-observability-acceptance.apps.buildcustom.ai
+
+Confirm:
+
+- HTTP 200
+- application still works
+- /api/leads still returns backend JSON
+- current route still points to release 5
+- immutable script is still:
+
+bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca
+
+- Recent Activity card is NOT present publicly
+- new private revision has NOT leaked into production
+- release count remains 2
+
+This is a critical isolation check.
+
+If the Recent Activity change appears publicly before Publish Updates:
+
+STOP.
+
+Report IMMUTABILITY/ISOLATION FAILURE.
+
+Do not click Publish Updates.
+
+==================================================
+PART 5 — PUBLISH UPDATES ONCE
+==================================================
+
+Only after:
+
+1. the customer edit completed successfully,
+2. the updated private preview passed,
+3. production was proven to remain on release 5,
+
+use the normal customer UI and click:
+
+Publish Updates
+
+exactly ONCE.
+
+Observe exactly one publish request.
+
+Do not retry a failed mutation.
+
+The publish must use the NEW generated source revision.
+
+Because generated source changed while adapter remains app-routing-v2, it must
+produce a NEW deterministic immutable script identity.
+
+Expected:
+
+release count:
+3
+
+historical:
+release 4
+
+previous current:
+release 5
+
+new current:
+release 6 or the next actual release ID assigned by the database
+
+Do not assume the numeric ID until returned.
+
+==================================================
+PART 6 — VERIFY IMMUTABLE UPDATE
+==================================================
+
+Record:
+
+- publish request
+- HTTP result
+- new release ID
+- new generated revision
+- adapter version
+- new immutable script
+- slug
+- public URL
+- route mapping
+
+Require:
+
+- new immutable script differs from release 5
+- release 5 script remains unchanged
+- release 4 remains unchanged
+- release records remain preserved
+- route changes only after candidate verification
+- stable slug remains unchanged
+- stable public URL remains unchanged
+- new route points to the new current release
+- release count becomes 3
+
+Do not mutate any historical immutable script.
+
+==================================================
+PART 7 — VERIFY UPDATED PUBLIC APPLICATION
+==================================================
+
+Open the SAME stable public URL:
+
+https://isolated-observability-acceptance.apps.buildcustom.ai
+
+Verify:
+
+- HTTP 200
+- same hostname
+- same slug
+- CRM renders
+- Recent Activity card is NOW visible
+- card is underneath Five Newest Leads
+- recent activity events render
+- lead name renders
+- activity type renders
+- date/time renders
+
+Verify existing production functionality:
+
+- /api/leads returns application/json
+- expected leads load
+- dashboard works
+- summary cards work
+- Five Newest Leads works
+- leads table works
+- search works
+- sorting works
+- filtering works
+- lead details works
+- seven fields render
+- Notes works
+- Activity Timeline works
+- no private-preview URLs
+- no generated-app API CORS failures
+- no actionable console/page errors
+
+Do not mutate production lead data for this verification.
+
+==================================================
+PART 8 — VERIFY RELEASE HISTORY
+==================================================
+
+At completion, verify all three releases.
+
+RELEASE 4
+
+revision:
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+adapter:
+old pre-app-routing-v2 artifact
+
+script:
+bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8
+
+status:
+historical
+
+RELEASE 5
+
+revision:
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+adapter:
+app-routing-v2
+
+script:
+bc-r-b16f863ac08c7be204b7ffd03b4b6a47c5e0290a85a02908f2382aca
+
+status before update:
+current
+
+status after successful update:
+historical
+
+NEW RELEASE
+
+revision:
+must differ from 020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+adapter:
+app-routing-v2
+
+script:
+must differ from release 5
+
+status:
+current
+
+Confirm:
+
+- release 4 preserved
+- release 5 preserved
+- new release current
+- stable URL unchanged
+- route points only to new current release
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+STOP without retry if:
+
+- customer AI operation genuinely fails
+- no new generated revision is produced
+- updated private preview fails
+- existing functionality regresses
+- public app changes before Publish Updates
+- Publish Updates fails
+- historical immutable script changes
+- stable URL unexpectedly changes
+- updated public backend fails
+- updated public application fails
+
+Do not repair infrastructure inside this task.
+
+If a genuine platform failure appears, diagnose/report it separately.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+FULL CUSTOMER UPDATE LOOP PASS / AGENT EDIT FAILURE /
+PRIVATE PREVIEW FAILURE / ISOLATION FAILURE /
+PUBLISH UPDATES FAILURE / UPDATED PUBLIC APP FAILURE /
+IMMUTABILITY FAILURE
+
+CUSTOMER EDIT
+- outbound instructions:
+- starting revision:
+- Think passes:
+- steps per pass:
+- continuations:
+- credits:
+- finish_task:
+- completion state:
+- new revision:
+- commit:
+
+UPDATED PRIVATE PREVIEW
+- HTTP:
+- Recent Activity:
+- event count:
+- lead name:
+- activity type:
+- date/time:
+- visual consistency:
+- existing CRM:
+- backend:
+- regression:
+- result:
+
+PRE-PUBLISH PRODUCTION ISOLATION
+- public release:
+- public script:
+- release count:
+- Recent Activity publicly visible:
+- /api/leads:
+- result:
+
+PUBLISH UPDATES
+- clicks:
+- requests:
+- HTTP:
+- source revision:
+- new release ID:
+- adapter:
+- new immutable script:
+- route switched:
+- release count:
+
+UPDATED PUBLIC APP
+- URL:
+- HTTP:
+- Recent Activity:
+- events:
+- backend Content-Type:
+- leads:
+- dashboard:
+- Five Newest:
+- search:
+- sorting:
+- filtering:
+- lead details:
+- Notes:
+- Activity Timeline:
+- console:
+- result:
+
+IMMUTABILITY
+- release 4 preserved:
+- release 5 preserved:
+- new release current:
+- release 4 script unchanged:
+- release 5 script unchanged:
+- new script differs:
+- stable slug unchanged:
+- stable URL unchanged:
+- route current:
+- result:
+
+INFRASTRUCTURE CHANGES:
+MUST BE ZERO
+
+AUTH CHANGES:
+MUST BE ZERO
+
+CUSTOMER AI INSTRUCTIONS:
+MUST BE EXACTLY ONE
+
+PUBLISH UPDATES:
+MUST BE EXACTLY ONE
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

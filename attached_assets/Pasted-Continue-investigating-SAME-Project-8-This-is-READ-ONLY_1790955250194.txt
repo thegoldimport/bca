@@ -1,0 +1,494 @@
+Continue investigating SAME Project 8.
+
+This is READ-ONLY DIAGNOSIS.
+
+Do NOT send another AI instruction.
+
+Do NOT manually continue the operation.
+
+Do NOT resend the Recent Activity request.
+
+Do NOT roll back the partial workspace.
+
+Do NOT modify Project 8 source.
+
+Do NOT Publish Updates.
+
+Do NOT create a release.
+
+Do NOT change auth.
+
+Do NOT change runtime limits.
+
+Do NOT change the 250-credit budget.
+
+Do NOT modify infrastructure.
+
+Do NOT deploy anything.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+We have TWO observed failures.
+
+Do not assume they share a cause.
+
+==================================================
+FAILURE A — NATIVE THINK ERROR
+==================================================
+
+Exactly one customer instruction was sent.
+
+Starting revision:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+
+Observed native Think passes:
+
+pass 1: 25 step markers
+pass 2: 25
+pass 3: 25
+pass 4: 23
+
+Total:
+98 step markers
+
+Internal continuations:
+3
+
+Fourth native Think stream ended:
+
+status = error
+
+finish_task:
+NOT observed
+
+Last verified new commit/revision:
+
+baa899414e0ea0a185b627404cd24743a624c049
+
+Two deploy_space calls were observed.
+
+The operation did NOT hit the configured:
+
+25 maxSteps per pass
+5 Think-turn ceiling
+4 continuation ceiling
+
+No resource-limit terminal state was reported.
+
+==================================================
+FAILURE B — AUTH AFTERWARD
+==================================================
+
+Separately, after the native Think failure:
+
+authenticated reads returned HTTP 401
+
+and a normal same-customer re-login returned:
+
+HTTP 502
+
+The native Think error occurred BEFORE that re-login attempt.
+
+A common cause has NOT been established.
+
+Do not infer causation.
+
+==================================================
+GOAL
+==================================================
+
+Determine:
+
+1. the exact cause of the fourth native Think stream error,
+2. whether the partial operation/workspace is safely resumable,
+3. the exact cause of the later 401,
+4. the exact cause of the normal login 502,
+5. whether any evidence links the Think failure and auth failure.
+
+Do not repair anything yet.
+
+==================================================
+PART 1 — RECONSTRUCT THE OPERATION
+==================================================
+
+Reconstruct the exact operation timeline from the original customer instruction
+through the fourth-pass error.
+
+Record:
+
+- operation ID
+- customer instruction timestamp
+- each Think pass start/end
+- each continuation
+- each model/provider request
+- each provider response/status
+- each tool call
+- deploy_space calls
+- commits/revisions created
+- lifecycle transitions
+- recovery transitions
+- credit reservations/refunds if observable
+- elapsed time
+- final native stream event
+- final operation state
+
+Do not count internal continuations as customer instructions.
+
+==================================================
+PART 2 — IDENTIFY THE EXACT NATIVE ERROR
+==================================================
+
+Find the original error responsible for:
+
+fourth Think pass
+→ status = error
+
+Do not stop at the generic stream status.
+
+Trace to the deepest available error.
+
+Determine whether it originated from:
+
+- model/provider request
+- AI Gateway
+- provider response parsing
+- streaming/SSE
+- ThinkAgent
+- tool execution
+- deploy_space
+- workspace
+- Durable Object
+- timeout
+- credit reservation
+- continuation logic
+- network/service binding
+- exception in BuildCustom/VibeSDK code
+- other
+
+Return the exact:
+
+- timestamp
+- component
+- error class/type
+- status code if applicable
+- error message
+- relevant stack location
+- upstream response/error if available
+- retryable/non-retryable classification if the native system provides one
+
+Do not expose secrets.
+
+==================================================
+PART 3 — VERIFY LIMITS WERE NOT THE CAUSE
+==================================================
+
+Read the actual operation accounting.
+
+Confirm if possible:
+
+- model calls/reservations
+- credits consumed
+- credit budget remaining
+- Think turns used
+- continuations used
+- elapsed time
+- no-progress counters
+
+We need evidence that this was NOT another resource-ceiling failure.
+
+If credit consumption cannot be recovered, say UNKNOWN rather than inferring it
+from step markers.
+
+==================================================
+PART 4 — INSPECT PARTIAL WORKSPACE READ-ONLY
+==================================================
+
+Inspect the existing workspace and Git state WITHOUT modifying it.
+
+For revision:
+
+baa899414e0ea0a185b627404cd24743a624c049
+
+determine:
+
+- parent revision
+- files changed
+- whether Recent Activity implementation exists
+- whether implementation appears complete or partial
+- working tree clean/dirty
+- uncommitted changes
+- current Git HEAD
+- SpaceDO/current authoritative revision
+- latest deployed private-preview revision if observable
+- whether deploy_space succeeded
+- whether preview artifact exists
+
+Do NOT declare the feature successful merely because code exists.
+
+We are determining recoverability only.
+
+==================================================
+PART 5 — DETERMINE RESUMABILITY
+==================================================
+
+Using the existing native lifecycle/recovery semantics, answer:
+
+Can this SAME operation safely continue from its existing workspace without
+resending the customer's instruction?
+
+Determine whether:
+
+- native operation state permits recovery/continuation
+- same ThinkAgent can continue
+- same SpaceDO/workspace remains authoritative
+- existing progress would be preserved
+- continuation would duplicate work
+- another customer instruction would be required
+- operation is terminal and cannot natively resume
+
+Do NOT actually resume it.
+
+Classify:
+
+SAFE NATIVE RESUME
+
+or
+
+NOT NATIVELY RESUMABLE
+
+or
+
+UNKNOWN
+
+Explain exactly why.
+
+==================================================
+PART 6 — TRACE THE 401
+==================================================
+
+Now investigate the later authenticated-read 401 separately.
+
+Identify the exact request that first returned 401.
+
+Record:
+
+- timestamp
+- endpoint
+- cookie/header presence
+- session/token identity metadata where safe
+- token expiration
+- stored session state
+- revocation state
+- runtime authentication result
+- control-plane interpretation
+- exact rejection reason if observable
+
+Compare against the last successful authenticated request.
+
+Determine what changed between:
+
+last successful auth
+→ first 401
+
+Do not change or revoke sessions.
+
+==================================================
+PART 7 — TRACE THE LOGIN 502
+==================================================
+
+Trace the normal same-customer login attempt that returned HTTP 502.
+
+Identify:
+
+- exact endpoint
+- control-plane request
+- runtime/service-binding request
+- runtime response
+- upstream status
+- exception/error
+- whether credentials reached the normal runtime auth path
+- whether a session was created
+- whether response translation failed
+- whether runtime/auth service was unavailable
+
+Find the deepest available cause of the 502.
+
+Do not retry login merely for testing unless an existing read-only trace already
+provides the answer.
+
+==================================================
+PART 8 — LOOK FOR A COMMON CAUSE
+==================================================
+
+Only after independently identifying both failures, compare:
+
+Think error timestamp/component
+401 timestamp/component
+login 502 timestamp/component
+
+Look for evidence of a shared dependency such as:
+
+- runtime Worker failure
+- Durable Object issue
+- service binding failure
+- deployment/version transition
+- Cloudflare incident/error
+- runtime exception
+- session-store failure
+- account/provider issue
+
+Classify:
+
+COMMON CAUSE PROVEN
+
+SEPARATE CAUSES PROVEN
+
+NO COMMON CAUSE ESTABLISHED
+
+Do not infer a relationship from timing alone.
+
+==================================================
+PART 9 — DETERMINE SMALLEST NEXT ACTION
+==================================================
+
+After root cause analysis, recommend the smallest next action.
+
+Possible outcomes include:
+
+A. transient native/provider failure and SAFE NATIVE RESUME
+
+B. native continuation/recovery defect requiring a platform fix
+
+C. operation terminal but partial workspace safely preserved, requiring an
+explicit customer retry strategy
+
+D. auth/runtime defect requiring repair before any agent continuation
+
+E. two unrelated defects requiring separate treatment
+
+Do NOT perform the action yet.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do not build new observability unless the existing production evidence is
+genuinely insufficient.
+
+Do not turn missing optional telemetry into a product failure.
+
+Use existing logs/state/receipts/source first.
+
+Do not rerun the customer request.
+
+Do not mutate the workspace.
+
+Do not login repeatedly.
+
+Do not alter production.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL DIAGNOSIS:
+ROOT CAUSE PROVEN / PARTIAL ROOT CAUSE / INSUFFICIENT EVIDENCE
+
+THINK FAILURE
+- operation ID:
+- error timestamp:
+- pass:
+- step:
+- originating component:
+- error type:
+- status:
+- exact error:
+- upstream cause:
+- retry classification:
+- final native state:
+
+LIMIT ACCOUNTING
+- Think turns:
+- continuations:
+- model calls:
+- credits used:
+- credits remaining:
+- elapsed:
+- resource ceiling hit:
+- result:
+
+PARTIAL WORKSPACE
+- HEAD:
+- new revision:
+- parent:
+- files changed:
+- Recent Activity implementation:
+- working tree:
+- uncommitted work:
+- deploy_space:
+- private preview revision:
+- workspace preserved:
+
+RESUMABILITY
+- classification:
+- same operation resumable:
+- same ThinkAgent:
+- same SpaceDO:
+- progress preserved:
+- duplicate-work risk:
+- customer resend required:
+- reason:
+
+AUTH 401
+- first failing request:
+- timestamp:
+- auth material present:
+- session existed:
+- expired:
+- revoked:
+- exact rejection:
+- root cause:
+
+LOGIN 502
+- endpoint:
+- timestamp:
+- control result:
+- runtime result:
+- deepest error:
+- session created:
+- root cause:
+
+RELATIONSHIP
+- classification:
+- evidence:
+- common component:
+- conclusion:
+
+SMALLEST NEXT ACTION:
+[one precise action]
+
+CHANGES MADE:
+MUST BE ZERO
+
+AI INSTRUCTIONS SENT:
+MUST BE ZERO
+
+MANUAL CONTINUATIONS:
+MUST BE ZERO
+
+PUBLISH UPDATES:
+MUST BE ZERO
+
+NEW RELEASES:
+MUST BE ZERO
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

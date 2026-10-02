@@ -1,0 +1,550 @@
+We stopped correctly before deployment.
+
+Continue ONLY with diagnosis of the failed focused D1 instrumentation tests.
+
+Do NOT deploy anything.
+
+Do NOT commit or push anything yet.
+
+Do NOT change Project 8.
+
+Do NOT send an AI instruction.
+
+Do NOT resume the Project 8 operation.
+
+Do NOT modify auth semantics.
+
+Do NOT modify runtime limits or the 250-credit budget.
+
+Do NOT modify gateway, publisher, control plane, or generated apps.
+
+Do NOT weaken, delete, skip, or trivially satisfy the Sentry observability
+assertions.
+
+The current candidate WeakMap guard is PROVISIONAL.
+
+Do not replace it unless evidence proves it is incorrect.
+
+==================================================
+CURRENT STATE
+==================================================
+
+Canonical GitHub baseline:
+
+a6e446ee041015bbde56df74075dcb945deb7699
+
+No candidate commit has been accepted or pushed.
+
+No deployment occurred.
+
+Provisional local candidate exists under:
+
+production/vibesdk-launch/runtime-source/worker/database/
+
+Modified:
+database.ts
+
+Added:
+d1-instrumentation.ts
+d1-instrumentation.test.ts
+
+Candidate behavior:
+
+- unguarded installed SDK repeatedly instrumented
+  → reproduces RangeError
+
+- candidate guard instrumented once/twice/10,000 times
+  → behavioral and method-identity assertions succeeded
+
+- 5,000 DatabaseService constructions against one binding
+  → owner-style Drizzle lookup behavior succeeded
+
+BUT:
+
+focused suite:
+1 passed
+11 failed
+
+Common failure:
+
+test telemetry interception observed ZERO Sentry span calls.
+
+Therefore:
+
+Sentry visibility is NOT YET VALIDATED.
+
+This does NOT prove that the candidate removed production telemetry.
+
+==================================================
+GOAL
+==================================================
+
+Determine exactly why the focused tests observe zero Sentry spans.
+
+We need to distinguish:
+
+A. TEST OBSERVATION DEFECT
+
+The installed Sentry D1 instrumentation is active, but the test intercepts the
+wrong SDK function/module instance/layer.
+
+B. CANDIDATE DEFECT
+
+The WeakMap guard prevents or bypasses the intended first instrumentation.
+
+C. BASELINE BEHAVIOR
+
+The installed Sentry D1 instrumentation does not emit spans through the API the
+test assumes, even without our candidate.
+
+D. ENVIRONMENT DIFFERENCE
+
+The instrumentation requires Sentry initialization/context/configuration that
+the focused test does not provide.
+
+E. OTHER PROVEN CAUSE
+
+Do not guess.
+
+==================================================
+PART 1 — ESTABLISH BASELINE TELEMETRY FIRST
+==================================================
+
+Before changing candidate code, test the INSTALLED Sentry SDK directly.
+
+Use ONE fresh mock/test D1 binding.
+
+Instrument it exactly ONCE using the existing installed:
+
+instrumentD1WithSentry
+
+with NO WeakMap candidate involved.
+
+Execute representative successful operations:
+
+prepare → bind → first
+prepare → bind → all
+prepare → bind → run
+
+and a controlled query error.
+
+Determine whether the CURRENT telemetry interception mechanism sees the
+expected Sentry activity.
+
+This is the critical control experiment.
+
+Report:
+
+BASELINE ONE-TIME SDK INSTRUMENTATION
+- query behavior:
+- error behavior:
+- expected instrumentation path:
+- observed spans:
+- observed breadcrumbs/events if relevant:
+- interception point:
+- result:
+
+If baseline one-time instrumentation ALSO records zero spans:
+
+the candidate has NOT been shown to cause the telemetry failure.
+
+Do not change the candidate to compensate.
+
+Instead diagnose the test interception/environment.
+
+==================================================
+PART 2 — TRACE THE INSTALLED SDK IMPLEMENTATION
+==================================================
+
+Inspect the exact installed implementation of:
+
+instrumentD1WithSentry
+
+and the Sentry functions it actually invokes.
+
+Trace:
+
+D1 binding
+→ prepare wrapper
+→ prepared statement wrapper
+→ bind/query method
+→ instrumentation helper
+→ Sentry API
+
+Determine precisely:
+
+- which Sentry function creates/records the instrumentation
+- whether spans are started lazily
+- whether an active client/scope/transaction is required
+- whether instrumentation is conditional
+- whether it uses imported bindings captured at module initialization
+- whether monkey-patching the exported Sentry function AFTER import can observe
+  calls
+- whether ESM/module identity means the test is spying on a different reference
+- whether the Worker runtime differs from the unit-test environment
+
+Do not modify node_modules or vendor SDK code.
+
+==================================================
+PART 3 — TRACE THE FAILED TEST INTERCEPTION
+==================================================
+
+Inspect exactly how d1-instrumentation.test.ts attempts to observe telemetry.
+
+Determine whether its spy/interceptor is attached to the SAME callable
+reference actually used by instrumentD1WithSentry.
+
+Prove this rather than assuming it.
+
+If the installed SDK captured something like:
+
+const startSpan = importedStartSpan
+
+before the test patched the export, then spying on the later export may
+correctly observe zero calls despite real instrumentation.
+
+Likewise inspect:
+
+- module cache
+- ESM namespace behavior
+- hoisted imports
+- Vitest mocking order
+- SDK initialization
+- Sentry client presence
+- active scope/context
+
+Identify the first point where expected observability disappears.
+
+==================================================
+PART 4 — COMPARE FOUR CONTROL CASES
+==================================================
+
+Run focused LOCAL tests only.
+
+CASE 1:
+raw uninstrumented D1 binding
+
+CASE 2:
+existing installed SDK instrumentation exactly once, no candidate
+
+CASE 3:
+candidate guard exactly once
+
+CASE 4:
+candidate guard repeatedly on same binding
+
+For each compare:
+
+- binding identity
+- prepare identity
+- prepared-statement method identity
+- query result
+- bound values
+- error propagation
+- actual instrumentation path reached
+- observable telemetry using a VALIDATED interception method
+
+The key comparison is:
+
+CASE 2 vs CASE 3.
+
+If CASE 2 and CASE 3 produce equivalent telemetry behavior, the candidate
+preserves first instrumentation.
+
+If CASE 2 produces telemetry and CASE 3 does not, the candidate is defective.
+
+==================================================
+PART 5 — VALIDATE A REAL OBSERVATION METHOD
+==================================================
+
+Do not simply rewrite the assertion until it passes.
+
+Establish a telemetry observation method that demonstrably detects the
+installed SDK's ONE-TIME baseline instrumentation.
+
+Only after that control succeeds may it be used to judge the candidate.
+
+Possible valid approaches depend on the actual SDK implementation.
+
+Use the smallest method supported by source evidence, such as:
+
+- correctly ordered module mock
+- SDK transport/event capture
+- span processor/export capture
+- initialized test client
+- SDK-supported test hook
+- another direct instrumentation boundary
+
+Do not send telemetry to a real production Sentry project.
+
+Do not require external network access.
+
+==================================================
+PART 6 — RE-EVALUATE THE WEAKMAP DESIGN
+==================================================
+
+Once telemetry observation is trustworthy, evaluate the current candidate.
+
+Required invariant remains:
+
+instrument(instrument(db)) ≡ instrument(db)
+
+for the same original D1 binding.
+
+Specifically prove:
+
+FIRST CALL:
+
+- existing SDK invoked exactly once
+- binding gets intended instrumentation
+- queries work
+- errors remain observable
+
+REPEATED CALLS:
+
+- existing SDK is NOT invoked again for same binding
+- no new prepare proxy is installed
+- no recursive prepared-statement wrapping occurs
+- telemetry from queries still works through the original instrumentation
+
+10,000 repeated instrumentation requests must not cause proxy growth or stack
+overflow.
+
+5,000 DatabaseService constructions must remain safe.
+
+==================================================
+PART 7 — CHECK WEAKMAP EDGE CASE
+==================================================
+
+Verify the cache keys and returned values carefully.
+
+If:
+
+originalBinding → instrumentedBinding
+
+is stored, determine what happens if later code passes either:
+
+originalBinding
+
+or:
+
+instrumentedBinding
+
+back to the guard.
+
+The guard must not accidentally instrument the instrumented result again.
+
+If both identities can legitimately reach the helper, ensure idempotency covers
+both safely.
+
+Do not add complexity if production flow proves only the original binding is
+ever supplied, but document the invariant.
+
+==================================================
+PART 8 — ONLY CHANGE CANDIDATE IF EVIDENCE REQUIRES IT
+==================================================
+
+If the candidate preserves telemetry and the test was wrong:
+
+fix ONLY the test/telemetry observation mechanism.
+
+If the candidate actually suppresses first instrumentation:
+
+make the smallest candidate correction.
+
+If the WeakMap strategy itself is invalid:
+
+explain why with evidence before replacing it.
+
+Do not redesign Sentry integration.
+
+Do not remove instrumentation.
+
+Do not catch and swallow the RangeError.
+
+Do not solve recursion by disabling telemetry.
+
+==================================================
+PART 9 — RERUN FOCUSED SUITE
+==================================================
+
+After the cause is proven and the smallest correction is made, rerun the
+focused suite.
+
+Require:
+
+- baseline one-time SDK telemetry control PASS
+- candidate first instrumentation telemetry PASS
+- repeated instrumentation telemetry PASS
+- once/twice/10,000 idempotency PASS
+- 5,000 DatabaseService constructions PASS
+- prepare/bind/first PASS
+- prepare/bind/all PASS
+- prepare/bind/run PASS
+- controlled query error observability PASS
+- no RangeError
+- no recursive proxy growth
+
+All focused tests must pass.
+
+==================================================
+PART 10 — THEN RUN RELEVANT REGRESSIONS
+==================================================
+
+ONLY after focused tests pass, run:
+
+- existing D1 instrumentation tests
+- DatabaseService tests
+- runtime auth tests
+- login/session tests
+- owner verification
+- logout/session behavior
+- runtime suite
+- typecheck
+- build
+- Worker dry-run
+
+If anything relevant fails, STOP.
+
+Do not deploy.
+
+==================================================
+PART 11 — ACCEPTANCE / SOURCE
+==================================================
+
+If and only if all relevant tests pass:
+
+prepare the candidate for acceptance.
+
+Verify source reconstruction against the canonical baseline plus this explicit
+patch.
+
+Commit the fix and tests.
+
+Push deliberately to canonical GitHub main.
+
+Report the resulting canonical commit.
+
+BUT DO NOT DEPLOY IN THIS TASK.
+
+We want source acceptance separated from production activation this time.
+
+==================================================
+PROJECT 8
+==================================================
+
+Do not touch Project 8 during this task.
+
+Expected preserved state remains:
+
+agent:
+c9b4c828-07d1-41aa-a6bb-2c858b29c09e
+
+expected HEAD:
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+production:
+release 5
+
+release count:
+2
+
+Do not re-login for Project 8.
+
+Do not trigger recovery.
+
+Do not send another customer instruction.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+TEST DIAGNOSIS PASS / CANDIDATE DEFECT /
+TEST HARNESS DEFECT / SDK BASELINE OBSERVABILITY ISSUE /
+REGRESSION FAILURE / SOURCE ACCEPTED
+
+BASELINE SDK CONTROL
+- one-time instrumentation:
+- query behavior:
+- error behavior:
+- telemetry observed:
+- observation method:
+- result:
+
+FAILED TEST ROOT CAUSE
+- classification:
+- exact cause:
+- first divergence:
+- evidence:
+
+CANDIDATE
+- WeakMap retained:
+- candidate changed:
+- reason:
+- first SDK instrumentation count:
+- repeated SDK instrumentation count:
+- original binding behavior:
+- instrumented binding behavior:
+- recursion prevented:
+- Sentry visibility preserved:
+
+FOCUSED TESTS
+- baseline control:
+- once:
+- twice:
+- 10,000:
+- 5,000 DatabaseService constructions:
+- first:
+- all:
+- run:
+- error observability:
+- total:
+- result:
+
+REGRESSIONS
+- D1:
+- DatabaseService:
+- auth:
+- sessions:
+- owner:
+- logout:
+- runtime:
+- typecheck:
+- build:
+- dry-run:
+- result:
+
+GITHUB
+- previous canonical:
+- new canonical:
+- committed:
+- pushed:
+- reconstruction:
+- result:
+
+DEPLOYMENT:
+MUST BE NONE
+
+PROJECT 8 CHANGES:
+MUST BE ZERO
+
+THINK/RPC CHANGES:
+MUST BE ZERO
+
+CUSTOMER AI INSTRUCTIONS:
+MUST BE ZERO
+
+PUBLISH UPDATES:
+MUST BE ZERO
+
+NEW RELEASES:
+MUST BE ZERO
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

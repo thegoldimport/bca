@@ -1,0 +1,494 @@
+We have accepted the read-only Project 8 diagnosis.
+
+Implement ONLY the proven runtime D1/Sentry instrumentation defect.
+
+Do NOT attempt to fix the Think/RPC stream error in this task.
+
+Do NOT resume the Project 8 operation yet.
+
+Do NOT send another customer AI instruction.
+
+Do NOT modify Project 8 source/workspace.
+
+Do NOT roll back its preserved commits.
+
+Do NOT Publish Updates.
+
+Do NOT create another release.
+
+Do NOT change customer credentials.
+
+Do NOT change auth semantics.
+
+Do NOT change runtime limits.
+
+Do NOT change the 250-credit budget.
+
+Do NOT change gateway or publisher.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+PROVEN ROOT CAUSE
+==================================================
+
+The Project 8 401 and subsequent normal-login 502 share a proven cause:
+
+recursive/repeated Sentry instrumentation of the runtime D1 binding and
+prepared statements.
+
+First retained 401:
+
+GET /api/projects/8/runtime/status
+
+Runtime auth reached owner/session D1 lookups.
+
+The session:
+
+- existed
+- was not expired
+- was not revoked
+
+The lookup failed with:
+
+RangeError: Maximum call stack size exceeded
+
+The repeated stack points at the instrumented prepared-statement bind proxy.
+
+Normal login later reached the normal AuthService path and failed with the same
+class of recursive proxy stack.
+
+Source diagnosis identified:
+
+instrumentD1WithSentry
+
+and specifically that DatabaseService can invoke instrumentation during
+construction without a binding-level idempotency guard.
+
+This is the ONLY defect authorized for repair in this task.
+
+==================================================
+GOAL
+==================================================
+
+Make the existing runtime D1/Sentry instrumentation safely IDEMPOTENT.
+
+A D1 binding must not become recursively wrapped when instrumentation is
+requested more than once.
+
+Likewise, prepared statements must not accumulate recursive instrumentation
+proxies.
+
+Preserve the existing intended Sentry visibility.
+
+This is NOT authorization to remove D1 observability entirely merely to make
+the stack overflow disappear.
+
+==================================================
+PART 1 — INSPECT CURRENT INSTRUMENTATION
+==================================================
+
+Before editing, identify the exact instrumentation lifecycle.
+
+Determine:
+
+- where instrumentD1WithSentry is defined
+- every production call site
+- when DatabaseService invokes it
+- whether the same D1 binding can pass through instrumentation multiple times
+- whether db.prepare is replaced
+- how prepared statements are wrapped
+- why repeated construction/instrumentation causes proxy recursion
+
+Confirm the smallest safe idempotency boundary.
+
+Do not redesign observability.
+
+==================================================
+PART 2 — IMPLEMENT IDEMPOTENCY
+==================================================
+
+Implement the smallest robust fix.
+
+Required invariant:
+
+instrument(instrument(db)) must behave equivalently to instrument(db)
+
+Repeated instrumentation of the SAME D1 binding must not wrap:
+
+- db.prepare
+- prepared statements
+- bind
+- first
+- all
+- run
+- raw
+
+or other instrumented operations recursively.
+
+Prefer an explicit private marker/symbol/WeakSet or equivalent safe
+binding-level idempotency mechanism appropriate to the runtime architecture.
+
+Do not depend on function-name inspection or fragile proxy detection.
+
+Requirements:
+
+1. First instrumentation still provides intended Sentry instrumentation.
+
+2. Second and subsequent instrumentation requests are safe no-ops for the
+   already-instrumented binding.
+
+3. Existing DatabaseService construction remains valid.
+
+4. Existing D1 behavior remains unchanged from the caller's perspective.
+
+5. Prepared statements still behave normally.
+
+6. Errors still reach the intended Sentry instrumentation.
+
+7. No recursive Proxy chain can accumulate.
+
+8. Do not change authentication policy or session semantics.
+
+==================================================
+PART 3 — FOCUSED REGRESSION TEST
+==================================================
+
+Add focused tests reproducing the ACTUAL defect.
+
+At minimum:
+
+- instrument D1 once
+- instrument the SAME binding twice
+- instrument it repeatedly beyond twice
+- construct DatabaseService repeatedly against the same binding where this
+  matches production behavior
+
+Then exercise:
+
+prepare
+→ bind
+→ first
+
+prepare
+→ bind
+→ all
+
+prepare
+→ bind
+→ run
+
+and any other operation involved in the existing instrumentation.
+
+Require:
+
+- no RangeError
+- no recursive proxy growth
+- correct query behavior
+- expected instrumentation still occurs
+- errors remain observable
+- repeated instrumentation does not duplicate instrumentation unexpectedly
+
+Include a regression reproducing the relevant auth-style lookup path if
+practical without changing auth itself.
+
+==================================================
+PART 4 — EXISTING REGRESSIONS
+==================================================
+
+Run the relevant existing suites for:
+
+- D1 instrumentation
+- DatabaseService
+- runtime auth
+- session resolution
+- login
+- owner verification
+- Task 6A/logout/session behavior
+- runtime
+- typecheck
+- build
+- Worker dry-run
+
+Do not rerun unrelated massive acceptance workflows unless required by a shared
+dependency.
+
+Do not make an AI request.
+
+==================================================
+PART 5 — SOURCE OF TRUTH
+==================================================
+
+GitHub remains canonical.
+
+Current canonical baseline:
+
+a6e446ee041015bbde56df74075dcb945deb7699
+
+Commit the accepted instrumentation fix and tests.
+
+Push deliberately to the canonical repository.
+
+Verify the resulting commit reconstructs/builds correctly.
+
+Do not leave authoritative source only in Replit.
+
+==================================================
+PART 6 — DEPLOY MINIMUM COMPONENT
+==================================================
+
+If tests pass:
+
+deploy ONLY the runtime component required for this instrumentation fix.
+
+Do not deploy control plane unless source evidence proves it is actually
+required.
+
+Do not change:
+
+- gateway
+- publisher behavior
+- app-routing-v2
+- auth policy
+- session lifetime
+- lifecycle limits
+- credit budget
+- generated app routing
+
+Record previous/new runtime version and rollback target.
+
+==================================================
+PART 7 — VERIFY AUTH WITHOUT TOUCHING THE AGENT
+==================================================
+
+After deployment, verify the proven failure path using the normal SAME customer.
+
+First use normal login ONCE.
+
+Do not create a new customer.
+
+Do not reset the password.
+
+Do not manipulate the session database.
+
+Require:
+
+POST /api/auth/login
+→ normal successful response
+
+Then use the resulting normal session for read-only requests:
+
+GET /api/projects/8/runtime/status
+
+and the ordinary dashboard/Project 8 read path.
+
+Require:
+
+- login succeeds
+- no 502
+- status succeeds
+- no 401 caused by D1 lookup failure
+- no Maximum call stack error
+- owner resolution succeeds
+
+Do NOT send anything in the agent input.
+
+==================================================
+PART 8 — VERIFY IDEMPOTENCY IN PRODUCTION
+==================================================
+
+Use normal read-only authenticated operations sufficient to cause repeated
+DatabaseService/D1 instrumentation in the same way that previously triggered
+the defect.
+
+Confirm:
+
+- no recursive stack overflow
+- no auth degradation
+- repeated status/read operations continue to work
+- session remains valid
+- no new session revocation
+- no unexpected Sentry/D1 instrumentation failure
+
+Do not stress test production unnecessarily.
+
+==================================================
+PART 9 — PRESERVE PROJECT 8 EXACTLY
+==================================================
+
+After auth is restored, perform READ-ONLY confirmation of Project 8.
+
+Expected authoritative workspace revision:
+
+50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Expected history:
+
+020de27f52eb0273554e1004cb12eb9f2977aa7a
+→ baa899414e0ea0a185b627404cd24743a624c049
+→ 50b27d65be36fdb7b9e37b6122c1b32ec536ed5a
+
+Confirm only:
+
+- same agent
+- workspace still exists
+- HEAD remains 50b27d...
+- working tree remains clean if observable
+- private deployed revision remains 50b27d... if observable
+- production remains release 5
+- release count remains 2
+
+Do NOT attempt to determine feature success yet.
+
+Do NOT resume the operation.
+
+Do NOT trigger recovery manually.
+
+Do NOT send the customer instruction again.
+
+==================================================
+IMPORTANT — THINK FAILURE REMAINS OUT OF SCOPE
+==================================================
+
+The fourth Think stream error remains unresolved.
+
+Known facts:
+
+- 4 Think passes
+- 98 model calls
+- 3 internal continuations
+- finish_task executed server-side
+- final persisted native stream status = error
+- latest retained lifecycle state = RUNNING
+- original callback exception message was not retained
+- safe native resumability remains UNKNOWN
+
+Do NOT alter ThinkAgent, RPC callbacks, continuation logic, completion logic,
+or recovery behavior in this task.
+
+We first restore reliable authentication.
+
+After auth is proven stable, we will decide how to handle the preserved
+operation separately.
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+If the instrumentation fix cannot be made without changing auth semantics:
+
+STOP.
+
+If relevant tests fail:
+
+STOP before deployment.
+
+If runtime deployment fails:
+
+STOP.
+
+If normal login still returns 502:
+
+STOP.
+
+If authenticated reads still fail from recursive D1 instrumentation:
+
+STOP.
+
+If Project 8 state differs unexpectedly:
+
+STOP and report it.
+
+Do not compensate by resending the AI request.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+D1 IDEMPOTENCY FIX PASS / IMPLEMENTATION FAILURE /
+TEST FAILURE / DEPLOYMENT FAILURE / AUTH STILL FAILS /
+PROJECT STATE CHANGED
+
+ROOT CAUSE FIX
+- component:
+- recursion mechanism:
+- idempotency mechanism:
+- first instrumentation:
+- repeated instrumentation:
+- prepared statements:
+- Sentry visibility preserved:
+
+TESTS
+- focused D1:
+- repeated instrumentation:
+- DatabaseService:
+- auth:
+- sessions:
+- owner:
+- runtime:
+- typecheck:
+- build:
+- dry-run:
+
+GITHUB
+- previous canonical:
+- new canonical:
+- pushed:
+- reproducible:
+
+DEPLOYMENT
+- previous runtime:
+- new runtime:
+- rollout:
+- rollback:
+- control changed:
+- gateway changed:
+- publisher changed:
+- auth semantics changed:
+- lifecycle limits changed:
+- credit budget changed:
+
+AUTH VERIFICATION
+- login attempts:
+- login result:
+- status result:
+- owner resolution:
+- repeated reads:
+- recursive RangeError:
+- session valid:
+- result:
+
+PROJECT 8 PRESERVATION
+- agent:
+- HEAD:
+- expected HEAD match:
+- working tree:
+- deployed private revision:
+- production release:
+- release count:
+- AI instructions:
+- recovery triggered:
+- result:
+
+THINK/RPC FIX ATTEMPTED:
+MUST BE NO
+
+CUSTOMER AI INSTRUCTIONS:
+MUST BE ZERO
+
+PUBLISH UPDATES:
+MUST BE ZERO
+
+NEW RELEASES:
+MUST BE ZERO
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

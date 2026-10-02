@@ -1,0 +1,1124 @@
+{
+  "startedAt": "2026-10-02T15:03:29.478Z",
+  "projectId": 8,
+  "owner": "379ce699-b905-43cc-b5ba-f40bb42ded20",
+  "agent": "c9b4c828-07d1-41aa-a6bb-2c858b29c09e",
+  "startingRevision": "020de27f52eb0273554e1004cb12eb9f2977aa7a",
+  "state": "OBSERVATION_STOPPED",
+  "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+  "sendClicks": 1,
+  "outboundInstructions": 1,
+  "matchingInstructions": 1,
+  "publishRequests": 0,
+  "frames": [
+    {
+      "at": "2026-10-02T15:03:45.926Z",
+      "type": "generation_started"
+    },
+    {
+      "at": "2026-10-02T15:03:46.010Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7"
+    },
+    {
+      "at": "2026-10-02T15:03:49.273Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "list",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-02T15:03:49.324Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "list",
+      "status": "success",
+      "paths": [
+        "/"
+      ]
+    },
+    {
+      "at": "2026-10-02T15:03:50.328Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "list",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-02T15:03:50.405Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "list",
+      "status": "success",
+      "paths": [
+        "/public"
+      ]
+    },
+    {
+      "at": "2026-10-02T15:03:51.804Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "list",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-02T15:03:51.848Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "list",
+      "status": "success",
+      "paths": [
+        "/src"
+      ]
+    },
+    {
+      "at": "2026-10-02T15:03:53.135Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "read",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-02T15:03:53.204Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "read",
+      "status": "success",
+      "paths": [
+        "/src/index.ts"
+      ]
+    },
+    {
+      "at": "2026-10-02T15:03:56.032Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "grep",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-02T15:03:56.095Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "grep",
+      "status": "success"
+    },
+    {
+      "at": "2026-10-02T15:03:59.723Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "read",
+      "status": "start"
+    },
+    {
+      "at": "2026-10-02T15:03:59.802Z",
+      "type": "conversation_response",
+      "conversationId": "conv-1790953425892-lrvikz7",
+      "toolName": "read",
+      "status": "success",
+      "paths": [
+        "public/index.html"
+      ]
+    }
+  ],
+  "statusSamples": [
+    {
+      "at": "2026-10-02T15:04:02.153Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "running",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:04:18.512Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "running",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:04:34.815Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:04:51.551Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:05:08.868Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:05:25.160Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:05:41.274Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:05:57.691Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:06:15.104Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:06:31.256Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:06:47.372Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:07:04.796Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    },
+    {
+      "at": "2026-10-02T15:07:21.358Z",
+      "status": {
+        "nativeThink": true,
+        "runtimeStatus": "ready",
+        "connected": true,
+        "files": 5,
+        "nativeTaskLifecycle": {
+          "status": "RUNNING",
+          "updatedAt": 1790953425972
+        },
+        "state": {
+          "shouldBeGenerating": false,
+          "generation": {
+            "status": "idle"
+          }
+        },
+        "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+        "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+        "publicAvailable": true
+      },
+      "revision": {
+        "branch": "main",
+        "commitHash": "baa899414e0ea0a185b627404cd24743a624c049"
+      },
+      "turns": [
+        {
+          "id": 1,
+          "mode": "build",
+          "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 2,
+          "mode": "build",
+          "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+          "matchingEdit": false,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        },
+        {
+          "id": 3,
+          "mode": "build",
+          "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+          "matchingEdit": true,
+          "commitHash": null,
+          "changedFiles": [],
+          "createdAt": "",
+          "activity": []
+        }
+      ],
+      "observedUI": {
+        "state": "recovering",
+        "stopVisible": true,
+        "inputDisabled": true
+      }
+    }
+  ],
+  "previewRequests": [
+    {
+      "at": "2026-10-02T15:03:36.273Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "method": "GET",
+      "tokenCount": 0
+    },
+    {
+      "at": "2026-10-02T15:03:39.326Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "method": "GET",
+      "tokenCount": 1
+    }
+  ],
+  "previewResponses": [
+    {
+      "at": "2026-10-02T15:03:37.686Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "status": 200,
+      "allowOrigin": null
+    },
+    {
+      "at": "2026-10-02T15:03:41.243Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200,
+      "allowOrigin": "null",
+      "leadCount": 12
+    }
+  ],
+  "appErrors": [],
+  "telemetryErrors": [
+    {
+      "at": "2026-10-02T15:03:39.414Z",
+      "type": "error",
+      "message": "Access to XMLHttpRequest at 'https://app.buildcustom.ai/cdn-cgi/rum?' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    }
+  ],
+  "localObserverErrors": [],
+  "filesRead": [
+    "/",
+    "/public",
+    "/src",
+    "/src/index.ts",
+    "public/index.html"
+  ],
+  "filesEdited": [],
+  "baseline": {
+    "ownerConfirmed": true,
+    "agentConfirmed": true,
+    "status": {
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "connected": true,
+      "files": 5,
+      "nativeTaskLifecycle": {
+        "status": "INCOMPLETE_RESOURCE_LIMIT",
+        "updatedAt": 1790883647656,
+        "reason": "credit_limit"
+      },
+      "state": {
+        "shouldBeGenerating": false,
+        "generation": {
+          "status": "idle"
+        }
+      },
+      "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+      "publicAvailable": true
+    },
+    "revision": {
+      "branch": "main",
+      "commitHash": "020de27f52eb0273554e1004cb12eb9f2977aa7a"
+    },
+    "turns": [
+      {
+        "id": 1,
+        "mode": "build",
+        "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+        "matchingEdit": false,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      },
+      {
+        "id": 2,
+        "mode": "build",
+        "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+        "matchingEdit": false,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      }
+    ],
+    "preview": {
+      "title": "Pulse CRM - Mini Sales Dashboard",
+      "seededLeadsVisible": true,
+      "total12": true
+    },
+    "api": {
+      "at": "2026-10-02T15:03:41.243Z",
+      "path": "/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/api/leads",
+      "status": 200,
+      "allowOrigin": "null",
+      "leadCount": 12
+    },
+    "actionableErrors": 0
+  },
+  "sendReservedAt": "2026-10-02T15:03:42.928Z",
+  "sentAt": "2026-10-02T15:03:45.920Z",
+  "lastSample": {
+    "at": "2026-10-02T15:07:21.358Z",
+    "status": {
+      "nativeThink": true,
+      "runtimeStatus": "ready",
+      "connected": true,
+      "files": 5,
+      "nativeTaskLifecycle": {
+        "status": "RUNNING",
+        "updatedAt": 1790953425972
+      },
+      "state": {
+        "shouldBeGenerating": false,
+        "generation": {
+          "status": "idle"
+        }
+      },
+      "previewUrl": "https://app.buildcustom.ai/_private_preview/c9b4c828-07d1-41aa-a6bb-2c858b29c09e/main/",
+      "deploymentUrl": "https://isolated-observability-acceptance.apps.buildcustom.ai",
+      "publicAvailable": true
+    },
+    "revision": {
+      "branch": "main",
+      "commitHash": "baa899414e0ea0a185b627404cd24743a624c049"
+    },
+    "turns": [
+      {
+        "id": 1,
+        "mode": "build",
+        "promptSha256": "12dbff78bc7991f1c8be81435711cb7580c3b550d74b37f6312e311560802a86",
+        "matchingEdit": false,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      },
+      {
+        "id": 2,
+        "mode": "build",
+        "promptSha256": "8b5f3426b2af414afcb7a554d04e4d10ee16f88fb4da50bb7048e85b6fa07c93",
+        "matchingEdit": false,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      },
+      {
+        "id": 3,
+        "mode": "build",
+        "promptSha256": "f4872dd3b12920737a3161a0b936af50ad491d0477993e34517339ee0a0bd38c",
+        "matchingEdit": true,
+        "commitHash": null,
+        "changedFiles": [],
+        "createdAt": "",
+        "activity": []
+      }
+    ],
+    "observedUI": {
+      "state": "recovering",
+      "stopVisible": true,
+      "inputDisabled": true
+    }
+  },
+  "failure": {
+    "name": "Error",
+    "message": "Owner GET 401"
+  },
+  "observerFinishedAt": "2026-10-02T15:07:36.449Z",
+  "customerBrowserLeftOpen": true
+}
