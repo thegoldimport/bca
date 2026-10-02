@@ -5,6 +5,7 @@ import {
   awaitNativeDeployResult,
   handleNativeThinkPublish,
   nativeReleaseScriptName,
+  PUBLISHER_ARTIFACT_VERSION,
   parseStockDeploymentUrl,
   validNativeSlug,
   verifyNativePublicRoute,
@@ -30,7 +31,7 @@ const project = {
 const owner = { id: "owner-a" };
 const wrongOwner = { id: "owner-b" };
 const validScript = (rev = revisionA, linkedAgentId = agentId) =>
-  `bc-r-${createHash("sha256").update(`${linkedAgentId.toLowerCase()}:${rev.toLowerCase()}`).digest("hex").slice(0, 56)}`;
+  `bc-r-${createHash("sha256").update(`${linkedAgentId.toLowerCase()}:${rev.toLowerCase()}:${PUBLISHER_ARTIFACT_VERSION}`).digest("hex").slice(0, 56)}`;
 
 class MockSocket extends EventTarget {
   sent: string[] = [];
@@ -454,7 +455,7 @@ test("stock WebSocket waits for immutable capability and idle state before deplo
   assert.deepEqual(socket.sent, []);
   socket.message(JSON.stringify({
     type: "agent_connected",
-    deploymentCapabilities: { platformImmutableRelease: true },
+    deploymentCapabilities: { platformImmutableRelease: true, publisherArtifactVersion: PUBLISHER_ARTIFACT_VERSION },
     state: { shouldBeGenerating: false },
   }));
   assert.deepEqual(socket.sent, [`{"type":"deploy","target":"platform","immutableRelease":true,"expectedRevision":"${revisionA}"}`]);
@@ -464,6 +465,26 @@ test("stock WebSocket waits for immutable capability and idle state before deplo
   }));
   assert.equal(await pending, `https://${validScript(revisionA)}.stock-preview.invalid/`);
   assert.equal(socket.closed, true);
+});
+
+test("native artifact identity versions packaging without changing generated source", async () => {
+  const current = await nativeReleaseScriptName(agentId, revisionA);
+  assert.equal(current, await nativeReleaseScriptName(agentId, revisionA, PUBLISHER_ARTIFACT_VERSION));
+  assert.notEqual(current, await nativeReleaseScriptName(agentId, revisionA, "app-routing-v3"));
+  assert.notEqual(current, await nativeReleaseScriptName(agentId, revisionB));
+  assert.equal(await nativeReleaseScriptName(agentId, revisionA, ""), null);
+});
+
+test("mixed publisher versions fail closed before sending deploy", async () => {
+  const socket = new MockSocket();
+  const pending = awaitNativeDeployResult(socket as any, revisionA, 500);
+  socket.message(JSON.stringify({
+    type: "agent_connected",
+    deploymentCapabilities: { platformImmutableRelease: true, publisherArtifactVersion: "old-publisher" },
+    state: { shouldBeGenerating: false },
+  }));
+  await assert.rejects(pending, /does not support immutable/);
+  assert.deepEqual(socket.sent, []);
 });
 
 test("launch status preserves only the path-scoped preview capability cookie", async () => {
@@ -506,7 +527,7 @@ test("stale stock worker, generating agent, timeout, and premature completion ne
   const generatingPending = awaitNativeDeployResult(generating as any, expectedRevision, 500);
   generating.message(JSON.stringify({
     type: "agent_connected",
-    deploymentCapabilities: { platformImmutableRelease: true },
+    deploymentCapabilities: { platformImmutableRelease: true, publisherArtifactVersion: PUBLISHER_ARTIFACT_VERSION },
     state: { shouldBeGenerating: true },
   }));
   await assert.rejects(generatingPending, /must be idle/);
@@ -766,7 +787,7 @@ test("publishing capabilities, protocol header, legacy path, recovery, and owner
   const f = fixture();
   const get = new Request("https://control.test/api", { method: "GET" });
   const capability = await handleNativeThinkPublish(f.env, get, project, "publishing-capabilities", owner);
-  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2", publicGeneratedAppsEnabled: true });
+  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2", publisherArtifactVersion: PUBLISHER_ARTIFACT_VERSION, publicGeneratedAppsEnabled: true });
 
   const missingProtocol = await handleNativeThinkPublish(
     f.env, f.request({ "X-Publish-Protocol": "wrong" }), project, "publish-immutable-v2", owner, {}, f.dependencies,
@@ -800,7 +821,7 @@ test("launch native publish exposes owner-scoped capabilities and requires its p
   const capability = await handleNativeThinkPublish(
     f.env, new Request("https://control.test/api", { method: "GET" }), project, "publishing-capabilities", owner,
   );
-  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2", publicGeneratedAppsEnabled: false });
+  assert.deepEqual(await capability?.json(), { buildId: "immutable-v2", publishProtocol: "immutable-v2", publisherArtifactVersion: PUBLISHER_ARTIFACT_VERSION, publicGeneratedAppsEnabled: false });
   const response = await publish(f);
   assert.equal(response?.status, 503);
   assert.match((await response!.json()).message, /private launch apps gateway/i);

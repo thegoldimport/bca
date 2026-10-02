@@ -1,0 +1,235 @@
+{
+  "status": "PASS",
+  "auditedAt": "2026-10-02T13:48:06.818Z",
+  "validationHash": "47a0fb74d2a29c8f13e0b659e17242f7acc93f117e9a30b515b1e08583879334",
+  "targets": {
+    "buildcustom-control-plane-launch": {
+      "previous": "dd40f46c-cd23-4e82-8679-83460169570f",
+      "main": "worker.js",
+      "oldModules": [
+        {
+          "name": "worker.js",
+          "sha256": "e113db24722025703d58c2905ff48ab4e9248d3849b3ef8a6b987d294bb15c33"
+        }
+      ],
+      "candidateModules": [
+        {
+          "name": "worker.js",
+          "sha256": "e5bfe26d7e0edfb9be6c4a51fdf805a9b85f058453ae8535ade3ffeaf4bc4f50"
+        }
+      ],
+      "modulesAudit": {
+        "status": "PASS",
+        "mainModule": "worker.js",
+        "mainExports": [
+          {
+            "local": "canPublishInStaging",
+            "exported": "canPublishInStaging"
+          },
+          {
+            "local": "hasExactStagingGatewayConfig",
+            "exported": "hasExactStagingGatewayConfig"
+          },
+          {
+            "local": "isReadOnlyRuntimeOperation",
+            "exported": "isReadOnlyRuntimeOperation"
+          },
+          {
+            "local": "managedStagingPublishUrl",
+            "exported": "managedStagingPublishUrl"
+          },
+          {
+            "local": "projectIdFromPath",
+            "exported": "projectIdFromPath"
+          },
+          {
+            "local": "ProjectOperationDO",
+            "exported": "ProjectOperationDO"
+          },
+          {
+            "local": "serializeProject",
+            "exported": "serializeProject"
+          },
+          {
+            "local": "serializeRelease",
+            "exported": "serializeRelease"
+          },
+          {
+            "local": "serializeTurn",
+            "exported": "serializeTurn"
+          },
+          {
+            "local": "serializeUser",
+            "exported": "serializeUser"
+          },
+          {
+            "local": "verifyManagedStagingRoute",
+            "exported": "verifyManagedStagingRoute"
+          },
+          {
+            "local": "worker_default",
+            "exported": "default"
+          }
+        ],
+        "modules": [
+          {
+            "family": "worker.js",
+            "old": "worker.js",
+            "candidate": "worker.js",
+            "result": "MAIN_EXPORTS_EQUAL"
+          }
+        ]
+      },
+      "bindingsHash": "c30af0a213792b1178930aebcd18e5b0f7992c5a8ddc82529bb2b620c139a754",
+      "runtime": "{\"assets\":{\"base_path\":\"/\",\"not_found_handling\":\"single-page-application\",\"raw_run_worker_first\":true,\"serve_directly\":false},\"compatibility_date\":\"2026-09-20\",\"compatibility_flags\":[\"nodejs_compat\"],\"usage_model\":\"standard\"}"
+    },
+    "buildcustom-vibesdk-launch": {
+      "previous": "5a964dd5-db65-4cde-83f8-22a17f4d909f",
+      "main": "index.js",
+      "oldModules": [
+        {
+          "name": "assets/esbuild-B4PnW_4U.wasm",
+          "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+        },
+        {
+          "name": "assets/hook-proxy-CkF0EhRO-odPdDpPH.js",
+          "sha256": "403143888a602947a183c6fa8c72073a67da42b4c96c340ef3b580cf71273286"
+        },
+        {
+          "name": "assets/mimetext.browser.es-CF8iqyB7.js",
+          "sha256": "325c98348fe2301cd3062c944f7b3221ef0712eb4e1cd09b4d8607ba6f4fd894"
+        },
+        {
+          "name": "assets/NodeWebSocketTransport-BntJgCj_.js",
+          "sha256": "ff0416528695d05574e54b0c37a8e1b2a3142ead1b35a3e81c41c2a5fc836928"
+        },
+        {
+          "name": "assets/rolldown-runtime-BzI350Cx.js",
+          "sha256": "f2868774669a0e4fd09238692bdeff8f8fa83db87f2d12af1efb94d9fcb0510e"
+        },
+        {
+          "name": "assets/version-BHTiQTUJ.js",
+          "sha256": "09204dcb53adbb5608b861d1ff434d0099e6691d6de9e5a923fdfcede304992d"
+        },
+        {
+          "name": "index.js",
+          "sha256": "d7fc995ca7a13cf1edf236e077cbca76036188972e9c538c640ace8dd3fde731"
+        }
+      ],
+      "candidateModules": [
+        {
+          "name": "assets/esbuild-B4PnW_4U.wasm",
+          "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+        },
+        {
+          "name": "assets/hook-proxy-CkF0EhRO-odPdDpPH.js",
+          "sha256": "403143888a602947a183c6fa8c72073a67da42b4c96c340ef3b580cf71273286"
+        },
+        {
+          "name": "assets/mimetext.browser.es-CF8iqyB7.js",
+          "sha256": "325c98348fe2301cd3062c944f7b3221ef0712eb4e1cd09b4d8607ba6f4fd894"
+        },
+        {
+          "name": "assets/NodeWebSocketTransport-BntJgCj_.js",
+          "sha256": "ff0416528695d05574e54b0c37a8e1b2a3142ead1b35a3e81c41c2a5fc836928"
+        },
+        {
+          "name": "assets/rolldown-runtime-BzI350Cx.js",
+          "sha256": "f2868774669a0e4fd09238692bdeff8f8fa83db87f2d12af1efb94d9fcb0510e"
+        },
+        {
+          "name": "assets/version-BHTiQTUJ.js",
+          "sha256": "09204dcb53adbb5608b861d1ff434d0099e6691d6de9e5a923fdfcede304992d"
+        },
+        {
+          "name": "index.js",
+          "sha256": "80f5a1b98169bbd8cede9d08a5484d91f8b81d7c9bd8ad7df5f0f1ebdd466ece"
+        }
+      ],
+      "modulesAudit": {
+        "status": "PASS",
+        "mainModule": "index.js",
+        "mainExports": [
+          {
+            "local": "CodeGeneratorAgent",
+            "exported": "CodeGeneratorAgent"
+          },
+          {
+            "local": "DORateLimitStore",
+            "exported": "DORateLimitStore"
+          },
+          {
+            "local": "PreviewCapabilityValidator",
+            "exported": "PreviewCapabilityValidator"
+          },
+          {
+            "local": "Sandbox",
+            "exported": "UserAppSandboxService"
+          },
+          {
+            "local": "SpaceDO",
+            "exported": "SpaceDO"
+          },
+          {
+            "local": "ThinkAgent",
+            "exported": "ThinkAgent"
+          },
+          {
+            "local": "UserSecretsStore",
+            "exported": "UserSecretsStore"
+          },
+          {
+            "local": "worker_entry_default",
+            "exported": "default"
+          }
+        ],
+        "modules": [
+          {
+            "family": "assets/NodeWebSocketTransport.js",
+            "old": "assets/NodeWebSocketTransport-BntJgCj_.js",
+            "candidate": "assets/NodeWebSocketTransport-BntJgCj_.js",
+            "result": "BYTE_IDENTICAL"
+          },
+          {
+            "family": "assets/esbuild.wasm",
+            "old": "assets/esbuild-B4PnW_4U.wasm",
+            "candidate": "assets/esbuild-B4PnW_4U.wasm",
+            "result": "BYTE_IDENTICAL"
+          },
+          {
+            "family": "assets/hook-proxy.js",
+            "old": "assets/hook-proxy-CkF0EhRO-odPdDpPH.js",
+            "candidate": "assets/hook-proxy-CkF0EhRO-odPdDpPH.js",
+            "result": "BYTE_IDENTICAL"
+          },
+          {
+            "family": "assets/mimetext.browser.es.js",
+            "old": "assets/mimetext.browser.es-CF8iqyB7.js",
+            "candidate": "assets/mimetext.browser.es-CF8iqyB7.js",
+            "result": "BYTE_IDENTICAL"
+          },
+          {
+            "family": "assets/rolldown-runtime.js",
+            "old": "assets/rolldown-runtime-BzI350Cx.js",
+            "candidate": "assets/rolldown-runtime-BzI350Cx.js",
+            "result": "BYTE_IDENTICAL"
+          },
+          {
+            "family": "assets/version.js",
+            "old": "assets/version-BHTiQTUJ.js",
+            "candidate": "assets/version-BHTiQTUJ.js",
+            "result": "BYTE_IDENTICAL"
+          },
+          {
+            "family": "index.js",
+            "old": "index.js",
+            "candidate": "index.js",
+            "result": "MAIN_EXPORTS_EQUAL"
+          }
+        ]
+      },
+      "bindingsHash": "8e8b60b2988441f15c1e9ad3de977e1d435ed2b640e823ffb50fb9e449fd1eb5",
+      "runtime": "{\"assets\":{\"base_path\":\"/\",\"not_found_handling\":\"single-page-application\",\"raw_run_worker_first\":true,\"serve_directly\":false},\"compatibility_date\":\"2026-05-23\",\"compatibility_flags\":[\"nodejs_compat\"],\"containers\":[{\"class_name\":\"UserAppSandboxService\"}],\"migration_tag\":\"v6\",\"usage_model\":\"standard\"}"
+    }
+  }
+}

@@ -69,12 +69,17 @@ export function normalizedNativeSlug(name: string, projectId: number): string {
   return validNativeSlug(normalized) ? normalized : `project-${projectId}`;
 }
 
-export async function nativeReleaseScriptName(agentId: string, revision: string): Promise<string | null> {
+export const PUBLISHER_ARTIFACT_VERSION = "app-routing-v2";
+
+export async function nativeReleaseScriptName(
+  agentId: string, revision: string, publisherVersion = PUBLISHER_ARTIFACT_VERSION,
+): Promise<string | null> {
   if (typeof agentId !== "string" || !AGENT_UUID.test(agentId)
-    || typeof revision !== "string" || !/^[a-f0-9]{40}$/i.test(revision)) return null;
+    || typeof revision !== "string" || !/^[a-f0-9]{40}$/i.test(revision)
+    || !/^[a-z0-9][a-z0-9.-]{0,63}$/.test(publisherVersion)) return null;
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`${agentId.toLowerCase()}:${revision.toLowerCase()}`),
+    new TextEncoder().encode(`${agentId.toLowerCase()}:${revision.toLowerCase()}:${publisherVersion}`),
   );
   const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   const name = `bc-r-${hash.slice(0, 56)}`;
@@ -194,7 +199,8 @@ export async function awaitNativeDeployResult(
         return;
       }
       if (message.type === "agent_connected" && !deploySent) {
-        if (message.deploymentCapabilities?.platformImmutableRelease !== true) {
+        if (message.deploymentCapabilities?.platformImmutableRelease !== true
+          || message.deploymentCapabilities?.publisherArtifactVersion !== PUBLISHER_ARTIFACT_VERSION) {
           finish(new Error("The linked stock runtime does not support immutable platform deployment identities."));
           return;
         }
@@ -751,6 +757,7 @@ export async function handleNativeThinkPublish(
   if (operation === "publishing-capabilities" && request.method === "GET") {
     return Response.json(
       { buildId: PUBLISH_BUILD_ID, publishProtocol: PUBLISH_PROTOCOL,
+        publisherArtifactVersion: PUBLISHER_ARTIFACT_VERSION,
         publicGeneratedAppsEnabled: !launchProfile(env) || env.PUBLIC_GENERATED_APPS_ENABLED === "true" },
       { headers: { "Cache-Control": "no-store" } },
     );

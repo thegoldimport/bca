@@ -1,0 +1,227 @@
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -4,6 +4,7 @@
+ import { Blueprint } from "../schemas";
+ import { BaseCodingBehavior } from "./behaviors/base";
+ import { ThinkCodingBehavior } from './behaviors/think';
++import { PUBLISHER_ARTIFACT_VERSION } from '../../services/deployer/platform-deployment-identity';
+ import { getBehaviorTypeForProject } from './features';
+ import { createObjectLogger, StructuredLogger } from '../../logger';
+ import { InferenceMetadata } from "../inferutils/config.types";
+@@ -299,7 +300,7 @@
+                 templateDetails: this.behavior.getTemplateDetails(),
+                 previewUrl: previewUrl,
+                     ...(this.state.behaviorType === 'think' && this.env.ENABLE_USER_ACCOUNT_DEPLOY !== 'true'
+-                        ? { deploymentCapabilities: { platformImmutableRelease: true } }
++                        ? { deploymentCapabilities: { platformImmutableRelease: true, publisherArtifactVersion: PUBLISHER_ARTIFACT_VERSION } }
+                     : {}),
+             });
+         })();
+--- a/worker/services/deployer/platform-deployment-identity.test.ts
++++ b/worker/services/deployer/platform-deployment-identity.test.ts
+@@ -1,5 +1,22 @@
+ import { describe, expect, it, vi } from 'vitest';
+-import { InFlightLock } from './platform-deployment-identity';
++import { InFlightLock, createImmutablePlatformScriptName, PUBLISHER_ARTIFACT_VERSION } from './platform-deployment-identity';
++
++describe('complete publisher artifact identity', () => {
++	it('is deterministic across exact retries and versions packaging independently of source', async () => {
++		const agent = 'c9b4c828-07d1-41aa-a6bb-2c858b29c09e';
++		const revision = '020de27f52eb0273554e1004cb12eb9f2977aa7a';
++		const name = await createImmutablePlatformScriptName(agent, revision);
++		expect(name).toBe(await createImmutablePlatformScriptName(agent, revision, PUBLISHER_ARTIFACT_VERSION));
++		expect(name).not.toBe(await createImmutablePlatformScriptName(agent, revision, 'app-routing-v3'));
++		expect(name).not.toBe(await createImmutablePlatformScriptName(agent, 'b'.repeat(40)));
++		expect(name).not.toBe('bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8');
++		expect(name).toMatch(/^bc-r-[a-f0-9]{56}$/);
++	});
++
++	it('rejects invalid artifact versions', async () => {
++		await expect(createImmutablePlatformScriptName('owner', 'a'.repeat(40), '')).rejects.toThrow('Invalid publisher');
++	});
++});
+ 
+ describe('immutable platform deployment in-flight lock', () => {
+ 	it('serializes requests and releases after the operation completes', async () => {
+--- a/worker/services/deployer/platform-deployment-identity.ts
++++ b/worker/services/deployer/platform-deployment-identity.ts
+@@ -1,4 +1,6 @@
+ const COMMIT_REVISION = /^[a-f0-9]{40}$/;
++// Bump whenever publisher routing/packaging changes deployable artifact semantics.
++export const PUBLISHER_ARTIFACT_VERSION = 'app-routing-v2';
+ 
+ export class InFlightLock {
+ 	private inFlight = false;
+@@ -23,11 +25,15 @@
+ export async function createImmutablePlatformScriptName(
+ 	agentId: string,
+ 	commitHash: string,
++publisherVersion = PUBLISHER_ARTIFACT_VERSION,
+ ): Promise<string> {
+ 	if (!agentId || !isCommitRevision(commitHash)) {
+ 		throw new Error('Immutable platform deployment requires an agent ID and a 40-character lowercase commit revision');
+ 	}
+-	const input = new TextEncoder().encode(`${agentId.toLowerCase()}:${commitHash.toLowerCase()}`);
++if (!/^[a-z0-9][a-z0-9.-]{0,63}$/.test(publisherVersion)) {
++throw new Error('Invalid publisher artifact version');
++}
++const input = new TextEncoder().encode(`${agentId.toLowerCase()}:${commitHash.toLowerCase()}:${publisherVersion}`);
+ 	const digest = await crypto.subtle.digest('SHA-256', input);
+ 	const digestHex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+ 	return `bc-r-${digestHex.slice(0, 56)}`;
+--- a/worker/services/deployer/think-user-deploy.test.ts
++++ b/worker/services/deployer/think-user-deploy.test.ts
+@@ -217,3 +217,101 @@
+ 		expect(result.deploymentUrl).toBe('https://my-app.user-sub.workers.dev');
+ 	});
+ });
++
++describe('emitted published full-stack routing', () => {
++	beforeEach(() => vi.clearAllMocks());
++
++	async function routing(app = true, spa = true) {
++		await deployThinkBundleToPlatform({
++			accountId: 'platform-account', apiToken: 'platform-token',
++			dispatchNamespace: 'namespace', previewDomain: 'preview.test', appName: 'app',
++			bundle: makeBundle({
++				modules: { 'bundle.js': app ? 'export class App {}' : 'export default {}' },
++				mainModule: 'bundle.js',
++				assets: { '/index.html': '<html>SPA</html>', '/assets/main.js': 'STATIC_JS', '/favicon.png': 'ICON' },
++				assetConfig: { not_found_handling: spa ? 'single-page-application' : 'none' },
++			}),
++		});
++		const args = deployWithAssets.mock.calls.at(-1)!;
++		const entry = args[1] as string;
++		const config = args[8];
++		const handler = new Function('return ' + entry.slice(entry.indexOf('export default ') + 15).replace(/;\s*$/, ''))();
++		const assets = vi.fn(async (request: Request) => {
++			const path = new URL(request.url).pathname;
++			if (path === '/' || path === '/index.html') return new Response('<html>SPA</html>', { headers: { 'content-type': 'text/html' } });
++			if (path === '/assets/main.js') return new Response('STATIC_JS');
++			if (path === '/favicon.png') return new Response('ICON');
++			// Model the original Cloudflare binding-level SPA behavior faithfully.
++			if (config.not_found_handling === 'single-page-application') return new Response('<html>SPA</html>', { headers: { 'content-type': 'text/html' } });
++			return new Response('asset miss', { status: 404 });
++		});
++		const backend = vi.fn(async (request: Request) => {
++			const path = new URL(request.url).pathname;
++			if (['/api/leads', '/rpc', '/webhook'].includes(path)) {
++				return Response.json({ method: request.method, query: new URL(request.url).search,
++					header: request.headers.get('x-test'), body: await request.text() });
++			}
++			return new Response('backend missing', { status: 404 });
++		});
++		const env = { ASSETS: { fetch: assets }, VIBE_APP: { idFromName: () => 'main', get: () => ({ fetch: backend }) } };
++		return { fetch: (request: Request) => handler.fetch(request, env), assets, backend, config };
++	}
++
++	it('observes true asset misses while static-only SPA configuration is retained', async () => {
++		expect((await routing()).config.not_found_handling).toBe('none');
++		const staticOnly = await routing(false);
++		expect(staticOnly.config.not_found_handling).toBe('single-page-application');
++		expect(await (await staticOnly.fetch(new Request('https://app.test/client'))).text()).toBe('<html>SPA</html>');
++		expect(staticOnly.backend).not.toHaveBeenCalled();
++	});
++
++	it.each(['/', '/assets/main.js', '/favicon.png'])('serves real static asset %s without backend invocation', async path => {
++		const r = await routing();
++		expect((await r.fetch(new Request('https://app.test' + path))).status).toBe(200);
++		expect(r.backend).not.toHaveBeenCalled();
++	});
++
++	it.each(['/leads', '/some/client/route'])('falls back only after unhandled HTML navigation %s', async path => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test' + path, { headers: { Accept: 'text/html' } }));
++		expect(await response.text()).toBe('<html>SPA</html>');
++		expect(r.backend).toHaveBeenCalledOnce();
++		expect(r.backend.mock.invocationCallOrder[0]).toBeLessThan(r.assets.mock.invocationCallOrder[1]);
++	});
++
++	it.each(['application/json', '*/*', 'text/html'])('allows the backend to handle API GET with Accept %s', async accept => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test/api/leads?status=New', { headers: { Accept: accept, 'x-test': 'preserved' } }));
++		expect(response.headers.get('content-type')).toContain('application/json');
++		expect(await response.json()).toEqual({ method: 'GET', query: '?status=New', header: 'preserved', body: '' });
++	});
++
++	it.each(['POST', 'PATCH', 'DELETE'])('forwards %s body, headers and query without calling static assets', async method => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test/rpc?key=1', {
++			method, headers: { 'x-test': 'preserved', Accept: 'application/json' }, body: '{"test":true}',
++		}));
++		expect(await response.json()).toEqual({ method, query: '?key=1', header: 'preserved', body: '{"test":true}' });
++		expect(r.assets).not.toHaveBeenCalled();
++	});
++
++	it('routes a non-/api backend GET and preserves non-navigation backend 404s', async () => {
++		const r = await routing();
++		expect((await r.fetch(new Request('https://app.test/webhook'))).headers.get('content-type')).toContain('application/json');
++		const missing = await r.fetch(new Request('https://app.test/missing', { headers: { Accept: 'application/json' } }));
++		expect(missing.status).toBe(404);
++		expect(await missing.text()).toBe('backend missing');
++	});
++
++	it('does not invent SPA fallback when the app did not request it', async () => {
++		const r = await routing(true, false);
++		expect((await r.fetch(new Request('https://app.test/client', { headers: { Accept: 'text/html' } }))).status).toBe(404);
++	});
++
++	it('forwards HEAD and does not depend on an API prefix', async () => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test/rpc', { method: 'HEAD' }));
++		expect(response.headers.get('content-type')).toContain('application/json');
++		expect(r.backend).toHaveBeenCalledOnce();
++	});
++});
+--- a/worker/services/deployer/think-user-deploy.ts
++++ b/worker/services/deployer/think-user-deploy.ts
+@@ -48,18 +48,25 @@
+ 		|| /\bApp\s+as\s+App\b/.test(moduleSource);
+ }
+ 
+-function buildEntryModule(mainModule: string, hasAssets: boolean, hasApp: boolean): string {
++function buildEntryModule(mainModule: string, hasAssets: boolean, hasApp: boolean, spaNavigation: boolean): string {
+ 	const specifier = mainModule.startsWith('.') ? mainModule : `./${mainModule}`;
+ 	const appExport = hasApp
+ 		? `export { App } from ${JSON.stringify(specifier)};\n`
+ 		: 'import { DurableObject } from "cloudflare:workers";\nexport class App extends DurableObject {}\n';
++	// ASSETS has true-miss semantics for App-backed releases. Never infer an API
++	// prefix: let the application's router handle every non-asset request first.
++	const readMethod = 'const readMethod = request.method === "GET" || request.method === "HEAD"; ';
+ 	const assetRouting = hasAssets
+-		? 'const assetResponse = await env.ASSETS.fetch(request); if (assetResponse.status !== 404) return assetResponse; const accept = request.headers.get("accept") || ""; if (request.method === "GET" && accept.includes("text/html")) { const indexUrl = new URL("/index.html", request.url); const indexResponse = await env.ASSETS.fetch(new Request(indexUrl, request)); if (indexResponse.status !== 404) return indexResponse; } '
++		? `${hasApp ? 'if (readMethod) { ' : ''}const assetResponse = await env.ASSETS.fetch(request); if (assetResponse.status !== 404) return assetResponse; ${hasApp ? '} ' : ''}`
+ 		: '';
+ 	const appRouting = hasApp
+-		? `return env.${APP_BINDING}.get(env.${APP_BINDING}.idFromName("main")).fetch(request);`
++		? `const appResponse = await env.${APP_BINDING}.get(env.${APP_BINDING}.idFromName("main")).fetch(request); `
++			+ (hasAssets && spaNavigation
++				? 'if (appResponse.status === 404 && readMethod && (request.headers.get("accept") || "").includes("text/html")) { const indexUrl = new URL(request.url); indexUrl.pathname = "/"; const indexResponse = await env.ASSETS.fetch(new Request(indexUrl, request)); if (indexResponse.status !== 404) return indexResponse; } '
++				: '')
++			+ 'return appResponse;'
+ 		: 'return new Response("Not Found", { status: 404 });';
+-	return `${appExport}export default { async fetch(request, env) { ${assetRouting}${appRouting} } };`;
++	return `${appExport}export default { async fetch(request, env) { ${readMethod}${assetRouting}${appRouting} } };`;
+ }
+ 
+ interface ThinkBundleArtifacts {
+@@ -117,6 +124,9 @@
+ 			...bundle.assetConfig,
+ 			binding: 'ASSETS',
+ 			run_worker_first: true,
++			// The entrypoint, not binding-level fallback, decides whether an
++			// unhandled application request is an HTML SPA navigation.
++			...(hasApp ? { not_found_handling: 'none' as const } : {}),
+ 		}
+ 	: undefined;
+ 	if (!assets && !hasApp) {
+@@ -125,7 +135,8 @@
+ 	const migration = hasApp
+ 		? [{ tag: `vibe-app-${bundle.commitHash.slice(0, 12)}`, new_sqlite_classes: ['App'] }]
+ 		: undefined;
+-	const entry = buildEntryModule(bundle.mainModule, Boolean(assets), hasApp);
++	const entry = buildEntryModule(bundle.mainModule, Boolean(assets), hasApp,
++		bundle.assetConfig?.not_found_handling === 'single-page-application');
+ 
+ 	return {
+ 		scriptName,
