@@ -210,3 +210,17 @@ mtime_ms = 1791058582887
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/913b9cff-7878-4376-b1c6-2c1670b739b4/09c53c1f-9426-47b4-8ebb-bc097bc2f083"
 storage_version_token = "1791058583624534"
 content_type = "text/plain"
+
+[[outputs]]
+id = "al7qaL34y7WXLfUCNPVms"
+uri = "file://.local/state/controlled-inference-experiment/byok-comparison-report.txt"
+type = "text"
+title = "Controlled BYOK comparison: stopped on Google HTTP 402"
+description = "One request, no retries. Exact safe error and headers, token/cost caveats, correlated Cloudflare metadata, unchanged configuration, and the incomplete comparison result."
+logical_id = "12a35dd2-f377-432b-a4f6-27a2aeddc2cb"
+content_hash = "sha256:0e370d078f5388becdc89933dfcaf1773a7c2ef5d5cb5aff3fcf61cb5477afa1"
+size = 7184
+mtime_ms = 1791062903797
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/12a35dd2-f377-432b-a4f6-27a2aeddc2cb/a24001d0-d149-484c-90d1-ba6fc63f16a2"
+storage_version_token = "1791062904556861"
+content_type = "text/plain"

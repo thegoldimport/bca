@@ -1,0 +1,453 @@
+Yes. Run ONE controlled BYOK comparison test.
+
+We have now established:
+
+WHOLESALE CONTROL:
+
+Same 46,000-byte synthetic coding-agent payload.
+
+Spaced:
+5/5 HTTP 200
+
+Rapid:
+HTTP 200
+HTTP 200
+HTTP 200
+HTTP 200
+HTTP 429
+
+The fifth rapid wholesale request returned:
+
+AiGatewayError
+code 2018
+"Wholesale Rate limited"
+
+No concurrency.
+No retries.
+No competing traffic.
+No customer workload.
+
+We now want to answer ONE question:
+
+Does the SAME rapid workload succeed when using our own Google AI Studio
+provider credential through Cloudflare AI Gateway instead of Cloudflare
+Unified Billing / wholesale?
+
+==================================================
+IMPORTANT
+==================================================
+
+This is a diagnostic test.
+
+Do NOT change BuildCustom production architecture.
+
+Do NOT change the production coding-agent path.
+
+Do NOT change Project 8.
+
+Do NOT deploy application changes.
+
+Do NOT permanently change the launch gateway configuration.
+
+Do NOT disable Unified Billing globally.
+
+Do NOT expose credentials.
+
+Do NOT store provider credentials in source code, logs, evidence files,
+artifacts, or Git.
+
+==================================================
+FIRST: DETERMINE WHETHER A SAFE BYOK TEST IS POSSIBLE
+==================================================
+
+Inspect the existing environment and Cloudflare-supported BYOK configuration.
+
+Determine whether an existing Google AI Studio provider credential is already
+available securely to this project.
+
+DO NOT print its value.
+
+DO NOT reveal any portion of it.
+
+DO NOT copy it into source.
+
+DO NOT create a credential.
+
+DO NOT rotate credentials.
+
+DO NOT modify production secrets merely to perform this test.
+
+If no existing authorized Google AI Studio credential is available:
+
+STOP.
+
+Return:
+
+BYOK TEST BLOCKED — PROVIDER CREDENTIAL REQUIRED
+
+and tell me exactly what credential/configuration I need to supply and the
+safest supported place to configure it.
+
+Do not fall back to wholesale.
+
+==================================================
+IF A CREDENTIAL IS AVAILABLE
+==================================================
+
+Use Cloudflare's officially supported BYOK/provider-authentication path.
+
+We want:
+
+Cloudflare AI Gateway
+→ Google AI Studio
+→ our provider credential
+
+NOT:
+
+Cloudflare AI Gateway
+→ Unified Billing / wholesale
+
+Confirm before inference that the request should be classified as BYOK rather
+than wholesale.
+
+Prefer an isolated diagnostic configuration/path if Cloudflare supports one.
+
+Do not alter the production BuildCustom inference route merely to conduct the
+test.
+
+==================================================
+TEST PAYLOAD
+==================================================
+
+Reuse the SAME safe synthetic request body from the accepted pacing experiment
+byte-for-byte if compatible with the BYOK request path.
+
+Target characteristics:
+
+46,000 bytes
+10 history messages
+15 tool definitions
+max_tokens: 32
+
+No Project 8 content.
+
+No customer content.
+
+Same requested model:
+
+google-ai-studio/gemini-3.6-flash
+
+Same observed underlying model where applicable:
+
+google/gemini-3.6-flash
+
+The intended independent variable is:
+
+WHO PAYS / WHICH PROVIDER CREDENTIAL PATH IS USED.
+
+Do not intentionally change:
+
+payload
+model
+request count
+pacing
+concurrency
+
+==================================================
+BYOK RAPID ARM
+==================================================
+
+Send at most FIVE logical inference requests.
+
+NO automatic retries.
+
+NO concurrency.
+
+Sequential rapid behavior:
+
+request 1
+→ response completes
+→ immediately request 2
+→ response completes
+→ immediately request 3
+→ response completes
+→ immediately request 4
+→ response completes
+→ immediately request 5
+
+No intentional pacing delay.
+
+Record the completion-to-next-start gap.
+
+STOP immediately on:
+
+429
+or any unexpected error.
+
+Do NOT retry.
+
+==================================================
+VERIFY BYOK ACTUALLY HAPPENED
+==================================================
+
+For every successful request, verify from safe Cloudflare metadata/logging that
+the request used BYOK/provider credentials rather than wholesale Unified
+Billing.
+
+Record only safe metadata.
+
+We need to distinguish:
+
+BYOK = true / provider credential path
+
+from:
+
+wholesale = true
+
+If the route silently falls back to wholesale:
+
+STOP.
+
+Do not count that request as a valid BYOK comparison.
+
+==================================================
+IF AN ERROR OCCURS
+==================================================
+
+Capture safe live evidence immediately:
+
+- timestamp
+- HTTP status
+- safe response body
+- safe response headers
+- gateway request ID
+- Ray ID
+- AI Gateway event ID
+- trace ID
+- provider/model
+- provider latency
+- BYOK/wholesale classification
+- Retry-After
+- rate-limit headers
+- quota headers
+- reset headers
+- provider request ID if exposed
+- usage metadata
+- cost metadata if exposed
+
+NEVER capture:
+
+provider credential
+Authorization header
+API key
+cookies
+secrets
+
+==================================================
+INTERPRETATION
+==================================================
+
+OUTCOME A
+
+BYOK rapid:
+5/5 HTTP 200
+
+while accepted wholesale rapid was:
+
+4/5 + code 2018 Wholesale Rate limited
+
+RESULT:
+
+BYOK AVOIDS REPRODUCED WHOLESALE FAILURE
+
+This would be strong evidence that the reproduced failure is specific to the
+Cloudflare wholesale / Unified Billing admission path rather than the request
+pattern itself.
+
+It would NOT prove BYOK has unlimited capacity.
+
+It would NOT automatically authorize migrating production to BYOK.
+
+--------------------------------------------------
+
+OUTCOME B
+
+BYOK rapid also receives HTTP 429.
+
+Determine whether the error is:
+
+Cloudflare wholesale code 2018
+
+OR
+
+Google/provider quota/rate limiting
+
+OR
+
+another Cloudflare limit.
+
+Capture evidence and STOP.
+
+RESULT:
+
+BYOK DOES NOT CLEARLY AVOID RATE LIMITING
+
+Do not implement anything.
+
+--------------------------------------------------
+
+OUTCOME C
+
+Credential/configuration failure.
+
+STOP.
+
+Do not change production to work around it.
+
+--------------------------------------------------
+
+OUTCOME D
+
+BYOK silently falls back to wholesale.
+
+STOP.
+
+Test invalid.
+
+==================================================
+COST SAFETY
+==================================================
+
+Before inference, estimate the maximum provider cost of five requests using
+current applicable Google AI Studio pricing.
+
+Hard diagnostic ceiling:
+
+$0.15
+
+If five requests could exceed $0.15:
+
+STOP before inference.
+
+Do not shrink the payload to fit the budget.
+
+==================================================
+DO NOT EXPAND THIS TEST
+==================================================
+
+Maximum five logical requests.
+
+No retries.
+
+No second run.
+
+No spaced BYOK arm.
+
+We already have the spaced wholesale control.
+
+No concurrency test.
+
+No different model.
+
+No different payload.
+
+No Project 8.
+
+No production architecture change.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL RESULT:
+BYOK AVOIDS REPRODUCED WHOLESALE FAILURE /
+BYOK DOES NOT CLEARLY AVOID RATE LIMITING /
+BYOK TEST BLOCKED — PROVIDER CREDENTIAL REQUIRED /
+BYOK TEST INVALID — WHOLESALE FALLBACK /
+OTHER FAILURE
+
+PRECONDITIONS
+- authorized provider credential available:
+- credential handling:
+- gateway:
+- provider:
+- requested model:
+- BYOK path:
+- wholesale disabled for these test requests:
+- payload bytes:
+- estimated maximum cost:
+
+BYOK RAPID TEST
+
+For every request:
+
+- number:
+- start:
+- end:
+- status:
+- duration:
+- gap from previous completion:
+- request bytes:
+- fresh tokens:
+- cached tokens:
+- output tokens:
+- total tokens:
+- gateway request ID:
+- Ray ID:
+- provider latency:
+- BYOK confirmed:
+- wholesale:
+- cost if exposed:
+
+RESULT
+- requests attempted:
+- successes:
+- failures:
+- 429:
+- error type:
+- actual provider path:
+
+WHOLESALE COMPARISON
+
+Accepted wholesale rapid:
+200 / 200 / 200 / 200 / 429
+error:
+AiGatewayError 2018
+Wholesale Rate limited
+
+BYOK rapid:
+[results]
+
+- workload materially identical:
+- pacing materially identical:
+- model materially identical:
+- credential/payment path different:
+
+CONCLUSION
+- does BYOK avoid the reproduced wholesale failure:
+- evidence:
+- what this proves:
+- what this does NOT prove:
+- production implication:
+
+RECOMMENDED NEXT STEP
+
+Do NOT implement anything.
+
+If BYOK passes 5/5, report whether a production BYOK architecture appears
+technically viable and what provider-side capacity limits we would need to
+understand before switching.
+
+If BYOK fails, identify whether the failure came from Google/provider,
+Cloudflare, or another layer.
+
+SOURCE CHANGES:
+ZERO
+
+PRODUCTION DEPLOYMENTS:
+ZERO
+
+PROJECT 8 ACTIONS:
+ZERO
+
+Then STOP.
