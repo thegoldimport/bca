@@ -1,0 +1,425 @@
+We have now identified the direct cause of Project 8's STOPPED operation:
+
+MODEL REQUESTS RECEIVED HTTP 429 "Rate limited"
+
+Freeze the accepted platform.
+
+Canonical:
+
+98c36fc985b78dfb2e2775c1ac20bfac8b49d0a5
+
+Runtime:
+
+5ab138b7-75fa-4cd2-8146-494171468a2f
+
+Control:
+
+db608621-1594-4db7-b200-209e1151d739
+
+Do NOT change continuation behavior.
+
+Do NOT change Auto Continue.
+
+Do NOT change resource limits.
+
+Do NOT add observability.
+
+Do NOT send another Project 8 instruction yet.
+
+Do NOT click Continue.
+
+Do NOT manually edit Project 8.
+
+Do NOT deploy anything unless the investigation proves a configuration defect
+that can be safely corrected.
+
+==================================================
+ESTABLISHED EVIDENCE
+==================================================
+
+The failed approved continuation operation was:
+
+think-approved:24a8005ed3466d5e388446aa08e0ec23af6184d8d91070d773fa471be2ba3da2
+
+PASS 1:
+
+- stream opened
+- four read-only tool calls completed:
+  list
+  find
+  read
+  read
+- next model request was attempted three times
+- all three attempts returned HTTP 429
+- response:
+  Rate limited.
+
+PASS 2:
+
+- stream opened
+- zero tool progress
+- model request attempted three times
+- all three attempts returned HTTP 429
+- response:
+  Rate limited.
+
+The six rejected requests correlate directly with the two native stream errors.
+
+The host then correctly stopped through its no_progress safeguard.
+
+Four model requests immediately preceding these failures returned HTTP 200.
+
+Known request path:
+
+BuildCustom/VibeSDK
+→ Cloudflare AI Gateway
+  buildcustom-vibesdk-launch-ai
+→ google-ai-studio
+→ google/gemini-3.6-flash
+
+The BuildCustom AI Gateway configured rate-limit interval and limit were both
+reported as zero.
+
+==================================================
+GOAL
+==================================================
+
+Determine WHO generated the HTTP 429 and WHY.
+
+We need to distinguish among:
+
+1. BuildCustom/VibeSDK local throttling
+2. Cloudflare AI Gateway rate limiting
+3. Cloudflare Unified Billing/account restriction
+4. Google AI Studio/provider quota
+5. Gemini model-specific quota/rate limit
+6. concurrency/request-rate restriction
+7. temporary provider capacity throttling
+8. another upstream limiter
+
+Do not guess.
+
+Use the six actual failed requests and the preceding successful requests.
+
+==================================================
+READ-ONLY INVESTIGATION
+==================================================
+
+Inspect available Cloudflare AI Gateway request records and configuration.
+
+For the six HTTP 429 attempts determine, where evidence exists:
+
+- timestamp
+- request ID
+- gateway ID
+- provider
+- requested model
+- resolved/observed model
+- HTTP status
+- response body
+- response headers
+- upstream/provider status
+- gateway status
+- cache status
+- latency
+- token/input/output metadata if available
+- retry metadata
+- billing metadata
+- rate-limit metadata
+- provider request ID
+- Cloudflare request/ray ID
+- whether the request reached Google
+- whether Cloudflare generated the 429 itself
+
+Compare against the four immediately preceding HTTP 200 requests.
+
+Look for changes in:
+
+- request frequency
+- concurrency
+- token/context size
+- model
+- provider
+- gateway
+- account/billing status
+- retry behavior
+
+==================================================
+CLOUDFLARE CONFIGURATION
+==================================================
+
+Read-only inspect the active production AI Gateway configuration.
+
+Confirm:
+
+- gateway name
+- authenticated gateway status
+- Unified Billing status
+- configured rate-limit interval
+- configured rate-limit limit
+- any dynamic rate limiting
+- account-level limits if visible
+- provider routing
+- fallback configuration
+- caching
+- retry settings relevant to these requests
+
+Do not change configuration yet.
+
+==================================================
+GOOGLE / PROVIDER SIDE
+==================================================
+
+Determine from existing response metadata whether the 429 originated from the
+provider.
+
+Look for headers/body/metadata identifying:
+
+- Google
+- Gemini
+- quota exceeded
+- requests per minute
+- tokens per minute
+- concurrent requests
+- resource exhausted
+- temporary capacity
+- billing/quota restriction
+
+If provider-side quota information is available through the currently
+configured account/integration, inspect it read-only.
+
+Do not add a direct Google API key.
+
+Do not bypass authenticated AI Gateway + Unified Billing.
+
+Our accepted architecture remains:
+
+VibeSDK
+→ authenticated Cloudflare AI Gateway
+→ Unified Billing
+→ Google AI Studio Gemini
+
+==================================================
+IMPORTANT CONTEXT
+==================================================
+
+We previously ran a clean inference lab against this architecture:
+
+12 requests
+12 HTTP 200
+no 429
+no auth errors
+no model errors
+
+So determine what is different about the Project 8 sequence.
+
+Possibilities to investigate include:
+
+- sustained request frequency
+- retries multiplying request rate
+- larger context
+- concurrent model requests
+- different endpoint/model resolution
+- account/provider quota behavior
+- temporary provider throttling
+
+Do not assume any of these is the cause.
+
+==================================================
+RETRY BEHAVIOR
+==================================================
+
+Also inspect the three-attempt behavior.
+
+For each failed model request determine:
+
+- who performs the retries
+- retry delays/backoff
+- whether Retry-After was supplied
+- whether Retry-After was honored
+- whether all three retries occurred too quickly
+- whether retrying immediately could make the rate limit worse
+
+Do NOT change retry behavior in this task.
+
+Just report it.
+
+If the provider explicitly supplied Retry-After and the system ignored it,
+identify that clearly as a potential platform issue.
+
+==================================================
+DO NOT SOLVE BY RAISING AGENT LIMITS
+==================================================
+
+This has nothing to do with:
+
+250 operation credits
+5 Think turns
+4 internal continuations
+25 steps/pass
+900000 ms
+
+Do not change those.
+
+Those are BuildCustom autonomous-work boundaries.
+
+HTTP 429 is a model/provider/gateway availability or quota issue.
+
+==================================================
+NO SYNTHETIC LOAD TEST
+==================================================
+
+Do not hammer the production model to reproduce the 429.
+
+Do not create a burst/load test.
+
+Do not consume substantial model usage.
+
+Use existing evidence first.
+
+At most, if absolutely necessary after configuration inspection, ONE benign
+model request may be used to establish whether the service currently accepts
+requests.
+
+Do not run 12 requests again.
+
+Do not use Project 8 for that probe.
+
+==================================================
+DECISION
+==================================================
+
+Classify the 429 cause as one of:
+
+A. BUILDCUSTOM CONFIGURATION DEFECT
+
+Example:
+we accidentally configured a limiter.
+
+B. RETRY/BACKOFF DEFECT
+
+Example:
+provider supplied a retry interval but our client immediately hammered it
+three times.
+
+C. CLOUDFLARE ACCOUNT/GATEWAY LIMIT
+
+D. GOOGLE/PROVIDER QUOTA OR RATE LIMIT
+
+E. TEMPORARY UPSTREAM CAPACITY THROTTLE
+
+F. UNKNOWN
+
+Only propose a code/configuration fix if evidence establishes one.
+
+If this requires changing Cloudflare account-level settings, quota, billing,
+or provider configuration that cannot safely be changed here:
+
+report exactly what needs to be changed.
+
+Do not invent a workaround.
+
+==================================================
+IF A PLATFORM FIX IS PROVEN
+==================================================
+
+Do NOT implement it automatically unless it is:
+
+- narrow
+- clearly supported by evidence
+- does not change architecture
+- does not bypass AI Gateway
+- does not introduce another provider
+- does not weaken account controls
+
+If the fix would alter retry policy, provider routing, billing, quota, or
+Cloudflare account settings:
+
+STOP after diagnosis and recommendation.
+
+I want to review that before implementation.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+BUILDCUSTOM CONFIGURATION DEFECT /
+RETRY-BACKOFF DEFECT /
+CLOUDFLARE LIMIT /
+GOOGLE PROVIDER LIMIT /
+TEMPORARY UPSTREAM THROTTLE /
+UNKNOWN
+
+429 ORIGIN
+- generated by:
+- evidence:
+- request reached Google:
+- Cloudflare-generated:
+- provider-generated:
+- response body:
+- relevant headers:
+- quota metadata:
+
+FAILED REQUESTS
+- total:
+- timestamps:
+- request IDs:
+- model:
+- provider:
+- preceding successful requests:
+- material difference between 200 and 429 requests:
+
+AI GATEWAY
+- gateway:
+- authenticated:
+- Unified Billing:
+- configured rate limit:
+- dynamic limiter:
+- account restriction:
+- routing:
+- result:
+
+PROVIDER
+- quota/rate information:
+- RPM:
+- TPM:
+- concurrency:
+- capacity:
+- billing/quota status:
+- result:
+
+RETRIES
+- retry owner:
+- attempts:
+- delays:
+- Retry-After present:
+- Retry-After honored:
+- retry behavior potentially worsened limit:
+- result:
+
+ROOT CAUSE
+- exact cause established:
+- evidence:
+- confidence:
+- transient or structural:
+- customer action required:
+- platform change required:
+
+RECOMMENDED NEXT ACTION
+- action:
+- code change required:
+- config change required:
+- account/provider change required:
+- safe to resume Project 8 afterward:
+
+SOURCE CHANGES:
+MUST BE ZERO
+
+DEPLOYMENTS:
+MUST BE ZERO
+
+PROJECT 8 ACTIONS:
+MUST BE ZERO
+
+Then STOP.

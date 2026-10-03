@@ -68,3 +68,9 @@ Select the gateway from the failed serving request's retained HTTP span, not a c
 **Why:** Querying a configuration-default gateway returned no records, while the gateway actually used by the serving requests retained complete HTTP 429 responses reading `Rate limited`. The installed native SDK exits its error-chunk branch before journaling that chunk, so an absent journal error is not proof that no useful error existed.
 
 **How to apply:** Narrow telemetry by service, time, and provider hostname; correlate invocation traces with native pass starts and terminal timestamps, then inspect only matching failed gateway records. Require a complete response head before quoting an exact safe error. Do not retrieve successful model response bodies or private request bodies. Distinguish a confirmed rate-limit rejection from an unproven quota, billing, or limiter-origin explanation.
+
+Do not interpret a Cloudflare MCP HTTP 200 with an undefined `result` as an empty resource list.
+
+**Why:** The dynamic-routes endpoint uses a top-level `data` envelope, which the MCP request wrapper did not expose through `result`. A separate authorized read-only HTTP inspection recovered the actual route list.
+
+**How to apply:** When a known endpoint's successful response has an unexpected shape, verify its envelope through an authorized read-only path and emit only necessary allowlisted metadata. Never expose credentials or confuse headers from the management API read with historical inference response headers.
