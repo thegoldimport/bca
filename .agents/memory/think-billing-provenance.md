@@ -62,3 +62,9 @@ An authenticated, provider-key-free stock Think run can be billed through Unifie
 **Why:** The isolated lab's normal Think flow produced successful wholesale Google gateway events without BYOK, and its visible prepaid-credit decrease matched the logged inference cost at 100 credit units per dollar. Its subsequent preview build failure was separate from inference.
 
 **How to apply:** Compare the deployed source model ID with the gateway's observed provider/model, HTTP statuses, wholesale/BYOK fields, token usage, cost, and credit delta before proposing any model-identifier change or treating a build failure as an inference failure.
+
+Select the gateway from the failed serving request's retained HTTP span, not a candidate checkout's default configuration. A complete gateway error response head can preserve the cause even when native diagnostics retain only `ThrownString` and the stream journal has no error chunk.
+
+**Why:** Querying a configuration-default gateway returned no records, while the gateway actually used by the serving requests retained complete HTTP 429 responses reading `Rate limited`. The installed native SDK exits its error-chunk branch before journaling that chunk, so an absent journal error is not proof that no useful error existed.
+
+**How to apply:** Narrow telemetry by service, time, and provider hostname; correlate invocation traces with native pass starts and terminal timestamps, then inspect only matching failed gateway records. Require a complete response head before quoting an exact safe error. Do not retrieve successful model response bodies or private request bodies. Distinguish a confirmed rate-limit rejection from an unproven quota, billing, or limiter-origin explanation.

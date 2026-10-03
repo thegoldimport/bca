@@ -1,0 +1,435 @@
+We have resolved the stopped-state UI bug.
+
+Accepted canonical:
+
+98c36fc985b78dfb2e2775c1ac20bfac8b49d0a5
+
+Accepted runtime:
+
+5ab138b7-75fa-4cd2-8146-494171468a2f
+
+Accepted control:
+
+db608621-1594-4db7-b200-209e1151d739
+
+Freeze the continuation system and stopped-state UI.
+
+Do NOT change:
+
+- Manual Continue
+- Auto Continue
+- continuation eligibility
+- task/operation identity
+- resource limits
+- status semantics
+- gateway
+- publisher
+- marketing
+
+Do NOT send another Project 8 customer instruction yet.
+
+Do NOT click Continue.
+
+Do NOT manually edit Project 8.
+
+Do NOT publish.
+
+==================================================
+WHAT WE NOW KNOW
+==================================================
+
+Project 8's fresh approved continuation operation was:
+
+think-approved:24a8005ed3466d5e388446aa08e0ec23af6184d8d91070d773fa471be2ba3da2
+
+It stopped after:
+
+12 credits
+2 Think turns
+1 internal continuation
+
+Server lifecycle:
+
+BLOCKED / STOPPED
+
+This was NOT:
+
+- bounded-session exhaustion
+- intentional finish_task
+- customer-input requirement
+- eligible Continue available
+
+Both native passes ended with stream status:
+
+error
+
+The second made no tool progress.
+
+The host no_progress guard then correctly selected BLOCKED.
+
+The retained diagnostics identify the errors only as:
+
+ThrownString
+
+The original underlying error text was not retained.
+
+Therefore we currently know WHAT stopped the operation but not WHY the native
+streams failed.
+
+==================================================
+GOAL
+==================================================
+
+Determine whether we can identify the underlying native stream failure from
+existing production evidence.
+
+If existing evidence is insufficient, make the SMALLEST safe observability
+improvement necessary so that the NEXT naturally occurring native stream
+failure preserves enough information to diagnose it.
+
+Do not change runtime behavior.
+
+Do not automatically retry failures.
+
+Do not alter continuation eligibility.
+
+Do not alter no_progress behavior.
+
+This is diagnostics only unless an exact existing platform defect is proven.
+
+==================================================
+PHASE 1 — READ-ONLY FORENSICS
+==================================================
+
+Inspect all currently retained evidence for the failed Project 8 operation.
+
+Look at existing:
+
+- runtime logs
+- control logs
+- persisted operation diagnostics
+- native stream events
+- ThinkAgent events
+- tool-call records
+- model/provider response metadata
+- Cloudflare Worker logs if retained
+- Durable Object diagnostics if retained
+- AI Gateway request/error metadata if retained
+- timestamps surrounding both failed native passes
+
+Try to identify the exact underlying error WITHOUT rerunning the operation.
+
+Determine for each failed pass:
+
+- timestamp
+- model/provider request started
+- provider response received or not
+- stream opened or not
+- last successful event/frame
+- tool calls before failure
+- HTTP/provider status if available
+- exception type
+- exception message if available
+- error source/layer
+- whether connection closed unexpectedly
+- whether timeout occurred
+- whether model/provider rejected something
+- whether malformed stream/event parsing occurred
+- whether runtime itself threw
+- whether customer workspace/tool execution contributed
+
+Do not infer a cause if evidence does not establish one.
+
+==================================================
+PHASE 2 — IDENTIFY THE OBSERVABILITY GAP
+==================================================
+
+If the exact error cannot be recovered, trace where:
+
+actual thrown error
+→ native stream catch
+→ diagnostic normalization
+→ persistence
+→ owner diagnostics
+
+lost the useful information.
+
+We already know the final retained representation became:
+
+ThrownString
+
+Find the first point where the actual error text/context was discarded.
+
+Answer:
+
+- what was originally available?
+- what was persisted?
+- what was intentionally redacted?
+- what was accidentally discarded?
+- why did only ThrownString survive?
+
+==================================================
+SECURITY REQUIREMENT
+==================================================
+
+Do NOT solve this by blindly persisting arbitrary raw errors.
+
+Diagnostics must not leak:
+
+- API keys
+- auth tokens
+- cookies
+- session IDs
+- Authorization headers
+- customer secrets
+- environment secrets
+- provider credentials
+- private request bodies unnecessarily
+
+If an observability change is required, retain a SAFE normalized diagnostic.
+
+Useful fields may include:
+
+- error category
+- safe error message
+- source layer
+- provider/model
+- HTTP status
+- Cloudflare request/ray ID if available
+- operation ID
+- pass/turn number
+- timestamp
+- retryability classification
+- stream phase
+- last successful event type
+- tool name if relevant
+
+Preserve only what is necessary to diagnose failures.
+
+==================================================
+THROWN STRING HANDLING
+==================================================
+
+Specifically inspect thrown-string normalization.
+
+If code currently does something equivalent to:
+
+catch (error) {
+  if (!(error instanceof Error)) {
+    return "ThrownString"
+  }
+}
+
+then safely preserve the useful string value after redaction/sanitization.
+
+For example conceptually:
+
+throw "some provider/runtime message"
+
+should not become only:
+
+ThrownString
+
+if the string itself can be safely normalized and retained.
+
+Do not blindly implement this example without inspecting the actual code.
+
+Use the existing error/redaction architecture.
+
+==================================================
+DO NOT TURN THIS INTO A NEW PLATFORM
+==================================================
+
+Do not add:
+
+- new queue
+- new operation ledger
+- external logging service
+- tracing vendor
+- new Durable Object
+- new database
+- automatic retry engine
+- fallback model
+- new orchestration layer
+
+Use existing diagnostics.
+
+This should be a small observability improvement if one is needed.
+
+==================================================
+TESTS
+==================================================
+
+If code changes are necessary, test at least:
+
+1. Error object retains safe useful message.
+
+2. Thrown string retains safe useful message.
+
+3. Secrets/tokens are redacted.
+
+4. Authorization headers are not persisted.
+
+5. Provider HTTP status is retained when available.
+
+6. Stream phase/source layer is retained.
+
+7. Operation identity and turn/pass are retained.
+
+8. Diagnostics survive operation termination.
+
+9. Owner-scoped diagnostic read can retrieve them.
+
+10. Normal successful streams are unchanged.
+
+11. Manual Continue unchanged.
+
+12. Auto Continue unchanged.
+
+13. no_progress guard unchanged.
+
+14. BLOCKED / STOPPED mapping unchanged.
+
+15. Needs Input unchanged.
+
+Run relevant runtime tests plus:
+
+- typecheck
+- build
+- Worker dry-run
+- source reconstruction if runtime source changes
+
+==================================================
+DEPLOYMENT
+==================================================
+
+If existing evidence identifies the exact failure:
+
+DO NOT change or deploy observability merely for completeness.
+
+Report the established root cause first.
+
+If existing evidence is insufficient and a narrow observability change is
+required:
+
+commit canonical.
+
+Deploy ONLY the runtime/control component actually requiring the diagnostic
+change.
+
+Do NOT deploy:
+
+gateway
+publisher
+marketing
+
+Preserve all continuation behavior.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT attempt to reproduce the failure by sending another Project 8 customer
+instruction in this task.
+
+Do NOT manually restart the stopped operation.
+
+Do NOT click Continue.
+
+Do NOT alter Project 8 lifecycle state.
+
+First make sure that if this happens again we will actually know WHY.
+
+Once diagnostics are adequate, STOP.
+
+We will then resume normal customer iteration and let the next real operation
+either succeed or naturally provide the evidence we need.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+ROOT CAUSE IDENTIFIED /
+OBSERVABILITY GAP FIXED /
+NO CHANGE REQUIRED /
+TEST FAILURE /
+DEPLOYMENT FAILURE
+
+PROJECT 8 FAILED STREAMS
+- operation:
+- pass 1 timestamp:
+- pass 1 last successful event:
+- pass 1 exact error:
+- pass 1 source:
+- pass 2 timestamp:
+- pass 2 last successful event:
+- pass 2 exact error:
+- pass 2 source:
+- exact root cause established:
+- confidence/evidence:
+
+OBSERVABILITY TRACE
+- original thrown value available:
+- first normalization:
+- persisted diagnostic:
+- information lost at:
+- reason:
+- secrets risk:
+- result:
+
+FIX
+- required:
+- files/components:
+- safe message retained:
+- redaction:
+- provider status retained:
+- stream phase retained:
+- operation/pass retained:
+- runtime behavior changed: MUST BE NO
+- retry behavior changed: MUST BE NO
+- continuation behavior changed: MUST BE NO
+- result:
+
+TESTS
+- Error object:
+- thrown string:
+- secret redaction:
+- auth redaction:
+- provider status:
+- stream phase:
+- operation/pass:
+- persistence:
+- owner diagnostics:
+- successful streams:
+- Manual Continue:
+- Auto Continue:
+- no_progress:
+- stopped mapping:
+- Needs Input:
+- typecheck:
+- build:
+- dry-run:
+- result:
+
+SOURCE
+- previous canonical:
+- new canonical:
+- pushed:
+
+DEPLOYMENT
+- runtime changed:
+- control changed:
+- gateway changed: MUST BE NO
+- publisher changed: MUST BE NO
+- marketing changed: MUST BE NO
+- rollback:
+
+PROJECT 8 ACTIONS
+- new customer instructions: MUST BE ZERO
+- Continue clicks: MUST BE ZERO
+- source edits: MUST BE ZERO
+- lifecycle manipulation: MUST BE ZERO
+- publish: MUST BE NO
+
+Then STOP.
