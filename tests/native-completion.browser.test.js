@@ -70,6 +70,8 @@ function fixture({
     runtimeProvider: "stock-think",
     runtimeStatus,
     nativeTaskLifecycle,
+    baseRevision: BASELINE,
+    baseTurnCount: BASE_TURNS.length,
     rejectHandshakes,
     closeAcceptedSockets,
     accelerateSocketRetries,
@@ -292,7 +294,21 @@ function installBrowserHarness(initialFixture) {
       if (this.readyState !== FakeWebSocket.OPEN) throw new Error("Fake WebSocket is not open");
       const frame = JSON.parse(String(raw));
       this.sent.push(frame);
-      if (frame.type === "user_suggestion") state.stats.userSuggestions += 1;
+      if (frame.type === "user_suggestion") {
+        state.stats.userSuggestions += 1;
+        state.stats.lastUserSuggestion = frame;
+        if (frame.continuationApproval) {
+          state.nativeTaskLifecycle = {
+            ...state.nativeTaskLifecycle,
+            status: "RUNNING",
+            customerStatus: "WORKING",
+            operationId: "fixture-operation-2",
+            updatedAt: Date.now() + 1,
+          };
+          state.shouldBeGenerating = true;
+          state.generationStatus = "running";
+        }
+      }
       if (frame.type === "get_conversation_state") state.stats.conversationStateRequests += 1;
       if (!["user_suggestion", "get_conversation_state"].includes(frame.type)) state.stats.unexpectedSocketFrames += 1;
       persist();
@@ -354,6 +370,15 @@ function installBrowserHarness(initialFixture) {
       if (typeof revision === "string") state.currentRevision = revision;
       if (typeof deployedRevision === "string") state.deployedRevision = deployedRevision;
       if (Array.isArray(persistedTurns)) state.persistedTurns = persistedTurns;
+      if (active === false && state.currentRevision !== state.baseRevision && state.persistedTurns.length > state.baseTurnCount) {
+        state.nativeTaskLifecycle = {
+          status: "COMPLETE",
+          customerStatus: "BUILD_COMPLETE",
+          taskId: "fixture-task",
+          operationId: "fixture-operation-complete",
+          updatedAt: Date.now(),
+        };
+      }
       persist();
     },
     delayTurnsRequest(skip = 0) {
@@ -528,6 +553,9 @@ async function assertSinglePersistedTurn(page, expectedPrompt = PROMPT) {
   assert.equal(text.split(ASSISTANT).length - 1, 1, "the assistant response must be rendered exactly once");
   const composer = await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled);
   assert.equal(composer, true, "composer must be usable after verified completion");
+  const completion = await page.$('[data-testid="native-build-complete"]');
+  assert.ok(completion, "green completion requires an authoritative COMPLETE customer lifecycle");
+  assert.match(await page.evaluate((node) => node.textContent || "", completion), /Build complete.*Your changes are ready to review/);
   const stats = await statsOf(page);
   assert.equal(stats.userSuggestions, 1, "recovery must not resend the prompt");
   assert.equal(stats.agentCreationRequests, 0, "recovery must not create an agent");
@@ -622,6 +650,143 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
     });
 
+    await t.test("CONTINUE_AVAILABLE renders a safe prompt and click retries are idempotent", async () => {
+      const taskId = "fixture-task-continue";
+      const operationId = "fixture-operation-before";
+      const page = await startEditor(serverUrl, browser, fixture({
+        nativeTaskLifecycle: {
+          status: "INCOMPLETE_RESOURCE_LIMIT",
+          customerStatus: "CONTINUE_AVAILABLE",
+          taskId,
+          operationId,
+          updatedAt: Date.now() - 1000,
+          reason: "fixture-only secret accounting diagnostic",
+          creditsUsed: 250,
+        },
+      }));
+      try {
+        await page.waitForSelector('[data-testid="button-native-continue"]', { timeout: 10_000 });
+        const text = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
+        assert.match(text, /I made progress on your request, but I haven't finished everything yet\. Would you like me to continue working\?/);
+        assert.match(text, /Continue/);
+        assert.doesNotMatch(text, /fixture-only secret|creditsUsed|250|INCOMPLETE_RESOURCE_LIMIT/i);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        await page.evaluate(() => {
+          const button = document.querySelector('[data-testid="button-native-continue"]');
+          button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+          button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        const stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 1, "two clicks start one approved next operation");
+        assert.equal(stats.lastUserSuggestion.message, "Continue");
+        assert.deepEqual(stats.lastUserSuggestion.continuationApproval, { taskId, operationId });
+        assert.equal(stats.agentCreationRequests, 0);
+        assert.equal(stats.publishRequests, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("NEEDS_INPUT is shown without Continue or green completion", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({
+        nativeTaskLifecycle: {
+          status: "USER_INPUT_REQUIRED",
+          customerStatus: "NEEDS_INPUT",
+          taskId: "fixture-task-input",
+          operationId: "fixture-operation-input",
+          updatedAt: Date.now(),
+        },
+      }));
+      try {
+        await page.waitForSelector('[data-testid="native-needs-input"]', { timeout: 10_000 });
+        assert.equal(await page.$('[data-testid="button-native-continue"]'), null);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        assert.equal((await statsOf(page)).userSuggestions, 0, "opening does not start an operation");
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("BLOCKED lifecycle never renders the green completion state", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({
+        nativeTaskLifecycle: {
+          status: "BLOCKED",
+          customerStatus: "STOPPED",
+          taskId: "fixture-task-blocked",
+          operationId: "fixture-operation-blocked",
+          updatedAt: Date.now(),
+          reason: "fixture-only blocked diagnostic",
+        },
+      }));
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        assert.equal(await page.$('[data-testid="button-native-continue"]'), null);
+        const state = await page.$('[data-testid="native-completion-state"]');
+        assert.notEqual(state && await page.evaluate((node) => node.getAttribute("data-state"), state), "success");
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("typed yes continues only while continuation is explicitly pending", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({
+        nativeTaskLifecycle: {
+          status: "INCOMPLETE_RESOURCE_LIMIT",
+          customerStatus: "CONTINUE_AVAILABLE",
+          taskId: "fixture-task-yes",
+          operationId: "fixture-operation-yes",
+          updatedAt: Date.now(),
+        },
+      }));
+      try {
+        await page.waitForSelector('[data-testid="button-native-continue"]', { timeout: 10_000 });
+        await page.type('[data-testid="input-editor-chat"]', "yes");
+        await page.click('[data-testid="button-send-chat"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        const approval = (await statsOf(page)).lastUserSuggestion.continuationApproval;
+        assert.deepEqual(approval, { taskId: "fixture-task-yes", operationId: "fixture-operation-yes" });
+      } finally {
+        await page.close();
+      }
+
+      const unrelated = await startEditor(serverUrl, browser);
+      try {
+        await unrelated.type('[data-testid="input-editor-chat"]', "yes");
+        await unrelated.click('[data-testid="button-send-chat"]');
+        await unrelated.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        const frame = (await statsOf(unrelated)).lastUserSuggestion;
+        assert.equal(frame.message, "yes");
+        assert.equal(frame.continuationApproval, undefined);
+      } finally {
+        await unrelated.close();
+      }
+    });
+
+    await t.test("a substantive new direction remains an ordinary user turn, not old-task continuation", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({
+        nativeTaskLifecycle: {
+          status: "INCOMPLETE_RESOURCE_LIMIT",
+          customerStatus: "CONTINUE_AVAILABLE",
+          taskId: "fixture-task-new-direction",
+          operationId: "fixture-operation-old",
+          updatedAt: Date.now(),
+        },
+      }));
+      try {
+        await page.waitForSelector('[data-testid="button-native-continue"]', { timeout: 10_000 });
+        await page.type('[data-testid="input-editor-chat"]', "Actually add a settings page instead.");
+        await page.click('[data-testid="button-send-chat"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        const frame = (await statsOf(page)).lastUserSuggestion;
+        assert.equal(frame.message, "Actually add a settings page instead.");
+        assert.equal(frame.continuationApproval, undefined);
+      } finally {
+        await page.close();
+      }
+    });
+
     await t.test("owner resource-limit status ends reconnect recovery without completing or replacing the saved revision", async () => {
       const page = await startEditor(serverUrl, browser, fixture({
         changed: true,
@@ -639,8 +804,10 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           text: node.textContent || "",
         }));
         assert.equal(completion.phase, "error", "native resource exhaustion is terminal and non-success");
-        assert.match(completion.text, /resource limit/i);
-        assert.match(completion.text, /incomplete, not complete/i);
+        const customerText = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
+        assert.match(customerText, /paused before completion/i);
+        assert.doesNotMatch(customerText, /operation credit ceiling|INCOMPLETE_RESOURCE_LIMIT/i);
+        assert.doesNotMatch(completion.text, /credit|resource ceiling|INCOMPLETE_RESOURCE_LIMIT/i);
         assert.doesNotMatch(completion.text, /SUCCESS|COMPLETE ·/);
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true);
         assert.equal(await page.$eval("iframe", (frame) => frame.getAttribute("src")), `${serverUrl}/__native_completion_preview/?revision=${EDITED}`);
@@ -685,8 +852,9 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           text: node.textContent || "",
         }));
         assert.equal(completion.phase, "error");
-        assert.match(completion.text, /resource limit/i);
-        assert.match(completion.text, /incomplete, not complete/i);
+        const customerText = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
+        assert.match(customerText, /paused before completion/i);
+        assert.doesNotMatch(customerText, /cumulative resource ceiling|INCOMPLETE_RESOURCE_LIMIT/i);
         assert.equal((await statsOf(page)).userSuggestions, 1, "the sent customer instruction is never automatically resent");
         assert.equal((await statsOf(page)).publishRequests, 0);
         assert.equal((await statsOf(page)).previewPosts, 0);
@@ -712,7 +880,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         });
         await page.evaluate(async () => window.__nativeCompletionHarness.fastForward(31_000));
         await waitForState(page, "error");
-        assert.match(await page.$eval('[data-testid="native-completion-state"]', (node) => node.textContent || ""), /resource limit/i);
+        assert.match(await page.$eval('[data-testid="native-completion-state"]', (node) => node.textContent || ""), /Stopped/i);
         assert.notEqual(await stateOf(page), "recovering", "the terminal task state ends recovery despite a stale host working flag");
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.disabled), true,
           "the explicit host working flag keeps input unavailable");
@@ -1023,8 +1191,9 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await new Promise((resolve) => setTimeout(resolve, 1_350));
         assert.equal(await stateOf(page), "error");
         const errorAfter = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
-        assert.match(errorBefore, /Stock Think reported an explicit test error/);
-        assert.match(errorAfter, /Stock Think reported an explicit test error/);
+        assert.match(errorBefore, /This build stopped before completion/);
+        assert.match(errorAfter, /This build stopped before completion/);
+        assert.doesNotMatch(errorAfter, /Stock Think reported an explicit test error/);
         const stats = await statsOf(page);
         assert.equal(stats.userSuggestions, 1);
         assert.equal(stats.agentCreationRequests, 0);

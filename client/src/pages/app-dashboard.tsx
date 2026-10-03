@@ -82,6 +82,12 @@ import { ThemeProvider, useTheme } from "@/contexts/theme-context";
 import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } from "@/pages/app-admin-pages";
 import ProjectDetail from "@/pages/project-detail";
 import { getPlanEntitlement } from "@shared/plans";
+import {
+  canContinueNativeTask,
+  customerLifecycleStatus,
+  hasFreshApprovedOperation,
+  isContextualContinuationApproval,
+} from "@/lib/native-continuation";
 
 function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onToggle: () => void; isAdmin: boolean }) {
   const [location] = useLocation();
@@ -675,12 +681,14 @@ function BuildActivity({
   projectId,
   theme,
   isBuilding,
+  customerFacing = false,
   progressEvents = [],
   connectionState,
 }: {
   projectId: number;
   theme: string;
   isBuilding: boolean;
+  customerFacing?: boolean;
   progressEvents?: string[];
   connectionState?: string;
 }) {
@@ -705,7 +713,9 @@ function BuildActivity({
   const generationStatus = generation.status || (isBuilding ? "running" : "idle");
   const latestTool = state.lastConversationResponse?.tool;
   const activePath = state.currentFile || latestTool?.args?.path;
-  const summary = statusQuery.isError
+  const summary = customerFacing
+    ? "Working on your changes"
+    : statusQuery.isError
     ? "Runtime activity is unavailable"
     : isBuilding
       ? activePath
@@ -714,7 +724,7 @@ function BuildActivity({
       : `${statusQuery.data?.files || 0} files · ${generationStatus}`;
 
   useEffect(() => {
-    if (!isBuilding) return;
+    if (!isBuilding || customerFacing) return;
     setOpen(true);
     const response = state.lastConversationResponse;
     const tool = response?.tool;
@@ -725,10 +735,10 @@ function BuildActivity({
         : summary;
     if (!next) return;
     setSteps((current) => current[current.length - 1] === next ? current : [...current.slice(-9), next]);
-  }, [isBuilding, activePath, state.lastConversationResponse, summary]);
+  }, [isBuilding, customerFacing, activePath, state.lastConversationResponse, summary]);
 
   useEffect(() => {
-    if (!isBuilding || !activePath || openFile === activePath) return;
+    if (!isBuilding || customerFacing || !activePath || openFile === activePath) return;
     setOpenFile(activePath);
     setLoadingFile(true);
     fetch(`/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(activePath)}`, { headers: authHeaders() })
@@ -738,7 +748,7 @@ function BuildActivity({
       })
       .catch(() => setFileContent("The Agent is preparing this file."))
       .finally(() => setLoadingFile(false));
-  }, [isBuilding, activePath, projectId]);
+  }, [isBuilding, customerFacing, activePath, projectId]);
 
   return (
     <div className={`rounded-xl border overflow-hidden ${theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"}`}>
@@ -758,11 +768,11 @@ function BuildActivity({
       </button>
       {open && (
         <div className={`px-3 pb-3 border-t ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-          <div className={`grid grid-cols-2 gap-2 py-3 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+          {!customerFacing && <div className={`grid grid-cols-2 gap-2 py-3 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
             <span>Generation <b className={theme === "dark" ? "text-white/80" : "text-gray-800"}>{generationStatus}</b></span>
             <span>Connection <b className={theme === "dark" ? "text-white/80" : "text-gray-800"}>{connectionState || (statusQuery.data?.connected ? "connected" : "not connected")}</b></span>
-          </div>
-          {(steps.length > 0 || progressEvents.length > 0) && (
+          </div>}
+          {!customerFacing && (steps.length > 0 || progressEvents.length > 0) && (
             <div className={`mb-3 space-y-1 border-l-2 pl-3 ${theme === "dark" ? "border-cyan-400/30" : "border-cyan-300"}`}>
               {[...steps, ...progressEvents].slice(-10).map((step, index, visibleSteps) => (
                 <div key={`${index}-${step}`} className={`text-[11px] leading-relaxed ${
@@ -775,7 +785,7 @@ function BuildActivity({
               ))}
             </div>
           )}
-          {isBuilding && openFile && (
+          {!customerFacing && isBuilding && openFile && (
             <div className="mb-3">
               <div className={`mb-1 truncate font-mono text-[10px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>{openFile}</div>
               <pre className={`max-h-48 overflow-auto rounded-lg p-2 text-[10px] leading-relaxed ${theme === "dark" ? "bg-black/40 text-cyan-100/70" : "border border-gray-100 bg-white text-gray-600"}`}>
@@ -789,10 +799,13 @@ function BuildActivity({
   );
 }
 
-type NativeCompletionPhase = "idle" | "running" | "recovering" | "success" | "error";
+type NativeCompletionPhase = "idle" | "running" | "recovering" | "paused" | "needs_input" | "success" | "error";
 
 type NativeTaskLifecycle = {
   status: string;
+  customerStatus?: string;
+  taskId?: string;
+  operationId?: string;
   reason?: string;
   updatedAt: number;
 };
@@ -804,13 +817,13 @@ const NATIVE_RECOVERY_POLL_MS = 5_000;
 
 function nativeResourceLimitError(runtimeStatus: any, operationStartedAt?: number): string | null {
   const lifecycle = runtimeStatus?.nativeTaskLifecycle as NativeTaskLifecycle | undefined;
+  if (lifecycle?.customerStatus === "CONTINUE_AVAILABLE") return null;
   if (typeof lifecycle?.status !== "string"
     || lifecycle.status.toUpperCase() !== "INCOMPLETE_RESOURCE_LIMIT"
     || typeof lifecycle.updatedAt !== "number"
     || !Number.isFinite(lifecycle.updatedAt)
     || (typeof operationStartedAt === "number" && lifecycle.updatedAt < operationStartedAt)) return null;
-  const reason = typeof lifecycle.reason === "string" ? lifecycle.reason.trim().slice(0, 240) : "";
-  return `Stopped at the resource limit${reason ? `: ${reason}` : ""}. This operation is incomplete, not complete. Existing files and preview are unchanged. Review them or send another instruction.`;
+  return "This build paused before completion. Review your project or send another instruction.";
 }
 
 type NativeOperationBaseline = {
@@ -820,6 +833,9 @@ type NativeOperationBaseline = {
   startingTurnCount?: number;
   promptDigest?: string;
   imageDigest?: string | null;
+  approvedTaskId?: string;
+  approvedOperationId?: string;
+  lifecycleUpdatedAt?: number;
 };
 
 async function sha256Hex(value: string): Promise<string> {
@@ -880,6 +896,21 @@ async function hasCorrelatedNativeTurn(turns: any[], baseline: NativeOperationBa
   return matches.length === 1;
 }
 
+async function hasNativeOperationEvidence(
+  turns: any[],
+  baseline: NativeOperationBaseline,
+  runtimeStatus: any,
+): Promise<boolean> {
+  if (baseline.approvedTaskId && baseline.approvedOperationId && typeof baseline.lifecycleUpdatedAt === "number") {
+    return hasFreshApprovedOperation(runtimeStatus?.nativeTaskLifecycle, {
+      taskId: baseline.approvedTaskId,
+      operationId: baseline.approvedOperationId,
+      updatedAt: baseline.lifecycleUpdatedAt,
+    });
+  }
+  return hasCorrelatedNativeTurn(turns, baseline);
+}
+
 function nativeOperationStorageKey(projectId: number): string {
   return `buildcustom:native-operation:${projectId}`;
 }
@@ -935,8 +966,12 @@ function EditorPage() {
   const canPublishNative = Boolean(currentRuntimeCapability && nativeThink);
   const resourceLimitedOperation = nativeResourceLimitError(currentRuntimeCapability?.status);
   const runtimeGenerationStatus = String(currentRuntimeCapability?.status?.state?.generation?.status || "").toLowerCase();
+  const currentNativeLifecycle = currentRuntimeCapability?.status?.nativeTaskLifecycle as NativeTaskLifecycle | undefined;
+  const authoritativeBuildComplete = currentNativeLifecycle?.status === "COMPLETE"
+    && customerLifecycleStatus(currentNativeLifecycle) === "BUILD_COMPLETE";
   const nativeRuntimeAlreadyWorking = nativeThink && (
     currentRuntimeCapability?.status?.state?.shouldBeGenerating === true
+    || currentNativeLifecycle?.customerStatus === "WORKING"
     || (!resourceLimitedOperation
       && ["pending", "queued", "starting", "running", "building", "generating"].includes(runtimeGenerationStatus))
   );
@@ -1001,6 +1036,13 @@ function EditorPage() {
   const nativeIdleStopRef = useRef<() => void>(() => undefined);
   const nativeOperationControllerRef = useRef<AbortController | null>(null);
   const nativeCancelRef = useRef<() => void>(() => undefined);
+  const continuationInFlightRef = useRef(false);
+  const canOfferNativeContinuation = nativeThink
+    && canContinueNativeTask(currentNativeLifecycle, nativeRuntimeAlreadyWorking)
+    && !sending
+    && !nativeRecoveryUnverified
+    && !nativeOperationControllerRef.current
+    && !continuationInFlightRef.current;
   const nativeLifecycleRef = useRef(0);
   const nativeMountedRef = useRef(false);
   const turnLoadSequenceRef = useRef(0);
@@ -1229,6 +1271,65 @@ function EditorPage() {
     loadRuntime();
     return () => { cancelled = true; };
   }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || !nativeThink
+      || (nativeCompletionPhase === "idle" && !sending && !canOfferNativeContinuation)) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const refreshLifecycle = async () => {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
+          credentials: "same-origin",
+          headers: authHeaders(),
+        });
+        const status = await response.json().catch(() => ({}));
+        if (!response.ok || cancelled || activeProjectIdRef.current !== projectId) return;
+        setRuntimeCapability({ projectId, nativeThink: true, status });
+        const customerStatus = customerLifecycleStatus(status.nativeTaskLifecycle);
+        if (customerStatus === "CONTINUE_AVAILABLE" && !sending && !nativeOperationControllerRef.current) {
+          setNativeCompletionPhase("paused");
+          setNativeCompletionMessage("I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?");
+          setNativeRecoveryUnverified(false);
+          setRuntimeError("");
+          setSending(false);
+        } else if (customerStatus === "NEEDS_INPUT" && !sending && !nativeOperationControllerRef.current) {
+          setNativeCompletionPhase("needs_input");
+          setNativeCompletionMessage("Needs your input");
+          setNativeRecoveryUnverified(false);
+          setSending(false);
+        } else if (customerStatus === "BUILD_COMPLETE"
+          && status.nativeTaskLifecycle?.status === "COMPLETE"
+          && status.state?.shouldBeGenerating !== true
+          && !["pending", "queued", "starting", "running", "building", "generating"].includes(
+            String(status.state?.generation?.status || "").toLowerCase(),
+          )
+          && !sending
+          && !readNativeOperationBaseline(projectId)
+          && !nativeOperationControllerRef.current) {
+          setNativeCompletionPhase("success");
+          setNativeCompletionMessage("Your changes are ready to review.");
+          setNativeRecoveryUnverified(false);
+          setRuntimeError("");
+          setSending(false);
+        } else if (customerStatus === "STOPPED" && !sending && !nativeOperationControllerRef.current) {
+          setNativeCompletionPhase("error");
+          setNativeCompletionMessage("This build stopped before completion.");
+          setNativeRecoveryUnverified(false);
+          setSending(false);
+        }
+      } catch {
+        // A transient status failure does not change the current customer-facing state.
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refreshLifecycle, 3000);
+      }
+    };
+    void refreshLifecycle();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [projectId, nativeThink, nativeCompletionPhase, sending, canOfferNativeContinuation]);
 
   useEffect(() => {
     const lifecycle = ++nativeLifecycleRef.current;
@@ -1498,6 +1599,43 @@ function EditorPage() {
     const savedBaseline = readNativeOperationBaseline(projectId);
     const status = currentRuntimeCapability.status || {};
     const state = status.state || {};
+    const openedCustomerStatus = customerLifecycleStatus(status.nativeTaskLifecycle);
+    if (openedCustomerStatus === "CONTINUE_AVAILABLE") {
+      setNativeCompletionPhase("paused");
+      setNativeCompletionMessage("I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?");
+      setNativeRecoveryUnverified(false);
+      setRuntimeError("");
+      setSending(false);
+      return;
+    }
+    if (openedCustomerStatus === "NEEDS_INPUT") {
+      setNativeCompletionPhase("needs_input");
+      setNativeCompletionMessage("Needs your input");
+      setNativeRecoveryUnverified(false);
+      setSending(false);
+      return;
+    }
+    if (openedCustomerStatus === "STOPPED" || String(status.nativeTaskLifecycle?.status || "").toUpperCase() === "BLOCKED") {
+      setNativeCompletionPhase("error");
+      setNativeCompletionMessage("This build stopped before completion.");
+      setNativeRecoveryUnverified(false);
+      setRuntimeError("");
+      setSending(false);
+      return;
+    }
+    if (openedCustomerStatus === "BUILD_COMPLETE"
+      && status.nativeTaskLifecycle?.status === "COMPLETE"
+      && state.shouldBeGenerating !== true
+      && !["pending", "queued", "starting", "running", "building", "generating"].includes(
+        String(state.generation?.status || state.generationStatus || state.status || "").toLowerCase(),
+      )
+      && !savedBaseline) {
+      setNativeCompletionPhase("success");
+      setNativeCompletionMessage("Your changes are ready to review.");
+      setNativeRecoveryUnverified(false);
+      setSending(false);
+      return;
+    }
     const generationStatus = String(state.generation?.status || state.generationStatus || state.status || "").toLowerCase();
     const runtimeActive = state.shouldBeGenerating === true
       || ["pending", "queued", "starting", "running", "building", "generating"].includes(generationStatus);
@@ -1569,7 +1707,7 @@ function EditorPage() {
           || "",
       ).toLowerCase();
       return ["failed", "error", "stopped", "cancelled", "canceled"].includes(generation)
-        ? `The stock runtime reports that the previous operation ${generation}.`
+        ? "This build stopped before completion. Review the project and try again."
         : null;
     };
     const reconcile = async () => {
@@ -1600,6 +1738,19 @@ function EditorPage() {
             fetchRuntime("revision"),
           ]);
           if (cancelled || activeProjectIdRef.current !== projectId) return;
+          const customerStatus = customerLifecycleStatus(runtimeStatus.nativeTaskLifecycle);
+          if (customerStatus === "CONTINUE_AVAILABLE" || customerStatus === "NEEDS_INPUT") {
+            setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
+            clearNativeOperationBaseline(projectId);
+            setNativeCompletionPhase(customerStatus === "CONTINUE_AVAILABLE" ? "paused" : "needs_input");
+            setNativeCompletionMessage(customerStatus === "CONTINUE_AVAILABLE"
+              ? "I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?"
+              : "Needs your input");
+            setNativeRecoveryUnverified(false);
+            setRuntimeError("");
+            setSending(false);
+            return;
+          }
           const terminalError = terminalRuntimeError(runtimeStatus);
           if (terminalError) {
             setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
@@ -1637,7 +1788,7 @@ function EditorPage() {
                 if (!baselineCorrelatable) throw new Error(lastError);
                 const turnsBeforePreview = runtimeTurnsFromResponse(await fetchRuntime("turns"));
                 if (cancelled || activeProjectIdRef.current !== projectId) return;
-                if (!turnsBeforePreview || !await hasCorrelatedNativeTurn(turnsBeforePreview, savedBaseline)) {
+                if (!turnsBeforePreview || !await hasNativeOperationEvidence(turnsBeforePreview, savedBaseline, finalStatus)) {
                   throw new Error("The changed revision is not yet correlated with this operation's appended prompt turn and assistant response.");
                 }
                 const previewState = finalStatus.state || {};
@@ -1678,7 +1829,7 @@ function EditorPage() {
                   lastError = "The runtime changed while its completed revision was being verified.";
                 } else {
                   const finalTurns = runtimeTurnsFromResponse(turnsData);
-                  if (!finalTurns || !await hasCorrelatedNativeTurn(finalTurns, savedBaseline)) {
+                  if (!finalTurns || !await hasNativeOperationEvidence(finalTurns, savedBaseline, lastStatus)) {
                     lastError = "No newly appended user turn with this prompt fingerprint and a completed assistant response is verified yet.";
                   } else {
                     const [verifiedStatus, verifiedRevision] = await Promise.all([
@@ -1697,7 +1848,12 @@ function EditorPage() {
                       setSending(false);
                       return;
                     }
-                    if (!isIdle(verifiedStatus) || verifiedRevision.commitHash !== candidateRevision) {
+                    if (!isIdle(verifiedStatus)
+                      || verifiedStatus?.nativeTaskLifecycle?.status !== "COMPLETE"
+                      || customerLifecycleStatus(verifiedStatus?.nativeTaskLifecycle) !== "BUILD_COMPLETE"
+                      || typeof verifiedStatus?.nativeTaskLifecycle?.updatedAt !== "number"
+                      || verifiedStatus.nativeTaskLifecycle.updatedAt < savedBaseline.startedAt
+                      || verifiedRevision.commitHash !== candidateRevision) {
                       candidateRevision = null;
                       candidateSince = 0;
                       lastError = "The runtime changed after turn correlation and preview verification.";
@@ -1713,7 +1869,7 @@ function EditorPage() {
                       clearNativeOperationBaseline(projectId);
                       setRuntimeError("");
                       setNativeCompletionPhase("success");
-                      setNativeCompletionMessage("The completed build was recovered from the stock runtime.");
+                      setNativeCompletionMessage("Your changes are ready to review.");
                       setNativeRecoveryUnverified(false);
                       recordNativeProgress(`${files.length} project files verified · preview ready`);
                       setSending(false);
@@ -1749,7 +1905,7 @@ function EditorPage() {
       controller.abort();
       finishRecoveryWait?.();
     };
-  }, [projectId, nativeThink, currentRuntimeCapability?.status]);
+  }, [projectId, nativeThink]);
 
   const recordNativeProgress = (label: string) => {
     const cleanLabel = label.trim();
@@ -1759,7 +1915,12 @@ function EditorPage() {
       : [...current.slice(-8), cleanLabel]);
   };
 
-  const streamNativeTurn = async (agentPrompt: string, images: ComposerImage[], lifecycle: number) => {
+  const streamNativeTurn = async (
+    agentPrompt: string,
+    images: ComposerImage[],
+    lifecycle: number,
+    continuationApproval?: { taskId: string; operationId: string; updatedAt: number },
+  ) => {
     nativeIdleStopRef.current();
     const operationController = new AbortController();
     nativeOperationControllerRef.current = operationController;
@@ -1794,6 +1955,28 @@ function EditorPage() {
     }
     const startingTurns = runtimeTurnsFromResponse(startingTurnsData);
     if (!startingTurns) throw new Error("The current authoritative conversation turns could not be verified. Your prompt was not sent.");
+    let lifecycleUpdatedAt: number | undefined;
+    if (continuationApproval) {
+      const statusResponse = await fetch(`/api/projects/${projectId}/runtime/status`, {
+        credentials: "same-origin",
+        headers: authHeaders(),
+        signal: operationController.signal,
+      });
+      const latestStatus = await statusResponse.json().catch(() => ({}));
+      const latestLifecycle = latestStatus?.nativeTaskLifecycle as NativeTaskLifecycle | undefined;
+      const latestGeneration = String(latestStatus?.state?.generation?.status
+        || latestStatus?.state?.generationStatus || latestStatus?.state?.status || "").toLowerCase();
+      const latestWorking = latestStatus?.state?.shouldBeGenerating === true
+        || ["pending", "queued", "starting", "running", "building", "generating"].includes(latestGeneration);
+      if (!statusResponse.ok
+        || !canContinueNativeTask(latestLifecycle, latestWorking)
+        || latestLifecycle.taskId !== continuationApproval.taskId
+        || latestLifecycle.operationId !== continuationApproval.operationId
+        || latestLifecycle.updatedAt !== continuationApproval.updatedAt) {
+        throw new Error("This continuation is no longer available. Refresh the project status and try again.");
+      }
+      lifecycleUpdatedAt = latestLifecycle.updatedAt;
+    }
     const promptDigest = await sha256Hex(agentPrompt);
     let imageDigest: string | null = null;
     if (images.length) {
@@ -1823,6 +2006,11 @@ function EditorPage() {
       startingTurnCount: startingTurns.length,
       promptDigest,
       imageDigest,
+      ...(continuationApproval ? {
+        approvedTaskId: continuationApproval.taskId,
+        approvedOperationId: continuationApproval.operationId,
+        lifecycleUpdatedAt,
+      } : {}),
     };
     writeNativeOperationBaseline(projectId, operationBaseline);
 
@@ -1890,6 +2078,23 @@ function EditorPage() {
         else resolve();
       };
 
+      const settleCustomerBoundary = (runtimeStatus: any): boolean => {
+        const customerStatus = customerLifecycleStatus(runtimeStatus?.nativeTaskLifecycle);
+        if (customerStatus !== "CONTINUE_AVAILABLE" && customerStatus !== "NEEDS_INPUT" && customerStatus !== "STOPPED") return false;
+        setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
+        setNativeCompletionPhase(customerStatus === "CONTINUE_AVAILABLE" ? "paused"
+          : customerStatus === "NEEDS_INPUT" ? "needs_input" : "error");
+        setNativeCompletionMessage(customerStatus === "CONTINUE_AVAILABLE"
+          ? "I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?"
+          : customerStatus === "NEEDS_INPUT" ? "Needs your input" : "This build stopped before completion.");
+        setNativeRecoveryUnverified(false);
+        setRuntimeError("");
+        setSending(false);
+        clearNativeOperationBaseline(projectId);
+        closeAndFinish();
+        return true;
+      };
+
       const failTurn = (message: string, recoverable = false, runtimeStatus?: any) => {
         const error = new Error(message);
         if (isOperationActive()) {
@@ -1953,7 +2158,7 @@ function EditorPage() {
             || "",
         ).toLowerCase();
         return ["failed", "error", "stopped", "cancelled", "canceled"].includes(status)
-          ? `The stock runtime reports that this operation ${status}.`
+          ? "This build stopped before completion. Review the project and try again."
           : null;
       };
 
@@ -1999,6 +2204,7 @@ function EditorPage() {
             cancelForLifecycle();
             return;
           }
+          if (settleCustomerBoundary(status)) return;
           if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
             revisionCandidate = null;
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
@@ -2066,6 +2272,7 @@ function EditorPage() {
             cancelForLifecycle();
             return;
           }
+          if (settleCustomerBoundary(latestStatus)) return;
           if (frameSequence !== checkFrameSequence || Date.now() - lastFrameAt < requiredQuietMs) {
             revisionCandidate = null;
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
@@ -2115,7 +2322,7 @@ function EditorPage() {
             return;
           }
           const turnsBeforePreview = runtimeTurnsFromResponse(turnsBeforePreviewData);
-          if (!turnsBeforePreview || !await hasCorrelatedNativeTurn(turnsBeforePreview, operationBaseline)) {
+          if (!turnsBeforePreview || !await hasNativeOperationEvidence(turnsBeforePreview, operationBaseline, latestStatus)) {
             settlementWaitReason = "The revision is not yet correlated with an appended user turn matching this prompt and a completed assistant response.";
             setNativeCompletionPhase("recovering");
             setNativeCompletionMessage("The revision is saved · verifying its matching conversation turn before completion…");
@@ -2153,7 +2360,7 @@ function EditorPage() {
           }
           const finalTurns = runtimeTurnsFromResponse(turnsData);
           if (!finalTurns || turnsSequence !== turnLoadSequenceRef.current
-            || !await hasCorrelatedNativeTurn(finalTurns, operationBaseline)) {
+            || !await hasNativeOperationEvidence(finalTurns, operationBaseline, latestStatus)) {
             settlementWaitReason = "The new revision is not yet correlated with an appended user turn matching this prompt and an assistant response.";
             setNativeCompletionPhase("recovering");
             setNativeCompletionMessage("The revision is saved · verifying its matching conversation turn before completion…");
@@ -2173,6 +2380,7 @@ function EditorPage() {
             failTurn(verifiedStatusError, false, verifiedStatus);
             return;
           }
+          if (settleCustomerBoundary(verifiedStatus)) return;
           const verifiedCommitHash = typeof verifiedRevision.commitHash === "string"
             ? verifiedRevision.commitHash
             : typeof verifiedRevision.revision?.commitHash === "string" ? verifiedRevision.revision.commitHash : null;
@@ -2184,9 +2392,22 @@ function EditorPage() {
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
-          if (!isRuntimeIdle(verifiedStatus) || verifiedCommitHash !== currentCommitHash) {
+          if (!isRuntimeIdle(verifiedStatus)
+            || verifiedStatus?.nativeTaskLifecycle?.status !== "COMPLETE"
+            || typeof verifiedStatus?.nativeTaskLifecycle?.updatedAt !== "number"
+            || verifiedStatus.nativeTaskLifecycle.updatedAt < startedAt
+            || customerLifecycleStatus(verifiedStatus?.nativeTaskLifecycle) !== "BUILD_COMPLETE"
+            || (operationBaseline.approvedTaskId
+              && !hasFreshApprovedOperation(verifiedStatus?.nativeTaskLifecycle, {
+                taskId: operationBaseline.approvedTaskId,
+                operationId: operationBaseline.approvedOperationId || "",
+                updatedAt: operationBaseline.lifecycleUpdatedAt || 0,
+              }))
+            || verifiedCommitHash !== currentCommitHash) {
             revisionCandidate = null;
-            settlementWaitReason = "Runtime activity or a changed revision was detected after preview and turn verification.";
+            settlementWaitReason = verifiedStatus?.nativeTaskLifecycle?.status !== "COMPLETE"
+              ? "The authoritative task lifecycle has not established completion."
+              : "Runtime activity or a changed revision was detected after preview and turn verification.";
             setNativeCompletionPhase("recovering");
             setNativeCompletionMessage("The runtime changed after verification · checking its final state again…");
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
@@ -2200,7 +2421,7 @@ function EditorPage() {
           setPreviewEnvironment("development");
           clearNativeOperationBaseline(projectId);
           setNativeCompletionPhase("success");
-          setNativeCompletionMessage("Build complete · authoritative files and preview are verified.");
+          setNativeCompletionMessage("Your changes are ready to review.");
           setNativeRecoveryUnverified(false);
           setPreviewRevision((revision) => revision + 1);
           queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
@@ -2316,6 +2537,10 @@ function EditorPage() {
           || (frame.code === "INCOMPLETE_RESOURCE_LIMIT"
             ? { status: frame.code, reason: frame.reason }
             : null);
+        if (streamedTaskLifecycle?.customerStatus === "CONTINUE_AVAILABLE"
+          || streamedTaskLifecycle?.customerStatus === "NEEDS_INPUT") {
+          if (settleCustomerBoundary({ nativeTaskLifecycle: streamedTaskLifecycle })) return;
+        }
         const streamedResourceLimit = nativeResourceLimitError({
           nativeTaskLifecycle: streamedTaskLifecycle,
           state: { shouldBeGenerating: false },
@@ -2352,7 +2577,13 @@ function EditorPage() {
             try {
               socket.send(JSON.stringify({
                 type: "user_suggestion",
-                message: agentPrompt,
+                message: continuationApproval ? "Continue" : agentPrompt,
+                ...(continuationApproval ? {
+                  continuationApproval: {
+                    taskId: continuationApproval.taskId,
+                    operationId: continuationApproval.operationId,
+                  },
+                } : {}),
                 ...(images.length ? { images } : {}),
               }));
               suggestionSent = true;
@@ -2454,9 +2685,7 @@ function EditorPage() {
             recordNativeProgress(typeof frame.error === "string" ? `Preview deployment failed: ${frame.error}` : "Preview deployment failed");
             break;
           case "error":
-            failTurn(typeof frame.message === "string" ? frame.message
-              : typeof frame.error === "string" ? frame.error
-                : "The native Agent reported an error.");
+            failTurn("This build stopped before completion. Review the project and try again.");
             return;
           case "generation_stopped":
           case "generation_cancelled":
@@ -2519,8 +2748,73 @@ function EditorPage() {
     return () => window.clearInterval(poll);
   }, [publishing, projectId, nativeThink]);
 
+  const handleContinue = async () => {
+    if (continuationInFlightRef.current || sending || !projectId || !nativeThink || nativeRecoveryUnverified) return;
+    const offeredLifecycle = currentNativeLifecycle;
+    if (!canContinueNativeTask(offeredLifecycle, nativeRuntimeAlreadyWorking)) return;
+    continuationInFlightRef.current = true;
+    const requestLifecycle = nativeLifecycleRef.current;
+    setSending(true);
+    setRuntimeError("");
+    setNativeCompletionPhase("running");
+    setNativeCompletionMessage("");
+    setMessages((current) => [
+      ...current,
+      { role: "user", content: "Continue" },
+      { role: "assistant", content: "" },
+    ]);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
+        credentials: "same-origin",
+        headers: authHeaders(),
+      });
+      const status = await response.json().catch(() => ({}));
+      const latestLifecycle = status?.nativeTaskLifecycle as NativeTaskLifecycle | undefined;
+      const generation = String(status?.state?.generation?.status || "").toLowerCase();
+      const latestIsWorking = status?.state?.shouldBeGenerating === true
+        || ["pending", "queued", "starting", "running", "building", "generating"].includes(generation);
+      if (!response.ok || !canContinueNativeTask(latestLifecycle, latestIsWorking)
+        || latestLifecycle.taskId !== offeredLifecycle.taskId
+        || latestLifecycle.operationId !== offeredLifecycle.operationId
+        || latestLifecycle.updatedAt !== offeredLifecycle.updatedAt) {
+        throw new Error("This continuation is no longer available. Refresh the project status and try again.");
+      }
+      setRuntimeCapability({ projectId, nativeThink: true, status });
+      await streamNativeTurn("Continue", [], requestLifecycle, {
+        taskId: latestLifecycle.taskId!,
+        operationId: latestLifecycle.operationId!,
+        updatedAt: latestLifecycle.updatedAt!,
+      });
+      if (nativeLifecycleRef.current !== requestLifecycle || activeProjectIdRef.current !== projectId) return;
+    } catch {
+      if (nativeLifecycleRef.current === requestLifecycle && activeProjectIdRef.current === projectId) {
+        nativeOperationControllerRef.current?.abort();
+        nativeOperationControllerRef.current = null;
+        setNativeCompletionPhase("error");
+        setNativeCompletionMessage("The request to continue could not be verified. Refresh and try again.");
+        setRuntimeError("The request to continue could not be verified. Refresh and try again.");
+        setMessages((current) => current.map((message, index) => index === current.length - 1
+          && message.role === "assistant"
+          ? { ...message, content: "The request to continue could not be verified. Refresh and try again." }
+          : message));
+      }
+    } finally {
+      continuationInFlightRef.current = false;
+      if (nativeLifecycleRef.current === requestLifecycle && activeProjectIdRef.current === projectId) setSending(false);
+    }
+  };
+
   const handleSend = async (promptOverride?: string, planOverride?: boolean) => {
     const prompt = (promptOverride ?? chatInput).trim();
+    if (nativeThink
+      && attachments.length === 0
+      && textContext.length === 0
+      && !selectedElement
+      && isContextualContinuationApproval(prompt, currentNativeLifecycle, nativeRuntimeAlreadyWorking)) {
+      setChatInput("");
+      void handleContinue();
+      return;
+    }
     const activePlanMode = nativeThink ? false : planOverride ?? planMode;
     if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified)) {
       if (!sending && nativeRuntimeAlreadyWorking) {
@@ -3038,7 +3332,8 @@ function EditorPage() {
         }`}>
           <Zap size={18} className="text-purple-400" />
           <h2 className="font-display font-semibold text-brand-gradient">AI Builder</h2>
-          {nativeThink && nativeCompletionPhase !== "idle" && (
+          {nativeThink && nativeCompletionPhase !== "idle"
+            && (nativeCompletionPhase !== "success" || authoritativeBuildComplete) && (
             <span
               role="status"
               aria-live="polite"
@@ -3049,15 +3344,15 @@ function EditorPage() {
                   ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
                   : nativeCompletionPhase === "error"
                     ? "border-red-400/30 bg-red-400/10 text-red-200"
-                    : nativeCompletionPhase === "recovering"
+                    : nativeCompletionPhase === "paused" || nativeCompletionPhase === "needs_input"
                       ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
                       : "border-cyan-400/30 bg-cyan-400/10 text-cyan-200"
               }`}
             >
-              {nativeCompletionPhase === "running" ? "RUNNING"
-                : nativeCompletionPhase === "recovering" ? "RECOVERING / VERIFYING"
-                  : nativeCompletionPhase === "success" ? "SUCCESS" : "ERROR"}
-              {nativeCompletionMessage ? ` · ${nativeCompletionMessage}` : ""}
+              {nativeCompletionPhase === "success" ? "Build complete"
+                : nativeCompletionPhase === "paused" ? "Continue available"
+                  : nativeCompletionPhase === "needs_input" ? "Needs your input"
+                    : nativeCompletionPhase === "error" ? "Stopped" : "Working"}
             </span>
           )}
           <button
@@ -3079,6 +3374,43 @@ function EditorPage() {
           {runtimeError && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{runtimeError}</div>}
           {runtimeCapabilityError && <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">{runtimeCapabilityError}</div>}
           {!currentRuntimeCapability && !runtimeCapabilityError && <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Checking project runtime…</p>}
+          {canOfferNativeContinuation && (
+            <section
+              className={`rounded-xl border px-4 py-3 ${
+                theme === "dark" ? "border-amber-300/20 bg-amber-300/[0.07]" : "border-amber-200 bg-amber-50"
+              }`}
+              aria-live="polite"
+              data-testid="native-continuation-prompt"
+            >
+              <p className={`text-sm leading-relaxed ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>
+                I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleContinue()}
+                disabled={sending || continuationInFlightRef.current || nativeRecoveryUnverified}
+                className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-busy={sending || continuationInFlightRef.current}
+                data-testid="button-native-continue"
+              >
+                {sending || continuationInFlightRef.current ? "Continuing…" : "Continue"}
+              </button>
+            </section>
+          )}
+          {customerLifecycleStatus(currentNativeLifecycle) === "NEEDS_INPUT" && (
+            <p className={`rounded-xl border px-4 py-3 text-sm ${
+              theme === "dark" ? "border-amber-300/20 bg-amber-300/[0.07] text-amber-100" : "border-amber-200 bg-amber-50 text-amber-900"
+            }`} role="status" data-testid="native-needs-input">
+              Needs your input
+            </p>
+          )}
+          {nativeCompletionPhase === "success" && authoritativeBuildComplete && (
+            <p className={`rounded-xl border px-4 py-3 text-sm ${
+              theme === "dark" ? "border-emerald-300/20 bg-emerald-300/[0.07] text-emerald-100" : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            }`} role="status" data-testid="native-build-complete">
+              Build complete. Your changes are ready to review.
+            </p>
+          )}
           {!turns.length && !messages.length && !runtimeError && (
             <div className={`rounded-2xl border px-4 py-4 ${theme === "dark" ? "bg-white/5 border-white/10" : "bg-gray-100 border-gray-200"}`}>
               <p className={`text-sm font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>What do you want to build?</p>
@@ -3225,6 +3557,7 @@ function EditorPage() {
               projectId={projectId}
               theme={theme}
               isBuilding={sending}
+              customerFacing={nativeThink}
               progressEvents={nativeProgress}
               connectionState={nativeThink ? (nativeConnected ? "connected" : "not connected") : undefined}
             />

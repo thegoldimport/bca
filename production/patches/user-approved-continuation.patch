@@ -1,0 +1,560 @@
+diff --git a/worker/agents/core/behaviors/base.ts b/worker/agents/core/behaviors/base.ts
+index 6ee98c7..2c89ce1 100644
+--- a/worker/agents/core/behaviors/base.ts
++++ b/worker/agents/core/behaviors/base.ts
+@@ -1674,7 +1674,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
+      * Handle user input during conversational code generation
+      * Processes user messages and updates pendingUserInputs state
+      */
+-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
++    async handleUserInput(userMessage: string, images?: ImageAttachment[], _continuationApproval?: { taskId: string; operationId: string }): Promise<void> {
+         try {
+             this.logger.info('Processing user input message', { 
+                 messageLength: userMessage.length,
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index eaaead8..b0db6e8 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -1,6 +1,10 @@
+ import { RpcTarget } from 'cloudflare:workers';
+ import { ThinkStreamForwarder } from '../../think/stream-forwarder';
+ import { projectNativeTaskLifecycle } from '../../think/task-lifecycle-status';
++import {
++APPROVED_CONTINUATION_PROMPT, continuationTaskId, customerTaskStatus,
++isConversationalContinuation, type ThinkContinuationApproval,
++} from '../../think/user-approved-continuation';
+ import { emitThinkDiagnostic, observeThinkBoundary, withThinkDiagnosticSafety, type ThinkDiagnosticContext } from '../../think/diagnostics';
+ import { getAgentByName } from 'agents';
+ import type { UIMessage } from 'ai';
+@@ -55,9 +59,11 @@ type ThinkAgentStub = {
+ 	configureVibe: (config: ThinkAgentConfig) => Promise<void>;
+ configureOperationLimits: (limits: NonNullable<ThinkAgentConfig['operationLimits']>) => Promise<void>;
+ 	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
+-	beginTask: (taskId: string, candidateConversationId: string) => Promise<ThinkTaskOperation>;
++beginTask: (taskId: string, candidateConversationId: string, originalIntent?: string) => Promise<ThinkTaskOperation>;
++approveTaskContinuation: (approval: ThinkContinuationApproval) => Promise<{ operationId: string; alreadyStarted: boolean }>;
+ 	getTaskLifecycle: () => Promise<ThinkTaskLifecycle>;
+ 	getTaskOperation: () => Promise<ThinkTaskOperation | undefined>;
++getTaskLifecycleSnapshot: () => Promise<{ lifecycle: ThinkTaskLifecycle; operation?: ThinkTaskOperation }>;
+ 	advanceTaskOperation: () => Promise<ThinkTaskOperation>;
+ 	markTaskChatStarted: () => Promise<ThinkTaskOperation>;
+ 	markTaskChatResolved: () => Promise<ThinkTaskOperation>;
+@@ -344,7 +350,12 @@ export class ThinkCodingBehavior
+ 
+ 	/** Read the same authoritative lifecycle used by the continuation driver. */
+ 	async getNativeTaskLifecycle() {
+-		return projectNativeTaskLifecycle(await (await this.getThinkStub()).getTaskLifecycle());
++const stub = await this.getThinkStub();
++const snapshot = await stub.getTaskLifecycleSnapshot();
++return {
++...projectNativeTaskLifecycle(snapshot.lifecycle, snapshot.operation),
++approvalReady: this.state.pendingUserInputs.length === 0 && !this.isCodeGenerating(),
++};
+ 	}
+ 
+ 	private operationLimitsFromEnvironment() {
+@@ -465,7 +476,38 @@ export class ThinkCodingBehavior
+ 		};
+ 	}
+ 
+-	async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
++async handleUserInput(userMessage: string, images?: ImageAttachment[], approval?: ThinkContinuationApproval): Promise<void> {
++if (approval && (!isConversationalContinuation(userMessage) || images?.length)) {
++throw new Error('Send a new instruction separately from the Continue action.');
++}
++if (approval || (!images?.length && isConversationalContinuation(userMessage))) {
++const stub = await this.getThinkStub();
++const operation = await stub.getTaskOperation();
++const lifecycle = await stub.getTaskLifecycle();
++if (approval || (operation && customerTaskStatus(lifecycle) === 'CONTINUE_AVAILABLE'
++&& this.state.pendingUserInputs.length === 0 && !this.isCodeGenerating())) {
++if (!operation || this.state.pendingUserInputs.length > 0 || this.isCodeGenerating()) {
++// Explicit retries may acknowledge a session already running, but never queue another.
++if (approval && operation && (
++operation.taskId !== approval.operationId
++|| this.getPendingTaskQueueIds().some(id => id.startsWith('think-approved:'))
++)) {
++const replay = await stub.approveTaskContinuation(approval);
++if (replay.alreadyStarted || this.getPendingTaskQueueIds().includes(replay.operationId)) return;
++}
++throw new Error('Another request is already being processed.');
++}
++const accepted = await stub.approveTaskContinuation(approval ?? {
++taskId: continuationTaskId(operation), operationId: operation.taskId,
++});
++if (accepted.alreadyStarted || this.getPendingTaskQueueIds().includes(accepted.operationId)) return;
++this.setThinkPendingInputs(
++[...this.state.pendingUserInputs, APPROVED_CONTINUATION_PROMPT],
++[...this.getPendingTaskQueueIds(), accepted.operationId],
++);
++return;
++}
++}
+ 		let processedImages: ProcessedImageAttachment[] | undefined;
+ 		if (images && images.length > 0) {
+ 			processedImages = await Promise.all(
+@@ -507,7 +549,8 @@ export class ThinkCodingBehavior
+ 			// the id/prompt of a chat that may be recovered after a worker restart.
+ 			const pending = this.state.pendingUserInputs.slice(0, 1);
+ 			const queueIds = this.getPendingTaskQueueIds();
+-			const taskId = createThinkTaskQueueIdentity(queueIds.slice(0, pending.length));
++const taskId = queueIds[0]?.startsWith('think-approved:')
++? queueIds[0] : createThinkTaskQueueIdentity(queueIds.slice(0, pending.length));
+ 
+ 			const compiled = pending[0];
+ 			try {
+@@ -548,7 +591,7 @@ export class ThinkCodingBehavior
+ 		// Refresh future-operation policy for existing agents, without rewriting
+ 		// the persisted limits of an operation recovered by beginTask.
+ 		await stub.configureOperationLimits(this.operationLimitsFromEnvironment());
+-		const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId());
++const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId(), text);
+ 		if (operation.replayOnly) return;
+ 		const initialLifecycle = await stub.getTaskLifecycle();
+ 		if (initialLifecycle.status !== 'RUNNING') return;
+@@ -557,6 +600,9 @@ export class ThinkCodingBehavior
+ 			message: '',
+ 			conversationId,
+ 			isStreaming: true,
++// Supported owner diagnostics capture the actual initialized operation
++// before its first model/tool reservation; the editor must not render usage.
++nativeTaskLifecycle: projectNativeTaskLifecycle(initialLifecycle, operation),
+ 		});
+ 
+ 		const accumulated = { text: '', bufferText: false, bufferedText: '' };
+@@ -615,12 +661,16 @@ export class ThinkCodingBehavior
+ 			});
+ 			if (result.lifecycle.status === 'INCOMPLETE_RESOURCE_LIMIT') {
+ 				const queueIds = this.getPendingTaskQueueIds();
+-				if (createThinkTaskQueueIdentity(queueIds.slice(-1)) === taskId) {
++const latestQueueId = queueIds.at(-1);
++const latestTaskId = latestQueueId?.startsWith('think-approved:')
++? latestQueueId : queueIds.length ? createThinkTaskQueueIdentity(queueIds.slice(-1)) : null;
++if (latestTaskId === taskId) {
++const stopped = await stub.getTaskLifecycleSnapshot();
+ 					this.broadcast(WebSocketMessageResponses.ERROR, {
+ 						error: result.lifecycle.summary,
+ 						code: result.lifecycle.status,
+ 						reason: result.lifecycle.reason,
+-						nativeTaskLifecycle: result.lifecycle,
++nativeTaskLifecycle: projectNativeTaskLifecycle(stopped.lifecycle, stopped.operation),
+ 						operationId: taskId,
+ 						conversationId,
+ 					});
+diff --git a/worker/agents/core/codingAgent.ts b/worker/agents/core/codingAgent.ts
+index e2c1849..f9c436a 100644
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -642,8 +642,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+      * Handle user input during conversational code generation
+      * Processes user messages and updates pendingUserInputs state
+      */
+-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
++    async handleUserInput(userMessage: string, images?: ImageAttachment[], continuationApproval?: { taskId: string; operationId: string }): Promise<void> {
+         try {
++            if (continuationApproval && this.behavior.getBehavior() !== 'think') {
++                throw new Error('This project does not support the Continue action.');
++            }
+             this.logger().info('Processing user input message', { 
+                 messageLength: userMessage.length,
+                 pendingInputsCount: this.state.pendingUserInputs.length,
+@@ -651,8 +654,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+                 imageCount: images?.length || 0
+             });
+ 
+-            await this.behavior.handleUserInput(userMessage, images);
+-            if (!this.behavior.isCodeGenerating()) {
++            await this.behavior.handleUserInput(userMessage, images, continuationApproval);
++            if (!this.behavior.isCodeGenerating() && this.state.pendingUserInputs.length > 0) {
+                 // If idle, start generation process
+                 this.logger().info('User input during IDLE state, starting generation');
+                 this.behavior.generateAllFiles().catch(error => {
+diff --git a/worker/agents/core/websocket.ts b/worker/agents/core/websocket.ts
+index 0ded5c8..3250b3c 100644
+--- a/worker/agents/core/websocket.ts
++++ b/worker/agents/core/websocket.ts
+@@ -14,6 +14,7 @@ interface IncomingWebSocketMessage {
+     type: string;
+     message?: string;
+     images?: ImageAttachment[];
++    continuationApproval?: { taskId: string; operationId: string };
+     credentials?: CredentialsPayload;
+     commitHash?: string;
+     target?: DeploymentTarget;
+@@ -290,7 +291,7 @@ export async function handleWebSocketMessage(
+                     return;
+                 }
+                 
+-                agent.handleUserInput(parsedMessage.message, parsedMessage.images).catch((error: unknown) => {
++                agent.handleUserInput(parsedMessage.message, parsedMessage.images, parsedMessage.continuationApproval).catch((error: unknown) => {
+                     logger.error('Error handling user suggestion:', error);
+                     sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
+                 });
+diff --git a/worker/agents/think/ThinkAgent.ts b/worker/agents/think/ThinkAgent.ts
+index 4a98afd..df01e95 100644
+--- a/worker/agents/think/ThinkAgent.ts
++++ b/worker/agents/think/ThinkAgent.ts
+@@ -22,6 +22,10 @@ import { createDeploySpaceTool } from './deploy-tool';
+ import { createCommitTool } from './commit-tool';
+ import { createSetTitleTool } from './set-title-tool';
+ import { selectThinkContextMessages } from './context-selector';
++import {
++assertContinuationApproval, continuationTaskId, createApprovedThinkOperation,
++type ThinkContinuationApproval,
++} from './user-approved-continuation';
+ import {
+ 	advanceThinkTaskOperation,
+ 	createFinishTaskTool,
+@@ -982,7 +986,40 @@ if (config && isCloudflareGatewayLimitsEnabled(this.env)) {
+ 		} as unknown as ToolSet;
+ 	}
+ 
+-	async beginTask(taskId: string, candidateConversationId: string): Promise<ThinkTaskOperation> {
++async approveTaskContinuation(approval: ThinkContinuationApproval): Promise<{
++operationId: string; alreadyStarted: boolean;
++}> {
++// Ownership is inherited from the owner's host agent and its bound Think DO.
++// Re-read after the digest await; reserve synchronously before another caller.
++const key = `think_customer_approval:${approval.operationId}`;
++const readCurrent = () => {
++const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++if (!operation || approval.taskId !== continuationTaskId(operation)) {
++throw new Error('This task is no longer available to continue.');
++}
++return operation;
++};
++let current = readCurrent();
++let receipt = this.ctx.storage.kv.get<{ operationId: string }>(key);
++if (receipt) return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++assertContinuationApproval(current, await this.getTaskLifecycle(), approval);
++const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
++JSON.stringify([approval.taskId, approval.operationId]),
++));
++const operationId = 'think-approved:' + Array.from(new Uint8Array(digest))
++.map(byte => byte.toString(16).padStart(2, '0')).join('');
++current = readCurrent();
++receipt = this.ctx.storage.kv.get<{ operationId: string }>(key);
++if (receipt) return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++const lifecycle = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey);
++if (!lifecycle) throw new Error('This task is not ready to continue.');
++assertContinuationApproval(current, lifecycle, approval);
++this.ctx.storage.kv.put(`think_approved_start:${operationId}`, current);
++this.ctx.storage.kv.put(key, { operationId });
++return { operationId, alreadyStarted: false };
++}
++
++async beginTask(taskId: string, candidateConversationId: string, originalIntent?: string): Promise<ThinkTaskOperation> {
+ const receipt = resolveThinkCompletedTaskReplay(
+ taskId, this.ctx.storage.kv.get<ThinkTaskOperation>(`think_completed_task:${taskId}`),
+ );
+@@ -1017,13 +1054,30 @@ if (receipt) return receipt;
+ // persisted customer turn after a newer one must not create another allowance.
+ if (existingOperation && existingLifecycle.status !== 'RUNNING') {
+ this.ctx.storage.kv.put(`think_completed_task:${existingOperation.taskId}`, existingOperation);
++const evidence = this.ctx.storage.kv.get<ThinkTaskEvidence>(this.taskEvidenceKey);
++if (evidence) this.ctx.storage.kv.put(`think_completed_evidence:${existingOperation.taskId}`, evidence);
++}
++const approvedParent = this.ctx.storage.kv.get<ThinkTaskOperation>(`think_approved_start:${taskId}`);
++if (approvedParent) {
++if (!existingOperation || existingOperation.taskId !== approvedParent.taskId) {
++throw new Error('A newer customer request replaced this continuation.');
+ }
+-		let operation = {
+-			...createThinkTaskOperation(
++assertContinuationApproval(existingOperation, existingLifecycle, {
++taskId: continuationTaskId(approvedParent), operationId: approvedParent.taskId,
++});
++}
++let operation = {
++...(approvedParent ? createApprovedThinkOperation(
++approvedParent, taskId, this.getConfig<ThinkAgentConfig>()?.operationLimits ?? approvedParent.limits,
++) : {
++...createThinkTaskOperation(
+ 				taskId,
+ 				candidateConversationId,
+ 				this.getConfig<ThinkAgentConfig>()?.operationLimits,
+ 			),
++customerTaskId: taskId,
++...(originalIntent ? { originalIntent } : {}),
++}),
+ 			messageCountAtPassStart: (await this.getMessages()).length,
+ 		};
+ 		try {
+@@ -1086,6 +1140,17 @@ this.ctx.storage.kv.put(`think_completed_task:${existingOperation.taskId}`, exis
+ 		return this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
+ 	}
+ 
++async getTaskLifecycleSnapshot(): Promise<{
++lifecycle: ThinkTaskLifecycle; operation?: ThinkTaskOperation;
++}> {
++return {
++lifecycle: this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey) ?? {
++status: 'RUNNING', summary: 'Task is in progress.', updatedAt: Date.now(),
++},
++operation: this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey),
++};
++}
++
+ 	async advanceTaskOperation(): Promise<ThinkTaskOperation> {
+ 		const operation = await this.getTaskOperation();
+ 		if (!operation) throw new Error('Cannot continue a Think task before beginTask');
+diff --git a/worker/agents/think/customer-operation.test.ts b/worker/agents/think/customer-operation.test.ts
+index 47eac66..4434629 100644
+--- a/worker/agents/think/customer-operation.test.ts
++++ b/worker/agents/think/customer-operation.test.ts
+@@ -114,8 +114,9 @@ describe('persisted customer operation boundaries', () => {
+   });
+ 
+   it('reports the persisted lifecycle only for the newest queued customer operation', () => {
+-    expect(behaviorSource).toContain('if (createThinkTaskQueueIdentity(queueIds.slice(-1)) === taskId)');
+-    expect(behaviorSource).toContain('nativeTaskLifecycle: result.lifecycle');
++    expect(behaviorSource).toContain('if (latestTaskId === taskId)');
++    expect(behaviorSource).toContain("latestQueueId?.startsWith('think-approved:')");
++    expect(behaviorSource).toContain('nativeTaskLifecycle: projectNativeTaskLifecycle(stopped.lifecycle, stopped.operation)');
+     expect(behaviorSource).toContain('reason: result.lifecycle.reason');
+     expect(behaviorSource).not.toContain('(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err })');
+   });
+diff --git a/worker/agents/think/finish-task-tool.ts b/worker/agents/think/finish-task-tool.ts
+index 597a53f..84856d8 100644
+--- a/worker/agents/think/finish-task-tool.ts
++++ b/worker/agents/think/finish-task-tool.ts
+@@ -37,6 +37,10 @@ export interface ThinkTaskEvidence {
+ 
+ export interface ThinkTaskOperation {
+ 	taskId: string;
++/** Stable customer intent across separately approved bounded operations. */
++customerTaskId?: string;
++parentOperationId?: string;
++originalIntent?: string;
+ 	conversationId: string;
+ 	continuationCount: number;
+ 	continuationBudget: number;
+diff --git a/worker/agents/think/task-lifecycle-status.test.ts b/worker/agents/think/task-lifecycle-status.test.ts
+index 6cfe305..6654b95 100644
+--- a/worker/agents/think/task-lifecycle-status.test.ts
++++ b/worker/agents/think/task-lifecycle-status.test.ts
+@@ -6,13 +6,13 @@ describe('native owner lifecycle projection', () => {
+ 		const native = { status: 'INCOMPLETE_RESOURCE_LIMIT' as const, reason: 'credit_limit',
+ 			updatedAt: 1234, summary: 'private details' };
+ 		expect(projectNativeTaskLifecycle(native)).toEqual({
+-			status: 'INCOMPLETE_RESOURCE_LIMIT', reason: 'credit_limit', updatedAt: 1234,
++status: 'INCOMPLETE_RESOURCE_LIMIT', reason: 'credit_limit', updatedAt: 1234, customerStatus: 'CONTINUE_AVAILABLE',
+ 		});
+ 		expect(native.status).toBe('INCOMPLETE_RESOURCE_LIMIT');
+ 	});
+ 	it('excludes arbitrary reason strings', () => {
+ 		expect(projectNativeTaskLifecycle({
+ 			status: 'BLOCKED', updatedAt: 1, summary: 'private', reason: 'private text',
+-		})).toEqual({ status: 'BLOCKED', updatedAt: 1 });
++})).toEqual({ status: 'BLOCKED', updatedAt: 1, customerStatus: 'STOPPED' });
+ 	});
+ });
+\ No newline at end of file
+diff --git a/worker/agents/think/task-lifecycle-status.ts b/worker/agents/think/task-lifecycle-status.ts
+index d060af4..1f0a4a2 100644
+--- a/worker/agents/think/task-lifecycle-status.ts
++++ b/worker/agents/think/task-lifecycle-status.ts
+@@ -1,19 +1,33 @@
+-import type { ThinkTaskLifecycle } from './finish-task-tool';
++import type { ThinkTaskLifecycle, ThinkTaskOperation } from './finish-task-tool';
++import { customerTaskStatus, continuationTaskId } from './user-approved-continuation';
+ 
+-const statuses = new Set(['RUNNING', 'COMPLETE', 'BLOCKED', 'INCOMPLETE_RESOURCE_LIMIT']);
++const statuses = new Set(['RUNNING', 'COMPLETE', 'BLOCKED', 'USER_INPUT_REQUIRED', 'INCOMPLETE_RESOURCE_LIMIT']);
+ const resourceReasons = new Set([
+ 	'credit_limit', 'model_call_limit', 'tool_call_limit', 'elapsed_time_limit',
+ 	'available_credits_limit', 'continuation_budget_exhausted',
+ ]);
+ 
+ /** Owner-visible metadata from the existing native lifecycle, never its summary. */
+-export function projectNativeTaskLifecycle(lifecycle: ThinkTaskLifecycle) {
++export function projectNativeTaskLifecycle(lifecycle: ThinkTaskLifecycle, operation?: ThinkTaskOperation) {
+ 	if (!statuses.has(lifecycle.status) || !Number.isFinite(lifecycle.updatedAt)) {
+ 		throw new Error('Native task lifecycle is unavailable.');
+ 	}
+ 	return {
+ 		status: lifecycle.status,
+ 		updatedAt: lifecycle.updatedAt,
++customerStatus: customerTaskStatus(lifecycle),
++...(operation ? {
++taskId: continuationTaskId(operation),
++operationId: operation.taskId,
++accounting: {
++startedAt: operation.startedAt,
++creditsUsed: operation.creditsConsumed,
++turnsUsed: operation.completedPassCount,
++continuationsUsed: operation.continuationCount,
++modelCalls: operation.modelCalls,
++toolCalls: operation.toolCalls,
++},
++} : {}),
+ 		...(lifecycle.reason && resourceReasons.has(lifecycle.reason)
+ 			? { reason: lifecycle.reason } : {}),
+ 	};
+diff --git a/worker/agents/think/user-approved-continuation.test.ts b/worker/agents/think/user-approved-continuation.test.ts
+new file mode 100644
+index 0000000..9aa3edb
+--- /dev/null
++++ b/worker/agents/think/user-approved-continuation.test.ts
+@@ -0,0 +1,80 @@
++import { describe, expect, it } from 'vitest';
++import { createThinkTaskOperation, advanceThinkTaskOperation } from './finish-task-tool';
++import {
++assertContinuationApproval, createApprovedThinkOperation, customerTaskStatus,
++isConversationalContinuation,
++} from './user-approved-continuation';
++
++// Sandboxed lifecycle simulation. No real runtime, credentials, or model calls.
++const limits = {
++maxContinuations: 4, maxCredits: 250, maxElapsedMs: 900000,
++maxModelCalls: 650, maxToolCalls: 1300,
++};
++const exhausted = {
++status: 'INCOMPLETE_RESOURCE_LIMIT' as const,
++reason: 'continuation_budget_exhausted', summary: 'Internal diagnostic', updatedAt: 1,
++};
++describe('customer-approved bounded work sessions', () => {
++it('offers Continue at an unfinished autonomous boundary', () => {
++expect(customerTaskStatus(exhausted)).toBe('CONTINUE_AVAILABLE');
++expect(exhausted.reason).toBe('continuation_budget_exhausted');
++});
++it('retains task, conversation, intent and policy while clearing usage', () => {
++const previous = {
++...createThinkTaskOperation('o1', 'same-conversation', limits),
++originalIntent: 'Repair persistence', creditsConsumed: 250, modelCalls: 100,
++toolCalls: 70, continuationCount: 4, completedPassCount: 5,
++resourceLimitReason: 'credit_limit' as const, resourceLimitAt: 1,
++};
++const next = createApprovedThinkOperation(previous, 'o2');
++expect(next).toMatchObject({
++taskId: 'o2', customerTaskId: 'o1', parentOperationId: 'o1',
++conversationId: 'same-conversation', originalIntent: 'Repair persistence',
++creditsConsumed: 0, modelCalls: 0, toolCalls: 0,
++continuationCount: 0, completedPassCount: 0, limits,
++});
++expect(next.resourceLimitReason).toBeUndefined();
++expect(next.startedAt).toBeGreaterThan(1);
++});
++it('retains one operation and cumulative allowance for internal continuation', () => {
++const session = createThinkTaskOperation('o2', 'conversation', limits);
++session.creditsConsumed = 12;
++const nextPass = advanceThinkTaskOperation(session);
++expect(nextPass.taskId).toBe('o2');
++expect(nextPass.startedAt).toBe(session.startedAt);
++expect(nextPass.creditsConsumed).toBe(12);
++});
++it('permits successive bounded sessions for the same task', () => {
++const first = createThinkTaskOperation('o1', 'conversation', limits);
++const second = createApprovedThinkOperation(first, 'o2');
++const third = createApprovedThinkOperation(second, 'o3');
++expect(third.customerTaskId).toBe('o1');
++expect(third.parentOperationId).toBe('o2');
++expect(third.limits).toEqual(limits);
++});
++it('never presents unfinished, blocked, or input-required work as complete', () => {
++for (const status of ['RUNNING', 'BLOCKED', 'USER_INPUT_REQUIRED'] as const) {
++expect(customerTaskStatus({ ...exhausted, status })).not.toBe('BUILD_COMPLETE');
++}
++expect(customerTaskStatus({ ...exhausted, status: 'COMPLETE' })).toBe('BUILD_COMPLETE');
++expect(customerTaskStatus({ ...exhausted, status: 'USER_INPUT_REQUIRED' })).toBe('NEEDS_INPUT');
++});
++it('does not bypass account credits, unknown stops, or stale task ownership', () => {
++expect(customerTaskStatus({ ...exhausted, reason: 'available_credits_limit' })).toBe('STOPPED');
++expect(customerTaskStatus({ ...exhausted, reason: 'unknown' })).toBe('STOPPED');
++const operation = createThinkTaskOperation('o1', 'conversation', limits);
++expect(() => assertContinuationApproval(operation, exhausted, {
++taskId: 'other-task', operationId: 'o1',
++})).toThrow();
++expect(() => assertContinuationApproval(operation, { ...exhausted, status: 'COMPLETE' }, {
++taskId: 'o1', operationId: 'o1',
++})).toThrow();
++});
++it('recognizes only deliberate short conversational approval', () => {
++for (const phrase of ['yes', 'continue', 'Keep going!', 'go ahead', 'finish it', 'keep working']) {
++expect(isConversationalContinuation(phrase)).toBe(true);
++}
++expect(isConversationalContinuation('Yes, add a settings page instead')).toBe(false);
++expect(isConversationalContinuation('Actually forget that')).toBe(false);
++});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/user-approved-continuation.ts b/worker/agents/think/user-approved-continuation.ts
+new file mode 100644
+index 0000000..94b7795
+--- /dev/null
++++ b/worker/agents/think/user-approved-continuation.ts
+@@ -0,0 +1,73 @@
++import {
++createThinkTaskOperation,
++type ThinkTaskLifecycle,
++type ThinkTaskOperation,
++} from './finish-task-tool';
++import { THINK_INTERNAL_CONTINUATION_PREFIX } from './context-selector';
++
++export interface ThinkContinuationApproval {
++taskId: string;
++operationId: string;
++}
++
++export type CustomerTaskStatus =
++| 'BUILD_COMPLETE'
++| 'CONTINUE_AVAILABLE'
++| 'NEEDS_INPUT'
++| 'WORKING'
++| 'STOPPED';
++
++// Account-level available-credit restrictions are deliberately excluded.
++const operationBoundaries = new Set([
++'continuation_budget_exhausted', 'credit_limit', 'elapsed_time_limit',
++'model_call_limit', 'tool_call_limit',
++]);
++
++export function customerTaskStatus(lifecycle: ThinkTaskLifecycle): CustomerTaskStatus {
++if (lifecycle.status === 'COMPLETE') return 'BUILD_COMPLETE';
++if (lifecycle.status === 'USER_INPUT_REQUIRED') return 'NEEDS_INPUT';
++if (lifecycle.status === 'INCOMPLETE_RESOURCE_LIMIT'
++&& operationBoundaries.has(lifecycle.reason ?? '')) return 'CONTINUE_AVAILABLE';
++return lifecycle.status === 'RUNNING' ? 'WORKING' : 'STOPPED';
++}
++
++export function isConversationalContinuation(message: string): boolean {
++return /^(yes|continue|keep going|go ahead|finish it|keep working)[.!?]*$/i
++.test(message.trim());
++}
++
++export function continuationTaskId(operation: ThinkTaskOperation): string {
++return operation.customerTaskId ?? operation.taskId;
++}
++
++export function assertContinuationApproval(
++operation: ThinkTaskOperation,
++lifecycle: ThinkTaskLifecycle,
++approval: ThinkContinuationApproval,
++): void {
++if (approval.taskId !== continuationTaskId(operation)
++|| approval.operationId !== operation.taskId
++|| customerTaskStatus(lifecycle) !== 'CONTINUE_AVAILABLE') {
++throw new Error('This task is not waiting for your permission to continue.');
++}
++}
++
++/** Keeps task context, but never carries operation-scoped usage or stop reasons. */
++export function createApprovedThinkOperation(
++previous: ThinkTaskOperation,
++operationId: string,
++limits: Parameters<typeof createThinkTaskOperation>[2] = previous.limits,
++): ThinkTaskOperation {
++return {
++...createThinkTaskOperation(operationId, previous.conversationId, limits),
++customerTaskId: continuationTaskId(previous),
++parentOperationId: previous.taskId,
++...(previous.originalIntent ? { originalIntent: previous.originalIntent } : {}),
++};
++}
++
++export const APPROVED_CONTINUATION_PROMPT =
++THINK_INTERNAL_CONTINUATION_PREFIX + '\n'
+++'The customer approved another bounded work session for this same unfinished task. '
+++'Continue the existing customer task from the current workspace and conversation. '
+++'Preserve completed work and focus on what remains. Verify the requested result before finishing.';
+\ No newline at end of file
