@@ -80,3 +80,9 @@ Large Cloudflare MCP outputs can replace array tails with `TRUNCATED` strings wh
 **Why:** A fully fetched gateway history was serialized as only a short record preview plus a truncation marker. Trusting its upstream count as the returned array length would have understated historical successes and failures.
 
 **How to apply:** Compute history aggregates inside the executor before serialization, return bounded evidence views, and check that status counts sum to the fetched count. Treat any truncation marker as incomplete returned data, not as a log record.
+
+Historical logged inference costs are not sufficient to certify a future experiment's budget when current published pricing differs. Do not assume provider cache hits or an undocumented discount to pass a hard cost preflight.
+
+**Why:** A bounded diagnostic fit its approved ceiling at the rate implied by historical gateway records but could exceed it at the published model rate. The difference did not establish either a price change or a currently applicable discount.
+
+**How to apply:** Verify the current rate for the exact billing path without spending inference credits, or use the higher published rate conservatively. If that estimate exceeds the approved ceiling, stop before the first request rather than shortening the experiment, changing its payload, or testing the price through inference.

@@ -1,0 +1,422 @@
+APPROVED: run the small controlled inference experiment.
+
+The previous investigation is accepted.
+
+Important conclusions already established:
+
+- No fixed four-request limit is supported.
+- No low token threshold is supported.
+- No simple context-size threshold is supported.
+- No competing BuildCustom account traffic caused the Project 8 event.
+- Historical production traffic successfully exceeded the Project 8 request
+  rate and token volume.
+- The 12/12 lab was a real coding-agent workload, not tiny probes.
+- The exact Project 8 429 enforcing service remains unknown.
+- Do NOT change BuildCustom coding behavior based on unsupported theories.
+
+Current production remains frozen.
+
+Canonical:
+98c36fc985b78dfb2e2775c1ac20bfac8b49d0a5
+
+Runtime:
+5ab138b7-75fa-4cd2-8146-494171468a2f
+
+Control:
+db608621-1594-4db7-b200-209e1151d739
+
+==================================================
+GOAL
+==================================================
+
+Run ONE tightly bounded controlled experiment to determine whether realistic
+coding-context requests currently show a pacing-dependent 429 pattern.
+
+This is diagnostic only.
+
+NO Project 8 actions.
+
+NO application source changes.
+
+NO deployments.
+
+NO Cloudflare configuration changes.
+
+NO copied credentials.
+
+Use the existing authenticated launch gateway/model path.
+
+==================================================
+IMPORTANT ADDITION
+==================================================
+
+If ANY test request returns HTTP 429, capture the diagnostic evidence
+IMMEDIATELY while it exists.
+
+For that response capture all SAFE available fields including:
+
+- timestamp
+- HTTP status
+- complete safe response body
+- response headers
+- Retry-After
+- retry-after-ms
+- Cloudflare Ray ID
+- gateway request ID
+- provider/model metadata
+- provider request ID if available
+- gateway timing
+- provider latency
+- wholesale status
+- token usage
+- billing/cost metadata
+- any rate-limit headers
+- any quota headers
+- any reset headers
+- any Cloudflare-specific enforcement metadata
+
+Do NOT persist or print:
+
+- Authorization headers
+- API keys
+- cookies
+- credentials
+- customer content
+- secrets
+
+We specifically do not want another historical 429 where the response headers
+are gone before we can inspect them.
+
+==================================================
+PRECONDITIONS
+==================================================
+
+Before starting:
+
+1. Confirm no BuildCustom customer operation is actively using the launch
+   gateway.
+
+2. Confirm there has been at least five minutes of gateway inactivity.
+
+3. Record the current gateway configuration read-only.
+
+4. Confirm:
+   - same authenticated gateway
+   - same google-ai-studio provider
+   - same google/gemini-3.6-flash observed model
+   - Unified Billing path
+   - no BYOK
+   - no configured gateway limiter
+
+5. Prepare synthetic coding context.
+
+Do NOT use Project 8 content.
+
+Payload should resemble the actual coding-agent request structure:
+
+approximately 43–47 KB
+realistic system context
+conversation history
+tool definitions
+
+Maximum output:
+32 tokens.
+
+==================================================
+ARM A — SPACED CONTROL
+==================================================
+
+Run at most FIVE logical model requests.
+
+NO automatic retries.
+
+Sequential only.
+
+No concurrency.
+
+After each successful response COMPLETES:
+
+wait at least 15 seconds before sending the next request.
+
+Record for every request:
+
+- exact start/end
+- status
+- request bytes
+- fresh input tokens
+- cached input tokens
+- output tokens
+- total tokens
+- gateway request ID
+- Ray ID
+- wholesale
+- cost
+- provider latency
+
+STOP IMMEDIATELY if any request returns:
+
+429
+or any unexpected error.
+
+Do not retry it.
+
+==================================================
+IDLE WINDOW
+==================================================
+
+If Arm A completes successfully:
+
+wait at least FIVE MINUTES.
+
+Confirm there is no competing traffic through the launch gateway during the
+idle window.
+
+Do not begin Arm B until that is true.
+
+==================================================
+ARM B — RAPID SEQUENTIAL
+==================================================
+
+Run at most FIVE logical model requests.
+
+Same:
+
+- gateway
+- provider
+- model
+- synthetic context structure
+- approximate payload size
+- output limit
+
+NO automatic retries.
+
+NO concurrency.
+
+Difference:
+
+send the next request immediately after the previous response completes.
+
+Record the same evidence.
+
+STOP IMMEDIATELY on the first:
+
+429
+or unexpected error.
+
+Do not retry.
+
+If a 429 occurs, capture the live headers and metadata described above before
+doing anything else.
+
+==================================================
+INTERPRETATION
+==================================================
+
+Possible outcomes:
+
+A.
+
+Spaced:
+5/5 success
+
+Rapid:
+fails near request 5
+
+Result:
+PACING RELATIONSHIP SUPPORTED
+
+This does NOT by itself identify who enforces the limit.
+
+--------------------------------------------------
+
+B.
+
+Spaced:
+5/5 success
+
+Rapid:
+5/5 success
+
+Result:
+PROJECT 8 FAILURE NOT REPRODUCED
+
+Do not invent a threshold.
+
+This would make a transient/time-dependent upstream restriction substantially
+more plausible.
+
+--------------------------------------------------
+
+C.
+
+Spaced arm itself receives 429
+
+Result:
+NOT A SIMPLE RAPID-PACING EFFECT
+
+Capture the live 429 metadata and STOP.
+
+--------------------------------------------------
+
+D.
+
+Different/unexpected failure
+
+Capture evidence and STOP.
+
+==================================================
+DO NOT KEEP TESTING
+==================================================
+
+This authorization is for:
+
+MAXIMUM 10 logical requests.
+
+No retries.
+
+No second experiment.
+
+No "let's try one more thing."
+
+No changing payload sizes after seeing results.
+
+No load test.
+
+No concurrency test.
+
+No token stress test.
+
+No Project 8 test.
+
+Hard usage ceiling:
+
+$0.10 estimated experiment cost.
+
+If preflight indicates the experiment could exceed that amount:
+
+STOP before running it.
+
+==================================================
+AFTER EXPERIMENT
+==================================================
+
+Do NOT implement anything.
+
+Do NOT change pacing.
+
+Do NOT change retries.
+
+Do NOT add recovery.
+
+Do NOT change gateways.
+
+Do NOT change models.
+
+Do NOT resume Project 8.
+
+Return the evidence first.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL RESULT:
+PACING RELATIONSHIP SUPPORTED /
+PROJECT 8 FAILURE NOT REPRODUCED /
+SPACED REQUEST ALSO RATE LIMITED /
+OTHER FAILURE /
+TEST NOT RUN
+
+PRECONDITIONS
+- gateway inactivity:
+- idle duration:
+- competing traffic:
+- gateway:
+- provider:
+- model:
+- Unified Billing:
+- configured limiter:
+- synthetic payload:
+- estimated cost:
+
+ARM A — SPACED
+For each request:
+- number:
+- timestamp:
+- status:
+- duration:
+- request bytes:
+- fresh tokens:
+- cached tokens:
+- output:
+- gateway request ID:
+- Ray ID:
+- provider latency:
+- wholesale:
+- cost:
+
+Arm A result:
+
+IDLE WINDOW
+- duration:
+- competing traffic:
+
+ARM B — RAPID
+For each request:
+- number:
+- timestamp:
+- status:
+- duration:
+- request bytes:
+- fresh tokens:
+- cached tokens:
+- output:
+- gateway request ID:
+- Ray ID:
+- provider latency:
+- wholesale:
+- cost:
+
+Arm B result:
+
+IF 429 OCCURRED
+- exact request:
+- response body:
+- Retry-After:
+- retry-after-ms:
+- rate-limit headers:
+- quota headers:
+- reset headers:
+- Cloudflare metadata:
+- provider metadata:
+- request reached provider:
+- enforcing service identifiable:
+- safe raw evidence retained:
+
+COMPARISON
+- spaced success rate:
+- rapid success rate:
+- difference:
+- pacing relationship supported:
+- Project 8 pattern reproduced:
+
+CONCLUSION
+- what this proves:
+- what this does NOT prove:
+- evidence of something BuildCustom/users are doing wrong:
+- production concern:
+
+RECOMMENDED NEXT STEP
+Do not implement it.
+Just state the evidence-supported next step.
+
+SOURCE CHANGES:
+MUST BE ZERO
+
+DEPLOYMENTS:
+MUST BE ZERO
+
+PROJECT 8 ACTIONS:
+MUST BE ZERO
+
+Then STOP.
