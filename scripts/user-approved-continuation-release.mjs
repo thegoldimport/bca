@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { hash as assetHash } from "blake3-wasm";
-import { auditModuleSets } from "./resource-envelope-module-audit.mjs";
+import { prepareContinuationModules } from "./continuation-module-audit.mjs";
 
 // Authorized platform release only. No generated-project Publish or source edits.
 const prefix = "production/vibesdk-launch/user-approved-continuation";
@@ -34,7 +34,7 @@ async function current(name) {
   return data.deployments[0].versions[0].version_id;
 }
 async function modules(directory) {
-  const names = (await readdir(directory, { recursive: true })).filter(name => /\.(js|wasm)$/.test(name)).sort();
+  const names = (await readdir(directory, { recursive: true })).filter(name => /\.(js|wasm)$/.test(name) || /^[a-f0-9]{40}-SKILL\.md$/.test(name)).sort();
   return Promise.all(names.map(async name => ({ name, bytes: await readFile(path.join(directory, name)) })));
 }
 const manifest = items => items.map(item => ({ name: item.name, sha256: sha(item.bytes) })).sort((a, b) => a.name.localeCompare(b.name));
@@ -110,6 +110,7 @@ if (action === "validation") {
     "scripts/reconstruct-user-approved-continuation-runtime.mjs",
     "scripts/user-approved-continuation-release.mjs",
     "scripts/resource-envelope-module-audit.mjs",
+    "scripts/continuation-module-audit.mjs", "scripts/continuation-module-audit.test.mjs",
     `${prefix}-source.json`, receipt.patch.path,
     ...Object.keys(receipt.sourceHashes).map(file => `production/vibesdk-launch/runtime-source/${file}`),
   ];
@@ -133,8 +134,9 @@ if (action === "validation") {
     assert.equal(latest.items[0]?.id, previous, "Latest version is not the serving baseline");
     const prior = await cf("GET", `/workers/scripts/${name}/versions/${previous}`);
     const old = await remoteModules(name, previous);
-    const local = await modules(directory);
-    const audit = auditModuleSets(old.items, local, old.main);
+    const prepared = prepareContinuationModules(old.items, await modules(directory), old.main);
+    const local = prepared.candidate;
+    const audit = prepared.audit;
     assert.equal(audit.status, "PASS");
     preflight.push({ name, previous, prior, old, local, audit });
   }
@@ -171,7 +173,8 @@ if (action === "validation") {
       const form = new FormData();
       form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
       for (const module of local) form.append(module.name, new Blob([module.bytes], {
-        type: module.name.endsWith(".wasm") ? "application/wasm" : "application/javascript+module",
+        type: module.name.endsWith(".wasm") ? "application/wasm"
+          : module.name.endsWith(".md") ? "text/plain" : "application/javascript+module",
       }), module.name);
       const uploaded = await cf("POST", `/workers/scripts/${name}/versions?bindings_inherit=strict`, form);
       entry.version = uploaded.id;
