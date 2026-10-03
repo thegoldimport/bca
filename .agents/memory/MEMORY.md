@@ -80,3 +80,4 @@
 - [Customer browser reconnects](customer-browser-reconnects.md) — preserve viewport on Puppeteer reconnects so hidden mobile navigation is not mistaken for a broken app.
 - [Customer-approved work policy](customer-approved-work-policy.md) — repeated human-approved bounded sessions continue one unfinished task; account restrictions remain separate.
 - [Gateway traffic evidence](gateway-traffic-evidence.md) — aggregate log totals can stay stale while new rows are readable; a count mismatch alone does not prove competing traffic.
+- [Wholesale production capacity](wholesale-production-capacity.md) — published Unified Billing caps do not explain every wholesale rejection; BYOK exemption is not unlimited capacity.

@@ -1,0 +1,453 @@
+We have successfully reproduced the production failure.
+
+STOP all inference experiments.
+
+Do NOT send any more model requests.
+
+Do NOT change production code.
+
+Do NOT add pacing.
+
+Do NOT add retries.
+
+Do NOT change models/providers/gateways.
+
+Do NOT touch Project 8.
+
+==================================================
+ESTABLISHED CONTROLLED RESULT
+==================================================
+
+Identical synthetic coding-agent payload:
+
+46,000 bytes
+10 history messages
+15 tool definitions
+max_tokens: 32
+
+ARM A — SPACED
+
+5/5 HTTP 200
+
+Spacing after each completed response:
+
+~15 seconds
+
+ARM B — RAPID SEQUENTIAL
+
+Request 1: HTTP 200
+Request 2: HTTP 200
+Request 3: HTTP 200
+Request 4: HTTP 200
+Request 5: HTTP 429
+
+Rapid completion-to-next-request gaps:
+
+98 ms
+1 ms
+93 ms
+1 ms
+
+No concurrency.
+
+No retries.
+
+No competing gateway traffic.
+
+No customer operation.
+
+No Project 8 content.
+
+==================================================
+LIVE ERROR
+==================================================
+
+The fifth rapid request returned:
+
+HTTP 429
+
+AiGatewayError
+
+code:
+2018
+
+internalCode:
+2018
+
+message:
+Wholesale Rate limited
+
+description:
+Wholesale Rate limited
+
+The rejected request showed:
+
+wholesale: false
+provider latency: 0 ms
+usage: absent
+cost: $0
+gateway processing: ~33 ms
+
+This strongly establishes rejection in the Cloudflare AI Gateway wholesale /
+Unified Billing path before billed provider inference.
+
+The live headers included:
+
+cf-aig-event-id:
+983dbdad-0ccc-438a-86c1-8fa04489df39
+
+cf-aig-log-id:
+01M41MYBS7BKC911PBVSY8KX57
+
+cf-aig-request-id:
+983dbdad-0ccc-438a-86c1-8fa04489df39
+
+cf-aig-trace-id:
+de9c042d12314ecfa81a68a07a6ccb65
+
+cf-ray:
+a44e7651be4d672e-ATL
+
+timestamp:
+
+2026-10-03T19:48:03.457Z
+
+No:
+
+Retry-After
+retry-after-ms
+rate-limit header
+quota header
+reset header
+
+was present.
+
+==================================================
+GOAL
+==================================================
+
+Determine the ACTUAL Cloudflare wholesale rate-limit policy represented by:
+
+AiGatewayError
+code 2018
+"Wholesale Rate limited"
+
+We are no longer investigating generic HTTP 429 behavior.
+
+We need the specific Cloudflare wholesale / Unified Billing rule.
+
+==================================================
+OFFICIAL CLOUDFLARE RESEARCH
+==================================================
+
+Use current official Cloudflare:
+
+- AI Gateway documentation
+- Unified Billing documentation
+- API documentation
+- model/provider documentation
+- limits documentation
+- changelogs
+- error-code documentation
+- account/API metadata available to this project
+
+Search specifically for:
+
+"Wholesale Rate limited"
+
+"2018"
+
+"AiGatewayError 2018"
+
+"Wholesale Rate limit"
+
+"Unified Billing rate limit"
+
+"AI Gateway wholesale rate limit"
+
+"google-ai-studio wholesale"
+
+"Gemini wholesale rate limit"
+
+Do not substitute the already-known configurable AI Gateway rate limiter.
+
+We already established:
+
+configured gateway limit = 0
+configured gateway interval = 0
+dynamic routes = none
+
+The reproduced error explicitly says WHOLESALE rate limited.
+
+==================================================
+QUESTIONS TO ANSWER
+==================================================
+
+Determine whether Cloudflare documents:
+
+1. Wholesale requests per second.
+
+2. Wholesale requests per minute.
+
+3. Burst limits.
+
+4. Token-per-minute limits.
+
+5. Cached-token treatment.
+
+6. Per-model limits.
+
+7. Per-provider limits.
+
+8. Per-account limits.
+
+9. Per-gateway limits.
+
+10. Shared Cloudflare credential/provider-pool limits.
+
+11. Concurrent request limits.
+
+12. Reset/window behavior.
+
+13. Whether the limit is fixed-window, sliding-window, token bucket, or another
+    mechanism.
+
+14. Whether customers can request/increase the allocation.
+
+15. Whether different Cloudflare plans receive different wholesale limits.
+
+16. Whether the limit applies specifically to:
+
+google-ai-studio
+google/gemini-3.6-flash
+
+17. Whether wholesale traffic uses Cloudflare-managed shared provider
+credentials or an account-specific allocation.
+
+18. Whether Cloudflare recommends BYOK for workloads exceeding wholesale
+capacity.
+
+Do NOT infer answers that documentation does not establish.
+
+==================================================
+ACCOUNT METADATA
+==================================================
+
+Read-only inspect any available Cloudflare account/API metadata that describes:
+
+- wholesale allocation
+- Unified Billing allocation
+- AI Gateway allocation
+- provider allocation
+- model allocation
+- request-rate limits
+- token-rate limits
+- burst capacity
+
+Do not modify anything.
+
+==================================================
+COMPARE TO REPRODUCTION
+==================================================
+
+Our reproduced rapid sequence was approximately:
+
+request 1 start:
+19:47:58.511
+
+request 2:
+19:48:00.304
+
+request 3:
+19:48:01.385
+
+request 4:
+19:48:02.618
+
+request 5:
+19:48:03.457 → 429
+
+So four successful requests began within approximately 4.1 seconds before the
+fifth was rejected.
+
+Each successful request represented approximately:
+
+8,571 total tokens
+
+with:
+
+2,021 fresh
+6,523 cached
+
+after caching became active.
+
+Determine whether this sequence matches any documented wholesale:
+
+RPS
+RPM
+burst
+token
+cached-token
+model
+
+limit.
+
+Do NOT assume "5th request" itself is the rule.
+
+==================================================
+IMPORTANT ARCHITECTURE QUESTION
+==================================================
+
+We are building a multi-user AI coding platform.
+
+Normal coding-agent behavior can naturally make multiple sequential model calls
+within seconds.
+
+Determine whether Cloudflare wholesale / Unified Billing is appropriate for
+that production workload at scale.
+
+Specifically determine whether the intended production architecture should be:
+
+A. continue using wholesale as-is
+
+B. request/increase a wholesale allocation
+
+C. use a different Cloudflare wholesale configuration
+
+D. use BYOK/provider credentials for production capacity
+
+E. another officially supported Cloudflare architecture
+
+Do NOT choose one based on preference.
+
+Report what Cloudflare documentation/account evidence supports.
+
+==================================================
+DO NOT CONTACT SUPPORT YET
+==================================================
+
+First exhaust available official documentation and account metadata.
+
+If the exact wholesale policy is NOT publicly exposed, prepare the precise
+Cloudflare support question we need to send.
+
+Include the reproduced event IDs and evidence.
+
+Do not actually contact support unless an existing connected support mechanism
+is explicitly authorized.
+
+==================================================
+NO MORE EXPERIMENTS
+==================================================
+
+Do not test:
+
+different spacing
+different request counts
+different payload sizes
+different models
+different gateways
+BYOK
+concurrency
+another rapid sequence
+
+We have reproduced the failure.
+
+More inference testing is not justified until we know Cloudflare's wholesale
+policy.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL FINDING:
+WHOLESALE POLICY IDENTIFIED /
+PARTIAL WHOLESALE POLICY IDENTIFIED /
+WHOLESALE POLICY NOT PUBLICLY EXPOSED /
+ACCOUNT CONFIGURATION ISSUE /
+OTHER
+
+ERROR 2018
+- official meaning:
+- official documentation:
+- enforcement layer:
+- provider contacted:
+- account/gateway/provider/model scope:
+
+WHOLESALE LIMIT
+- requests/sec:
+- requests/min:
+- burst:
+- tokens/min:
+- cached-token treatment:
+- concurrency:
+- reset/window:
+- account scope:
+- gateway scope:
+- provider scope:
+- model scope:
+- adjustable:
+- plan dependent:
+
+REPRODUCTION MATCH
+- four successful requests:
+- fifth rejected:
+- elapsed window:
+- tokens:
+- matches documented limit:
+- exact triggering metric established:
+
+PRODUCTION ARCHITECTURE
+- is current wholesale route intended for multi-user coding-agent traffic:
+- scaling limitation:
+- officially supported higher-capacity option:
+- BYOK relevance:
+- allocation increase relevance:
+- evidence:
+
+WHAT USERS/BUILDCUSTOM DID
+- malformed behavior:
+- excessive concurrency:
+- unsupported request:
+- normal rapid agent behavior:
+- why Cloudflare rejected it:
+
+ACTION REQUIRED BEFORE LAUNCH
+- required:
+- optional:
+- not supported by evidence:
+
+IF POLICY IS NOT PUBLIC
+Prepare:
+
+CLOUDFLARE SUPPORT REQUEST
+
+Include:
+- gateway
+- provider
+- model
+- error code 2018
+- exact message
+- timestamp
+- event ID
+- log ID
+- trace ID
+- Ray ID
+- controlled reproduction
+- spaced control result
+- question asking for exact wholesale quota metric, scope, threshold, reset
+  behavior, production capacity options, and whether allocation can be raised.
+
+SOURCE CHANGES:
+ZERO
+
+DEPLOYMENTS:
+ZERO
+
+INFERENCE REQUESTS:
+ZERO
+
+PROJECT 8 ACTIONS:
+ZERO
+
+Then STOP.

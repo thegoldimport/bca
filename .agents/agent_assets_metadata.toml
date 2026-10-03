@@ -196,3 +196,17 @@ mtime_ms = 1791057055919
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/8d0fa20a-78af-4c87-bf55-f3b6d42d39b9/d09e7f61-922b-4f62-a25e-d794155c5050"
 storage_version_token = "1791057056476984"
 content_type = "text/plain"
+
+[[outputs]]
+id = "VQUWj7B371rxvLRc_ZUYJ"
+uri = "file://.local/state/controlled-inference-experiment/cloudflare-wholesale-support-draft.txt"
+type = "text"
+title = "Cloudflare wholesale policy support request"
+description = "Draft only, not sent. Includes the exact error 2018 event, controlled reproduction, documented 200/60s quota discrepancy, and questions about effective limits and production capacity."
+logical_id = "913b9cff-7878-4376-b1c6-2c1670b739b4"
+content_hash = "sha256:beac1e3c299088cc553b8961cbcfb4412bfa3eada78652609f5d329047b1ce1a"
+size = 4829
+mtime_ms = 1791058582887
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/913b9cff-7878-4376-b1c6-2c1670b739b4/09c53c1f-9426-47b4-8ebb-bc097bc2f083"
+storage_version_token = "1791058583624534"
+content_type = "text/plain"
