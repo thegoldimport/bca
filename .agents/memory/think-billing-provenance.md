@@ -74,3 +74,9 @@ Do not interpret a Cloudflare MCP HTTP 200 with an undefined `result` as an empt
 **Why:** The dynamic-routes endpoint uses a top-level `data` envelope, which the MCP request wrapper did not expose through `result`. A separate authorized read-only HTTP inspection recovered the actual route list.
 
 **How to apply:** When a known endpoint's successful response has an unexpected shape, verify its envelope through an authorized read-only path and emit only necessary allowlisted metadata. Never expose credentials or confuse headers from the management API read with historical inference response headers.
+
+Large Cloudflare MCP outputs can replace array tails with `TRUNCATED` strings while preserving scalar counts and a computed completeness flag.
+
+**Why:** A fully fetched gateway history was serialized as only a short record preview plus a truncation marker. Trusting its upstream count as the returned array length would have understated historical successes and failures.
+
+**How to apply:** Compute history aggregates inside the executor before serialization, return bounded evidence views, and check that status counts sum to the fetched count. Treat any truncation marker as incomplete returned data, not as a log record.

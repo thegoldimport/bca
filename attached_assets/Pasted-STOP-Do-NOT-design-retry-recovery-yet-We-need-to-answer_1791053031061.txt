@@ -1,0 +1,655 @@
+STOP. Do NOT design retry/recovery yet.
+
+We need to answer a more fundamental question:
+
+WHY DID NORMAL BUILDCUSTOM USAGE TRIGGER THE 429?
+
+If ordinary use of the coding agent naturally crosses some provider,
+Cloudflare, model, token, concurrency, or request threshold, adding retries
+would only hide the real production problem.
+
+We need to identify WHAT BEHAVIOR CAUSED THE LIMIT so we can prevent normal
+users from causing it.
+
+Current accepted platform remains frozen:
+
+Canonical:
+98c36fc985b78dfb2e2775c1ac20bfac8b49d0a5
+
+Runtime:
+5ab138b7-75fa-4cd2-8146-494171468a2f
+
+Control:
+db608621-1594-4db7-b200-209e1151d739
+
+NO source changes.
+NO deployments.
+NO Project 8 changes.
+NO continuation changes.
+NO retry changes.
+NO Auto Continue changes.
+
+==================================================
+WHAT IS ALREADY PROVEN
+==================================================
+
+Project 8's continuation operation made four successful model calls.
+
+Then:
+
+logical model request #5:
+429
+wait ~2 sec
+429
+wait ~4 sec
+429
+
+The host then entered another native pass almost immediately.
+
+That pass:
+
+429
+wait ~2 sec
+429
+wait ~4 sec
+429
+
+All six failures returned:
+
+HTTP 429
+Rate limited.
+
+The successful calls immediately before them were:
+
+input tokens:
+9,316
+2,195
+2,294
+2,440
+
+output tokens:
+8
+15
+17
+18
+
+The successful requests were billed through Unified Billing and showed
+provider latency.
+
+The failed requests showed:
+
+wholesale: false
+0 tokens
+0 cost
+0 provider latency
+25–30 ms gateway processing
+
+There was:
+
+- no configured BuildCustom gateway limiter
+- no dynamic route limiter
+- positive account credit
+- account spend limit disabled
+- no observed request concurrency
+- no evidence of the documented 200 requests / 60 sec gateway limit
+- no direct Google credential
+- authenticated Cloudflare AI Gateway + Unified Billing
+
+The exact enforcing service is still UNKNOWN.
+
+==================================================
+THE QUESTION WE NEED TO ANSWER
+==================================================
+
+What characteristic of the successful Project 8 traffic caused the NEXT
+request to be rate limited?
+
+We need to investigate potential thresholds.
+
+Do not merely ask:
+
+"Who returned the 429?"
+
+Also ask:
+
+"What did we do immediately before the 429 that could have triggered it?"
+
+==================================================
+PHASE 1 — RECONSTRUCT THE COMPLETE REQUEST TIMELINE
+==================================================
+
+Reconstruct ALL model requests for this operation from the beginning of the
+fresh approved operation through the final 429.
+
+Do not limit this to the four successful gateway records if other model
+requests/events exist.
+
+For every logical model request record:
+
+- exact timestamp
+- request duration
+- provider/model
+- request body byte size
+- estimated/input tokens
+- output tokens
+- total tokens
+- gateway request ID
+- success/failure
+- retry attempts
+- time since previous request
+- cumulative requests in:
+  - previous 10 sec
+  - previous 30 sec
+  - previous 60 sec
+  - previous 5 min
+- cumulative input tokens in:
+  - previous 10 sec
+  - previous 30 sec
+  - previous 60 sec
+  - previous 5 min
+- cumulative output tokens
+- cumulative total tokens
+- whether request was part of same Think turn
+- whether request followed a tool result
+- tool result size if available
+- context/request size growth
+- operation credit accounting
+- native pass
+- Think turn
+- retry status
+
+Produce an ordered timeline.
+
+==================================================
+PHASE 2 — CHECK REQUEST-RATE THRESHOLDS
+==================================================
+
+Determine whether the successful sequence crossed any plausible request-rate
+boundary immediately before request #5.
+
+Calculate:
+
+requests / 10 sec
+requests / 30 sec
+requests / 60 sec
+requests / minute
+
+Include physical HTTP retry attempts separately from logical model requests.
+
+Determine:
+
+Did the first 429 occur immediately after a specific count?
+
+Example only:
+
+request 1 → 200
+request 2 → 200
+request 3 → 200
+request 4 → 200
+request 5 → 429
+
+If so, determine whether that pattern appears elsewhere in existing production
+or lab traffic.
+
+Search existing retained AI Gateway traffic for OTHER sequences using the same:
+
+gateway
+provider
+model
+
+Look for:
+
+N successful requests
+→ 429
+
+Do not generate new traffic yet.
+
+==================================================
+PHASE 3 — CHECK TOKEN THROUGHPUT
+==================================================
+
+Investigate whether this could be a token-rate threshold rather than request
+count.
+
+Calculate cumulative input tokens before the first 429.
+
+At minimum the four known successes total:
+
+9,316
++ 2,195
++ 2,294
++ 2,440
+
+= 16,245 input tokens
+
+But verify whether these are the complete relevant token counts.
+
+Calculate:
+
+input tokens / 10 sec
+input tokens / 30 sec
+input tokens / 60 sec
+input tokens / minute
+
+Also calculate total tokens.
+
+Check whether context caching or repeated large prompts affect any recorded
+quota metric.
+
+Search historical traffic for:
+
+similar token bursts that succeeded
+
+and:
+
+similar token bursts that produced 429.
+
+==================================================
+PHASE 4 — CHECK REQUEST SIZE / CONTEXT
+==================================================
+
+Known successful request bodies were approximately:
+
+42,926–45,740 bytes
+
+The first failed pass request was approximately:
+
+46,540 bytes
+
+The second failed pass request was approximately:
+
+42,026 bytes
+
+This makes a simple request-size ceiling unlikely because the smaller second
+request also failed.
+
+Still reconstruct context growth.
+
+Determine:
+
+- system prompt size
+- conversation size
+- tool-result size
+- generated source/context included
+- whether each model request resends full context
+- whether tool results substantially increase the next request
+- whether some model/provider limit is based on tokens rather than raw bytes
+
+Do not optimize context yet.
+
+==================================================
+PHASE 5 — CHECK ACCOUNT-WIDE TRAFFIC
+==================================================
+
+This is extremely important.
+
+The previous investigation inspected the Project 8 request sequence.
+
+But rate limits may apply across the ENTIRE:
+
+Cloudflare account
+gateway
+provider credential
+Unified Billing credential
+model
+provider
+
+At the exact time of the first Project 8 429:
+
+2026-10-03 ~15:24:30 UTC
+
+inspect ALL traffic through:
+
+buildcustom-vibesdk-launch-ai
+
+not just Project 8.
+
+Determine:
+
+- total requests in previous 10 sec
+- total requests in previous 30 sec
+- total requests in previous 60 sec
+- total requests in previous 5 min
+- total tokens in those windows
+- other projects/users
+- tests
+- background operations
+- acceptance tooling
+- health probes
+- duplicate requests
+- retry traffic
+
+Also determine whether anything else in our testing environment was hitting the
+same gateway/model at that time.
+
+This could explain why ten Project 8 records alone do not appear to hit a
+documented limit.
+
+==================================================
+PHASE 6 — CHECK PROVIDER/MODEL SCOPE
+==================================================
+
+Determine everything Cloudflare exposes about limits for:
+
+provider:
+google-ai-studio
+
+model:
+google/gemini-3.6-flash
+
+through:
+
+authenticated AI Gateway + Unified Billing
+
+We specifically need to know whether Cloudflare uses:
+
+- a shared provider credential
+- account-specific provider allocation
+- model-specific allocation
+- gateway-specific allocation
+- wholesale/shared capacity
+
+and whether any rate limit applies to that route that is DIFFERENT from the
+generic documented:
+
+200 requests / 60 seconds / gateway
+
+Use official Cloudflare documentation/configuration/API information available
+to the project.
+
+If web research is available, use official Cloudflare documentation only for
+Cloudflare claims.
+
+Do not assume the generic gateway limit is the only relevant limit.
+
+==================================================
+PHASE 7 — COMPARE AGAINST THE CLEAN 12/12 LAB
+==================================================
+
+We previously proved:
+
+12 requests
+12 HTTP 200
+
+against the same general architecture.
+
+Find whatever retained evidence still exists for that test.
+
+We need to know WHY twelve succeeded there while Project 8 failed after four.
+
+Compare:
+
+- request spacing
+- total duration
+- request sizes
+- token counts
+- model
+- provider
+- gateway
+- Unified Billing path
+- concurrency
+- account traffic
+- context size
+- retries
+- authentication
+- route
+- date/time
+- runtime version
+
+If detailed request records are unavailable, inspect the test code/harness to
+determine how those twelve requests were spaced and what their payloads looked
+like.
+
+This comparison could be extremely important.
+
+Twelve tiny sequential inference probes succeeding does NOT prove that a
+coding-agent workload with large repeated context will remain under the same
+quota.
+
+==================================================
+PHASE 8 — HISTORICAL 429 PATTERN SEARCH
+==================================================
+
+Search retained AI Gateway traffic for other HTTP 429 responses using this
+gateway/model/provider.
+
+For every available historical 429 cluster determine:
+
+- timestamp
+- requests immediately preceding it
+- request rate
+- token rate
+- request sizes
+- project/operation if attributable
+- duration until successful traffic resumed
+
+We want to know whether this has happened before.
+
+Especially determine:
+
+HOW LONG AFTER THE PROJECT 8 429 CLUSTER DID THE NEXT SUCCESSFUL REQUEST
+THROUGH THE SAME ROUTE OCCUR?
+
+If requests began succeeding again after:
+
+10 seconds
+30 seconds
+60 seconds
+5 minutes
+
+that gives us useful evidence about the limiter window.
+
+Do not generate new traffic to test this yet.
+
+==================================================
+PHASE 9 — LOOK FOR A THRESHOLD
+==================================================
+
+After reconstructing the evidence, evaluate these hypotheses separately:
+
+A. REQUESTS PER MINUTE
+
+B. TOKENS PER MINUTE
+
+C. REQUESTS PER SHORT BURST
+
+D. MODEL-SPECIFIC QUOTA
+
+E. UNIFIED BILLING SHARED/WHOLESALE CAPACITY
+
+F. ACCOUNT-WIDE TRAFFIC
+
+G. CONTEXT SIZE
+
+H. RETRY AMPLIFICATION
+
+I. TEMPORARY PROVIDER CAPACITY
+
+J. OTHER
+
+For each:
+
+SUPPORTED
+CONTRADICTED
+INSUFFICIENT EVIDENCE
+
+Do not choose a cause merely because it sounds plausible.
+
+==================================================
+PHASE 10 — ONLY IF HISTORICAL DATA IS INSUFFICIENT
+==================================================
+
+Do NOT run a production load test automatically.
+
+If historical evidence cannot distinguish the likely causes, design a SMALL,
+CONTROLLED diagnostic experiment.
+
+Do not execute it yet.
+
+The experiment should use a disposable inference test, NOT Project 8.
+
+It should answer specific questions such as:
+
+Does:
+
+4 rapid realistic-context requests
+→ 5th request 429?
+
+versus:
+
+same requests spaced 15 seconds apart
+→ all succeed?
+
+Or:
+
+small payloads rapid
+versus
+large realistic coding-context payloads
+
+But only propose the minimum experiment needed.
+
+Do not hammer production.
+
+Do not consume significant credits.
+
+Do not execute until I approve it.
+
+==================================================
+WHY THIS MATTERS
+==================================================
+
+We are building a production coding platform.
+
+If one normal coding operation can naturally do:
+
+four model calls
+→ rate limited
+
+then hundreds of users could make the platform unusable.
+
+We need to know whether the problem is:
+
+OUR request pattern
+
+OUR architecture
+
+OUR shared gateway/provider allocation
+
+OUR context/token volume
+
+a Cloudflare limit
+
+a provider quota
+
+or a genuinely random upstream event.
+
+Retries are not the solution until we understand this.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL FINDING:
+REQUEST-RATE PATTERN /
+TOKEN-RATE PATTERN /
+ACCOUNT-WIDE TRAFFIC /
+MODEL-SPECIFIC LIMIT /
+SHARED CAPACITY /
+TEMPORARY UPSTREAM EVENT /
+NO THRESHOLD FOUND /
+INSUFFICIENT EVIDENCE
+
+PROJECT 8 TIMELINE
+Provide ordered model-request timeline with:
+- timestamp
+- logical request
+- HTTP attempt
+- status
+- input tokens
+- output tokens
+- request bytes
+- gap since previous request
+- cumulative requests 60 sec
+- cumulative tokens 60 sec
+
+FIRST 429
+- timestamp:
+- requests previous 10 sec:
+- requests previous 30 sec:
+- requests previous 60 sec:
+- input tokens previous 60 sec:
+- total tokens previous 60 sec:
+- account-wide requests previous 60 sec:
+- account-wide tokens previous 60 sec:
+
+12/12 LAB COMPARISON
+- model:
+- provider:
+- gateway:
+- request spacing:
+- request size:
+- token size:
+- account traffic:
+- material differences:
+
+HISTORICAL 429S
+- other clusters:
+- common pattern:
+- next successful request after Project 8 failure:
+- recovery interval:
+
+HYPOTHESES
+- request/minute:
+- token/minute:
+- burst:
+- model-specific:
+- Unified Billing/shared capacity:
+- account-wide traffic:
+- context size:
+- retry amplification:
+- temporary provider capacity:
+- other:
+
+MOST LIKELY EXPLANATION
+- explanation:
+- supporting evidence:
+- contradicting evidence:
+- confidence:
+
+CAN NORMAL USERS TRIGGER THIS?
+- yes/no/unknown:
+- behavior that appears to trigger it:
+- likely production risk:
+
+PREVENTION
+Do NOT implement.
+Report only:
+- behavior we should avoid:
+- architecture/configuration concern:
+- possible preventive change:
+- evidence required before changing it:
+
+CONTROLLED EXPERIMENT NEEDED:
+YES / NO
+
+If YES:
+- exact hypothesis:
+- exact test:
+- number of requests:
+- spacing:
+- payload:
+- expected result if hypothesis true:
+- expected result if false:
+- estimated usage:
+- safety bound:
+
+SOURCE CHANGES:
+ZERO
+
+DEPLOYMENTS:
+ZERO
+
+PROJECT 8 ACTIONS:
+ZERO
+
+Then STOP.

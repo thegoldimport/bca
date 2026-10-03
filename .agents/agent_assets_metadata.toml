@@ -154,3 +154,17 @@ mtime_ms = 1790896857499
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/392d7d8e-0775-4fd1-a3b3-d8c6629b86e8/fc1efd71-66a1-44ff-b52b-17b7c3987ce7"
 storage_version_token = "1790896943402000"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "FJFe27Fz_o1L6Nrm9ctnQ"
+uri = "file://.local/state/rate-limit-origin/project8-model-request-timeline.csv"
+type = "table"
+title = "Project 8 model-request timeline"
+description = "Ten HTTP attempts mapped to six logical requests, with gateway IDs, durations, context sizes, cached tokens, operation accounting, and 10-second, 30-second, 60-second, and five-minute rolling totals."
+logical_id = "12f9c440-3585-4e40-b629-c18ecc5fa7f9"
+content_hash = "sha256:ee8a507499a9ab0a379acd9f8e4d02d06af11688db0e65450459c15c36f8e99a"
+size = 5548
+mtime_ms = 1791054719490
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/12f9c440-3585-4e40-b629-c18ecc5fa7f9/5129ffda-7bd0-4ec4-b79a-2b5460c0876f"
+storage_version_token = "1791054733810838"
+content_type = "text/csv"
