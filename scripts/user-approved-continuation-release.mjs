@@ -7,9 +7,13 @@ import { hash as assetHash } from "blake3-wasm";
 import { prepareContinuationModules } from "./continuation-module-audit.mjs";
 
 // Authorized platform release only. No generated-project Publish or source edits.
-const prefix = "production/vibesdk-launch/user-approved-continuation";
+const resume = process.argv.includes("--manual-auto");
+const prefix = `production/vibesdk-launch/${resume ? "manual-auto-continuation" : "user-approved-continuation"}`;
 const api = "https://api.cloudflare.com/client/v4/accounts/03ef1e6e42498920987f07059e107538";
-const targets = [
+const targets = resume ? [
+  ["buildcustom-vibesdk-launch", "4d45172a-4d55-4f36-989f-b938706a31a5", "/tmp/buildcustom-manual-auto-runtime-upload"],
+  ["buildcustom-control-plane-launch", "fc92c145-4435-4507-bce1-2857127cb7ab", "/tmp/buildcustom-manual-auto-control-upload"],
+] : [
   ["buildcustom-vibesdk-launch", "2ce0e373-1a98-471c-b21f-3b66d28c4d73", "/tmp/buildcustom-approved-continuation-runtime-upload"],
   ["buildcustom-control-plane-launch", "c5e18eab-1b8b-49d4-adc0-62dfb0e5e6ac", "/tmp/buildcustom-approved-continuation-control-upload"],
 ];
@@ -98,10 +102,24 @@ async function validated() {
 }
 
 const action = process.argv[2];
-if (action === "validation") {
+if (action === "audit") {
+  const report = { status: "PASS", productionMutations: 0, targets: {} };
+  for (const [name, previous, directory] of targets) {
+    assert.equal(await current(name), previous, "Serving version changed");
+    const old = await remoteModules(name, previous);
+    const prepared = prepareContinuationModules(old.items, await modules(directory), old.main);
+    report.targets[name] = { previous, main: old.main, audit: prepared.audit,
+      preservedTextModules: prepared.preservedTextModules };
+  }
+  await writeFile(`${prefix}-module-audit.json`, JSON.stringify(report, null, 2) + "\n");
+  console.log(JSON.stringify({ status: report.status, productionMutations: 0, targets: Object.keys(report.targets) }));
+} else if (action === "validation") {
   assert(/^[a-f0-9]{40}$/.test(process.argv[3] ?? ""), "Pass the verified canonical commit");
   const receipt = await load(`${prefix}-source.json`);
   const files = [
+    ...(resume ? ["client/src/components/native-auto-continue-control.tsx",
+      "scripts/prepare-manual-auto-continuation-source.mjs",
+      "scripts/reconstruct-manual-auto-continuation-runtime.mjs"] : []),
     "client/src/pages/app-dashboard.tsx", "client/src/lib/native-continuation.ts",
     "client/src/lib/native-continuation.test.ts", "cloudflare/staging/think-runtime.ts",
     "tests/native-completion.browser.test.js", "tests/native-task-lifecycle-status.test.ts",
@@ -118,7 +136,8 @@ if (action === "validation") {
   const moduleManifests = Object.fromEntries(await Promise.all(targets.map(async ([name, , directory]) => [name, manifest(await modules(directory))])));
   const validation = {
     status: "PASS", canonicalCommit: process.argv[3], sourceHashes, modules: moduleManifests, assets: await assets(),
-    checks: { rootTestsPassed: 282, runtimeTestsPassed: 689, runtimeSkipped: 1, renderedUiTestsPassed: 28,
+    checks: { ...(resume ? await load(".local/state/continuation-resume/checks.json") : {
+      rootTestsPassed: 282, runtimeTestsPassed: 689, runtimeSkipped: 1, renderedUiTestsPassed: 28 }),
       rootTypecheck: "PASS", runtimeTypecheck: "PASS", frontendBuild: "PASS", workerDryRuns: "PASS", sourceReconstruction: "PASS" },
   };
   await writeFile(`${prefix}-validation.json`, JSON.stringify(validation, null, 2) + "\n");

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { NativeAutoContinueControl } from "@/components/native-auto-continue-control";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { csrfToken, getAppUser, setAppUser, authHeaders, isAdminUser, signOut, type AppUser } from "@/lib/auth";
@@ -799,9 +800,10 @@ function BuildActivity({
   );
 }
 
-type NativeCompletionPhase = "idle" | "running" | "recovering" | "paused" | "needs_input" | "success" | "error";
+type NativeCompletionPhase = "idle" | "starting" | "running" | "recovering" | "paused" | "needs_input" | "success" | "error";
 
 type NativeTaskLifecycle = {
+  autoContinue?: { taskId: string; enabled: boolean; version: number; changedAt: number };
   status: string;
   customerStatus?: string;
   taskId?: string;
@@ -1013,6 +1015,7 @@ function EditorPage() {
   const [runtimeError, setRuntimeError] = useState("");
   const [sending, setSending] = useState(false);
   const [nativeCompletionPhase, setNativeCompletionPhase] = useState<NativeCompletionPhase>("idle");
+  const [autoContinueSaving, setAutoContinueSaving] = useState(false);
   const [nativeCompletionMessage, setNativeCompletionMessage] = useState("");
   const [nativeRecoveryUnverified, setNativeRecoveryUnverified] = useState(false);
   const [nativeProgress, setNativeProgress] = useState<string[]>([]);
@@ -1273,20 +1276,28 @@ function EditorPage() {
   }, [projectId]);
 
   useEffect(() => {
-    if (!projectId || !nativeThink
-      || (nativeCompletionPhase === "idle" && !sending && !canOfferNativeContinuation)) return;
+    if (!projectId || !nativeThink || !nativeRuntimeReady) return;
     let cancelled = false;
+    const controller = new AbortController();
     let timer: number | null = null;
     const refreshLifecycle = async () => {
       try {
         const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
           credentials: "same-origin",
           headers: authHeaders(),
+          signal: controller.signal,
         });
         const status = await response.json().catch(() => ({}));
         if (!response.ok || cancelled || activeProjectIdRef.current !== projectId) return;
         setRuntimeCapability({ projectId, nativeThink: true, status });
         const customerStatus = customerLifecycleStatus(status.nativeTaskLifecycle);
+        // The old boundary is still authoritative while an approval is pending.
+        // It must not cancel the socket before the new operation is accepted.
+        if (continuationInFlightRef.current && customerStatus === "CONTINUE_AVAILABLE") return;
+        if (customerStatus === "WORKING" && !continuationInFlightRef.current) {
+          setNativeCompletionPhase("running");
+          setNativeCompletionMessage("Working");
+        }
         if (customerStatus === "CONTINUE_AVAILABLE" && !sending && !nativeOperationControllerRef.current) {
           setNativeCompletionPhase("paused");
           setNativeCompletionMessage("I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?");
@@ -1327,9 +1338,10 @@ function EditorPage() {
     void refreshLifecycle();
     return () => {
       cancelled = true;
+      controller.abort();
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [projectId, nativeThink, nativeCompletionPhase, sending, canOfferNativeContinuation]);
+  }, [projectId, nativeThink, nativeRuntimeReady, nativeCompletionPhase, sending, canOfferNativeContinuation]);
 
   useEffect(() => {
     const lifecycle = ++nativeLifecycleRef.current;
@@ -2079,7 +2091,15 @@ function EditorPage() {
       };
 
       const settleCustomerBoundary = (runtimeStatus: any): boolean => {
+        const lifecycle = runtimeStatus?.nativeTaskLifecycle;
+        if (typeof lifecycle?.updatedAt !== "number" || lifecycle.updatedAt < startedAt) return false;
+        if (continuationApproval && !hasFreshApprovedOperation(lifecycle, continuationApproval)) return false;
         const customerStatus = customerLifecycleStatus(runtimeStatus?.nativeTaskLifecycle);
+        if (customerStatus === "CONTINUE_AVAILABLE" && lifecycle.autoContinue?.enabled) {
+          setNativeCompletionPhase("starting");
+          setNativeCompletionMessage("Starting...");
+          return false;
+        }
         if (customerStatus !== "CONTINUE_AVAILABLE" && customerStatus !== "NEEDS_INPUT" && customerStatus !== "STOPPED") return false;
         setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
         setNativeCompletionPhase(customerStatus === "CONTINUE_AVAILABLE" ? "paused"
@@ -2202,6 +2222,12 @@ function EditorPage() {
           const status = await fetchJson("status");
           if (!isOperationActive()) {
             cancelForLifecycle();
+            return;
+          }
+          if (continuationApproval && !hasFreshApprovedOperation(status.nativeTaskLifecycle, continuationApproval)) {
+            setNativeCompletionPhase("starting");
+            setNativeCompletionMessage("Starting...");
+            scheduleSettle();
             return;
           }
           if (settleCustomerBoundary(status)) return;
@@ -2537,6 +2563,16 @@ function EditorPage() {
           || (frame.code === "INCOMPLETE_RESOURCE_LIMIT"
             ? { status: frame.code, reason: frame.reason }
             : null);
+        if (continuationApproval && hasFreshApprovedOperation(streamedTaskLifecycle, continuationApproval)
+          && customerLifecycleStatus(streamedTaskLifecycle) === "WORKING") {
+          setRuntimeCapability((current) => ({
+            projectId, nativeThink: true,
+            status: { ...(current?.projectId === projectId ? current.status : {}),
+              nativeTaskLifecycle: streamedTaskLifecycle, state: { shouldBeGenerating: true } },
+          }));
+          setNativeCompletionPhase("running");
+          setNativeCompletionMessage("Working");
+        }
         if (streamedTaskLifecycle?.customerStatus === "CONTINUE_AVAILABLE"
           || streamedTaskLifecycle?.customerStatus === "NEEDS_INPUT") {
           if (settleCustomerBoundary({ nativeTaskLifecycle: streamedTaskLifecycle })) return;
@@ -2545,7 +2581,8 @@ function EditorPage() {
           nativeTaskLifecycle: streamedTaskLifecycle,
           state: { shouldBeGenerating: false },
         }, startedAt);
-        if (streamedResourceLimit) {
+        if (streamedResourceLimit && !(streamedTaskLifecycle?.autoContinue?.enabled
+          && customerLifecycleStatus(streamedTaskLifecycle) === "CONTINUE_AVAILABLE")) {
           failTurn(streamedResourceLimit);
           return;
         }
@@ -2575,6 +2612,8 @@ function EditorPage() {
             promptAttempted = true;
             writeNativeOperationBaseline(projectId, { ...operationBaseline, promptAttempted: true });
             try {
+              setNativeCompletionPhase(continuationApproval ? "starting" : "running");
+              setNativeCompletionMessage(continuationApproval ? "Starting..." : "Agent started · streaming progress");
               socket.send(JSON.stringify({
                 type: "user_suggestion",
                 message: continuationApproval ? "Continue" : agentPrompt,
@@ -2588,8 +2627,6 @@ function EditorPage() {
               }));
               suggestionSent = true;
               lastFrameAt = Date.now();
-              setNativeCompletionPhase("running");
-              setNativeCompletionMessage("Agent started · streaming progress");
             } catch {
               failTurn("BuildCustom could not send the request. No automatic retry was attempted.", true);
               return;
@@ -2748,6 +2785,52 @@ function EditorPage() {
     return () => window.clearInterval(poll);
   }, [publishing, projectId, nativeThink]);
 
+  const handleAutoContinue = async (enabled: boolean) => {
+    const taskId = currentNativeLifecycle?.taskId;
+    if (!projectId || !taskId || autoContinueSaving) return;
+    const savedProjectId = projectId;
+    setAutoContinueSaving(true);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        const socket = new WebSocket(`${protocol}//${location.host}/api/projects/${savedProjectId}/runtime/ws`);
+        let sent = false;
+        const timer = window.setTimeout(() => finish(new Error("Auto Continue could not be saved. Please try again.")), 15000);
+        const finish = (error?: Error) => {
+          window.clearTimeout(timer);
+          socket.onclose = null;
+          socket.close();
+          if (error) reject(error); else resolve();
+        };
+        socket.onmessage = (event) => {
+          let frame: any;
+          try { frame = JSON.parse(String(event.data)); } catch { return; }
+          if (frame.type === "agent_connected" && !sent) {
+            sent = true;
+            socket.send(JSON.stringify({ type: "set_auto_continue", taskId, enabled }));
+          } else if (frame.type === "auto_continue_updated"
+            && frame.preference?.taskId === taskId && frame.preference?.enabled === enabled) {
+            finish();
+          } else if (frame.type === "error") {
+            finish(new Error("Auto Continue could not be saved. Refresh the task and try again."));
+          }
+        };
+        socket.onerror = () => finish(new Error("Auto Continue could not be saved. Please try again."));
+        socket.onclose = () => finish(new Error("Auto Continue could not be saved. Please try again."));
+      });
+      const response = await fetch(`/api/projects/${savedProjectId}/runtime/status`, { headers: authHeaders(), cache: "no-store" });
+      if (!response.ok) throw new Error("Auto Continue was saved, but the latest task could not be checked. Refresh to check its state.");
+      const status = await response.json();
+      if (activeProjectIdRef.current === savedProjectId) {
+        setRuntimeCapability({ projectId: savedProjectId, nativeThink: true, status });
+      }
+    } catch (error) {
+      if (activeProjectIdRef.current === savedProjectId) setRuntimeError(error instanceof Error ? error.message : "Auto Continue could not be saved.");
+    } finally {
+      setAutoContinueSaving(false);
+    }
+  };
+
   const handleContinue = async () => {
     if (continuationInFlightRef.current || sending || !projectId || !nativeThink || nativeRecoveryUnverified) return;
     const offeredLifecycle = currentNativeLifecycle;
@@ -2756,8 +2839,8 @@ function EditorPage() {
     const requestLifecycle = nativeLifecycleRef.current;
     setSending(true);
     setRuntimeError("");
-    setNativeCompletionPhase("running");
-    setNativeCompletionMessage("");
+    setNativeCompletionPhase("starting");
+    setNativeCompletionMessage("Starting...");
     setMessages((current) => [
       ...current,
       { role: "user", content: "Continue" },
@@ -2797,6 +2880,21 @@ function EditorPage() {
           && message.role === "assistant"
           ? { ...message, content: "The request to continue could not be verified. Refresh and try again." }
           : message));
+        // Retry is available only when an owner read still confirms this exact
+        // unstarted boundary. Ambiguous accepted work stays in recovery.
+        try {
+          const response = await fetch(`/api/projects/${projectId}/runtime/status`, { headers: authHeaders(), cache: "no-store" });
+          const status = await response.json();
+          const lifecycle = status.nativeTaskLifecycle;
+          if (response.ok && canContinueNativeTask(lifecycle, status.state?.shouldBeGenerating === true)
+            && lifecycle.taskId === offeredLifecycle.taskId
+            && lifecycle.operationId === offeredLifecycle.operationId) {
+            setRuntimeCapability({ projectId, nativeThink: true, status });
+            setNativeCompletionPhase("paused");
+            setNativeRecoveryUnverified(false);
+            clearNativeOperationBaseline(projectId);
+          }
+        } catch { /* Keep unknown outcomes in recovery without automatic retry. */ }
       }
     } finally {
       continuationInFlightRef.current = false;
@@ -3352,7 +3450,8 @@ function EditorPage() {
               {nativeCompletionPhase === "success" ? "Build complete"
                 : nativeCompletionPhase === "paused" ? "Continue available"
                   : nativeCompletionPhase === "needs_input" ? "Needs your input"
-                    : nativeCompletionPhase === "error" ? "Stopped" : "Working"}
+                    : nativeCompletionPhase === "error" ? "Stopped"
+                      : nativeCompletionPhase === "starting" ? "Starting..." : "Working"}
             </span>
           )}
           <button
@@ -3371,6 +3470,14 @@ function EditorPage() {
         </div>
 
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="builder-chat-scroll">
+          {nativeThink && currentNativeLifecycle?.taskId && (
+            <NativeAutoContinueControl
+              enabled={currentNativeLifecycle.autoContinue?.taskId === currentNativeLifecycle.taskId
+                && currentNativeLifecycle.autoContinue?.enabled === true}
+              busy={autoContinueSaving}
+              onChange={handleAutoContinue}
+            />
+          )}
           {runtimeError && <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{runtimeError}</div>}
           {runtimeCapabilityError && <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">{runtimeCapabilityError}</div>}
           {!currentRuntimeCapability && !runtimeCapabilityError && <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Checking project runtime…</p>}

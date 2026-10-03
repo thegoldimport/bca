@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import ts from "typescript";
 import * as operationHelpers from "../production/vibesdk-launch/runtime-source/worker/agents/think/finish-task-tool";
 import * as continuationHelpers from "../production/vibesdk-launch/runtime-source/worker/agents/think/user-approved-continuation";
@@ -9,6 +10,7 @@ import { allowedNativeClientFrame } from "../cloudflare/staging/think-runtime";
 
 const limits = { maxContinuations: 4, maxCredits: 250, maxElapsedMs: 900000, maxModelCalls: 650, maxToolCalls: 1300 };
 const boundary = { status: "INCOMPLETE_RESOURCE_LIMIT" as const, reason: "continuation_budget_exhausted", summary: "diagnostic", updatedAt: 1 };
+let accountDenied = false;
 
 // Sandboxed storage/service adapters executing the actual production methods.
 // No real runtime attachment, credentials, generated-project inspection or AI.
@@ -17,7 +19,7 @@ function nativeFixture() {
   const ast = ts.createSourceFile("ThinkAgent.ts", source, ts.ScriptTarget.Latest, true);
   const declaration = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === "ThinkAgent") as ts.ClassDeclaration;
   assert.ok(declaration);
-  const wanted = new Set(["approveTaskContinuation", "beginTask", "getTaskLifecycle", "getTaskOperation", "getTaskLifecycleSnapshot"]);
+  const wanted = new Set(["approveTaskContinuation", "beginTask", "getTaskLifecycle", "getTaskOperation", "getTaskLifecycleSnapshot", "setTaskAutoContinue", "assertAutoAuthorization"]);
   const methods = declaration.members.filter(node => ts.isMethodDeclaration(node) && wanted.has(node.name.getText(ast)));
   assert.equal(methods.length, wanted.size);
   const keys = declaration.members.filter(node => ts.isPropertyDeclaration(node) && /^task.*Key$/.test(node.name.getText(ast)));
@@ -56,18 +58,28 @@ function hostFixture(native: ReturnType<typeof nativeFixture>["native"]) {
   const source = readFileSync("production/vibesdk-launch/runtime-source/worker/agents/core/behaviors/think.ts", "utf8");
   const ast = ts.createSourceFile("think.ts", source, ts.ScriptTarget.Latest, true);
   const declaration = ast.statements.find(node => ts.isClassDeclaration(node)) as ts.ClassDeclaration;
-  const method = declaration.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(ast) === "handleUserInput");
-  assert.ok(method);
-  const dependencies = { ...continuationHelpers, IdGenerator: { generateConversationId: () => "new-customer-queue-item" } };
-  const compiled = ts.transpileModule(`return class HostFixture { ${method.getText(ast)} }`, {
+  const methods = declaration.members.filter(node => ts.isMethodDeclaration(node)
+    && ["handleUserInput", "setTaskAutoContinue", "disableTaskAutoContinue", "continueAutomatically", "build"].includes(node.name.getText(ast)));
+  assert.equal(methods.length, 5);
+  const dependencies = {
+    ...continuationHelpers,
+    createThinkTaskQueueIdentity: (ids: string[]) => "think-queue:" + ids.join(":"),
+    IdGenerator: { generateConversationId: () => "new-customer-queue-item" },
+    checkUsageAndBalance: async () => ({ allowed: !accountDenied }),
+    WebSocketMessageResponses: { ERROR: "error" },
+  };
+  const compiled = ts.transpileModule(`return class HostFixture { ${methods.map(method => method.getText(ast)).join("\n")} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
   const Fixture = new Function(...Object.keys(dependencies), compiled)(...Object.values(dependencies));
   const host = new Fixture();
-  host.state = { pendingUserInputs: [] };
+  host.state = { pendingUserInputs: [], metadata: { userId: "sandbox-owner" } };
   host.queueIds = [];
   host.getThinkStub = async () => native;
   host.isCodeGenerating = () => false;
+  host.broadcast = () => {};
+  host.setState = (state: any) => { host.state = state; };
+  host.env = {};
   host.getPendingTaskQueueIds = () => host.queueIds;
   host.setThinkPendingInputs = (messages: string[], ids: string[]) => {
     host.state.pendingUserInputs = messages;
@@ -204,4 +216,190 @@ test("owner bridge permits only bounded continuation identities and rejects mixe
   assert.equal(allowedNativeClientFrame({ ...approved, message: "Actually add settings instead." }), null);
   assert.equal(allowedNativeClientFrame({ ...approved, continuationApproval: { taskId: "x".repeat(257), operationId: "O1" } }), null);
   assert.equal(allowedNativeClientFrame({ ...approved, images: [{}] }), null);
+});
+
+test("task Auto Continue defaults OFF, persists toggles, and audits authoritative changes", async () => {
+  const { native, approval, store } = nativeFixture();
+  assert.equal((await native.getTaskLifecycle()).autoContinue.enabled, false);
+  const enabled = await native.setTaskAutoContinue(approval.taskId, true);
+  assert.equal((await native.getTaskLifecycleSnapshot()).lifecycle.autoContinue.enabled, true);
+  assert.deepEqual(await native.setTaskAutoContinue(approval.taskId, true), enabled, "duplicate save does not duplicate authorization");
+  const disabled = await native.setTaskAutoContinue(approval.taskId, false);
+  assert.ok(disabled.version > enabled.version);
+  assert.equal([...store.keys()].filter(key => key.startsWith("think_auto_continue_audit:")).length, 2);
+  await assert.rejects(native.setTaskAutoContinue("foreign-task", true));
+});
+
+test("Auto Continue OFF leaves the natural boundary unchanged", async () => {
+  const { native, store } = nativeFixture();
+  const host = hostFixture(native);
+  await host.continueAutomatically();
+  assert.deepEqual(host.queueIds, []);
+  assert.equal([...store.keys()].filter(key => key.startsWith("think_customer_approval:")).length, 0);
+});
+
+test("automatic approvals use the same native transition, preserving context with fresh O2 and O3", async () => {
+  const { native, approval, store } = nativeFixture();
+  const host = hostFixture(native);
+  await native.setTaskAutoContinue(approval.taskId, true);
+  const original = await native.getTaskOperation();
+  for (let i = 0; i < 2; i++) {
+    const previous = await native.getTaskOperation();
+    await host.continueAutomatically();
+    assert.equal(host.queueIds.length, 1);
+    const next = await native.beginTask(host.queueIds[0], "must-not-create-another-conversation");
+    assert.notEqual(next.taskId, previous.taskId);
+    assert.equal(next.customerTaskId, approval.taskId);
+    assert.equal(next.conversationId, original.conversationId);
+    assert.equal(next.originalIntent, original.originalIntent);
+    assert.equal(next.startingHead, "current-O1-revision");
+    assert.ok(next.startedAt > original.startedAt);
+    assert.equal(next.creditsConsumed, 0);
+    assert.equal(next.completedPassCount, 0);
+    assert.equal(next.continuationCount, 0);
+    assert.deepEqual(next.limits, limits);
+    const receipt = store.get(`think_customer_approval:${previous.taskId}`);
+    assert.equal(receipt.source, "auto");
+    assert.equal(receipt.operationId, next.taskId);
+    host.setThinkPendingInputs([], []);
+    store.set("think_task_lifecycle", { ...boundary, updatedAt: Date.now() });
+  }
+});
+
+for (const status of ["COMPLETE", "USER_INPUT_REQUIRED", "BLOCKED", "RUNNING"]) {
+  test(`Auto Continue does not approve ${status}`, async () => {
+    const { native, approval, store } = nativeFixture();
+    const host = hostFixture(native);
+    await native.setTaskAutoContinue(approval.taskId, true);
+    store.set("think_task_lifecycle", { ...boundary, status });
+    await host.continueAutomatically();
+    assert.deepEqual(host.queueIds, []);
+    assert.equal([...store.keys()].filter(key => key.startsWith("think_customer_approval:")).length, 0);
+  });
+}
+
+test("automatic approval enforces genuine account admission and stops authorization on failure", async () => {
+  const { native, approval, store } = nativeFixture();
+  const host = hostFixture(native);
+  await native.setTaskAutoContinue(approval.taskId, true);
+  accountDenied = true;
+  try { await host.continueAutomatically(); } finally { accountDenied = false; }
+  assert.deepEqual(host.queueIds, []);
+  assert.equal((await native.getTaskLifecycle()).autoContinue.enabled, false);
+  assert.equal([...store.keys()].filter(key => key.startsWith("think_customer_approval:")).length, 0);
+});
+
+test("disable cancels an unstarted automatic reservation but leaves manual Continue usable", async () => {
+  const { native, approval, store } = nativeFixture();
+  const preference = await native.setTaskAutoContinue(approval.taskId, true);
+  const automatic = await native.approveTaskContinuation({ ...approval, source: "auto", preauthorizationVersion: preference.version });
+  await native.setTaskAutoContinue(approval.taskId, false);
+  await assert.rejects(native.beginTask(automatic.operationId, "same-conversation"), /no longer enabled/);
+  assert.equal((await native.getTaskOperation()).taskId, approval.operationId);
+  const manual = await native.approveTaskContinuation(approval);
+  const next = await native.beginTask(manual.operationId, "same-conversation");
+  assert.notEqual(next.taskId, approval.operationId);
+  assert.equal(store.get(`think_customer_approval:${approval.operationId}`).source, "manual");
+});
+
+test("new substantive direction disables old authorization and supersedes unstarted approvals", async () => {
+  const { native, approval } = nativeFixture();
+  const host = hostFixture(native);
+  await native.setTaskAutoContinue(approval.taskId, true);
+  await host.continueAutomatically();
+  await host.handleUserInput("Actually build the settings page instead");
+  assert.equal((await native.getTaskLifecycle()).autoContinue.enabled, false);
+  assert.deepEqual(host.queueIds, ["new-customer-queue-item"]);
+  assert.deepEqual(host.state.pendingUserInputs, ["Actually build the settings page instead"]);
+});
+
+test("manual/auto race and duplicate automatic event reserve and queue exactly one next operation", async () => {
+  const { native, approval, store } = nativeFixture();
+  const host = hostFixture(native);
+  await native.setTaskAutoContinue(approval.taskId, true);
+  await Promise.all([host.continueAutomatically(), host.continueAutomatically(), host.handleUserInput("Continue", undefined, approval)]);
+  assert.equal(host.queueIds.length, 1);
+  assert.equal([...store.keys()].filter(key => key.startsWith("think_approved_start:")).length, 1);
+  const next = await native.beginTask(host.queueIds[0], "same-conversation");
+  const replay = await native.approveTaskContinuation(approval);
+  assert.equal(replay.alreadyStarted, true);
+  assert.equal(replay.operationId, next.taskId);
+});
+
+test("new task defaults OFF and stale preauthorization cannot resume an old task", async () => {
+  const { native, approval, store } = nativeFixture();
+  const preference = await native.setTaskAutoContinue(approval.taskId, true);
+  store.set("think_task_lifecycle", { ...boundary, status: "COMPLETE" });
+  const next = await native.beginTask("new-independent-task", "new-independent-conversation", "New direction");
+  assert.equal((await native.getTaskLifecycle()).autoContinue.enabled, false);
+  assert.notEqual(next.customerTaskId, approval.taskId);
+  await assert.rejects(native.approveTaskContinuation({ ...approval, source: "auto", preauthorizationVersion: preference.version }));
+});
+
+test("turning Off during active work leaves the operation unchanged and the next boundary waits", async () => {
+  const { native, approval, store } = nativeFixture();
+  const host = hostFixture(native);
+  const preference = await native.setTaskAutoContinue(approval.taskId, true);
+  const accepted = await native.approveTaskContinuation({ ...approval, source: "auto", preauthorizationVersion: preference.version });
+  await native.beginTask(accepted.operationId, "same-conversation");
+  const before = await native.getTaskOperation();
+  await native.setTaskAutoContinue(approval.taskId, false);
+  assert.deepEqual(await native.getTaskOperation(), before, "no counter, tool, or workspace mutation from the toggle");
+  store.set("think_task_lifecycle", { ...boundary, updatedAt: Date.now() });
+  await host.continueAutomatically();
+  assert.deepEqual(host.queueIds, []);
+});
+
+test("customer Stop revokes task preauthorization before the existing cancellation path", async () => {
+  const { native, approval } = nativeFixture();
+  const host = hostFixture(native);
+  await native.setTaskAutoContinue(approval.taskId, true);
+  await host.disableTaskAutoContinue();
+  assert.equal((await native.getTaskLifecycle()).autoContinue.enabled, false);
+  await host.continueAutomatically();
+  assert.deepEqual(host.queueIds, []);
+  const handler = readFileSync("production/vibesdk-launch/runtime-source/worker/agents/core/websocket.ts", "utf8");
+  const stop = handler.slice(handler.indexOf("case WebSocketMessageRequests.STOP_GENERATION:"));
+  assert.ok(stop.indexOf("disableTaskAutoContinue") < stop.indexOf("cancelCurrentInference"));
+});
+
+test("disabling during an in-flight automatic approval fails closed without a reservation", async () => {
+  const { native, approval, store } = nativeFixture();
+  const preference = await native.setTaskAutoContinue(approval.taskId, true);
+  const pending = native.approveTaskContinuation({ ...approval, source: "auto", preauthorizationVersion: preference.version });
+  await native.setTaskAutoContinue(approval.taskId, false);
+  await assert.rejects(pending, /no longer enabled/);
+  assert.equal([...store.keys()].filter(key => key.startsWith("think_customer_approval:")).length, 0);
+});
+
+test("manual approval adopts an automatic reservation that wins during the digest await", async () => {
+  const { native, approval, store } = nativeFixture();
+  const parent = await native.getTaskOperation();
+  const id = "think-approved:" + createHash("sha256").update(JSON.stringify([approval.taskId, approval.operationId])).digest("hex");
+  const key = `think_customer_approval:${approval.operationId}`;
+  const get = native.ctx.storage.kv.get;
+  let reads = 0;
+  native.ctx.storage.kv.get = (name: string) => {
+    if (name === key && ++reads === 2) {
+      store.set(`think_approved_start:${id}`, parent);
+      store.set(key, { operationId: id, source: "auto", taskId: approval.taskId, parentOperationId: approval.operationId });
+    }
+    return get(name);
+  };
+  const accepted = await native.approveTaskContinuation(approval);
+  assert.equal(store.get(key).source, "manual");
+  assert.equal(accepted.operationId, id);
+  await native.setTaskAutoContinue(approval.taskId, false);
+  assert.equal((await native.beginTask(id, "same-conversation")).taskId, id);
+});
+
+test("bridge only accepts explicit, owner-bound task preference values; customer cannot claim auto approval", () => {
+  assert.deepEqual(allowedNativeClientFrame({ type: "set_auto_continue", taskId: "sandbox-task", enabled: true, userId: "forged-owner" }),
+    { type: "set_auto_continue", taskId: "sandbox-task", enabled: true });
+  assert.equal(allowedNativeClientFrame({ type: "set_auto_continue", taskId: "sandbox-task", enabled: "true" }), null);
+  assert.equal(allowedNativeClientFrame({ type: "set_auto_continue", taskId: "", enabled: true }), null);
+  const frame = allowedNativeClientFrame({ type: "user_suggestion", message: "Continue", continuationApproval: {
+    taskId: "sandbox-task", operationId: "sandbox-operation", source: "auto", preauthorizationVersion: 999,
+  } });
+  assert.deepEqual(frame.continuationApproval, { taskId: "sandbox-task", operationId: "sandbox-operation" });
 });

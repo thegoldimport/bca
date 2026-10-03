@@ -285,7 +285,10 @@ function installBrowserHarness(initialFixture) {
         }
         this.readyState = FakeWebSocket.OPEN;
         this.onopen?.({ target: this });
-        this.emit({ type: "agent_connected", state: { shouldBeGenerating: false } });
+        // Production reopens with the previous terminal lifecycle attached.
+        // Omitting this field hid the real pre-send continuation regression.
+        this.emit({ type: "agent_connected", state: { shouldBeGenerating: false },
+          ...(state.nativeTaskLifecycle ? { nativeTaskLifecycle: state.nativeTaskLifecycle } : {}) });
         if (closeAfterOpen) setTimeout(() => this.close(1011, "Immediate socket flap"), 0);
       }, 0);
     }
@@ -297,20 +300,30 @@ function installBrowserHarness(initialFixture) {
       if (frame.type === "user_suggestion") {
         state.stats.userSuggestions += 1;
         state.stats.lastUserSuggestion = frame;
-        if (frame.continuationApproval) {
+        if (frame.continuationApproval && !state.delayContinuationStart) {
           state.nativeTaskLifecycle = {
             ...state.nativeTaskLifecycle,
             status: "RUNNING",
             customerStatus: "WORKING",
             operationId: "fixture-operation-2",
             updatedAt: Date.now() + 1,
+            accounting: { startedAt: Date.now(), creditsUsed: 0, turnsUsed: 0, continuationsUsed: 0, modelCalls: 0, toolCalls: 0 },
           };
           state.shouldBeGenerating = true;
           state.generationStatus = "running";
+          this.emit({ type: "generation_started", nativeTaskLifecycle: state.nativeTaskLifecycle });
         }
       }
+      if (frame.type === "set_auto_continue") {
+        state.nativeTaskLifecycle.autoContinue = {
+          taskId: frame.taskId, enabled: frame.enabled,
+          version: (state.nativeTaskLifecycle.autoContinue?.version || 0) + 1,
+          changedAt: Date.now(),
+        };
+        this.emit({ type: "auto_continue_updated", preference: state.nativeTaskLifecycle.autoContinue });
+      }
       if (frame.type === "get_conversation_state") state.stats.conversationStateRequests += 1;
-      if (!["user_suggestion", "get_conversation_state"].includes(frame.type)) state.stats.unexpectedSocketFrames += 1;
+      if (!["user_suggestion", "get_conversation_state", "set_auto_continue"].includes(frame.type)) state.stats.unexpectedSocketFrames += 1;
       persist();
     }
 
@@ -362,7 +375,9 @@ function installBrowserHarness(initialFixture) {
       state.stats.frameworkEnvelopesFiltered += 1;
       persist();
     },
-    setRuntime({ active, revision, deployedRevision, persistedTurns }) {
+    setRuntime({ active, revision, deployedRevision, persistedTurns, delayContinuationStart, nativeTaskLifecycle }) {
+      if (typeof delayContinuationStart === "boolean") state.delayContinuationStart = delayContinuationStart;
+      if (nativeTaskLifecycle) state.nativeTaskLifecycle = structuredClone(nativeTaskLifecycle);
       if (typeof active === "boolean") {
         state.shouldBeGenerating = active;
         state.generationStatus = active ? "running" : "idle";
@@ -431,6 +446,7 @@ function installBrowserHarness(initialFixture) {
       persist();
       return JSON.parse(JSON.stringify({
         currentRevision: state.currentRevision,
+        nativeTaskLifecycle: state.nativeTaskLifecycle,
         shouldBeGenerating: state.shouldBeGenerating,
         generationStatus: state.generationStatus,
         persistedTurns: state.persistedTurns,
@@ -683,9 +699,61 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.deepEqual(stats.lastUserSuggestion.continuationApproval, { taskId, operationId });
         assert.equal(stats.agentCreationRequests, 0);
         assert.equal(stats.publishRequests, 0);
+        await waitForState(page, "running");
+        const lifecycle = (await page.evaluate(() => window.__nativeCompletionHarness.snapshot())).nativeTaskLifecycle;
+        assert.equal(lifecycle.taskId, taskId);
+        assert.notEqual(lifecycle.operationId, operationId);
+        assert.equal(lifecycle.accounting.creditsUsed, 0);
+        assert.equal(lifecycle.accounting.turnsUsed, 0);
+        assert.equal(lifecycle.accounting.continuationsUsed, 0);
+        await page.reload({ waitUntil: "networkidle0" });
+        await waitForState(page, "running");
+        assert.equal((await statsOf(page)).userSuggestions, 1, "reopen must not resend approval");
       } finally {
         await page.close();
       }
+    });
+
+    await t.test("Continue stays Starting until a persisted new operation is authoritative", async () => {
+      const lifecycle = { status: "INCOMPLETE_RESOURCE_LIMIT", customerStatus: "CONTINUE_AVAILABLE",
+        taskId: "pending-fixture-task", operationId: "pending-fixture-operation", updatedAt: Date.now() - 1000 };
+      const page = await startEditor(serverUrl, browser, fixture({ nativeTaskLifecycle: lifecycle }));
+      try {
+        await page.waitForSelector('[data-testid="button-native-continue"]');
+        await page.evaluate(() => window.__nativeCompletionHarness.setRuntime({ delayContinuationStart: true }));
+        await page.click('[data-testid="button-native-continue"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1);
+        await waitForState(page, "starting");
+        assert.equal(await page.$eval('[data-testid="native-completion-state"]', e => e.textContent), "Starting...");
+        await page.evaluate(() => {
+          const h = window.__nativeCompletionHarness;
+          const fresh = { ...h.snapshot().nativeTaskLifecycle, status: "RUNNING", customerStatus: "WORKING",
+            operationId: "accepted-operation", updatedAt: Date.now(),
+            accounting: { startedAt: Date.now(), creditsUsed: 0, turnsUsed: 0, continuationsUsed: 0, modelCalls: 0, toolCalls: 0 } };
+          h.setRuntime({ nativeTaskLifecycle: fresh, active: true });
+          h.emit({ type: "generation_started", nativeTaskLifecycle: fresh });
+        });
+        await waitForState(page, "running");
+      } finally { await page.close(); }
+    });
+
+    await t.test("Auto Continue defaults Off, persists on reopen, and can be disabled while work runs", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({ nativeTaskLifecycle: {
+        status: "RUNNING", customerStatus: "WORKING", taskId: "auto-fixture-task",
+        operationId: "auto-fixture-operation", updatedAt: Date.now(),
+      } }));
+      try {
+        await page.waitForSelector('[data-testid="toggle-auto-continue"]');
+        assert.equal(await page.$eval('[data-testid="toggle-auto-continue"]', e => e.getAttribute("aria-checked")), "false");
+        await page.click('[data-testid="toggle-auto-continue"]');
+        await page.waitForFunction(() => document.querySelector('[data-testid="toggle-auto-continue"]')?.getAttribute("aria-checked") === "true");
+        await page.reload({ waitUntil: "networkidle0" });
+        await page.waitForSelector('[data-testid="toggle-auto-continue"]');
+        assert.equal(await page.$eval('[data-testid="toggle-auto-continue"]', e => e.getAttribute("aria-checked")), "true");
+        await page.click('[data-testid="toggle-auto-continue"]');
+        await page.waitForFunction(() => document.querySelector('[data-testid="toggle-auto-continue"]')?.getAttribute("aria-checked") === "false");
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+      } finally { await page.close(); }
     });
 
     await t.test("NEEDS_INPUT is shown without Continue or green completion", async () => {

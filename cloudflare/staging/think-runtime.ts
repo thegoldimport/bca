@@ -510,6 +510,10 @@ export async function openStockAgentWebSocket(env: Env, request: Request, agentI
 export function allowedNativeClientFrame(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const frame = value as Record<string, unknown>;
+  if (frame.type === "set_auto_continue" && typeof frame.enabled === "boolean"
+    && typeof frame.taskId === "string" && /^[a-zA-Z0-9_:.-]{1,256}$/.test(frame.taskId)) {
+    return { type: frame.type, taskId: frame.taskId, enabled: frame.enabled };
+  }
   if (frame.type === "get_conversation_state") return { type: frame.type };
   if (frame.type === "stop_generation") return { type: frame.type };
   if (frame.type === "user_suggestion" && typeof frame.message === "string"
@@ -779,6 +783,18 @@ export function projectOwnerNativeTaskLifecycle(value: unknown):
     updatedAt: lifecycle.updatedAt,
     ...taskIdentity,
     customerStatus,
+    ...(lifecycle.autoContinue && typeof lifecycle.autoContinue === "object"
+      && !Array.isArray(lifecycle.autoContinue)
+      && typeof (lifecycle.autoContinue as any).enabled === "boolean"
+      && (lifecycle.autoContinue as any).taskId === taskIdentity.taskId
+      && Number.isSafeInteger((lifecycle.autoContinue as any).version)
+      && Number.isFinite((lifecycle.autoContinue as any).changedAt)
+      ? { autoContinue: {
+        taskId: taskIdentity.taskId,
+        enabled: (lifecycle.autoContinue as any).enabled,
+        version: (lifecycle.autoContinue as any).version,
+        changedAt: (lifecycle.autoContinue as any).changedAt,
+      } } : {}),
     ...(accounting ? { accounting } : {}),
     ...(typeof lifecycle.reason === "string" && NATIVE_RESOURCE_REASONS.has(lifecycle.reason)
       ? { reason: lifecycle.reason } : {}),
