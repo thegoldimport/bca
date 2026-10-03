@@ -168,3 +168,17 @@ mtime_ms = 1791054719490
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/12f9c440-3585-4e40-b629-c18ecc5fa7f9/5129ffda-7bd0-4ec4-b79a-2b5460c0876f"
 storage_version_token = "1791054733810838"
 content_type = "text/csv"
+
+[[outputs]]
+id = "DWuPxdcjQRDd77JYcUHd0"
+uri = "file://.local/state/controlled-inference-experiment/safe-evidence025.txt"
+type = "text"
+title = "Controlled pacing experiment: report and safe evidence"
+description = "Five spaced requests succeeded. The runner stopped at its traffic-verification check; no rapid requests were sent. Includes exact timings, IDs, safe headers, usage, cost, and reconciliation."
+logical_id = "c8b6c9f2-61ec-4215-bded-2e57eb15e284"
+content_hash = "sha256:57556680dc0f6bba20b81500a76f537130b83a0ee995c50fa9756ad3306546e0"
+size = 23417
+mtime_ms = 1791056611846
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/c8b6c9f2-61ec-4215-bded-2e57eb15e284/6ba5f997-5c01-4863-b0a3-f7ec6d876ab3"
+storage_version_token = "1791056612341189"
+content_type = "text/plain"

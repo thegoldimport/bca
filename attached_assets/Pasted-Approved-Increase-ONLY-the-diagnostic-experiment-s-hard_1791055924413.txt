@@ -1,0 +1,379 @@
+Approved. Increase ONLY the diagnostic experiment's hard cost ceiling from
+$0.10 to $0.25.
+
+Do NOT change anything else about the previously approved experiment.
+
+There is no need to spend another task determining whether the exact applicable
+input price is $0.75 or $1.50 per million tokens.
+
+The current conservative estimate of approximately $0.1421 is safely below the
+new $0.25 ceiling.
+
+==================================================
+EXPERIMENT AUTHORIZATION
+==================================================
+
+Run the previously approved controlled pacing experiment.
+
+Maximum:
+
+10 logical inference requests total.
+
+NO automatic retries.
+
+NO concurrency.
+
+NO Project 8 content.
+
+NO Project 8 actions.
+
+NO source changes.
+
+NO deployments.
+
+NO configuration changes.
+
+NO gateway changes.
+
+NO model changes.
+
+NO continuation changes.
+
+NO retry-policy changes.
+
+Hard experiment cost ceiling:
+
+$0.25
+
+If preflight now estimates more than $0.25:
+
+STOP.
+
+Otherwise proceed.
+
+==================================================
+PRECONDITIONS
+==================================================
+
+Before sending inference:
+
+1. Confirm there is no active customer operation using the launch gateway.
+
+2. Confirm the launch gateway has been inactive for at least five minutes.
+
+3. Use:
+
+gateway:
+buildcustom-vibesdk-launch-ai
+
+provider:
+google-ai-studio
+
+model:
+google/gemini-3.6-flash
+
+authenticated AI Gateway + Unified Billing.
+
+4. Confirm no configured gateway limiter.
+
+5. Use synthetic coding context approximately matching the real Project 8
+request structure:
+
+approximately 43–47 KB
+realistic system context
+conversation history
+tool definitions
+
+Do NOT use actual Project 8/customer content.
+
+Maximum output:
+32 tokens per request.
+
+==================================================
+ARM A — SPACED CONTROL
+==================================================
+
+Send FIVE logical model requests maximum.
+
+NO retries.
+
+NO concurrency.
+
+After each response fully completes:
+
+wait at least 15 seconds before sending the next request.
+
+Record each request:
+
+- exact start/end time
+- HTTP status
+- request bytes
+- fresh input tokens
+- cached input tokens
+- output tokens
+- total tokens
+- gateway request ID
+- Cloudflare Ray ID
+- provider latency
+- wholesale status
+- cost
+
+STOP immediately on:
+
+429
+or any unexpected error.
+
+Do NOT retry.
+
+==================================================
+INTER-ARM IDLE WINDOW
+==================================================
+
+Only if Arm A completes 5/5 successfully:
+
+wait at least FIVE MINUTES.
+
+Confirm there was no competing launch-gateway traffic during the idle window.
+
+Then proceed.
+
+==================================================
+ARM B — RAPID SEQUENTIAL
+==================================================
+
+Send FIVE logical model requests maximum.
+
+Use the same:
+
+gateway
+provider
+model
+payload structure
+approximate request size
+output limit
+
+NO retries.
+
+NO concurrency.
+
+Send the next request immediately after the previous response fully completes.
+
+Record the same evidence.
+
+STOP immediately on the first:
+
+429
+or unexpected error.
+
+Do NOT retry.
+
+==================================================
+CRITICAL: IF A 429 OCCURS
+==================================================
+
+Capture the evidence immediately while it still exists.
+
+Safely capture:
+
+- exact timestamp
+- HTTP status
+- complete safe response body
+- response headers
+- Retry-After
+- retry-after-ms
+- Cloudflare Ray ID
+- gateway request ID
+- provider/model metadata
+- provider request ID if available
+- gateway processing time
+- provider latency
+- wholesale status
+- token usage
+- billing/cost metadata
+- rate-limit headers
+- quota headers
+- reset headers
+- Cloudflare-specific enforcement metadata
+
+DO NOT expose or persist:
+
+- Authorization values
+- API keys
+- cookies
+- credentials
+- secrets
+- customer content
+
+We specifically want to avoid losing the headers/evidence again if the 429 is
+reproduced.
+
+==================================================
+INTERPRETATION
+==================================================
+
+ARM A 5/5
+ARM B fails near request 5:
+
+PACING RELATIONSHIP SUPPORTED
+
+Do not implement anything.
+
+--------------------------------------------------
+
+ARM A 5/5
+ARM B 5/5:
+
+PROJECT 8 FAILURE NOT REPRODUCED
+
+Do not invent a threshold.
+
+--------------------------------------------------
+
+ARM A receives 429:
+
+SPACED REQUEST ALSO RATE LIMITED
+
+Capture evidence and stop.
+
+--------------------------------------------------
+
+Any other failure:
+
+OTHER FAILURE
+
+Capture evidence and stop.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do not expand this experiment after seeing the result.
+
+Maximum 10 requests means maximum 10 requests.
+
+Do not:
+
+- run another arm
+- try different spacing
+- increase payload size
+- decrease payload size
+- test concurrency
+- test another model
+- test another gateway
+- test Project 8
+- retry a 429
+- modify the platform
+
+The purpose is to answer ONE question:
+
+Does the current launch route reproduce a pacing-dependent failure with a
+realistic coding-agent workload?
+
+==================================================
+RETURN
+==================================================
+
+OVERALL RESULT:
+PACING RELATIONSHIP SUPPORTED /
+PROJECT 8 FAILURE NOT REPRODUCED /
+SPACED REQUEST ALSO RATE LIMITED /
+OTHER FAILURE /
+TEST NOT RUN
+
+PRECONDITIONS
+- no active customer operation:
+- gateway inactivity:
+- idle duration:
+- competing traffic:
+- gateway:
+- provider:
+- model:
+- Unified Billing:
+- configured limiter:
+- synthetic payload:
+- estimated maximum cost:
+
+ARM A — SPACED
+For each request:
+- number:
+- timestamp:
+- status:
+- duration:
+- request bytes:
+- fresh tokens:
+- cached tokens:
+- output:
+- gateway request ID:
+- Ray ID:
+- provider latency:
+- wholesale:
+- cost:
+
+Arm A result:
+
+IDLE WINDOW
+- duration:
+- competing traffic:
+
+ARM B — RAPID
+For each request:
+- number:
+- timestamp:
+- status:
+- duration:
+- request bytes:
+- fresh tokens:
+- cached tokens:
+- output:
+- gateway request ID:
+- Ray ID:
+- provider latency:
+- wholesale:
+- cost:
+
+Arm B result:
+
+IF 429 OCCURRED
+- exact request:
+- response body:
+- Retry-After:
+- retry-after-ms:
+- rate-limit headers:
+- quota headers:
+- reset headers:
+- Cloudflare metadata:
+- provider metadata:
+- request reached provider:
+- enforcing service identifiable:
+- safe raw evidence retained:
+
+COMPARISON
+- spaced success rate:
+- rapid success rate:
+- difference:
+- pacing relationship supported:
+- Project 8 pattern reproduced:
+
+CONCLUSION
+- what this proves:
+- what this does NOT prove:
+- evidence of something BuildCustom/users are doing wrong:
+- production concern:
+
+RECOMMENDED NEXT STEP
+Do not implement anything.
+State only the evidence-supported next step.
+
+ACTUAL EXPERIMENT COST:
+$
+
+SOURCE CHANGES:
+ZERO
+
+DEPLOYMENTS:
+ZERO
+
+PROJECT 8 ACTIONS:
+ZERO
+
+Then STOP.
