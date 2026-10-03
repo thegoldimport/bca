@@ -1,0 +1,517 @@
+Continue the Project 8 customer acceptance test.
+
+DO NOT CHANGE BUILDCUSTOM PLATFORM CODE.
+
+The user-approved continuation feature has already been implemented, tested,
+pushed and deployed.
+
+Accepted canonical:
+
+208f97099ae297d3d205fec0e813ae87427e6269
+
+Accepted runtime:
+
+4d45172a-4d55-4f36-989f-b938706a31a5
+
+Accepted control:
+
+fc92c145-4435-4507-bce1-2857127cb7ab
+
+Freeze those components unless a NEW actual platform failure is demonstrated.
+
+Do NOT change:
+
+- continuation behavior
+- lifecycle implementation
+- status mapping
+- resource limits
+- runtime
+- control
+- gateway
+- publisher
+- marketing
+
+Do NOT manually edit Project 8 generated source.
+
+Do NOT diagnose or repair the CRM through Replit.
+
+Do NOT manipulate lifecycle/checkpoint state.
+
+Do NOT force Project 8 into CONTINUE_AVAILABLE.
+
+Do NOT manufacture a continuation boundary.
+
+Do NOT publish yet.
+
+Do NOT start Hot Leads.
+
+Do NOT test revert yet.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+WHY LIVE CONTINUE WAS NOT TESTED
+==================================================
+
+The continuation implementation passed automated verification.
+
+However, Project 8's previously running operation naturally ended:
+
+BLOCKED
+
+rather than:
+
+INCOMPLETE_RESOURCE_LIMIT / continuation_budget_exhausted
+
+Therefore the new implementation correctly did NOT show Continue.
+
+It also correctly removed the old false green:
+
+Build complete
+
+state.
+
+That is accepted behavior.
+
+Do not change it.
+
+We now need to continue using BuildCustom normally until an eligible
+continuation boundary occurs naturally.
+
+==================================================
+CURRENT PROJECT 8 CUSTOMER SITUATION
+==================================================
+
+The CRM is much improved but still has known customer-visible problems.
+
+Previously verified working:
+
+- dashboard renders
+- 12 leads visible
+- dashboard totals populate
+- status/pipeline counts populate
+- Five Newest Leads populated
+- Leads Database contains 12 leads
+- search works
+- ascending sort works
+- descending sort works
+- filtering works
+- lead details render
+- seven expected fields exist
+- existing notes visible
+- Recent Activity card exists
+- Recent Activity populated
+- lead name visible
+- activity type visible
+- date/time visible
+
+Previously verified remaining problems:
+
+- /api/leads fetch fails
+- Add Lead appears in UI but POST returned 503
+- added lead disappeared after refresh
+- Edit appeared in UI but PUT returned 503
+- edit disappeared after refresh
+- posting a note appeared in UI but request returned 503
+- posted note disappeared after refresh
+- Activity Timeline was empty
+- Recent Activity was not newest-first
+
+These are generated-application problems.
+
+==================================================
+SEND ONE NORMAL CUSTOMER CORRECTION
+==================================================
+
+Through Project 8's normal BuildCustom chat box send exactly ONE message:
+
+"The CRM is much closer, but the data still isn't actually saving. Adding a
+lead, editing a lead, and posting a note look like they work until I refresh,
+then the changes disappear. The API requests are also failing, the Activity
+Timeline is empty, and Recent Activity isn't newest-first. Please fix all of
+that, make sure the data actually persists after refresh, and test the whole
+CRM before you finish."
+
+Exactly one user_suggestion.
+
+Do not add technical hints.
+
+Do not tell the coding agent:
+
+- what files to change
+- what architecture to use
+- what Cloudflare requires
+- what Durable Objects are
+- how persistence should be implemented
+- what Replit believes is broken
+
+The BuildCustom coding agent must diagnose and repair its own application.
+
+==================================================
+LET BUILDCUSTOM WORK
+==================================================
+
+Allow the normal customer operation to run.
+
+The agent may:
+
+- inspect files
+- inspect errors
+- edit
+- build
+- preview
+- test APIs
+- test persistence
+- create private revisions
+- encounter errors
+- repair them
+- use automatic internal continuations
+- verify again
+
+Do not interfere with intermediate generated-app failures.
+
+==================================================
+IF THE OPERATION REACHES BUILD COMPLETE
+==================================================
+
+If customer-facing state becomes:
+
+Build complete
+
+perform the complete private CRM verification below.
+
+Do NOT publish before verification.
+
+==================================================
+IF THE OPERATION REACHES CONTINUE_AVAILABLE
+==================================================
+
+THIS IS THE LIVE ACCEPTANCE TEST WE HAVE BEEN WAITING FOR.
+
+Verify customer UI:
+
+- does NOT say Build complete
+- does NOT expose continuation_budget_exhausted
+- does NOT expose INCOMPLETE_RESOURCE_LIMIT
+- does NOT expose credits/turns/internal resource terminology
+- explains that progress was made but work remains
+- Continue action is visible
+- chat remains usable
+- no new operation starts automatically
+
+Then click:
+
+Continue
+
+EXACTLY ONCE.
+
+Do NOT send another customer instruction.
+
+Verify:
+
+- SAME task
+- SAME conversation
+- SAME workspace
+- SAME current files/revision/progress
+- NEW bounded operation
+- fresh operation credits
+- fresh Think turns
+- fresh internal-continuation count
+- fresh elapsed window
+- original customer task remains understood
+- agent begins working again
+
+Then let the agent work normally.
+
+If it reaches CONTINUE_AVAILABLE again:
+
+verify the same customer experience.
+
+Click Continue exactly once again.
+
+Again require:
+
+same task
+same workspace
+same progress
+new bounded operation
+fresh operation counters
+
+Then let it work.
+
+There is no need to stop merely because multiple user-approved work sessions
+are needed.
+
+==================================================
+IF THE OPERATION REACHES BLOCKED
+==================================================
+
+Do NOT automatically classify BLOCKED as platform failure.
+
+First inspect only the CUSTOMER-FACING explanation/state.
+
+Do not inspect source or internal checkpoints.
+
+If it genuinely needs customer information/action:
+
+report:
+
+NEEDS CUSTOMER INPUT
+
+If it simply returned control with generated-app work still broken and chat is
+usable:
+
+report:
+
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX
+
+Do not change platform code.
+
+If BLOCKED prevents normal customer iteration despite no required customer
+input:
+
+report:
+
+PLATFORM FAILURE
+
+and stop.
+
+==================================================
+FULL PRIVATE CRM VERIFICATION
+==================================================
+
+When BuildCustom genuinely claims:
+
+Build complete
+
+test the entire private CRM.
+
+BACKEND
+
+- /api/leads succeeds
+- correct API response
+- 12 original leads available
+- no application-breaking API failures
+
+DASHBOARD
+
+- dashboard renders
+- lead count correct
+- totals correct
+- status/pipeline counts populated
+- Five Newest Leads populated
+
+LEADS DATABASE
+
+- 12 leads visible
+- search works
+- ascending sort works
+- descending sort works
+- status filtering works
+
+LEAD DETAILS
+
+- details render
+- seven expected fields available
+- existing notes accessible
+- Activity Timeline populated appropriately
+
+WRITE/PERSISTENCE TEST
+
+Create one uniquely named temporary lead.
+
+Verify:
+
+- create request succeeds
+- temporary lead appears
+- refresh
+- temporary lead STILL exists
+
+Edit that temporary lead.
+
+Verify:
+
+- edit request succeeds
+- updated values appear
+- refresh
+- updated values STILL exist
+
+Post one temporary note to that temporary lead.
+
+Verify:
+
+- note request succeeds
+- note appears
+- refresh
+- note STILL exists
+- Activity Timeline reflects appropriate activity
+
+Delete the temporary lead.
+
+Verify:
+
+- delete succeeds
+- refresh
+- temporary lead remains gone
+- original 12 leads remain intact
+
+RECENT ACTIVITY
+
+Verify:
+
+- populated
+- newest activity first
+- lead name
+- activity type
+- date/time
+- temporary test activity behaves coherently while testing
+
+CONSOLE/NETWORK
+
+- no application-breaking console errors
+- no failing CRM API requests
+- harmless development/CDN warnings do not fail acceptance
+
+==================================================
+FALSE COMPLETION
+==================================================
+
+If BuildCustom shows:
+
+Build complete
+
+but the full private verification materially fails:
+
+STOP.
+
+Report:
+
+FALSE COMPLETION
+
+Do not publish.
+
+Do not manually fix the CRM.
+
+That would demonstrate that the completion gate is still too permissive.
+
+==================================================
+IF PRIVATE CRM FULLY PASSES
+==================================================
+
+STOP BEFORE PUBLISHING.
+
+Report:
+
+READY FOR PUBLISH TEST
+
+We will do:
+
+publish
+→ new Hot Leads change
+→ publish again
+→ revert
+→ continue from reverted version
+
+as the next acceptance stage.
+
+Do not combine that stage into this one.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+READY FOR PUBLISH TEST /
+USER-APPROVED CONTINUATION LIVE PASS /
+GENERATED APP NEEDS ANOTHER CUSTOMER FIX /
+FALSE COMPLETION /
+NEEDS CUSTOMER INPUT /
+PLATFORM FAILURE
+
+CUSTOMER OPERATION
+- instructions sent:
+- operation started:
+- agent worked:
+- private revisions:
+- ending customer state:
+- chat usable:
+- result:
+
+CONTINUE #1
+- offered:
+- customer copy:
+- internal reason exposed:
+- clicked:
+- same task:
+- same conversation:
+- same workspace:
+- progress preserved:
+- new operation:
+- fresh bounded counters:
+- agent worked:
+- result:
+
+CONTINUE #2
+- required:
+- offered:
+- clicked:
+- same task:
+- progress preserved:
+- new operation:
+- fresh bounded counters:
+- agent worked:
+- result:
+
+PRIVATE CRM
+- /api/leads:
+- 12 leads:
+- dashboard:
+- Five Newest:
+- search:
+- ascending sort:
+- descending sort:
+- filtering:
+- lead details:
+- seven fields:
+- existing notes:
+- Activity Timeline:
+- Add Lead persistence:
+- Edit persistence:
+- Note persistence:
+- Delete:
+- original 12 preserved:
+- Recent Activity:
+- newest-first:
+- console/network:
+- result:
+
+COMPLETION
+- Build complete shown:
+- verification passed:
+- false completion:
+- ready for publish test:
+
+PLATFORM CHANGES:
+MUST BE ZERO
+
+MANUAL GENERATED-SOURCE EDITS:
+MUST BE ZERO
+
+PROJECT 8 PUBLISH:
+MUST BE NO
+
+HOT LEADS:
+MUST NOT START
+
+REVERT:
+MUST NOT START
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

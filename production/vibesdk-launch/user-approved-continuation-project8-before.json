@@ -1,0 +1,18 @@
+{
+  "path": "/app/editor/8",
+  "httpStatus": 200,
+  "nativeTaskLifecycle": {
+    "status": "BLOCKED",
+    "updatedAt": 1790982667743
+  },
+  "shouldBeGenerating": false,
+  "nativeBuildCompleteShown": false,
+  "continueShown": false,
+  "chatUsable": true,
+  "publishClicked": false,
+  "repairMessagesSent": 0,
+  "internalReasonExposed": false,
+  "taskUi": [
+    "SUCCESS · Build complete · authoritative files and preview are verified."
+  ]
+}

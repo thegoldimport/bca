@@ -1,0 +1,1304 @@
+We need to improve BuildCustom's customer-facing continuation behavior BEFORE
+continuing the Project 8 acceptance test.
+
+This is a PRODUCT/LIFECYCLE improvement prompted by what Project 8 just exposed.
+
+Do NOT manually repair Project 8.
+
+Do NOT send another customer instruction to Project 8 yet.
+
+Do NOT publish Project 8.
+
+Do NOT change the configured operation limits.
+
+Do NOT increase credits, Think turns, continuations, or elapsed time.
+
+Do NOT change Cloudflare/VibeSDK architecture.
+
+Do NOT touch gateway or publisher behavior.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+WHY WE ARE CHANGING THIS
+==================================================
+
+BuildCustom currently allows one customer request to perform a bounded amount
+of autonomous work.
+
+Current operation limits are intentionally:
+
+maxSteps per Think pass = 25
+Think turns = 5
+maxContinuations = 4
+maxCredits = 250
+maxElapsedMs = 900000
+
+Those limits are GOOD.
+
+We do NOT want an agent getting stuck and autonomously burning unlimited model
+calls, time, or money.
+
+However, when the agent reaches one of those autonomous-work limits while the
+customer's task is still unfinished, the current customer experience is wrong.
+
+Project 8 demonstrated this.
+
+The agent made substantial progress but eventually ended:
+
+INCOMPLETE_RESOURCE_LIMIT
+reason: continuation_budget_exhausted
+
+That internal reason is useful for BuildCustom diagnostics.
+
+It is NOT useful customer-facing language.
+
+The customer should not need to understand:
+
+- Think turns
+- continuation budgets
+- model-call budgets
+- internal credits
+- resource limits
+- INCOMPLETE_RESOURCE_LIMIT
+- continuation_budget_exhausted
+
+From the customer's perspective:
+
+"The agent worked for a while, made progress, but there is still more work to
+do."
+
+BuildCustom should ask permission to continue.
+
+==================================================
+PRODUCT MODEL
+==================================================
+
+We need to distinguish THREE concepts.
+
+1. TASK
+
+The overall thing the customer asked BuildCustom to accomplish.
+
+Example:
+
+"Fix the CRM so data persists, Activity Timeline works, and Recent Activity is
+correct."
+
+A task may require multiple bounded work sessions.
+
+The task survives across those work sessions until:
+
+- completed
+- customer stops it
+- customer changes direction
+- genuinely blocked waiting for customer information/action
+
+--------------------------------------------------
+
+2. OPERATION / WORK SESSION
+
+One bounded autonomous coding session.
+
+Each operation receives the existing limits:
+
+25 steps per Think pass
+5 Think turns
+4 automatic internal continuations
+250 credits
+15 minutes
+
+When that operation reaches its allowed autonomous-work boundary, BuildCustom
+does NOT automatically give it unlimited additional budget.
+
+If work remains, return control to the customer.
+
+--------------------------------------------------
+
+3. INTERNAL CONTINUATION
+
+These are the existing automatic continuations inside ONE operation.
+
+They share the SAME:
+
+- operation identity
+- resource counters
+- elapsed timer
+- credit budget
+- task/progress state
+
+Do not change that behavior.
+
+==================================================
+NEW CONCEPT: USER-APPROVED CONTINUATION
+==================================================
+
+When an operation reaches its autonomous-work limit but the TASK is unfinished,
+BuildCustom should present:
+
+"I made progress, but there's still more to finish."
+
+Then summarize:
+
+WHAT I COMPLETED
+
+and
+
+WHAT'S STILL LEFT
+
+Then ask:
+
+"Continue working?"
+
+Provide a clear:
+
+Continue
+
+action.
+
+The customer may also respond conversationally with things such as:
+
+yes
+continue
+keep going
+go ahead
+finish it
+keep working
+
+A user-approved continuation means:
+
+SAME TASK
+SAME ORIGINAL CUSTOMER INTENT
+SAME CONVERSATION
+SAME PROJECT
+SAME AGENT
+SAME WORKSPACE
+SAME FILES
+SAME GIT HISTORY
+SAME CURRENT REVISION
+SAME PROGRESS
+
+but:
+
+NEW OPERATION / WORK SESSION
+NEW bounded resource allowance
+
+The new operation receives fresh:
+
+- credits
+- Think-turn count
+- internal-continuation count
+- elapsed timer
+- operation-scoped model-call count
+- operation-scoped tool-call count
+- operation-scoped resource state
+
+Configured ceilings remain unchanged.
+
+==================================================
+CRITICAL SEMANTICS
+==================================================
+
+USER-APPROVED CONTINUATION MUST NOT:
+
+- resend the original customer instruction as a new unrelated request
+- make the model rediscover the task from scratch
+- create another project
+- create another workspace
+- reset files
+- reset Git history
+- discard progress
+- duplicate completed work
+- erase conversation history
+- silently grant unlimited autonomous work
+
+Instead it should mean:
+
+"Continue this existing unfinished task from the current state with another
+bounded work session."
+
+==================================================
+TASK IDENTITY VS OPERATION IDENTITY
+==================================================
+
+Implement/extend the lifecycle so that one TASK can own multiple OPERATIONS.
+
+Conceptually:
+
+Task T1
+    Operation O1
+        internal pass
+        internal continuation
+        internal continuation
+        limit reached
+
+    customer approves Continue
+
+    Operation O2
+        internal pass
+        internal continuation
+        ...
+
+    customer approves Continue
+
+    Operation O3
+        ...
+
+    COMPLETE
+
+The exact implementation does not need these literal names if the existing
+architecture already has appropriate identities.
+
+Reuse existing concepts wherever possible.
+
+Do NOT build a competing orchestration system.
+
+Do NOT replace the native ThinkAgent.
+
+Do NOT duplicate workspace state.
+
+This should be the smallest extension of the current task/operation lifecycle.
+
+==================================================
+WHEN TO OFFER CONTINUE
+==================================================
+
+Offer customer continuation when:
+
+1. the operation reached a bounded autonomous-work limit
+
+AND
+
+2. the overall task is not established COMPLETE
+
+AND
+
+3. the system does not require some specific missing customer input
+
+Examples include appropriate internal reasons such as:
+
+continuation_budget_exhausted
+
+Think-turn/work-session exhaustion
+
+credit allowance exhausted for THIS operation
+
+elapsed-time allowance exhausted for THIS operation
+
+other equivalent bounded autonomous-work limits
+
+Do NOT automatically expose those reasons to the customer.
+
+Keep them internally for diagnostics.
+
+==================================================
+WHEN NOT TO OFFER CONTINUE
+==================================================
+
+Do NOT show generic Continue when:
+
+TASK COMPLETE
+
+Show:
+
+Build complete
+
+--------------------------------------------------
+
+ACTUAL CUSTOMER INPUT REQUIRED
+
+Example:
+
+"I need your Stripe secret key before I can test checkout."
+
+Show something like:
+
+Needs your input
+
+and explain what is required.
+
+--------------------------------------------------
+
+SECURITY / OWNERSHIP FAILURE
+
+Do not turn that into Continue.
+
+--------------------------------------------------
+
+UNRECOVERABLE PLATFORM FAILURE
+
+Do not pretend that more agent work will solve infrastructure corruption.
+
+--------------------------------------------------
+
+CUSTOMER CANCELLED
+
+Do not continue.
+
+==================================================
+CUSTOMER-FACING STATES
+==================================================
+
+Simplify the normal customer experience to three major outcomes.
+
+--------------------------------------------------
+
+1. BUILD COMPLETE
+
+Use green success state only when the task is actually established complete.
+
+Example:
+
+✓ Build complete
+
+"Your changes are ready to review."
+
+Do NOT show this when supported lifecycle is:
+
+BLOCKED
+
+INCOMPLETE_RESOURCE_LIMIT
+
+RUNNING
+
+RECOVERING
+
+VERIFYING
+
+USER_INPUT_REQUIRED
+
+or any other unfinished state.
+
+This also addresses the issue we observed where the editor displayed a green:
+
+Build complete
+
+while supported lifecycle was:
+
+BLOCKED
+
+That is misleading and should be corrected as part of this lifecycle/UI work.
+
+--------------------------------------------------
+
+2. CONTINUE?
+
+Use when the agent made progress but exhausted the current bounded work session
+while the task remains unfinished.
+
+Example:
+
+"I made progress, but there's still more to finish.
+
+Completed:
+• Dashboard and lead list are working
+• Search, sorting, and filtering are working
+• Recent Activity is displaying
+
+Still working on:
+• Saving lead changes correctly
+• Note persistence
+• Activity Timeline
+
+Continue working?"
+
+[ Continue ]
+
+Do NOT show:
+
+insufficient tokens
+
+insufficient turns
+
+continuation budget exhausted
+
+available credits limit
+
+INCOMPLETE_RESOURCE_LIMIT
+
+elapsed_time_limit
+
+or other internal lifecycle terminology to normal customers.
+
+Those remain available in diagnostics/admin/support surfaces.
+
+--------------------------------------------------
+
+3. NEEDS YOUR INPUT
+
+Use when progress cannot continue without information/action from the customer.
+
+Example:
+
+"I need your Stripe API key before I can test checkout."
+
+Do not present this as an autonomous-work exhaustion.
+
+==================================================
+PROGRESS SUMMARY
+==================================================
+
+The continuation message should summarize actual known progress.
+
+Do NOT fabricate accomplishments.
+
+Use the best existing trustworthy information available from:
+
+- task progress
+- completed agent work
+- tool results
+- verification results
+- current revision/workspace
+- completion state
+
+If detailed structured progress is unavailable, use a conservative message:
+
+"I made progress on your request, but I haven't finished everything yet.
+
+Would you like me to continue working?"
+
+That is acceptable.
+
+Do NOT require another model call solely to create fancy continuation copy if
+doing so would defeat the purpose of stopping at the operation boundary.
+
+==================================================
+CONTINUE BUTTON
+==================================================
+
+Add a normal customer-facing Continue action.
+
+When clicked:
+
+1. verify the task still belongs to the authenticated customer
+2. verify the task remains unfinished
+3. verify no operation is currently RUNNING
+4. verify continuation is eligible
+5. create/start the next bounded operation for the SAME TASK
+6. preserve workspace/current revision/progress
+7. give the new operation fresh operation-scoped counters
+8. continue the original task
+
+The button must be idempotent.
+
+Double-clicking or retrying the request must NOT start two operations.
+
+If an operation is already running for that task, another Continue request
+must not create another concurrent operation.
+
+==================================================
+CONVERSATIONAL CONTINUE
+==================================================
+
+The user should also be able to type:
+
+yes
+
+continue
+
+keep going
+
+go ahead
+
+finish it
+
+etc.
+
+when the current task is specifically waiting for continuation approval.
+
+Do NOT globally interpret every "yes" as continuation.
+
+Only interpret it this way when:
+
+- there is a current unfinished task
+- it is explicitly awaiting continuation approval
+- there is no conflicting newer customer task/message
+
+Prefer using the same underlying continuation action as the Continue button.
+
+Do not implement two separate continuation systems.
+
+==================================================
+NEW CUSTOMER REQUEST WHILE CONTINUE IS OFFERED
+==================================================
+
+This is important.
+
+If BuildCustom is asking:
+
+"Continue working?"
+
+and instead the customer sends a NEW substantive instruction such as:
+
+"Actually forget that, add a settings page instead."
+
+Do NOT automatically continue the old task.
+
+Treat the new substantive customer instruction according to the existing
+new-message/task behavior.
+
+The old task should no longer silently consume work sessions.
+
+Preserve its history.
+
+==================================================
+FRESH OPERATION ACCOUNTING
+==================================================
+
+For each USER-APPROVED continuation operation initialize fresh:
+
+credits used = 0
+
+Think turns used = 0
+
+internal continuations used = 0
+
+operation elapsed timer = now
+
+operation-scoped model/tool counters = fresh
+
+operation terminal/resource-limit reason = none
+
+But preserve TASK-level information including:
+
+- original intent
+- task identity
+- prior operation history
+- progress
+- current workspace
+- current revision
+- relevant verification state
+- conversation context
+
+Do not accidentally reset the task itself.
+
+==================================================
+LIMIT LOOP
+==================================================
+
+This may happen repeatedly.
+
+Operation O1 reaches boundary.
+
+Continue?
+
+Customer approves.
+
+O2 reaches boundary.
+
+Continue?
+
+Customer approves.
+
+O3 completes.
+
+Build complete.
+
+That is valid.
+
+Do NOT impose an arbitrary task-wide number of customer-approved work sessions
+unless the platform already has a deliberate account-level usage/billing limit.
+
+Any real account-level billing/usage restriction should remain separate from
+these per-operation autonomous-work limits.
+
+Do not bypass genuine account billing restrictions.
+
+==================================================
+INTERNAL STATUS VS CUSTOMER STATUS
+==================================================
+
+Preserve detailed internal lifecycle reasons.
+
+For diagnostics we still want to know:
+
+INCOMPLETE_RESOURCE_LIMIT
+continuation_budget_exhausted
+available_credits_limit
+elapsed_time_limit
+etc.
+
+But map them into appropriate customer-facing states.
+
+Example:
+
+Internal:
+INCOMPLETE_RESOURCE_LIMIT
+continuation_budget_exhausted
+
+Customer:
+CONTINUE_AVAILABLE
+
+Internal:
+USER_INPUT_REQUIRED
+
+Customer:
+NEEDS_INPUT
+
+Internal:
+SUCCESS / verified completion
+
+Customer:
+BUILD_COMPLETE
+
+Do not destroy diagnostic fidelity merely to simplify the UI.
+
+==================================================
+TESTS
+==================================================
+
+Add focused tests.
+
+TEST 1 — CONTINUATION BUDGET EXHAUSTED
+
+Task T1
+Operation O1 reaches internal continuation limit
+Task not complete
+
+Require:
+
+customer state = CONTINUE_AVAILABLE
+green Build complete = false
+internal reason preserved
+Continue button available
+
+--------------------------------------------------
+
+TEST 2 — USER CLICKS CONTINUE
+
+T1/O1 awaiting continuation
+
+customer clicks Continue
+
+Require:
+
+same task T1
+new operation O2
+same workspace
+same conversation
+same current revision
+progress preserved
+
+O2 receives fresh:
+
+credits
+turns
+continuations
+elapsed timer
+operation counters
+
+--------------------------------------------------
+
+TEST 3 — DOUBLE CLICK
+
+Customer clicks Continue twice.
+
+Require:
+
+only ONE next operation starts.
+
+--------------------------------------------------
+
+TEST 4 — AUTOMATIC INTERNAL CONTINUATION
+
+Inside O2, automatic Think continuation occurs.
+
+Require:
+
+still O2
+same counters accumulate
+no fresh budget
+
+--------------------------------------------------
+
+TEST 5 — SECOND USER-APPROVED CONTINUATION
+
+O2 reaches its boundary.
+
+Customer approves Continue again.
+
+Require:
+
+same T1
+new O3
+fresh bounded operation counters
+
+--------------------------------------------------
+
+TEST 6 — COMPLETION
+
+Agent actually completes and verification succeeds.
+
+Require:
+
+customer state = BUILD_COMPLETE
+Continue not offered
+green Build complete allowed
+
+--------------------------------------------------
+
+TEST 7 — NEEDS INPUT
+
+Agent requires actual customer information.
+
+Require:
+
+NEEDS_INPUT
+not Continue
+not Build complete
+
+--------------------------------------------------
+
+TEST 8 — NEW CUSTOMER DIRECTION
+
+Continue is offered for T1.
+
+Customer instead sends substantive new request.
+
+Require:
+
+old task does not silently continue
+new customer instruction handled by existing new-task/new-message semantics
+
+--------------------------------------------------
+
+TEST 9 — CONVERSATIONAL YES
+
+Continue is currently being offered.
+
+Customer sends:
+
+yes
+
+Require:
+
+same behavior as Continue button
+same task
+one new operation
+
+--------------------------------------------------
+
+TEST 10 — YES WITHOUT CONTINUE STATE
+
+No task is awaiting continuation.
+
+Customer says:
+
+yes
+
+Require:
+
+do NOT blindly start an old task.
+
+--------------------------------------------------
+
+TEST 11 — BLOCKED UI
+
+Supported lifecycle = BLOCKED.
+
+Require:
+
+green Build complete badge NOT displayed.
+
+--------------------------------------------------
+
+TEST 12 — RESOURCE REASON REDACTION
+
+Internal operation ends:
+
+continuation_budget_exhausted
+
+Normal customer UI must NOT expose raw internal reason.
+
+Diagnostic/status interfaces may retain it.
+
+--------------------------------------------------
+
+TEST 13 — WORKSPACE CONTINUITY
+
+Make edits in O1.
+
+Continue into O2.
+
+Require O2 sees and works from O1's latest files/revision.
+
+No rollback/reset.
+
+--------------------------------------------------
+
+TEST 14 — ORIGINAL TASK CONTINUITY
+
+O1 ends unfinished.
+
+Continue into O2.
+
+Require the agent understands the ORIGINAL unfinished task and progress without
+the customer having to restate the whole request.
+
+==================================================
+REGRESSIONS
+==================================================
+
+Preserve everything already proven:
+
+- normal new customer message starts fresh operation
+- automatic internal continuation shares one operation budget
+- duplicate customer delivery does not create duplicate operation
+- 25-step Think boundary behavior
+- 250-credit operation allowance
+- 5 Think turns
+- 4 internal continuations
+- 15-minute operation window
+- auth/ownership isolation
+- private preview
+- revisions
+- immutable publishing
+- release history
+
+Run relevant:
+
+task lifecycle tests
+operation tests
+continuation tests
+resource-limit tests
+conversation tests
+pending-chat tests
+owner/auth tests
+rendered controller/UI tests
+runtime suite
+control tests if touched
+typecheck
+build
+Worker dry-runs
+
+Run suites serially where necessary if the known parallel Worker test-pool
+storage issue appears.
+
+Do not mistake that known test-runner concurrency issue for a product
+regression if serial execution passes.
+
+==================================================
+CANONICAL SOURCE / DEPLOYMENT
+==================================================
+
+Current accepted canonical before this work:
+
+aaaa1749
+
+Current accepted runtime:
+
+2ce0e373
+
+Verify exact current values before changing anything.
+
+After implementation and passing tests:
+
+commit to canonical GitHub.
+
+Continue avoiding the unrelated marketing workflow if the existing safe
+CI-skip process remains appropriate.
+
+Do NOT make unrelated marketing changes.
+
+Deploy ONLY the BuildCustom component(s) actually required for this feature.
+
+If runtime changes:
+deploy runtime.
+
+If customer UI/control also necessarily changes:
+deploy only the necessary additional component.
+
+Do NOT deploy:
+
+gateway
+publisher
+generated Project 8 code
+marketing
+
+unless the implementation genuinely requires one of those components, in
+which case STOP and explain why before broadening deployment.
+
+Record rollback versions.
+
+==================================================
+PROJECT 8 — USE THE EXISTING UNFINISHED TASK
+==================================================
+
+After deployment, Project 8 becomes the acceptance test.
+
+DO NOT SEND THE NEW REPAIR MESSAGE WE HAD PLANNED.
+
+Do NOT create another customer task yet.
+
+The most recent Project 8 operation ended:
+
+INCOMPLETE_RESOURCE_LIMIT
+
+reason:
+
+continuation_budget_exhausted
+
+Its customer task remains unfinished.
+
+Known customer-visible unfinished items include:
+
+- /api/leads still fails
+- create returns 503 / does not persist
+- edit returns 503 / does not persist
+- note posting returns 503 / does not persist
+- Activity Timeline empty
+- Recent Activity not newest-first
+
+The previous operation nevertheless made substantial progress.
+
+==================================================
+PROJECT 8 ACCEPTANCE — CONTINUE STATE
+==================================================
+
+Open Project 8 normally as the customer.
+
+Expected customer experience:
+
+NOT:
+
+Build complete
+
+NOT:
+
+continuation_budget_exhausted
+
+NOT:
+
+insufficient credits
+
+NOT:
+
+insufficient turns
+
+Instead something equivalent to:
+
+"I made progress, but there's still more to finish."
+
+Show trustworthy completed/remaining work if available.
+
+Show:
+
+Continue
+
+Verify:
+
+- green Build complete is absent
+- Continue is available
+- chat remains usable
+- no new AI operation starts automatically
+
+==================================================
+CLICK CONTINUE ONCE
+==================================================
+
+Use the NORMAL customer-facing Continue action exactly once.
+
+Do not send another repair instruction.
+
+This should:
+
+- continue the SAME unfinished customer task
+- create a NEW bounded operation
+- preserve Project 8 workspace
+- preserve current revision
+- preserve all prior progress
+- preserve original task intent
+- initialize fresh operation counters
+
+Verify the new operation receives:
+
+credits used = 0 initially
+Think turns = 0 initially
+internal continuations = 0 initially
+fresh elapsed window
+
+Do not expose these counters in customer UI; verify through supported test or
+diagnostic evidence.
+
+==================================================
+LET PROJECT 8 AGENT WORK
+==================================================
+
+Now let BuildCustom work normally.
+
+Do NOT manually repair the CRM.
+
+Do NOT give technical hints.
+
+Do NOT edit generated source.
+
+Do NOT intervene on intermediate generated-app errors.
+
+Let the agent:
+
+inspect
+edit
+build
+preview
+test
+fix
+continue internally
+verify
+
+If this new work session reaches its bounded limit before finishing:
+
+EXPECTED PRODUCT RESULT:
+
+Continue is offered again.
+
+That is a PASS for the continuation mechanism.
+
+Do NOT manually send a new repair instruction.
+
+For this acceptance test, if Continue is offered again, click it ONCE more and
+verify a third operation begins for the same task with fresh bounded counters.
+
+Then let it work.
+
+We want to prove at least:
+
+unfinished task
+→ Continue
+→ fresh work session
+→ same task/progress
+
+and, if naturally needed:
+
+→ Continue again
+→ another fresh work session
+→ same task/progress
+
+==================================================
+WHEN PROJECT 8 CLAIMS BUILD COMPLETE
+==================================================
+
+Only when the customer UI genuinely reaches:
+
+Build complete
+
+perform the full private CRM verification.
+
+Verify:
+
+- /api/leads succeeds
+- 12 original leads load
+- dashboard correct
+- Five Newest correct
+- search works
+- ascending sort works
+- descending sort works
+- filtering works
+- lead details work
+- seven fields remain
+- existing notes work
+- posting a temporary note persists after refresh
+- Activity Timeline contains appropriate activity
+- Add Lead persists after refresh
+- editing temporary lead persists after refresh
+- delete temporary lead works
+- original 12 remain
+- Recent Activity populated
+- Recent Activity newest-first
+- lead name/activity type/date-time correct
+- no application-breaking console/API errors
+
+Use a uniquely named temporary test lead if needed.
+
+Clean it up.
+
+==================================================
+IF AGENT CLAIMS BUILD COMPLETE BUT APP FAILS
+==================================================
+
+If customer UI says:
+
+Build complete
+
+but verification shows the requested task is still materially broken:
+
+STOP.
+
+Return:
+
+FALSE COMPLETION
+
+Do NOT publish.
+
+That would be a meaningful product issue:
+
+our completion/verification gate allowed an unfinished task to become green
+Build complete.
+
+Do not manually fix the CRM.
+
+==================================================
+IF PRIVATE APP PASSES
+==================================================
+
+If Project 8 eventually reaches genuine Build complete AND the private CRM
+passes:
+
+STOP BEFORE PUBLISHING.
+
+For this task we are testing the new user-approved continuation behavior.
+
+Do not yet start:
+
+Publish Updates
+Hot Leads
+revert
+
+Report that Project 8 is ready for the next acceptance stage.
+
+We will authorize publish/change/revert separately after this continuation
+feature is proven.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+USER-APPROVED CONTINUATION PASS /
+FALSE COMPLETION /
+CONTINUATION IMPLEMENTATION FAILURE /
+PLATFORM FAILURE /
+TEST FAILURE /
+DEPLOYMENT FAILURE
+
+IMPLEMENTATION
+- task identity:
+- operation identity:
+- internal continuation behavior:
+- user-approved continuation behavior:
+- fresh operation accounting:
+- idempotency:
+- conversational continue:
+- new-direction behavior:
+- customer status mapping:
+- Build complete mapping:
+- Needs input mapping:
+- result:
+
+TESTS
+- continuation exhausted:
+- Continue click:
+- double click:
+- internal continuation:
+- second approved continuation:
+- completion:
+- needs input:
+- new direction:
+- conversational yes:
+- yes without pending continuation:
+- BLOCKED UI:
+- resource reason redaction:
+- workspace continuity:
+- original task continuity:
+- runtime:
+- control:
+- UI:
+- typecheck:
+- build:
+- dry-run:
+- result:
+
+SOURCE
+- previous canonical:
+- new canonical:
+- pushed:
+- marketing workflow triggered:
+- result:
+
+DEPLOYMENT
+- previous runtime:
+- new runtime:
+- control changed:
+- gateway changed:
+- publisher changed:
+- marketing changed:
+- rollback versions:
+- result:
+
+PROJECT 8 CONTINUATION UI
+- previous internal lifecycle:
+- customer-facing state:
+- Build complete shown:
+- internal reason exposed:
+- Continue shown:
+- chat usable:
+- automatic operation started:
+- result:
+
+PROJECT 8 CONTINUE #1
+- clicked:
+- same task:
+- new operation:
+- same workspace:
+- starting revision:
+- progress preserved:
+- fresh credits:
+- fresh turns:
+- fresh continuations:
+- fresh elapsed:
+- agent worked:
+- revisions created:
+- ending state:
+- result:
+
+PROJECT 8 CONTINUE #2
+- required:
+- clicked:
+- same task:
+- new operation:
+- progress preserved:
+- fresh bounded counters:
+- agent worked:
+- ending state:
+- result:
+
+PROJECT 8 FINAL
+- customer state:
+- final private revision:
+- /api/leads:
+- 12 leads:
+- persistence:
+- Activity Timeline:
+- Recent Activity:
+- newest-first:
+- full CRM verification:
+- false completion:
+- ready for publish-stage test:
+- result:
+
+PLATFORM CODE CHANGES:
+[list narrowly]
+
+MANUAL PROJECT 8 SOURCE EDITS:
+MUST BE ZERO
+
+NEW PROJECT 8 CUSTOMER REPAIR INSTRUCTIONS:
+MUST BE ZERO
+
+PROJECT 8 PUBLISH ACTIONS:
+MUST BE ZERO
+
+HOT LEADS:
+MUST NOT START
+
+REVERT:
+MUST NOT START
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

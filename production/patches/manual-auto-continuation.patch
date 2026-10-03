@@ -1,0 +1,345 @@
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index b0db6e8..4a27c8b 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -1,4 +1,5 @@
+ import { RpcTarget } from 'cloudflare:workers';
++import { checkUsageAndBalance } from '../../../services/rate-limit';
+ import { ThinkStreamForwarder } from '../../think/stream-forwarder';
+ import { projectNativeTaskLifecycle } from '../../think/task-lifecycle-status';
+ import {
+@@ -61,6 +62,7 @@ configureOperationLimits: (limits: NonNullable<ThinkAgentConfig['operationLimits
+ 	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
+ beginTask: (taskId: string, candidateConversationId: string, originalIntent?: string) => Promise<ThinkTaskOperation>;
+ approveTaskContinuation: (approval: ThinkContinuationApproval) => Promise<{ operationId: string; alreadyStarted: boolean }>;
++setTaskAutoContinue: (taskId: string, enabled: boolean) => Promise<NonNullable<ThinkTaskLifecycle['autoContinue']>>;
+ 	getTaskLifecycle: () => Promise<ThinkTaskLifecycle>;
+ 	getTaskOperation: () => Promise<ThinkTaskOperation | undefined>;
+ getTaskLifecycleSnapshot: () => Promise<{ lifecycle: ThinkTaskLifecycle; operation?: ThinkTaskOperation }>;
+@@ -476,6 +478,60 @@ approvalReady: this.state.pendingUserInputs.length === 0 && !this.isCodeGenerati
+ 		};
+ 	}
+ 
++async setTaskAutoContinue(taskId: string, enabled: boolean) {
++const stub = await this.getThinkStub();
++const preference = await stub.setTaskAutoContinue(taskId, enabled);
++this.broadcast('auto_continue_updated' as WebSocketMessageResponses, { preference });
++if (enabled && !this.isCodeGenerating()) await this.continueAutomatically();
++return preference;
++}
++
++async disableTaskAutoContinue(): Promise<void> {
++const stub = await this.getThinkStub();
++const operation = await stub.getTaskOperation();
++if (operation) await stub.setTaskAutoContinue(continuationTaskId(operation), false);
++}
++
++/** Same native reservation and durable host queue as manual Continue. */
++private async continueAutomatically(): Promise<void> {
++if (this.state.pendingUserInputs.length > 0) return;
++const stub = await this.getThinkStub();
++const operation = await stub.getTaskOperation();
++const lifecycle = await stub.getTaskLifecycle();
++const preference = lifecycle.autoContinue;
++if (!operation || !preference?.enabled || preference.taskId !== continuationTaskId(operation)
++|| customerTaskStatus(lifecycle) !== 'CONTINUE_AVAILABLE') return;
++try {
++const userId = this.state.metadata.userId;
++if (!userId) throw new Error('Please sign in before continuing.');
++const admission = await checkUsageAndBalance(this.env, userId, undefined,
++this.state.cloudflareToken || null, this.state.wsOrigin || undefined);
++if (admission.refreshedBlob) {
++this.setState({ ...this.state, cloudflareToken: admission.refreshedBlob });
++}
++if (!admission.allowed) throw new Error('Your account cannot start more work right now. Check your available usage before continuing.');
++// A new customer message may have arrived during admission.
++if (this.state.pendingUserInputs.length > 0) return;
++const accepted = await stub.approveTaskContinuation({
++taskId: preference.taskId, operationId: operation.taskId,
++source: 'auto', preauthorizationVersion: preference.version,
++});
++const latest = await stub.getTaskLifecycle();
++if (this.state.pendingUserInputs.length > 0 || accepted.alreadyStarted
++|| !latest.autoContinue?.enabled || latest.autoContinue.version !== preference.version
++|| latest.autoContinue.taskId !== preference.taskId) return;
++this.setThinkPendingInputs([APPROVED_CONTINUATION_PROMPT], [accepted.operationId]);
++} catch (error) {
++// Turning Off is an expected stop, not a platform error.
++const latest = await stub.getTaskLifecycle();
++if (!latest.autoContinue?.enabled || latest.autoContinue.version !== preference.version) return;
++await stub.setTaskAutoContinue(preference.taskId, false);
++this.broadcast(WebSocketMessageResponses.ERROR, {
++error: error instanceof Error ? error.message : 'Auto Continue stopped. Please try continuing manually.',
++});
++}
++}
++
+ async handleUserInput(userMessage: string, images?: ImageAttachment[], approval?: ThinkContinuationApproval): Promise<void> {
+ if (approval && (!isConversationalContinuation(userMessage) || images?.length)) {
+ throw new Error('Send a new instruction separately from the Continue action.');
+@@ -509,6 +565,15 @@ return;
+ }
+ }
+ 		let processedImages: ProcessedImageAttachment[] | undefined;
++// New explicit direction supersedes the old task's standing authorization.
++const stub = await this.getThinkStub();
++const previous = await stub.getTaskOperation();
++if (previous) await stub.setTaskAutoContinue(continuationTaskId(previous), false);
++// Discard unstarted approved queue entries, never interrupt an active tool.
++const preserved = this.state.pendingUserInputs.map((message, i) => ({
++message, id: this.getPendingTaskQueueIds()[i],
++})).filter((item, i) => !item.id?.startsWith('think-approved:') || (i === 0 && this.isCodeGenerating()));
++this.setThinkPendingInputs(preserved.map(item => item.message), preserved.map(item => item.id));
+ 		if (images && images.length > 0) {
+ 			processedImages = await Promise.all(
+ 				images.map((image) => uploadImage(this.env, image, ImageType.UPLOADS)),
+@@ -556,6 +621,14 @@ const taskId = queueIds[0]?.startsWith('think-approved:')
+ 			try {
+ 				await this.runPrompt(compiled, taskId);
+ 			} catch (e) {
++if (e instanceof Error && e.message === 'Auto Continue is no longer enabled for this task.') {
++const index = this.getPendingTaskQueueIds().indexOf(taskId);
++if (index >= 0) this.setThinkPendingInputs(
++this.state.pendingUserInputs.filter((_, i) => i !== index),
++this.getPendingTaskQueueIds().filter((_, i) => i !== index),
++);
++continue;
++}
+ 				this.logger.error('Think prompt failed', e);
+ 				this.broadcast(WebSocketMessageResponses.ERROR, {
+ 					error: e instanceof Error ? e.message : String(e),
+@@ -571,6 +644,7 @@ const taskId = queueIds[0]?.startsWith('think-approved:')
+ 				this.state.pendingUserInputs.slice(pending.length),
+ 				this.getPendingTaskQueueIds().slice(pending.length),
+ 			);
++await this.continueAutomatically();
+ 
+ 			if (!this.isMVPGenerated()) {
+ 				this.setMVPGenerated();
+diff --git a/worker/agents/core/codingAgent.ts b/worker/agents/core/codingAgent.ts
+index f9c436a..fe08e87 100644
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -674,6 +674,16 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+             this.broadcastError('Error processing user input', error);
+         }
+     }
++
++    async setTaskAutoContinue(taskId: string, enabled: boolean): Promise<void> {
++        if (!(this.behavior instanceof ThinkCodingBehavior)) throw new Error('Auto Continue is not available for this project.');
++        await this.behavior.setTaskAutoContinue(taskId, enabled);
++        if (!this.behavior.isCodeGenerating() && this.state.pendingUserInputs.length > 0) {
++            this.behavior.generateAllFiles().catch(error => {
++                this.logger().error('Auto Continue could not start', error);
++            });
++        }
++    }
+     // ==========================================
+     // WebSocket Management
+     // ==========================================
+diff --git a/worker/agents/core/websocket.ts b/worker/agents/core/websocket.ts
+index 3250b3c..1b723ea 100644
+--- a/worker/agents/core/websocket.ts
++++ b/worker/agents/core/websocket.ts
+@@ -40,6 +40,14 @@ export async function handleWebSocketMessage(
+         const parsedMessage = JSON.parse(message) as IncomingWebSocketMessage;
+ 
+         switch (parsedMessage.type) {
++            case 'set_auto_continue':
++                if (typeof (parsedMessage as any).taskId !== 'string'
++                    || typeof (parsedMessage as any).enabled !== 'boolean') {
++                    sendError(connection, 'This Auto Continue request is not valid.');
++                    return;
++                }
++                await (agent as any).setTaskAutoContinue((parsedMessage as any).taskId, (parsedMessage as any).enabled);
++                break;
+             case WebSocketMessageRequests.SESSION_INIT: {
+                 // const credentials = parsedMessage.credentials as CredentialsPayload | undefined;
+                 // agent.getBehavior().setRuntimeOverrides(credentialsToRuntimeOverrides(credentials));
+@@ -167,6 +175,9 @@ export async function handleWebSocketMessage(
+                 break;
+             case WebSocketMessageRequests.STOP_GENERATION: {
+                 logger.info('User requested to stop generation');
++                if (agent.getBehavior().getBehavior() === 'think') {
++                    await (agent.getBehavior() as any).disableTaskAutoContinue();
++                }
+                 
+                 // Cancel current inference operation
+                 const wasCancelled = agent.getBehavior().cancelCurrentInference();
+diff --git a/worker/agents/think/ThinkAgent.ts b/worker/agents/think/ThinkAgent.ts
+index df01e95..8e6978c 100644
+--- a/worker/agents/think/ThinkAgent.ts
++++ b/worker/agents/think/ThinkAgent.ts
+@@ -986,6 +986,28 @@ if (config && isCloudflareGatewayLimitsEnabled(this.env)) {
+ 		} as unknown as ToolSet;
+ 	}
+ 
++async setTaskAutoContinue(taskId: string, enabled: boolean) {
++const operation = await this.getTaskOperation();
++if (!operation || continuationTaskId(operation) !== taskId || typeof enabled !== 'boolean') {
++throw new Error('This task is no longer available.');
++}
++const current = this.ctx.storage.kv.get<NonNullable<ThinkTaskLifecycle['autoContinue']>>('think_auto_continue');
++if (current?.taskId === taskId && current.enabled === enabled) return current;
++const preference = { taskId, enabled, version: (current?.version ?? 0) + 1, changedAt: Date.now() };
++this.ctx.storage.kv.put('think_auto_continue', preference);
++this.ctx.storage.kv.put(`think_auto_continue_audit:${taskId}:${preference.version}`, preference);
++return preference;
++}
++
++private assertAutoAuthorization(approval: ThinkContinuationApproval): void {
++if (approval.source !== 'auto') return;
++const preference = this.ctx.storage.kv.get<NonNullable<ThinkTaskLifecycle['autoContinue']>>('think_auto_continue');
++if (!preference?.enabled || preference.taskId !== approval.taskId
++|| preference.version !== approval.preauthorizationVersion) {
++throw new Error('Auto Continue is no longer enabled for this task.');
++}
++}
++
+ async approveTaskContinuation(approval: ThinkContinuationApproval): Promise<{
+ operationId: string; alreadyStarted: boolean;
+ }> {
+@@ -1000,8 +1022,14 @@ throw new Error('This task is no longer available to continue.');
+ return operation;
+ };
+ let current = readCurrent();
++this.assertAutoAuthorization(approval);
+ let receipt = this.ctx.storage.kv.get<{ operationId: string }>(key);
+-if (receipt) return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++if (receipt) {
++if (approval.source !== 'auto' && current.taskId === approval.operationId) {
++this.ctx.storage.kv.put(key, { ...receipt, source: 'manual', approvedAt: Date.now() });
++}
++return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++}
+ assertContinuationApproval(current, await this.getTaskLifecycle(), approval);
+ const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
+ JSON.stringify([approval.taskId, approval.operationId]),
+@@ -1009,13 +1037,23 @@ JSON.stringify([approval.taskId, approval.operationId]),
+ const operationId = 'think-approved:' + Array.from(new Uint8Array(digest))
+ .map(byte => byte.toString(16).padStart(2, '0')).join('');
+ current = readCurrent();
+-receipt = this.ctx.storage.kv.get<{ operationId: string }>(key);
+-if (receipt) return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++this.assertAutoAuthorization(approval);
++receipt = this.ctx.storage.kv.get<{ operationId: string; source?: string; started?: boolean }>(key);
++if (receipt) {
++if (approval.source !== 'auto' && receipt.source === 'auto' && !receipt.started) {
++this.ctx.storage.kv.put(key, { ...receipt, source: 'manual', manualApprovedAt: Date.now() });
++}
++return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++}
+ const lifecycle = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey);
+ if (!lifecycle) throw new Error('This task is not ready to continue.');
+ assertContinuationApproval(current, lifecycle, approval);
+ this.ctx.storage.kv.put(`think_approved_start:${operationId}`, current);
+-this.ctx.storage.kv.put(key, { operationId });
++this.ctx.storage.kv.put(key, {
++operationId, taskId: approval.taskId, parentOperationId: approval.operationId,
++source: approval.source ?? 'manual', approvedAt: Date.now(),
++...(approval.source === 'auto' ? { preauthorizationVersion: approval.preauthorizationVersion } : {}),
++});
+ return { operationId, alreadyStarted: false };
+ }
+ 
+@@ -1059,6 +1097,15 @@ if (evidence) this.ctx.storage.kv.put(`think_completed_evidence:${existingOperat
+ }
+ const approvedParent = this.ctx.storage.kv.get<ThinkTaskOperation>(`think_approved_start:${taskId}`);
+ if (approvedParent) {
++const approvalReceipt = this.ctx.storage.kv.get<ThinkContinuationApproval>(
++`think_customer_approval:${approvedParent.taskId}`,
++);
++if (approvalReceipt?.source === 'auto') {
++this.assertAutoAuthorization({
++taskId: continuationTaskId(approvedParent), operationId: approvedParent.taskId,
++source: 'auto', preauthorizationVersion: approvalReceipt.preauthorizationVersion,
++});
++}
+ if (!existingOperation || existingOperation.taskId !== approvedParent.taskId) {
+ throw new Error('A newer customer request replaced this continuation.');
+ }
+@@ -1097,6 +1144,14 @@ customerTaskId: taskId,
+ 			// starting; later concrete tool outcomes establish the progress state.
+ 		}
+ 		// Persist an explicit start intent before changing the terminal lifecycle.
++if (approvedParent) {
++const approvalReceipt = this.ctx.storage.kv.get<ThinkContinuationApproval>(
++`think_customer_approval:${approvedParent.taskId}`);
++if (approvalReceipt?.source === 'auto') this.assertAutoAuthorization({
++taskId: continuationTaskId(approvedParent), operationId: approvedParent.taskId,
++source: 'auto', preauthorizationVersion: approvalReceipt.preauthorizationVersion,
++});
++}
+ 		// On recovery, a matching intent prevents an old terminal status from
+ 		// acknowledging this new queue item if the worker stopped mid-initialization.
+ 		this.putTaskDiagnostic(this.taskStartIntentKey, taskId);
+@@ -1129,11 +1184,18 @@ customerTaskId: taskId,
+ 	}
+ 
+ 	async getTaskLifecycle(): Promise<ThinkTaskLifecycle> {
+-		return this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey) ?? {
++const lifecycle = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey) ?? {
+ 			status: 'RUNNING',
+ 			summary: 'Task is in progress.',
+ 			updatedAt: Date.now(),
+ 		};
++const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++const preference = this.ctx.storage.kv.get<NonNullable<ThinkTaskLifecycle['autoContinue']>>('think_auto_continue');
++return {
++...lifecycle,
++...(operation ? { autoContinue: preference?.taskId === continuationTaskId(operation) ? preference
++: { taskId: continuationTaskId(operation), enabled: false, version: 0, changedAt: 0 } } : {}),
++};
+ 	}
+ 
+ 	async getTaskOperation(): Promise<ThinkTaskOperation | undefined> {
+@@ -1144,9 +1206,7 @@ async getTaskLifecycleSnapshot(): Promise<{
+ lifecycle: ThinkTaskLifecycle; operation?: ThinkTaskOperation;
+ }> {
+ return {
+-lifecycle: this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey) ?? {
+-status: 'RUNNING', summary: 'Task is in progress.', updatedAt: Date.now(),
+-},
++lifecycle: await this.getTaskLifecycle(),
+ operation: this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey),
+ };
+ }
+diff --git a/worker/agents/think/finish-task-tool.ts b/worker/agents/think/finish-task-tool.ts
+index 84856d8..2b59dbd 100644
+--- a/worker/agents/think/finish-task-tool.ts
++++ b/worker/agents/think/finish-task-tool.ts
+@@ -15,6 +15,7 @@ export interface ThinkTaskLifecycle {
+ 	summary: string;
+ 	reason?: string;
+ 	updatedAt: number;
++autoContinue?: { taskId: string; enabled: boolean; version: number; changedAt: number };
+ }
+ 
+ export interface ThinkTaskEvidence {
+diff --git a/worker/agents/think/task-lifecycle-status.ts b/worker/agents/think/task-lifecycle-status.ts
+index 1f0a4a2..1dc89fe 100644
+--- a/worker/agents/think/task-lifecycle-status.ts
++++ b/worker/agents/think/task-lifecycle-status.ts
+@@ -16,6 +16,8 @@ export function projectNativeTaskLifecycle(lifecycle: ThinkTaskLifecycle, operat
+ 		status: lifecycle.status,
+ 		updatedAt: lifecycle.updatedAt,
+ customerStatus: customerTaskStatus(lifecycle),
++...(lifecycle.autoContinue && operation && lifecycle.autoContinue.taskId === continuationTaskId(operation)
++? { autoContinue: lifecycle.autoContinue } : {}),
+ ...(operation ? {
+ taskId: continuationTaskId(operation),
+ operationId: operation.taskId,
+diff --git a/worker/agents/think/user-approved-continuation.ts b/worker/agents/think/user-approved-continuation.ts
+index 94b7795..657fadb 100644
+--- a/worker/agents/think/user-approved-continuation.ts
++++ b/worker/agents/think/user-approved-continuation.ts
+@@ -8,6 +8,9 @@ import { THINK_INTERNAL_CONTINUATION_PREFIX } from './context-selector';
+ export interface ThinkContinuationApproval {
+ taskId: string;
+ operationId: string;
++/** Set by the authenticated host, never accepted from customer approval frames. */
++source?: 'manual' | 'auto';
++preauthorizationVersion?: number;
+ }
+ 
+ export type CustomerTaskStatus =

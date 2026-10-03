@@ -1,0 +1,670 @@
+Resume the continuation fix from the existing workspace after the Replit
+workspace restart.
+
+DO NOT START OVER.
+
+DO NOT redesign or reimplement the continuation system unless the existing
+changes were genuinely lost.
+
+DO NOT send another Project 8 customer instruction.
+
+DO NOT click Project 8 Continue until the candidate is fully recovered,
+verified, committed and deployed.
+
+Do NOT manually edit Project 8 generated source.
+
+Do NOT change resource limits.
+
+Do NOT change gateway, publisher or marketing.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+KNOWN ROOT CAUSE — ACCEPT THIS
+==================================================
+
+The live manual Continue failure was diagnosed before the workspace restart.
+
+The first divergence was FRONTEND ordering.
+
+On the real customer connection, the first agent_connected frame contains the
+EXHAUSTED PARENT operation's Continue-available lifecycle state.
+
+The editor incorrectly treated that parent lifecycle state as the conclusion
+of the newly requested continuation and closed the socket BEFORE sending the
+continuation approval.
+
+Live evidence showed:
+
+ZERO outgoing approval frames.
+
+Therefore:
+
+- backend never received the approval
+- no new bounded operation could be created
+- old counters remained
+- old operation remained authoritative
+
+The UI also displayed Working optimistically before authoritative acceptance.
+
+Automated tests missed the defect because their connection fixture did not
+include the exhausted parent lifecycle state present in the real handshake.
+
+Do NOT reopen root-cause investigation unless recovered code/tests contradict
+this evidence.
+
+==================================================
+CANDIDATE FIX ALREADY IMPLEMENTED
+==================================================
+
+Before the workspace restart, the candidate had already been changed so:
+
+1. Manual Continue sends the approval despite receiving the exhausted parent's
+   lifecycle state in the initial handshake.
+
+2. The editor does NOT show Working merely because Continue was clicked.
+
+3. Working waits for authoritative evidence of the NEW operation.
+
+4. A regression test reproduces the real parent-lifecycle handshake.
+
+5. Task-scoped Auto Continue was added.
+
+6. Auto Continue defaults OFF.
+
+7. Auto Continue uses the SAME reservation/queue/continuation transition as
+   manual Continue.
+
+8. Account admission is checked before each automatic bounded session.
+
+9. A new substantive customer instruction revokes the old task's Auto Continue
+   authorization.
+
+10. Stop revokes Auto Continue.
+
+Targeted control, ownership and native continuation tests had passed.
+
+Worker regressions had passed.
+
+The restart occurred while finishing source reconstruction/release parity and
+before deployment.
+
+NO candidate deployment occurred.
+
+NO additional Project 8 Continue click occurred.
+
+==================================================
+STEP 1 — RECOVER THE EXISTING CANDIDATE
+==================================================
+
+Inspect the current workspace.
+
+Determine whether the pre-restart candidate changes still exist.
+
+Compare them against accepted canonical:
+
+208f97099ae297d3d205fec0e813ae87427e6269
+
+Do not blindly regenerate files.
+
+If the candidate changes are still present:
+
+continue from them.
+
+If only test logs/session state were lost:
+
+rerun tests.
+
+If some uncommitted candidate files were actually lost:
+
+reconstruct ONLY the already-described continuation changes from available
+workspace/Git evidence.
+
+Do not introduce unrelated changes.
+
+Before proceeding, report internally/record:
+
+- candidate files recovered
+- candidate diff understood
+- no unrelated source changes
+- accepted production remains unchanged
+
+==================================================
+STEP 2 — RERUN THE LOST VERIFICATION
+==================================================
+
+Rerun the relevant verification that was lost during restart.
+
+At minimum:
+
+- real-handshake manual Continue regression
+- rendered-browser continuation tests
+- Auto Continue tests
+- ownership/auth tests
+- queue/idempotency tests
+- runtime continuation tests
+- control/root tests
+- Worker regressions
+- typecheck
+- frontend build
+- runtime build
+- Worker dry-runs
+- source reconstruction
+- release parity/module audit
+
+Use serial execution if the known parallel Worker storage/test-pool issue
+appears.
+
+The critical regression MUST include:
+
+Continue available
+→ customer clicks Continue
+→ real initial agent_connected frame contains exhausted parent lifecycle
+→ socket remains alive long enough to SEND approval
+→ approval reaches server
+→ NEW operation becomes authoritative
+→ only then UI becomes Working
+
+Require an outgoing approval frame.
+
+==================================================
+AUTO CONTINUE VERIFICATION
+==================================================
+
+Verify:
+
+DEFAULT
+
+New task:
+Auto Continue OFF.
+
+MANUAL
+
+Auto Continue OFF:
+continuation boundary waits for customer.
+
+AUTO
+
+Auto Continue ON:
+continuation boundary uses the SAME secure continuation transition and creates
+exactly one fresh bounded operation without requiring the click.
+
+REPEATED AUTO
+
+If another bounded session reaches its continuation boundary:
+exactly one additional operation is created.
+
+STOP CONDITIONS
+
+Auto Continue must NOT continue through:
+
+- Build complete
+- Needs Input
+- customer Stop
+- auth/ownership failure
+- real platform failure
+- genuine account-level usage/billing restriction
+
+DISABLE
+
+If user disables Auto Continue during active work:
+current operation remains safe;
+next boundary waits for manual Continue.
+
+NEW DIRECTION
+
+If customer sends a new substantive instruction:
+old task Auto Continue authorization is revoked.
+
+RACES
+
+Manual Continue and Auto Continue at the same boundary:
+exactly ONE next operation.
+
+Duplicate automatic event:
+exactly ONE next operation.
+
+REFRESH
+
+Task-level Auto Continue preference survives normal refresh/reopen.
+
+==================================================
+RESOURCE MODEL MUST REMAIN UNCHANGED
+==================================================
+
+Each bounded operation remains:
+
+25 steps per Think pass
+5 Think turns
+4 internal continuations
+250 credits
+900000 ms
+
+Auto Continue does NOT increase these.
+
+Auto Continue simply pre-authorizes another bounded operation when the current
+one reaches an eligible continuation boundary.
+
+Every new operation gets fresh operation-scoped accounting.
+
+Real account-level usage/billing limits remain authoritative.
+
+==================================================
+STEP 3 — CANONICAL SOURCE
+==================================================
+
+Only after all required verification passes:
+
+commit the recovered candidate to canonical GitHub main.
+
+Do not force push.
+
+Avoid triggering the unrelated marketing workflow using the existing safe
+process if still applicable.
+
+Record:
+
+previous canonical
+new canonical
+exact changed files
+test evidence
+
+==================================================
+STEP 4 — DEPLOY
+==================================================
+
+Deploy ONLY components actually changed by this candidate.
+
+Expected:
+
+runtime and/or control/UI.
+
+Do NOT deploy:
+
+gateway
+publisher
+marketing
+
+unless the recovered diff proves one is genuinely required.
+
+Preserve bindings/modules/assets exactly.
+
+Run inactive candidate/release parity checks before activation as previously
+done.
+
+Record rollback versions.
+
+==================================================
+STEP 5 — RECOVER CUSTOMER SESSION
+==================================================
+
+After deployment, reopen Project 8 through the normal customer path.
+
+Do not manipulate lifecycle state.
+
+Do not manually reset anything.
+
+Do not send another customer instruction.
+
+The existing task should still be at its unfinished continuation boundary.
+
+If the old browser session was lost, normal customer login/reopen is allowed.
+
+Require the server-authoritative state to show:
+
+Continue available.
+
+If Project 8 is no longer at that state for some unexpected reason:
+
+STOP and report the actual state.
+
+Do not manufacture the boundary.
+
+==================================================
+STEP 6 — LIVE MANUAL CONTINUE TEST
+==================================================
+
+Before clicking, record:
+
+task identity
+current operation identity
+operation start time
+credits used
+Think turns used
+internal continuations used
+current revision
+workspace identity
+
+Then click:
+
+Continue
+
+EXACTLY ONCE.
+
+Verify the ACTUAL customer path.
+
+Require:
+
+1. approval frame is sent
+
+2. server receives approval
+
+3. same task identity
+
+4. exactly ONE new operation
+
+5. NEW operation identity
+
+6. NEW operation start time
+
+7. same workspace
+
+8. same starting revision/progress
+
+9. fresh bounded operation accounting
+
+10. agent begins working
+
+11. Working appears only after authoritative new-operation acceptance
+
+12. refresh shows the NEW operation, not the exhausted parent
+
+Do not require counters to remain literally zero because the agent may begin
+using them immediately.
+
+Prove they belong to a freshly initialized new operation.
+
+If this fails:
+
+STOP.
+
+Do not click again.
+
+Do not patch again in the same run.
+
+Return the exact failure evidence.
+
+==================================================
+STEP 7 — AUTO CONTINUE LIVE TEST
+==================================================
+
+Only after manual Continue is live-proven:
+
+Turn Auto Continue ON for the CURRENT Project 8 task.
+
+Verify the task-level preference is authoritatively saved.
+
+Then leave the agent alone.
+
+Do NOT create artificial work.
+
+Do NOT intentionally exhaust resources.
+
+If the resumed operation NATURALLY reaches another unfinished continuation
+boundary:
+
+require Auto Continue to:
+
+- recognize the eligible boundary
+- record automatic approval
+- create exactly ONE new bounded operation
+- preserve same task/workspace/progress
+- initialize fresh operation accounting
+- continue without customer click
+
+If Project 8 finishes before another boundary:
+
+that is acceptable.
+
+Do not manufacture another boundary merely to live-test Auto Continue.
+
+Automated coverage is sufficient if the CRM naturally completes first.
+
+==================================================
+STEP 8 — IF BUILD COMPLETE
+==================================================
+
+If Project 8 reaches genuine Build complete, run the full private CRM
+acceptance.
+
+Verify:
+
+- /api/leads succeeds
+- original 12 leads load
+- dashboard correct
+- Five Newest populated correctly
+- search
+- ascending sort
+- descending sort
+- status filter
+- lead details
+- seven expected fields
+- existing notes
+- Activity Timeline populated
+
+Then create ONE uniquely named temporary lead.
+
+Verify:
+
+CREATE
+- request succeeds
+- appears
+- refresh
+- still exists
+
+EDIT
+- edit succeeds
+- refresh
+- edit persists
+
+NOTE
+- note succeeds
+- refresh
+- note persists
+- Activity Timeline reflects it
+
+DELETE
+- delete succeeds
+- refresh
+- temporary lead remains gone
+
+Verify original 12 remain intact.
+
+RECENT ACTIVITY
+- populated
+- newest-first
+- correct lead
+- activity type
+- date/time
+
+CONSOLE/NETWORK
+- no application-breaking CRM API failures
+
+Clean up temporary test data.
+
+If Build complete is shown but these materially fail:
+
+FALSE COMPLETION.
+
+Do not publish.
+
+If everything passes:
+
+READY FOR PUBLISH TEST.
+
+==================================================
+DO NOT PUBLISH YET
+==================================================
+
+Even if Project 8 passes:
+
+DO NOT publish.
+
+DO NOT start Hot Leads.
+
+DO NOT test revert.
+
+We will do:
+
+publish
+→ Hot Leads change
+→ publish
+→ revert
+→ continue editing
+
+as the next acceptance stage.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+READY FOR PUBLISH TEST /
+MANUAL CONTINUE LIVE PASS /
+AUTO CONTINUE LIVE PASS /
+CONTINUATION STILL FAILS /
+FALSE COMPLETION /
+RECOVERY FAILURE /
+TEST FAILURE /
+DEPLOYMENT FAILURE
+
+RECOVERY
+- candidate survived restart:
+- files recovered:
+- unrelated changes:
+- previous production untouched:
+- result:
+
+ROOT CAUSE
+- accepted diagnosis:
+- outgoing approval before fix:
+- regression reproduces:
+- result:
+
+FIX
+- manual Continue ordering:
+- authoritative Working state:
+- Auto Continue:
+- default:
+- task scope:
+- shared continuation transition:
+- account admission:
+- Stop/new-direction behavior:
+- result:
+
+TESTS
+- real handshake regression:
+- outgoing approval:
+- authoritative operation:
+- rendered browser:
+- Auto Continue OFF:
+- Auto Continue ON:
+- repeated auto:
+- disable:
+- Needs Input:
+- account restriction:
+- new direction:
+- manual/auto race:
+- duplicate event:
+- refresh persistence:
+- ownership:
+- idempotency:
+- runtime:
+- control:
+- Worker:
+- typecheck:
+- builds:
+- dry-runs:
+- source reconstruction:
+- release parity:
+- result:
+
+SOURCE
+- previous canonical:
+- new canonical:
+- pushed:
+- marketing workflow:
+- result:
+
+DEPLOYMENT
+- previous runtime:
+- new runtime:
+- previous control:
+- new control:
+- gateway changed:
+- publisher changed:
+- marketing changed:
+- rollback:
+- result:
+
+PROJECT 8 BEFORE CONTINUE
+- task:
+- operation:
+- start:
+- credits:
+- turns:
+- continuations:
+- revision:
+- workspace:
+
+PROJECT 8 MANUAL CONTINUE
+- clicked:
+- approval frame sent:
+- approval received:
+- same task:
+- new operation:
+- new start:
+- same workspace:
+- same starting revision:
+- fresh accounting:
+- authoritative Working:
+- agent worked:
+- refresh shows new operation:
+- result:
+
+PROJECT 8 AUTO CONTINUE
+- enabled:
+- preference persisted:
+- natural second boundary reached:
+- auto approval:
+- new operation:
+- same task/workspace:
+- fresh accounting:
+- agent continued:
+- result:
+
+PROJECT 8 FINAL
+- lifecycle:
+- revision:
+- Build complete:
+- CRM verification:
+- false completion:
+- ready for publish:
+
+RESOURCE LIMITS CHANGED:
+MUST BE NO
+
+MANUAL PROJECT 8 SOURCE EDITS:
+MUST BE ZERO
+
+NEW PROJECT 8 CUSTOMER INSTRUCTIONS:
+MUST BE ZERO
+
+PROJECT 8 PUBLISH:
+MUST BE NO
+
+HOT LEADS:
+MUST NOT START
+
+REVERT:
+MUST NOT START
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

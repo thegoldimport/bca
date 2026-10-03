@@ -1,0 +1,27 @@
+{
+  "path": "/app/editor/8",
+  "httpStatus": 200,
+  "nativeTaskLifecycle": {
+    "status": "BLOCKED",
+    "updatedAt": 1790982667743,
+    "taskId": "think-queue:conv-1790982128359-m6y5v3z",
+    "operationId": "think-queue:conv-1790982128359-m6y5v3z",
+    "customerStatus": "STOPPED",
+    "accounting": {
+      "startedAt": 1790982128535,
+      "creditsUsed": 192,
+      "turnsUsed": 5,
+      "continuationsUsed": 4,
+      "modelCalls": 96,
+      "toolCalls": 91
+    }
+  },
+  "shouldBeGenerating": false,
+  "nativeBuildCompleteShown": false,
+  "continueShown": false,
+  "chatUsable": true,
+  "publishClicked": false,
+  "repairMessagesSent": 0,
+  "internalReasonExposed": false,
+  "taskUi": []
+}

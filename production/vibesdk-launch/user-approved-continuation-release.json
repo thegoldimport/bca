@@ -1,0 +1,60 @@
+{
+  "state": "ACTIVE",
+  "canonicalCommit": "208f97099ae297d3d205fec0e813ae87427e6269",
+  "targets": {
+    "buildcustom-vibesdk-launch": {
+      "previousVersion": "2ce0e373-1a98-471c-b21f-3b66d28c4d73",
+      "rollbackVersion": "2ce0e373-1a98-471c-b21f-3b66d28c4d73",
+      "state": "ACTIVE",
+      "main": "index.js",
+      "modules": [
+        {
+          "name": "./207675bc61985763007bef924b915f43ff3dc25d-SKILL.md",
+          "sha256": "bb620c71dd6762ca61ee5acb563c710600f961eeb6ccc6eb1f7003359f2aa9aa"
+        },
+        {
+          "name": "./3e51c3b6c51d14c0f926fc51bac892d3382548bf-SKILL.md",
+          "sha256": "6cc26ebc78673680cb3960e10192dcbd7c4dff74e7da9a13f1c343e2cc86121b"
+        },
+        {
+          "name": "./6128e62305fc8de5a3c6845ea6b3fd1f4412c6c4-esbuild.wasm",
+          "sha256": "08b944deee8c26af2250d31d0ef1df78e1af9129848cc62d88eabc82b7c908f3"
+        },
+        {
+          "name": "./b2a76c4e89b97beb69394911244f8582a08adf64-SKILL.md",
+          "sha256": "e0283287a2bf95f5659c62c31f4fa27bea9a4df492d7f5f4ad9955d775cb2f9b"
+        },
+        {
+          "name": "./bc659942f46fcff9304d22e8b012089016e80cfd-SKILL.md",
+          "sha256": "671c46dc33a771834b1db9e60656361b41f46ba8f29822f4f18799cd46d6e49e"
+        },
+        {
+          "name": "index.js",
+          "sha256": "ac8e3b820eecedd4d2ef21149f259e7a5c442fbcbf2a832ec3d301ef3fee9af8"
+        }
+      ],
+      "bindingSha256": "8e8b60b2988441f15c1e9ad3de977e1d435ed2b640e823ffb50fb9e449fd1eb5",
+      "runtimeSha256": "cb78257273f7b58b0fa141d6e83bac3a1d3c78d67def73b30b29f5b5e62163e0",
+      "moduleAudit": "PASS",
+      "version": "4d45172a-4d55-4f36-989f-b938706a31a5",
+      "deploymentId": "934b0f82-8425-4e7d-a639-e501fedcf17a"
+    },
+    "buildcustom-control-plane-launch": {
+      "previousVersion": "c5e18eab-1b8b-49d4-adc0-62dfb0e5e6ac",
+      "rollbackVersion": "c5e18eab-1b8b-49d4-adc0-62dfb0e5e6ac",
+      "state": "ACTIVE",
+      "main": "worker.js",
+      "modules": [
+        {
+          "name": "worker.js",
+          "sha256": "12e55025d5d702e927c38555163961dd7964a0f1ed67b29249013908edbd2614"
+        }
+      ],
+      "bindingSha256": "c30af0a213792b1178930aebcd18e5b0f7992c5a8ddc82529bb2b620c139a754",
+      "runtimeSha256": "130ddab0be02fe002227cfba1e0c089f9a75e0d0497bdc7856bd1a855af162a5",
+      "moduleAudit": "PASS",
+      "version": "fc92c145-4435-4507-bce1-2857127cb7ab",
+      "deploymentId": "8c084739-ac2e-48c3-aaa3-53b53a733bf3"
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "overallStatus": "PLATFORM FAILURE",
+  "acceptedCanonical": "208f97099ae297d3d205fec0e813ae87427e6269",
+  "acceptedRuntime": "4d45172a-4d55-4f36-989f-b938706a31a5",
+  "acceptedControl": "fc92c145-4435-4507-bce1-2857127cb7ab",
+  "customerOperation": {
+    "instructionsSent": 1,
+    "exactPrompt": true,
+    "observedWork": true,
+    "taskId": "think-queue:conv-1790987919600-o5j05rz",
+    "operationId": "think-queue:conv-1790987919600-o5j05rz",
+    "revisions": [
+      "024c0428052865cce2a638b33e8c3c916db41b4f",
+      "020795439ebfea3b3aafb7126cdb10a483e7ae7c",
+      "185fde29b9e98d65338a797f3d6097320a8a6c70"
+    ],
+    "endingCustomerStatus": "CONTINUE_AVAILABLE",
+    "staleGreenBeforeNormalRefresh": true,
+    "correctBoundaryUiAfterNormalRefresh": true
+  },
+  "continue1": {
+    "clickedOnce": true,
+    "copy": "I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?\n\nContinue",
+    "internalReasonExposed": false,
+    "originalTaskPreserved": true,
+    "workspaceUnchanged": true,
+    "revisionUnchanged": true,
+    "newOperationObserved": false,
+    "freshCountersObserved": false,
+    "agentWorkObserved": false,
+    "observationAfterClickMs": 261582,
+    "before": {
+      "startedAt": 1790987919762,
+      "creditsUsed": 174,
+      "turnsUsed": 5,
+      "continuationsUsed": 4,
+      "modelCalls": 87,
+      "toolCalls": 82
+    },
+    "after": {
+      "startedAt": 1790987919762,
+      "creditsUsed": 174,
+      "turnsUsed": 5,
+      "continuationsUsed": 4,
+      "modelCalls": 87,
+      "toolCalls": 82
+    },
+    "endingCustomerStatus": "CONTINUE_AVAILABLE",
+    "chatUsable": true
+  },
+  "continue2": {
+    "clicked": false,
+    "reason": "First approval did not establish a new bounded operation; the same parent boundary remained."
+  },
+  "privateCrm": {
+    "fullVerification": "NOT RUN: no genuine task completion",
+    "currentRevision": "185fde29b9e98d65338a797f3d6097320a8a6c70",
+    "temporaryLeadCreated": false
+  },
+  "scope": {
+    "platformCodeChanges": 0,
+    "deployments": 0,
+    "manualGeneratedSourceEdits": 0,
+    "additionalRepairInstructions": 0,
+    "publish": false,
+    "hotLeads": false,
+    "revert": false,
+    "project9": false,
+    "project5Touched": false
+  }
+}

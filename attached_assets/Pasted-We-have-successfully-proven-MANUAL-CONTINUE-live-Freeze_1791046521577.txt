@@ -1,0 +1,460 @@
+We have successfully proven MANUAL CONTINUE live.
+
+Freeze the accepted continuation implementation.
+
+Current canonical:
+
+dade339cad352b474ebb25a544e1357d3a9acf73
+
+Current runtime:
+
+5ab138b7-75fa-4cd2-8146-494171468a2f
+
+Current control:
+
+01a0e626-fc88-4696-8945-88a5677142bf
+
+Manual Continue is now ACCEPTED.
+
+Do NOT redesign it.
+
+Do NOT change its resource limits.
+
+Do NOT change Auto Continue semantics.
+
+Do NOT send another Project 8 customer instruction yet.
+
+Do NOT manually edit Project 8.
+
+Do NOT publish.
+
+Do NOT start Hot Leads.
+
+Do NOT test revert.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+WHAT IS NOW PROVEN
+==================================================
+
+The live manual continuation path passed.
+
+One customer Continue click:
+
+- sent exactly one approval
+- produced exactly one new bounded operation
+- preserved the same task
+- preserved the same workspace
+- preserved the starting revision
+- initialized fresh operation accounting
+- caused the agent to work
+- survived refresh
+- showed Working only after the fresh operation became authoritative
+
+This is accepted.
+
+Auto Continue is also implemented and deployed:
+
+- task-scoped
+- default OFF
+- persisted when enabled
+- same secure continuation transition as manual Continue
+- account admission checked
+- automated tests passed
+
+It was not live-exercised because the resumed Project 8 operation did NOT
+reach another eligible continuation boundary.
+
+Do not manufacture one.
+
+==================================================
+NEW OBSERVATION
+==================================================
+
+The fresh resumed Project 8 operation later stopped at authoritative server
+state:
+
+BLOCKED / STOPPED
+
+after approximately:
+
+12 credits
+2 Think turns
+1 internal continuation
+
+It did NOT exhaust:
+
+250 credits
+5 Think turns
+4 internal continuations
+900000 ms
+
+No Build complete occurred.
+
+No eligible Continue boundary occurred.
+
+Auto Continue correctly did NOT create another operation.
+
+However:
+
+THE EDITOR STILL DISPLAYED:
+
+Working
+
+even though authoritative server state was:
+
+BLOCKED / STOPPED
+
+We need to investigate this narrow state transition before continuing Project
+8.
+
+==================================================
+PHASE 1 — READ-ONLY DIAGNOSIS
+==================================================
+
+Do not mutate Project 8.
+
+Do not send a customer message.
+
+Do not click Continue.
+
+Do not change lifecycle state.
+
+Do not restart the operation.
+
+Do not edit generated source.
+
+Inspect the completed/stopped operation read-only.
+
+Determine:
+
+1. Why did the operation transition to BLOCKED / STOPPED?
+
+2. What exact terminal/stop reason was recorded?
+
+3. Was this:
+   - normal coding-agent behavior
+   - finish_task behavior
+   - user-input requirement
+   - agent-declared block
+   - tool/runtime error
+   - stream disconnect
+   - model error
+   - verification failure
+   - lifecycle mapping problem
+   - other?
+
+4. Did the coding agent intentionally stop?
+
+5. Did it provide a customer-facing explanation?
+
+6. Did the server send the terminal lifecycle frame to the editor?
+
+7. Did the editor receive that frame?
+
+8. If received, why did the editor remain Working?
+
+9. If not received, why was authoritative terminal state not synchronized?
+
+10. Does a normal refresh show the correct stopped state?
+
+11. Is Auto Continue correctly ineligible for this exact stop reason?
+
+12. Does BLOCKED / STOPPED actually mean the customer needs to do something,
+or is it merely being used as a generic "agent stopped before completion"
+state?
+
+That last question matters.
+
+==================================================
+DESIRED CUSTOMER SEMANTICS
+==================================================
+
+The normal customer should essentially see:
+
+WORKING
+
+The agent is actively working.
+
+--------------------------------------------------
+
+BUILD COMPLETE
+
+The requested work is genuinely complete and verification passed.
+
+--------------------------------------------------
+
+CONTINUE AVAILABLE
+
+The agent reached a bounded autonomous-work boundary while the task remains
+unfinished.
+
+Manual mode:
+wait for Continue.
+
+Auto Continue:
+approve the next bounded session automatically.
+
+--------------------------------------------------
+
+NEEDS YOUR INPUT
+
+The agent genuinely cannot continue without something from the customer.
+
+Examples:
+
+- credential
+- decision
+- missing information
+- external authorization
+
+--------------------------------------------------
+
+STOPPED / ERROR
+
+Only when there is a meaningful reason that continuing automatically is not
+appropriate.
+
+The UI must not remain Working after authoritative work has stopped.
+
+==================================================
+IMPORTANT PRODUCT QUESTION
+==================================================
+
+Determine whether the current BLOCKED / STOPPED state after only:
+
+12 credits
+2 turns
+1 continuation
+
+represents a genuine reason the CUSTOMER must intervene.
+
+If YES:
+
+the editor should transition out of Working and clearly tell the customer what
+is needed.
+
+If NO, and this is simply:
+
+"the coding agent stopped but the original task is still unfinished"
+
+then determine whether this state SHOULD be eligible for the same continuation
+system.
+
+Do not automatically change this behavior yet.
+
+First establish the exact reason.
+
+We do not want to accidentally create infinite retries around a genuine
+platform/tool failure.
+
+==================================================
+STATUS SYNCHRONIZATION
+==================================================
+
+Regardless of the semantic answer above:
+
+an authoritative server terminal state must clear Working.
+
+The editor cannot continue saying Working after the operation has stopped.
+
+Trace:
+
+runtime terminal state
+→ control/bridge
+→ stream/event
+→ editor reducer/state
+→ visible customer status
+
+Find the first divergence.
+
+If this is a narrow stale-state bug, fix it.
+
+Do not redesign the editor.
+
+==================================================
+AUTO CONTINUE
+==================================================
+
+Do NOT change Auto Continue merely because it did not run here.
+
+Its behavior was correct if this was not an eligible continuation boundary.
+
+Auto Continue should only auto-approve eligible continuation boundaries.
+
+It must not blindly restart:
+
+- Needs Input
+- auth failure
+- account restriction
+- platform failure
+- unsafe/unrecoverable error
+
+But if diagnosis proves BLOCKED / STOPPED is currently being used for a
+recoverable unfinished-agent state that requires no customer input, report
+that clearly.
+
+We can then decide whether that state should become continuation-eligible.
+
+==================================================
+TESTS
+==================================================
+
+If a status synchronization fix is required, add a focused regression.
+
+Test:
+
+authoritative operation starts
+→ UI Working
+→ server transitions BLOCKED / STOPPED
+→ editor receives/synchronizes state
+→ Working disappears
+
+Then require correct customer-facing state.
+
+Also preserve:
+
+- manual Continue live-path regression
+- authoritative Starting → Working transition
+- Auto Continue OFF
+- Auto Continue ON
+- Needs Input
+- Build complete
+- ownership
+- idempotency
+- resource boundaries
+
+Run only relevant suites plus:
+
+typecheck
+build
+Worker dry-runs
+
+Do not reopen broad platform acceptance.
+
+==================================================
+DEPLOYMENT
+==================================================
+
+If diagnosis proves a narrow platform/UI bug:
+
+make the smallest fix.
+
+Commit canonical.
+
+Deploy only the component actually required.
+
+Do not deploy:
+
+gateway
+publisher
+marketing
+
+Do not alter Project 8 generated source.
+
+If no code change is necessary:
+
+do not deploy anything.
+
+==================================================
+AFTER DIAGNOSIS/FIX
+==================================================
+
+Do NOT send another Project 8 customer correction in this task.
+
+Do NOT attempt to make the CRM finish.
+
+Do NOT publish.
+
+We first need a clean answer about what BLOCKED / STOPPED means here and
+whether the customer should have been asked to Continue, asked for input, or
+shown a stopped/error state.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+STATUS BUG FIXED /
+STATUS BUG CONFIRMED /
+NORMAL AGENT STOP /
+NEEDS CUSTOMER INPUT /
+CONTINUATION-ELIGIBILITY QUESTION /
+PLATFORM FAILURE /
+NO CHANGE REQUIRED
+
+PROJECT 8 STOP
+- operation:
+- credits:
+- turns:
+- internal continuations:
+- exact server lifecycle:
+- exact stop reason:
+- agent intentionally stopped:
+- customer input required:
+- task still unfinished:
+- recoverable by more agent work:
+- Auto Continue eligibility under current rules:
+
+STATUS TRACE
+- terminal event emitted:
+- control received:
+- editor received:
+- editor state:
+- visible state:
+- first divergence:
+- refresh behavior:
+- root cause:
+
+PRODUCT SEMANTICS
+- correct customer-facing state should be:
+- should Continue be offered:
+- should Auto Continue apply:
+- reason:
+
+FIX
+- required:
+- files/components:
+- behavior changed:
+- continuation logic changed:
+- Auto Continue logic changed:
+- resource limits changed:
+- result:
+
+TESTS
+- stopped-state UI:
+- manual Continue regression:
+- Starting → Working:
+- Auto Continue:
+- Needs Input:
+- Build complete:
+- typecheck:
+- build:
+- dry-run:
+- result:
+
+SOURCE
+- previous canonical:
+- new canonical:
+- pushed:
+
+DEPLOYMENT
+- runtime changed:
+- control changed:
+- gateway changed: MUST BE NO
+- publisher changed: MUST BE NO
+- marketing changed: MUST BE NO
+- rollback:
+
+PROJECT 8 ACTIONS
+- new customer instructions: MUST BE ZERO
+- Continue clicks: MUST BE ZERO
+- generated-source edits: MUST BE ZERO
+- publish: MUST BE NO
+- Hot Leads: MUST NOT START
+- revert: MUST NOT START
+
+Then STOP.

@@ -1,0 +1,1099 @@
+We now have a REAL live BuildCustom platform failure in the newly implemented
+user-approved continuation path, AND we want to add one small extension to that
+same continuation system: optional Auto Continue.
+
+Diagnose the live continuation failure first, fix it, then add Auto Continue
+using the SAME continuation mechanism.
+
+Do NOT send another Project 8 customer correction.
+
+Do NOT click Continue again until the defect is diagnosed and the fix is deployed.
+
+Do NOT manually repair Project 8.
+
+Do NOT edit Project 8 generated source.
+
+Do NOT increase resource limits.
+
+Do NOT remove operation/work-session boundaries.
+
+Do NOT create an unlimited autonomous operation.
+
+Do NOT change gateway, publisher, marketing, or generated-app publishing.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+CURRENT ACCEPTED BASELINE
+==================================================
+
+Canonical:
+
+208f97099ae297d3d205fec0e813ae87427e6269
+
+Runtime:
+
+4d45172a-4d55-4f36-989f-b938706a31a5
+
+Control:
+
+fc92c145-4435-4507-bce1-2857127cb7ab
+
+Verify these before changing anything.
+
+==================================================
+LIVE CONTINUATION FAILURE
+==================================================
+
+Project 8 naturally reached:
+
+Continue available
+
+The customer-facing continuation experience worked correctly.
+
+It displayed:
+
+"I made progress on your request, but I haven't finished everything yet.
+Would you like me to continue working?"
+
+Correct behavior:
+
+- Continue available
+- no genuine Build complete
+- no internal resource-limit reason exposed
+- chat usable
+- no automatic operation started
+- existing operation counters preserved before approval
+
+Then Continue was clicked EXACTLY ONCE.
+
+EXPECTED:
+
+same task
+→ approval
+→ NEW bounded operation
+→ fresh operation identity
+→ fresh start time
+→ fresh operation accounting
+→ same workspace/revision/progress
+→ agent resumes unfinished task
+
+ACTUAL:
+
+- UI briefly displayed Working
+- no new operation appeared
+- no further agent work occurred
+- after more than four minutes and refresh:
+  - operation ID unchanged
+  - start time unchanged
+  - credits still 174
+  - Think turns still 5
+  - internal continuations still 4
+  - revision unchanged
+- Continue available returned
+
+This is a confirmed platform failure.
+
+==================================================
+PHASE 1 — READ-ONLY DIAGNOSIS
+==================================================
+
+Trace the REAL customer Continue request through:
+
+customer click
+→ frontend handler
+→ control/owner bridge
+→ authenticated ownership
+→ continuation eligibility
+→ approval/reservation
+→ next-operation identity
+→ queue/start
+→ runtime
+→ durable operation persistence
+→ ThinkAgent start
+
+Find the FIRST divergence.
+
+Do not mutate Project 8 during diagnosis.
+
+Do not:
+
+- manually change lifecycle state
+- reset counters
+- create an operation
+- replay Continue
+- send another AI instruction
+- manually repair the CRM
+
+Answer:
+
+1. Did the browser send the approval request?
+
+2. What response did it receive?
+
+3. Did control receive it?
+
+4. Did ownership validation pass?
+
+5. Did eligibility pass?
+
+6. Was an approval/reservation persisted?
+
+7. Was the next operation identity generated?
+
+8. Was the new operation persisted?
+
+9. Was it queued?
+
+10. Did runtime receive the start?
+
+11. Did runtime reject it?
+
+12. Did idempotency incorrectly consume/reject the first real approval?
+
+13. Did task/operation identity point back to the exhausted operation?
+
+14. Did queue identity collide?
+
+15. Why did the UI briefly display Working without an authoritative new
+operation?
+
+16. Why did automated tests pass while the live customer path failed?
+
+==================================================
+PHASE 2 — SMALLEST FIX
+==================================================
+
+Fix the exact first divergence.
+
+Preserve the existing model:
+
+TASK
+  Operation 1
+    bounded work
+
+  continuation approval
+
+  Operation 2
+    fresh bounded work
+
+  continuation approval
+
+  Operation 3
+    fresh bounded work
+
+Each NEW operation preserves:
+
+- task
+- conversation
+- workspace
+- current revision
+- progress
+- original customer intent
+
+Each NEW operation receives fresh:
+
+- operation ID
+- start time
+- operation credits
+- Think-turn count
+- internal-continuation count
+- elapsed window
+- operation-scoped counters
+
+Existing ceilings remain unchanged:
+
+25 steps per Think pass
+5 Think turns
+4 internal continuations
+250 credits
+900000 ms
+
+Do NOT increase them.
+
+==================================================
+AUTHORITATIVE UI
+==================================================
+
+Do not display:
+
+Working
+
+solely because Continue was clicked.
+
+The customer UI should become Working when the server has authoritatively
+accepted/created the new operation.
+
+A short pending state such as:
+
+Starting...
+
+is fine while approval is being processed.
+
+If starting fails:
+
+return to Continue available and show a normal retry/error message.
+
+Do not expose internal lifecycle terminology.
+
+Also correct stale green Build complete if it is caused by the same client
+state synchronization path.
+
+Do not broaden this into an unrelated UI rewrite.
+
+==================================================
+PHASE 3 — ADD OPTIONAL AUTO CONTINUE
+==================================================
+
+Once manual Continue works correctly, add:
+
+AUTO CONTINUE
+
+This is USER PRE-AUTHORIZATION for future continuation gates.
+
+It does NOT remove continuation gates.
+
+It does NOT create unlimited operations.
+
+It does NOT increase any limits.
+
+It does NOT bypass billing/account limits.
+
+It simply means:
+
+"When this task reaches a normal unfinished continuation boundary, I authorize
+BuildCustom to approve Continue for me automatically."
+
+==================================================
+CUSTOMER UI
+==================================================
+
+Add an Auto Continue toggle near the task/chat controls where it is easy to
+understand but not intrusive.
+
+Suggested customer-facing copy:
+
+Auto Continue
+
+"Keep working automatically until the task is finished or I need something
+from you. Additional work may use more of your AI credits/usage."
+
+Default:
+
+OFF
+
+The user must deliberately enable it.
+
+Do not silently enable it.
+
+When ON, make the state obvious.
+
+Example:
+
+Auto Continue: On
+
+Allow the user to turn it OFF while the task is running.
+
+==================================================
+AUTO CONTINUE SEMANTICS
+==================================================
+
+Suppose:
+
+Operation O1 reaches its bounded work-session limit.
+
+Task remains unfinished.
+
+With Auto Continue OFF:
+
+CONTINUE_AVAILABLE
+
+→ wait for customer
+
+With Auto Continue ON:
+
+CONTINUE_AVAILABLE occurs internally
+
+→ record that the continuation was auto-approved under the user's existing
+pre-authorization
+
+→ use the SAME continuation approval/start mechanism as the manual Continue
+button
+
+→ create O2
+
+→ fresh bounded operation accounting
+
+→ continue working
+
+If O2 reaches another normal continuation boundary:
+
+Auto Continue still ON
+
+→ approve continuation again
+
+→ create O3
+
+→ fresh bounded accounting
+
+→ continue
+
+Repeat until one of the legitimate stop conditions occurs.
+
+==================================================
+CRITICAL: ONE CONTINUATION SYSTEM
+==================================================
+
+Do NOT build a separate autonomous execution engine.
+
+Manual Continue and Auto Continue MUST converge on the SAME server-side
+continuation function.
+
+Conceptually:
+
+approveContinuation(taskId, approvalSource)
+
+where approvalSource might distinguish:
+
+manual
+auto
+
+for auditing/usage history.
+
+But use existing architecture and naming where appropriate.
+
+The important rule is:
+
+MANUAL CONTINUE
+and
+AUTO CONTINUE
+
+must ultimately execute the same secure/idempotent continuation transition.
+
+==================================================
+AUTO CONTINUE STILL HAS GATES
+==================================================
+
+Auto Continue does NOT mean:
+
+"ignore all limits and run forever."
+
+Every operation remains independently bounded.
+
+Example:
+
+O1
+250 credits / 5 turns / 4 internal continuations / 15 min
+→ continuation boundary
+
+Auto-approved
+
+O2
+250 credits / 5 turns / 4 internal continuations / 15 min
+→ continuation boundary
+
+Auto-approved
+
+O3
+...
+
+This preserves cost and runaway-agent safeguards.
+
+==================================================
+STOP AUTO CONTINUE WHEN
+==================================================
+
+Auto Continue must STOP and return control to the customer for:
+
+1. TASK COMPLETE
+
+Show:
+
+Build complete
+
+--------------------------------------------------
+
+2. USER INPUT REQUIRED
+
+Example:
+
+"I need your Stripe API key before I can continue."
+
+Show:
+
+Needs your input
+
+Do NOT auto-answer.
+
+--------------------------------------------------
+
+3. CUSTOMER CANCELS/STOPS
+
+Stop.
+
+--------------------------------------------------
+
+4. CUSTOMER TURNS AUTO CONTINUE OFF
+
+Finish/stop according to safe existing operation behavior.
+
+Do not start another auto-approved operation after the current bounded
+operation reaches its next boundary.
+
+Do not abruptly kill an active tool mutation merely because the toggle changed.
+
+--------------------------------------------------
+
+5. AUTH / OWNERSHIP FAILURE
+
+Stop.
+
+--------------------------------------------------
+
+6. REAL PLATFORM FAILURE
+
+Stop.
+
+--------------------------------------------------
+
+7. GENUINE ACCOUNT-LEVEL USAGE/BILLING LIMIT
+
+Stop.
+
+Auto Continue must NEVER bypass a real subscription/account/usage restriction.
+
+Per-operation autonomous-work limits and account-level usage restrictions are
+different concepts.
+
+==================================================
+NEW CUSTOMER MESSAGE
+==================================================
+
+If Auto Continue is ON and the customer sends a NEW substantive instruction,
+do not allow the old task to silently keep spawning new operations behind the
+new request.
+
+Use existing new-message/task semantics.
+
+The customer's newest explicit direction wins.
+
+Prevent race conditions where:
+
+old task auto-continues
+
+while
+
+new customer task starts
+
+unless the product intentionally supports parallel tasks, which BuildCustom
+does not need here.
+
+==================================================
+TURNING AUTO CONTINUE OFF
+==================================================
+
+If customer turns Auto Continue OFF:
+
+persist that choice authoritatively.
+
+If an operation is currently running:
+
+let the current bounded operation behave safely.
+
+At the NEXT continuation boundary:
+
+show normal Continue available
+
+and wait.
+
+Do not auto-approve again.
+
+==================================================
+PERSISTENCE SCOPE
+==================================================
+
+For now make Auto Continue a TASK-level preference.
+
+That is safest.
+
+The user turns it on for the task they want BuildCustom to keep working on.
+
+Do NOT automatically make it an account-wide default.
+
+We can add an account preference later if desired.
+
+Task-level default:
+
+OFF
+
+==================================================
+COST / USAGE TRANSPARENCY
+==================================================
+
+The customer needs to understand that Auto Continue can consume additional
+usage.
+
+Use concise language.
+
+Something equivalent to:
+
+"Keep working automatically until the task is finished or I need something
+from you. Additional work may use more of your AI credits/usage."
+
+Do NOT show internal:
+
+250 credits
+Think turns
+continuation count
+token machinery
+
+in the normal UI unless those later become actual customer billing units.
+
+Use whatever final customer-facing usage term BuildCustom ultimately uses.
+
+==================================================
+AUTO CONTINUE AUDITABILITY
+==================================================
+
+Internally record enough information to establish:
+
+- user enabled Auto Continue
+- when it was enabled
+- task it applies to
+- when an automatic approval occurred
+- which operation boundary triggered it
+- resulting operation identity
+- usage associated with each bounded operation
+- when Auto Continue was disabled
+
+Do not create excessive duplicate state.
+
+Use the existing task/operation model.
+
+==================================================
+IDEMPOTENCY / RACES
+==================================================
+
+Auto Continue must have the same duplicate protection as manual Continue.
+
+One boundary may produce:
+
+EXACTLY ONE next operation.
+
+Protect against:
+
+- duplicate scheduler execution
+- repeated lifecycle event delivery
+- refresh
+- multiple browser tabs
+- user clicking Continue while Auto Continue is simultaneously approving
+- user disabling Auto Continue while approval is in flight
+
+Never create O2 and O3 from the same O1 boundary.
+
+==================================================
+TESTS — MANUAL CONTINUE
+==================================================
+
+Add a regression test reproducing the REAL customer path:
+
+rendered editor
+→ Continue available
+→ click Continue
+→ real control endpoint
+→ runtime approval
+→ new persisted operation
+→ authoritative Working state
+
+Require:
+
+- one approval
+- one next operation
+- new operation ID
+- new start time
+- same task
+- same workspace
+- same starting revision
+- fresh bounded accounting
+- agent begins work
+
+Also test:
+
+- double click
+- request retry
+- refresh during approval
+- refresh after approval
+- second manual continuation
+- ownership rejection
+- stale task rejection
+
+==================================================
+TESTS — AUTO CONTINUE
+==================================================
+
+TEST A
+
+Auto Continue OFF.
+
+Operation reaches continuation boundary.
+
+Require:
+
+Continue available
+no automatic next operation.
+
+--------------------------------------------------
+
+TEST B
+
+Enable Auto Continue.
+
+Operation reaches continuation boundary.
+
+Require:
+
+same secure continuation transition
+one new operation
+fresh bounded accounting
+same task/workspace/progress
+no customer click required.
+
+--------------------------------------------------
+
+TEST C
+
+Auto Continue remains ON.
+
+Second operation reaches continuation boundary.
+
+Require:
+
+exactly one third operation
+fresh bounded accounting
+same task/progress.
+
+--------------------------------------------------
+
+TEST D
+
+Auto Continue ON but task completes.
+
+Require:
+
+Build complete
+no further operation.
+
+--------------------------------------------------
+
+TEST E
+
+Auto Continue ON but Needs Input.
+
+Require:
+
+stop
+Needs your input
+no automatic approval.
+
+--------------------------------------------------
+
+TEST F
+
+Auto Continue ON but account-level usage restriction reached.
+
+Require:
+
+stop
+no bypass.
+
+--------------------------------------------------
+
+TEST G
+
+Auto Continue ON.
+
+Customer turns it OFF during active operation.
+
+Require:
+
+current work remains safe
+next continuation boundary waits for manual Continue.
+
+--------------------------------------------------
+
+TEST H
+
+Auto Continue ON.
+
+Customer sends substantive new direction.
+
+Require:
+
+old task does not silently spawn another continuation behind the new request.
+
+--------------------------------------------------
+
+TEST I
+
+Manual Continue and automatic approval race.
+
+Require:
+
+exactly ONE next operation.
+
+--------------------------------------------------
+
+TEST J
+
+Duplicate automatic lifecycle event.
+
+Require:
+
+exactly ONE next operation.
+
+--------------------------------------------------
+
+TEST K
+
+Refresh/browser reopen.
+
+Require:
+
+Auto Continue task preference preserved.
+
+--------------------------------------------------
+
+TEST L
+
+New task.
+
+Require:
+
+Auto Continue defaults OFF.
+
+==================================================
+REGRESSION
+==================================================
+
+Preserve:
+
+- auth/ownership
+- task identity
+- operation identity
+- internal continuations
+- fresh user-approved operation accounting
+- workspace continuity
+- conversation continuity
+- revision continuity
+- resource ceilings
+- private preview
+- revision creation
+- immutable publishing
+- release history
+- status redaction
+- Needs Input behavior
+- Build complete correctness
+
+Run relevant:
+
+runtime tests
+control/root tests
+rendered UI tests
+continuation lifecycle tests
+queue/idempotency tests
+owner/auth tests
+typecheck
+build
+Worker dry-runs
+
+Use serial execution if the known parallel Worker test-pool storage issue
+appears.
+
+==================================================
+SOURCE / DEPLOYMENT
+==================================================
+
+After tests pass:
+
+commit to canonical GitHub.
+
+Deploy ONLY components required for:
+
+- manual Continue fix
+- Auto Continue
+
+Expected scope:
+
+runtime and/or control/UI.
+
+Do NOT deploy:
+
+gateway
+publisher
+marketing
+
+unless diagnosis proves one is actually necessary.
+
+If a broad architectural change appears necessary:
+
+STOP and report before implementing it.
+
+==================================================
+LIVE PROJECT 8 RETEST
+==================================================
+
+After deployment:
+
+Do NOT send another customer correction.
+
+Project 8 should remain at its existing unfinished continuation boundary.
+
+Open Project 8 normally.
+
+Verify:
+
+Continue available.
+
+First test MANUAL continuation because that is the currently broken path.
+
+Record:
+
+task
+operation
+start time
+counters
+revision
+
+Click Continue EXACTLY ONCE.
+
+Require:
+
+same task
+NEW operation
+NEW start time
+same workspace
+same starting revision
+fresh bounded accounting
+agent begins working
+
+If manual Continue still fails:
+
+STOP.
+
+Do not test Auto Continue.
+
+==================================================
+AUTO CONTINUE LIVE TEST
+==================================================
+
+Only after manual Continue is live-proven:
+
+Turn Auto Continue ON for the SAME Project 8 task.
+
+Do not send another customer instruction.
+
+Let the agent continue working.
+
+If the current operation naturally reaches another unfinished continuation
+boundary:
+
+Require Auto Continue to approve it automatically.
+
+Verify:
+
+same task
+new operation
+new start time
+same workspace
+progress preserved
+fresh bounded accounting
+agent continues without customer click
+
+Do NOT artificially exhaust the operation just to trigger this.
+
+If it naturally finishes before another boundary:
+
+that is fine.
+
+Do not create artificial work.
+
+Automated coverage is sufficient for Auto Continue if Project 8 finishes
+before naturally exercising it live.
+
+==================================================
+IF PROJECT 8 REACHES BUILD COMPLETE
+==================================================
+
+Perform the full private CRM verification already established:
+
+- /api/leads succeeds
+- original 12 leads load
+- dashboard correct
+- Five Newest correct
+- search
+- sort both directions
+- filter
+- lead details
+- seven fields
+- existing notes
+- Activity Timeline
+- create temporary lead
+- refresh and verify persistence
+- edit temporary lead
+- refresh and verify persistence
+- add temporary note
+- refresh and verify persistence
+- delete temporary lead
+- refresh and verify deletion
+- original 12 preserved
+- Recent Activity populated
+- newest-first
+- no application-breaking console/API errors
+
+If it materially fails despite Build complete:
+
+FALSE COMPLETION.
+
+Do not publish.
+
+If it passes:
+
+READY FOR PUBLISH TEST.
+
+Do not publish yet.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL STATUS:
+READY FOR PUBLISH TEST /
+MANUAL CONTINUE LIVE PASS /
+AUTO CONTINUE LIVE PASS /
+CONTINUATION STILL FAILS /
+FALSE COMPLETION /
+TEST FAILURE /
+DEPLOYMENT FAILURE
+
+ROOT CAUSE
+- exact first divergence:
+- why live manual Continue failed:
+- why automated tests missed it:
+
+MANUAL CONTINUE FIX
+- change:
+- authoritative UI behavior:
+- result:
+
+AUTO CONTINUE
+- task-level preference:
+- default:
+- customer disclosure:
+- manual/auto shared transition:
+- stop conditions:
+- account-limit behavior:
+- disable behavior:
+- new-message behavior:
+- auditability:
+- result:
+
+TESTS
+- manual live-path regression:
+- double click:
+- retry:
+- refresh:
+- second manual continuation:
+- Auto Continue OFF:
+- Auto Continue ON:
+- repeated auto continuation:
+- task complete:
+- Needs Input:
+- account limit:
+- disable while running:
+- new customer direction:
+- manual/auto race:
+- duplicate event:
+- persistence:
+- new task defaults OFF:
+- runtime:
+- control:
+- UI:
+- typecheck:
+- build:
+- dry-run:
+- result:
+
+SOURCE
+- previous canonical:
+- new canonical:
+- pushed:
+- result:
+
+DEPLOYMENT
+- previous versions:
+- new versions:
+- runtime:
+- control:
+- gateway changed:
+- publisher changed:
+- marketing changed:
+- rollback:
+- result:
+
+PROJECT 8 MANUAL CONTINUE
+- offered:
+- clicked:
+- same task:
+- new operation:
+- new start:
+- same workspace:
+- same revision:
+- fresh accounting:
+- agent worked:
+- result:
+
+PROJECT 8 AUTO CONTINUE
+- enabled:
+- naturally reached boundary:
+- automatically approved:
+- same task:
+- new operation:
+- fresh accounting:
+- progress preserved:
+- agent continued:
+- result:
+
+PROJECT 8 FINAL
+- lifecycle:
+- final revision:
+- Build complete:
+- CRM verification:
+- ready for publish test:
+
+PLATFORM RESOURCE LIMITS CHANGED:
+MUST BE NO
+
+MANUAL PROJECT 8 SOURCE EDITS:
+MUST BE ZERO
+
+NEW PROJECT 8 CUSTOMER INSTRUCTIONS:
+MUST BE ZERO
+
+PROJECT 8 PUBLISH:
+MUST BE NO
+
+HOT LEADS:
+MUST NOT START
+
+REVERT:
+MUST NOT START
+
+PROJECT 9:
+MUST BE NO
+
+PROJECT 5:
+MUST BE UNTOUCHED
+
+Then STOP.

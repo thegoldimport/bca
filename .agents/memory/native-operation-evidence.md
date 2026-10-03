@@ -39,6 +39,12 @@ A green editor success badge is not authoritative evidence of native completion.
 
 **How to apply:** Check the native lifecycle and rendered customer requirements independently of the badge. Keep a misleading status badge separate from generated-app defects, and do not publish a failed private repair.
 
+An approval click, chat echo, or optimistic Working label does not establish that a new bounded operation started.
+
+**Why:** Live acceptance briefly displayed Working after Continue, then returned to the same eligible boundary with unchanged durable operation identity and accounting.
+
+**How to apply:** Preserve the one-way approval checkpoint and require a new operation identity plus fresh accounting before accepting a resumed session. Do not retry an ambiguous approval or treat the unchanged parent boundary as a second approved session.
+
 An operation ending `BLOCKED` does not by itself prove that customer iteration is blocked.
 
 **Why:** A subsequent normal customer correction was accepted, performed coding work, and created new private revisions after a `BLOCKED` result. The customer confirmed that remaining application defects should be handled through normal corrections, not automatic platform forensics.

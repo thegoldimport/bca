@@ -78,3 +78,4 @@
 - [Customer-loop testing](customer-loop-testing.md) — let BuildCustom's agent repair generated-app bugs through normal customer chat; stop for actual platform blockers.
 - [Customer operation diagnosis](customer-operation-diagnosis.md) — distinguish stale queue errors from fresh counters; account metering must match admission policy.
 - [Customer browser reconnects](customer-browser-reconnects.md) — preserve viewport on Puppeteer reconnects so hidden mobile navigation is not mistaken for a broken app.
+- [Customer-approved work policy](customer-approved-work-policy.md) — repeated human-approved bounded sessions continue one unfinished task; account restrictions remain separate.

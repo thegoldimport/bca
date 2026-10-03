@@ -1,0 +1,156 @@
+Continue Project 8 through the NORMAL BuildCustom customer workflow.
+
+Do NOT modify BuildCustom platform code.
+
+Do NOT manually inspect, diagnose, or repair the generated CRM through Replit.
+
+Do NOT inspect internal checkpoints.
+
+Do NOT change resource limits.
+
+Do NOT manually edit generated source.
+
+Do NOT publish until the private CRM passes.
+
+Do NOT start Hot Leads yet.
+
+Do NOT test revert yet.
+
+Do NOT create Project 9.
+
+Do NOT touch Project 5.
+
+==================================================
+CURRENT PRODUCT RESULT
+==================================================
+
+The BuildCustom iterative customer workflow is functioning.
+
+The previous customer correction:
+
+- started as a new operation
+- entered RUNNING
+- coding agent worked normally
+- created eight private revisions
+- returned control to the customer
+- ended INCOMPLETE_RESOURCE_LIMIT because its internal continuation budget was
+  exhausted
+- left chat usable for another customer request
+
+Do NOT treat continuation_budget_exhausted as a platform failure.
+
+That operation used its allowed work budget and returned control.
+
+A new customer correction should receive a new operation.
+
+==================================================
+CURRENT CUSTOMER-VISIBLE STATE
+==================================================
+
+The CRM has improved substantially.
+
+WORKING:
+
+- dashboard renders
+- 12 leads visible
+- pipeline value displays
+- won revenue displays
+- status counts display
+- Five Newest displays five leads
+- Leads Database displays all 12 leads
+- search works
+- ascending sorting works
+- descending sorting works
+- filtering works
+- lead details work
+- seven expected fields exist
+- existing notes are visible
+- Recent Activity exists
+- Recent Activity is populated
+- lead name displays
+- activity type displays
+- date/time displays
+- original 12 leads remain intact
+
+STILL BROKEN:
+
+1. /api/leads still fails when fetched.
+
+2. Creating a lead appears to work in the UI, but the request returns HTTP 503
+   and the lead disappears after refresh.
+
+3. Editing a lead appears to work in the UI, but the request returns HTTP 503
+   and the edit disappears after refresh.
+
+4. Posting a note appears in the UI, but the request returns HTTP 503 and the
+   note disappears after refresh.
+
+5. Activity Timeline renders but is empty.
+
+6. Recent Activity is not ordered newest-first.
+
+These are GENERATED APPLICATION problems.
+
+Do not diagnose them through Replit before giving BuildCustom's coding agent
+another chance.
+
+==================================================
+SEND EXACTLY ONE CUSTOMER MESSAGE
+==================================================
+
+Through Project 8's normal BuildCustom chat box send exactly:
+
+"The CRM is much closer, but the data still isn't actually saving. Adding a
+lead, editing a lead, and posting a note look like they work until I refresh,
+then the changes disappear. The API requests are also failing, the Activity
+Timeline is empty, and Recent Activity isn't newest-first. Please fix all of
+that, make sure the data actually persists after refresh, and test the whole
+CRM before you finish."
+
+Send exactly ONE user_suggestion.
+
+Do not add technical hints.
+
+Do not tell the agent:
+
+- which files are wrong
+- which architecture to use
+- how to implement persistence
+- what Cloudflare requires
+- what Durable Objects are
+- what database APIs to use
+- what previous revisions contained
+- what Replit thinks the root cause is
+
+The coding agent must diagnose and repair its own application.
+
+==================================================
+LET THE AGENT WORK
+==================================================
+
+Allow BuildCustom's normal coding workflow to proceed.
+
+It may:
+
+- inspect files
+- inspect errors
+- inspect API behavior
+- edit code
+- build
+- preview
+- create private revisions
+- test APIs
+- use browser verification
+- encounter failures
+- repair failures
+- continue internally
+- verify again
+
+Do NOT stop on intermediate generated-app failures.
+
+Do NOT manually help it code.
+
+If it exhausts the allowed operation budget and returns customer control again,
+that is acceptable.
+
+We

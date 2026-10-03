@@ -510,11 +510,25 @@ export async function openStockAgentWebSocket(env: Env, request: Request, agentI
 export function allowedNativeClientFrame(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const frame = value as Record<string, unknown>;
+  if (frame.type === "set_auto_continue" && typeof frame.enabled === "boolean"
+    && typeof frame.taskId === "string" && /^[a-zA-Z0-9_:.-]{1,256}$/.test(frame.taskId)) {
+    return { type: frame.type, taskId: frame.taskId, enabled: frame.enabled };
+  }
   if (frame.type === "get_conversation_state") return { type: frame.type };
   if (frame.type === "stop_generation") return { type: frame.type };
   if (frame.type === "user_suggestion" && typeof frame.message === "string"
     && frame.message.trim().length > 0 && frame.message.length <= 30_000) {
     const clean: Record<string, unknown> = { type: frame.type, message: frame.message };
+    if (frame.continuationApproval !== undefined) {
+      const approval = frame.continuationApproval as Record<string, unknown> | null;
+      if (!approval || typeof approval !== "object" || Array.isArray(approval)
+        || typeof approval.taskId !== "string" || typeof approval.operationId !== "string"
+        || !/^[a-zA-Z0-9_:.-]{1,256}$/.test(approval.taskId)
+        || !/^[a-zA-Z0-9_:.-]{1,256}$/.test(approval.operationId)
+        || (Array.isArray(frame.images) && frame.images.length > 0)
+        || !/^(yes|continue|keep going|go ahead|finish it|keep working)[.!?]*$/i.test(frame.message.trim())) return null;
+      clean.continuationApproval = { taskId: approval.taskId, operationId: approval.operationId };
+    }
     if (frame.images !== undefined) {
       if (!Array.isArray(frame.images) || frame.images.length > 2) return null;
       let total = 0;
@@ -729,23 +743,59 @@ export function shapeThinkHistory(messages: unknown): Array<{
   return turns;
 }
 
-const NATIVE_TASK_STATUSES = new Set(["RUNNING", "COMPLETE", "BLOCKED", "INCOMPLETE_RESOURCE_LIMIT"]);
+const NATIVE_TASK_STATUSES = new Set(["RUNNING", "COMPLETE", "BLOCKED", "USER_INPUT_REQUIRED", "INCOMPLETE_RESOURCE_LIMIT"]);
 const NATIVE_RESOURCE_REASONS = new Set([
   "credit_limit", "model_call_limit", "tool_call_limit", "elapsed_time_limit",
   "available_credits_limit", "continuation_budget_exhausted",
 ]);
 
 export function projectOwnerNativeTaskLifecycle(value: unknown):
-  { status: string; updatedAt: number; reason?: string } | undefined {
+  { status: string; updatedAt: number; reason?: string; customerStatus?: string; taskId?: string; operationId?: string; accounting?: Record<string, number> } | undefined {
   if (value === undefined) return undefined; // Older runtime versions remain compatible.
   const lifecycle = value as Record<string, unknown> | null;
   if (!lifecycle || typeof lifecycle.status !== "string" || !NATIVE_TASK_STATUSES.has(lifecycle.status)
     || typeof lifecycle.updatedAt !== "number" || !Number.isFinite(lifecycle.updatedAt)) {
     throw new RuntimeIdentityError("The native task status was incomplete.", 502);
   }
+  const operationBoundaryReasons = new Set([
+    "credit_limit", "model_call_limit", "tool_call_limit", "elapsed_time_limit", "continuation_budget_exhausted",
+  ]);
+  // Derive from supported lifecycle facts, never trust a contradictory label.
+  const customerStatus = lifecycle.status === "COMPLETE" ? lifecycle.approvalReady === false ? "WORKING" : "BUILD_COMPLETE"
+    : lifecycle.status === "USER_INPUT_REQUIRED" ? "NEEDS_INPUT"
+    : lifecycle.status === "RUNNING" ? "WORKING"
+    : lifecycle.status === "INCOMPLETE_RESOURCE_LIMIT" && typeof lifecycle.reason === "string"
+      && operationBoundaryReasons.has(lifecycle.reason)
+      ? lifecycle.approvalReady === false ? "WORKING" : "CONTINUE_AVAILABLE" : "STOPPED";
+  const taskIdentity = typeof lifecycle.taskId === "string" && /^[a-zA-Z0-9_:.-]{1,256}$/.test(lifecycle.taskId)
+    && typeof lifecycle.operationId === "string" && /^[a-zA-Z0-9_:.-]{1,256}$/.test(lifecycle.operationId)
+    ? { taskId: lifecycle.taskId, operationId: lifecycle.operationId } : {};
+  let accounting: Record<string, number> | undefined;
+  if (lifecycle.accounting && typeof lifecycle.accounting === "object" && !Array.isArray(lifecycle.accounting)) {
+    const candidate = lifecycle.accounting as Record<string, unknown>;
+    const names = ["startedAt", "creditsUsed", "turnsUsed", "continuationsUsed", "modelCalls", "toolCalls"];
+    if (names.every(name => typeof candidate[name] === "number" && Number.isFinite(candidate[name]) && Number(candidate[name]) >= 0)) {
+      accounting = Object.fromEntries(names.map(name => [name, Number(candidate[name])]));
+    }
+  }
   return {
     status: lifecycle.status,
     updatedAt: lifecycle.updatedAt,
+    ...taskIdentity,
+    customerStatus,
+    ...(lifecycle.autoContinue && typeof lifecycle.autoContinue === "object"
+      && !Array.isArray(lifecycle.autoContinue)
+      && typeof (lifecycle.autoContinue as any).enabled === "boolean"
+      && (lifecycle.autoContinue as any).taskId === taskIdentity.taskId
+      && Number.isSafeInteger((lifecycle.autoContinue as any).version)
+      && Number.isFinite((lifecycle.autoContinue as any).changedAt)
+      ? { autoContinue: {
+        taskId: taskIdentity.taskId,
+        enabled: (lifecycle.autoContinue as any).enabled,
+        version: (lifecycle.autoContinue as any).version,
+        changedAt: (lifecycle.autoContinue as any).changedAt,
+      } } : {}),
+    ...(accounting ? { accounting } : {}),
     ...(typeof lifecycle.reason === "string" && NATIVE_RESOURCE_REASONS.has(lifecycle.reason)
       ? { reason: lifecycle.reason } : {}),
   };

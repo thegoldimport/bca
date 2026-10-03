@@ -10,7 +10,7 @@ test("owner status projects existing authoritative lifecycle without summary or 
   assert.deepEqual(projectOwnerNativeTaskLifecycle({
     status: "INCOMPLETE_RESOURCE_LIMIT", reason: "credit_limit", updatedAt: 1234,
     summary: "private summary", userId: "other-user", prompt: "private prompt", token: "private credential",
-  }), { status: "INCOMPLETE_RESOURCE_LIMIT", reason: "credit_limit", updatedAt: 1234 });
+  }), { status: "INCOMPLETE_RESOURCE_LIMIT", reason: "credit_limit", updatedAt: 1234, customerStatus: "CONTINUE_AVAILABLE" });
 });
 
 test("owner lifecycle rejects malformed authoritative status rather than claiming idle completion", () => {
@@ -24,7 +24,45 @@ test("owner lifecycle rejects malformed authoritative status rather than claimin
 test("unknown free-form resource reasons are not returned to owner", () => {
   assert.deepEqual(projectOwnerNativeTaskLifecycle({
     status: "INCOMPLETE_RESOURCE_LIMIT", reason: "arbitrary text", updatedAt: 1234,
-  }), { status: "INCOMPLETE_RESOURCE_LIMIT", updatedAt: 1234 });
+  }), { status: "INCOMPLETE_RESOURCE_LIMIT", updatedAt: 1234, customerStatus: "STOPPED" });
+});
+
+test("owner customer status cannot contradict blocked, input, completion or account restriction facts", () => {
+  const cases = [
+    ["BLOCKED", "continuation_budget_exhausted", "STOPPED"],
+    ["USER_INPUT_REQUIRED", undefined, "NEEDS_INPUT"],
+    ["COMPLETE", undefined, "BUILD_COMPLETE"],
+    ["RUNNING", undefined, "WORKING"],
+    ["INCOMPLETE_RESOURCE_LIMIT", "available_credits_limit", "STOPPED"],
+  ];
+  for (const [status, reason, expected] of cases) {
+    assert.equal(projectOwnerNativeTaskLifecycle({
+      status, reason, updatedAt: 10, customerStatus: "BUILD_COMPLETE",
+    })?.customerStatus, expected);
+  }
+});
+
+test("owner diagnostic projection carries only bounded identities and explicit accounting", () => {
+  const projected = projectOwnerNativeTaskLifecycle({
+    status: "RUNNING", updatedAt: 10, taskId: "think-queue:T1", operationId: "think-approved:O2",
+    accounting: { startedAt: 10, creditsUsed: 0, turnsUsed: 0, continuationsUsed: 0, modelCalls: 0, toolCalls: 0, privateData: "omit" },
+    originalIntent: "omit", summary: "omit", userId: "omit",
+  });
+  assert.deepEqual(projected, {
+    status: "RUNNING", updatedAt: 10, customerStatus: "WORKING",
+    taskId: "think-queue:T1", operationId: "think-approved:O2",
+    accounting: { startedAt: 10, creditsUsed: 0, turnsUsed: 0, continuationsUsed: 0, modelCalls: 0, toolCalls: 0 },
+  });
+});
+
+test("a terminal native boundary is not offered while its host still has pending work", () => {
+  assert.equal(projectOwnerNativeTaskLifecycle({
+    status: "INCOMPLETE_RESOURCE_LIMIT", reason: "continuation_budget_exhausted",
+    updatedAt: 10, approvalReady: false,
+  })?.customerStatus, "WORKING");
+  assert.equal(projectOwnerNativeTaskLifecycle({
+    status: "COMPLETE", updatedAt: 10, approvalReady: false,
+  })?.customerStatus, "WORKING", "an old completion must not become green while another request is queued");
 });
 
 // Execute the actual policy-update method, without loading the native SDK's

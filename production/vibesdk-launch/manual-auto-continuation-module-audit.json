@@ -1,0 +1,130 @@
+{
+  "status": "PASS",
+  "productionMutations": 0,
+  "targets": {
+    "buildcustom-vibesdk-launch": {
+      "previous": "4d45172a-4d55-4f36-989f-b938706a31a5",
+      "main": "index.js",
+      "audit": {
+        "status": "PASS",
+        "mainModule": "index.js",
+        "mainExports": [
+          {
+            "local": "CodeGeneratorAgent",
+            "exported": "CodeGeneratorAgent"
+          },
+          {
+            "local": "DORateLimitStore2",
+            "exported": "DORateLimitStore"
+          },
+          {
+            "local": "index_default",
+            "exported": "default"
+          },
+          {
+            "local": "PreviewCapabilityValidator",
+            "exported": "PreviewCapabilityValidator"
+          },
+          {
+            "local": "Sandbox",
+            "exported": "UserAppSandboxService"
+          },
+          {
+            "local": "SpaceDO",
+            "exported": "SpaceDO"
+          },
+          {
+            "local": "ThinkAgent",
+            "exported": "ThinkAgent"
+          },
+          {
+            "local": "UserSecretsStore",
+            "exported": "UserSecretsStore"
+          }
+        ],
+        "modules": [
+          {
+            "family": "./6128e62305fc8de5a3c6845ea6b3fd1f4412c6c4-esbuild.wasm",
+            "old": "./6128e62305fc8de5a3c6845ea6b3fd1f4412c6c4-esbuild.wasm",
+            "candidate": "./6128e62305fc8de5a3c6845ea6b3fd1f4412c6c4-esbuild.wasm",
+            "result": "BYTE_IDENTICAL"
+          },
+          {
+            "family": "index.js",
+            "old": "index.js",
+            "candidate": "index.js",
+            "result": "MAIN_EXPORTS_EQUAL"
+          }
+        ]
+      },
+      "preservedTextModules": 4
+    },
+    "buildcustom-control-plane-launch": {
+      "previous": "fc92c145-4435-4507-bce1-2857127cb7ab",
+      "main": "worker.js",
+      "audit": {
+        "status": "PASS",
+        "mainModule": "worker.js",
+        "mainExports": [
+          {
+            "local": "canPublishInStaging",
+            "exported": "canPublishInStaging"
+          },
+          {
+            "local": "hasExactStagingGatewayConfig",
+            "exported": "hasExactStagingGatewayConfig"
+          },
+          {
+            "local": "isReadOnlyRuntimeOperation",
+            "exported": "isReadOnlyRuntimeOperation"
+          },
+          {
+            "local": "managedStagingPublishUrl",
+            "exported": "managedStagingPublishUrl"
+          },
+          {
+            "local": "projectIdFromPath",
+            "exported": "projectIdFromPath"
+          },
+          {
+            "local": "ProjectOperationDO",
+            "exported": "ProjectOperationDO"
+          },
+          {
+            "local": "serializeProject",
+            "exported": "serializeProject"
+          },
+          {
+            "local": "serializeRelease",
+            "exported": "serializeRelease"
+          },
+          {
+            "local": "serializeTurn",
+            "exported": "serializeTurn"
+          },
+          {
+            "local": "serializeUser",
+            "exported": "serializeUser"
+          },
+          {
+            "local": "verifyManagedStagingRoute",
+            "exported": "verifyManagedStagingRoute"
+          },
+          {
+            "local": "worker_default",
+            "exported": "default"
+          }
+        ],
+        "modules": [
+          {
+            "family": "worker.js",
+            "old": "worker.js",
+            "candidate": "worker.js",
+            "result": "MAIN_EXPORTS_EQUAL"
+          }
+        ]
+      },
+      "preservedTextModules": 0
+    }
+  }
+}

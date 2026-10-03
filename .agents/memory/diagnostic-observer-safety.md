@@ -14,3 +14,9 @@ Do not treat arbitrary WebSocket close reasons, error messages, or stack headers
 **Why:** A safety review found that allowlisting error properties still retained unlabelled sensitive text inside allowed string fields.
 
 **How to apply:** Apply a fail-closed policy to untrusted free-form text, retain safely attributable structural fields and source frames, and explicitly test unlabelled content. A production observability release stays gated on these safety checks even when functional regressions pass.
+
+Use exactly one writer for a shared live-acceptance evidence file. Detach a launcher's passive recorder before handing its browser to later phase drivers.
+
+**Why:** A lingering recovery recorder retained an old in-memory snapshot and overwrote later acceptance facts when new frames arrived. This was an evidence-write race, not a customer lifecycle transition.
+
+**How to apply:** End the previous recorder before phase handoff while preserving the browser session. Keep immutable phase receipts and reconstruct evidence only from those actual receipts, never by inventing click history or customer state.
