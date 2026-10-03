@@ -1,0 +1,404 @@
+Approved to complete ONLY Arm B of the controlled pacing experiment.
+
+Do NOT rerun Arm A.
+
+Arm A is accepted:
+
+- 5/5 HTTP 200
+- realistic 46,000-byte synthetic coding context
+- same launch gateway/provider/model
+- authenticated Unified Billing
+- zero retries
+- zero concurrency
+- >=15 seconds between completed responses and next requests
+- actual recorded cost: $0.027640725
+- no inference failure
+- no competing traffic found during reconciliation
+
+The aggregate-count mismatch was a diagnostic-runner verification mistake,
+not gateway traffic and not a product failure.
+
+For this continuation of the experiment, DO NOT use aggregate gateway-count
+equality as the traffic-safety check.
+
+Use timestamped request rows / request IDs to identify actual traffic.
+
+==================================================
+GOAL
+==================================================
+
+Complete the missing RAPID arm and answer:
+
+Does rapid sequential use of the SAME realistic coding-context workload
+reproduce the Project 8 HTTP 429 behavior?
+
+Nothing else.
+
+==================================================
+PRODUCTION FREEZE
+==================================================
+
+NO source changes.
+
+NO deployments.
+
+NO configuration changes.
+
+NO retry changes.
+
+NO continuation changes.
+
+NO Auto Continue changes.
+
+NO Project 8 actions.
+
+NO customer content.
+
+NO attached coding-agent runtime.
+
+==================================================
+PRECONDITION
+==================================================
+
+Before Arm B:
+
+1. Confirm at least FIVE MINUTES of launch-gateway inactivity using timestamped
+   request rows.
+
+2. Confirm no active customer operation.
+
+3. Confirm no active Think stream/fiber that could issue inference.
+
+4. Confirm no competing launch-gateway request rows during the idle window.
+
+5. Confirm route remains:
+
+gateway:
+buildcustom-vibesdk-launch-ai
+
+provider:
+google-ai-studio
+
+model:
+google/gemini-3.6-flash
+
+authenticated AI Gateway + Unified Billing
+
+6. Confirm configured gateway limiter remains disabled.
+
+If any of these fail:
+
+STOP without inference.
+
+==================================================
+ARM B — RAPID SEQUENTIAL ONLY
+==================================================
+
+Use the SAME synthetic workload structure as accepted Arm A:
+
+approximately 46,000-byte JSON
+realistic system context
+ten history messages
+fifteen tool definitions
+no customer content
+max_tokens: 32
+
+Send at most FIVE logical requests.
+
+NO automatic retries.
+
+NO concurrency.
+
+Request sequence:
+
+request 1
+→ wait only until response fully completes
+→ request 2 immediately
+→ wait only until response fully completes
+→ request 3 immediately
+→ etc.
+
+Do NOT intentionally insert pacing delays.
+
+This should mimic rapid sequential model/tool reasoning without concurrency.
+
+==================================================
+HARD STOP
+==================================================
+
+STOP immediately on:
+
+- HTTP 429
+- any unexpected HTTP error
+- unexpected competing traffic
+- authentication change
+- provider/model change
+- route change
+
+Do NOT retry a failed request.
+
+Do NOT send the remaining requests after a failure.
+
+Maximum authorized inference:
+
+5 logical requests.
+
+==================================================
+COST
+==================================================
+
+Hard additional experiment ceiling:
+
+$0.15
+
+This applies ONLY to Arm B.
+
+If preflight estimates Arm B could exceed $0.15:
+
+STOP.
+
+Do not alter the payload to fit the budget.
+
+==================================================
+IF 429 OCCURS
+==================================================
+
+This is the most important part.
+
+Capture the response evidence immediately before it disappears.
+
+Safely retain:
+
+- exact request start/end
+- HTTP status
+- complete SAFE response body
+- all SAFE response headers
+- Retry-After
+- retry-after-ms
+- rate-limit headers
+- quota headers
+- reset headers
+- Cloudflare Ray ID
+- gateway request ID
+- provider/model
+- provider request ID if exposed
+- gateway processing time
+- provider latency
+- wholesale status
+- fresh/cached/output/total token metadata
+- billing/cost metadata
+- any safe Cloudflare enforcement metadata
+
+Do NOT retain or print:
+
+- Authorization header values
+- API keys
+- cookies
+- credentials
+- secrets
+- customer data
+
+If a 429 happens, do not spend time running another request.
+
+Capture the evidence and STOP.
+
+==================================================
+IMPORTANT COMPARISON
+==================================================
+
+Compare Arm B directly with the already accepted Arm A.
+
+Arm A:
+
+5/5 success
+46,000-byte payload
+spaced >=15 seconds
+same gateway/provider/model
+
+Arm B:
+
+same workload
+same route
+rapid sequential pacing
+
+The intended independent variable is pacing.
+
+Do not silently alter the workload between arms.
+
+If exact byte-for-byte reuse of the safe synthetic Arm A request body is
+possible, prefer that.
+
+==================================================
+INTERPRETATION
+==================================================
+
+ARM B 5/5 HTTP 200:
+
+OVERALL RESULT:
+PROJECT 8 FAILURE NOT REPRODUCED
+
+This means both:
+
+spaced realistic workload = 5/5
+rapid realistic workload = 5/5
+
+Combined with historical heavier successful workloads, there is no current
+evidence that normal rapid BuildCustom coding behavior reproducibly triggers
+the original 429.
+
+Do NOT invent another threshold.
+
+--------------------------------------------------
+
+ARM B receives 429:
+
+OVERALL RESULT:
+PACING RELATIONSHIP SUPPORTED
+
+Capture the live 429 evidence.
+
+Do NOT implement pacing changes yet.
+
+We will inspect exactly where in the sequence it occurred and what headers /
+metadata reveal.
+
+--------------------------------------------------
+
+ARM B receives another error:
+
+OVERALL RESULT:
+OTHER FAILURE
+
+Capture it and stop.
+
+==================================================
+DO NOT EXPAND THE EXPERIMENT
+==================================================
+
+After Arm B:
+
+NO second rapid run.
+
+NO slower run.
+
+NO faster run.
+
+NO concurrency run.
+
+NO different payload.
+
+NO different model.
+
+NO different gateway.
+
+NO Project 8 test.
+
+NO automatic retry.
+
+NO platform changes.
+
+Return the evidence and STOP.
+
+==================================================
+RETURN
+==================================================
+
+OVERALL RESULT:
+PROJECT 8 FAILURE NOT REPRODUCED /
+PACING RELATIONSHIP SUPPORTED /
+OTHER FAILURE /
+TEST NOT RUN
+
+PRECONDITIONS
+- idle duration:
+- timestamped gateway rows checked:
+- competing traffic:
+- active customer operations:
+- active Think streams:
+- gateway:
+- provider:
+- model:
+- Unified Billing:
+- limiter:
+- estimated Arm B cost:
+
+ARM A ACCEPTED BASELINE
+- requests:
+- successes:
+- spacing:
+- payload bytes:
+- cost:
+
+ARM B
+For every request:
+- number:
+- start:
+- end:
+- status:
+- duration:
+- gap from previous response completion:
+- request bytes:
+- fresh tokens:
+- cached tokens:
+- output tokens:
+- total tokens:
+- gateway request ID:
+- Ray ID:
+- provider latency:
+- wholesale:
+- cost:
+
+ARM B RESULT
+- requests attempted:
+- successes:
+- failures:
+- 429:
+- pacing:
+- actual cost:
+
+IF 429 OCCURRED
+- request number:
+- response body:
+- Retry-After:
+- retry-after-ms:
+- rate-limit headers:
+- quota headers:
+- reset headers:
+- Cloudflare metadata:
+- provider metadata:
+- request reached provider:
+- enforcing service identifiable:
+
+FINAL COMPARISON
+- spaced: 5/5
+- rapid:
+- workload materially identical:
+- pacing relationship supported:
+- Project 8 failure reproduced:
+
+WHAT THIS TELLS US
+- evidence normal user behavior caused original 429:
+- evidence against that:
+- remaining unknown:
+- production significance:
+
+RECOMMENDED NEXT STEP
+Do not implement anything.
+State only the evidence-supported next action.
+
+TOTAL ARM B COST:
+$
+
+TOTAL ARM A + ARM B COST:
+$
+
+SOURCE CHANGES:
+ZERO
+
+DEPLOYMENTS:
+ZERO
+
+PROJECT 8 ACTIONS:
+ZERO
+
+Then STOP.

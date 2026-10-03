@@ -86,3 +86,9 @@ Historical logged inference costs are not sufficient to certify a future experim
 **Why:** A bounded diagnostic fit its approved ceiling at the rate implied by historical gateway records but could exceed it at the published model rate. The difference did not establish either a price change or a currently applicable discount.
 
 **How to apply:** Verify the current rate for the exact billing path without spending inference credits, or use the higher published rate conservatively. If that estimate exceeds the approved ceiling, stop before the first request rather than shortening the experiment, changing its payload, or testing the price through inference.
+
+The live compat error response can expose a more specific rejection than the same request's retained Gateway response head. A live HTTP 429 returned `AiGatewayError`, internal code `2018`, and `Wholesale Rate limited`, while the retained response head was only `Rate limited`.
+
+**Why:** Immediate safe capture preserved the wholesale classification that would otherwise have been lost by relying on historical log bodies alone. Authentication remained true, but the rejected request reported wholesale false, zero recorded input/output usage and cost, and zero provider latency. Those facts support a wholesale admission rejection without identifying its precise quota policy or proving a universal request threshold.
+
+**How to apply:** Preserve both live safe failure body/headers and matching Gateway metadata before stopping an approved diagnostic. Do not confuse the Gateway request ID with an unexposed provider request ID. Treat an absent usage object or total-token value as unavailable, not an invented zero, and do not assume the historical generic rejection necessarily had the same enforcing policy.

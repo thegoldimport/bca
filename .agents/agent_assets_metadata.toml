@@ -182,3 +182,17 @@ mtime_ms = 1791056611846
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/c8b6c9f2-61ec-4215-bded-2e57eb15e284/6ba5f997-5c01-4863-b0a3-f7ec6d876ab3"
 storage_version_token = "1791056612341189"
 content_type = "text/plain"
+
+[[outputs]]
+id = "LWv5j7ZK8EIPZ1zjwkHCZ"
+uri = "file://.local/state/controlled-inference-experiment/arm-b-safe-evidence.txt"
+type = "text"
+title = "Arm B captured live 429 evidence and comparison"
+description = "Four rapid requests succeeded; request 5 returned AiGatewayError 2018: Wholesale Rate limited. Includes the complete safe live body and headers, IDs, timings, costs, payload identity, and timestamped traffic reconciliation."
+logical_id = "8d0fa20a-78af-4c87-bf55-f3b6d42d39b9"
+content_hash = "sha256:913ad1299d3a0cf09c95158f65300bb65700c6b1eee15b5126e0be997fee2c55"
+size = 18841
+mtime_ms = 1791057055919
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:6e503f41-f9fc-40ef-b7a5-0b6b08acc34b/8d0fa20a-78af-4c87-bf55-f3b6d42d39b9/d09e7f61-922b-4f62-a25e-d794155c5050"
+storage_version_token = "1791057056476984"
+content_type = "text/plain"
