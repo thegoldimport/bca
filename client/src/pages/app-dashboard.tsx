@@ -913,6 +913,19 @@ async function hasNativeOperationEvidence(
   return hasCorrelatedNativeTurn(turns, baseline);
 }
 
+function isCurrentStoppedLifecycle(lifecycle: NativeTaskLifecycle | undefined, baseline: NativeOperationBaseline | null): boolean {
+  if (customerLifecycleStatus(lifecycle) !== "STOPPED") return false;
+  if (!baseline) return true;
+  if (!lifecycle || !Number.isFinite(lifecycle.updatedAt) || lifecycle.updatedAt < baseline.startedAt) return false;
+  if (baseline.approvedTaskId && baseline.approvedOperationId && typeof baseline.lifecycleUpdatedAt === "number") {
+    return hasFreshApprovedOperation(lifecycle, {
+      taskId: baseline.approvedTaskId, operationId: baseline.approvedOperationId,
+      updatedAt: baseline.lifecycleUpdatedAt,
+    });
+  }
+  return true;
+}
+
 function nativeOperationStorageKey(projectId: number): string {
   return `buildcustom:native-operation:${projectId}`;
 }
@@ -1323,10 +1336,17 @@ function EditorPage() {
           setNativeRecoveryUnverified(false);
           setRuntimeError("");
           setSending(false);
-        } else if (customerStatus === "STOPPED" && !sending && !nativeOperationControllerRef.current) {
+        } else if (isCurrentStoppedLifecycle(status.nativeTaskLifecycle, readNativeOperationBaseline(projectId))) {
+          // Terminal owner state also settles an open/recovering stream. This
+          // cancels only local observation, never the stopped native operation.
+          nativeCancelRef.current();
+          nativeOperationControllerRef.current?.abort();
+          nativeOperationControllerRef.current = null;
+          clearNativeOperationBaseline(projectId);
           setNativeCompletionPhase("error");
           setNativeCompletionMessage("This build stopped before completion.");
           setNativeRecoveryUnverified(false);
+          setRuntimeError("");
           setSending(false);
         }
       } catch {
@@ -1751,13 +1771,15 @@ function EditorPage() {
           ]);
           if (cancelled || activeProjectIdRef.current !== projectId) return;
           const customerStatus = customerLifecycleStatus(runtimeStatus.nativeTaskLifecycle);
-          if (customerStatus === "CONTINUE_AVAILABLE" || customerStatus === "NEEDS_INPUT") {
+          if (customerStatus === "CONTINUE_AVAILABLE" || customerStatus === "NEEDS_INPUT"
+            || isCurrentStoppedLifecycle(runtimeStatus.nativeTaskLifecycle, savedBaseline)) {
             setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
             clearNativeOperationBaseline(projectId);
-            setNativeCompletionPhase(customerStatus === "CONTINUE_AVAILABLE" ? "paused" : "needs_input");
+            setNativeCompletionPhase(customerStatus === "CONTINUE_AVAILABLE" ? "paused"
+              : customerStatus === "NEEDS_INPUT" ? "needs_input" : "error");
             setNativeCompletionMessage(customerStatus === "CONTINUE_AVAILABLE"
               ? "I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?"
-              : "Needs your input");
+              : customerStatus === "NEEDS_INPUT" ? "Needs your input" : "This build stopped before completion.");
             setNativeRecoveryUnverified(false);
             setRuntimeError("");
             setSending(false);
@@ -2574,7 +2596,8 @@ function EditorPage() {
           setNativeCompletionMessage("Working");
         }
         if (streamedTaskLifecycle?.customerStatus === "CONTINUE_AVAILABLE"
-          || streamedTaskLifecycle?.customerStatus === "NEEDS_INPUT") {
+          || streamedTaskLifecycle?.customerStatus === "NEEDS_INPUT"
+          || customerLifecycleStatus(streamedTaskLifecycle) === "STOPPED") {
           if (settleCustomerBoundary({ nativeTaskLifecycle: streamedTaskLifecycle })) return;
         }
         const streamedResourceLimit = nativeResourceLimitError({

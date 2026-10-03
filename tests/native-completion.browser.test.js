@@ -776,6 +776,62 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
     });
 
+    await t.test("active operation terminal lifecycle frame clears Working without completing or continuing", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(() => {
+          const h = window.__nativeCompletionHarness;
+          const stopped = { status: "BLOCKED", customerStatus: "STOPPED",
+            taskId: "fixture-task", operationId: "fixture-operation", updatedAt: Date.now() + 1 };
+          h.setNativeTaskLifecycle(stopped);
+          h.emit({ type: "agent_connected", nativeTaskLifecycle: stopped });
+        });
+        await waitForState(page, "error");
+        assert.equal(await page.$eval('[data-testid="native-completion-state"]', n => n.textContent), "Stopped");
+        assert.equal(await page.$('[data-testid="button-native-continue"]'), null);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        assert.equal((await statsOf(page)).userSuggestions, 1);
+      } finally { await page.close(); }
+    });
+
+    await t.test("authoritative stopped owner status clears Working when terminal stream frame is missing", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(() => {
+          const h = window.__nativeCompletionHarness;
+          h.setRuntime({ active: false, nativeTaskLifecycle: {
+            status: "BLOCKED", customerStatus: "STOPPED",
+            taskId: "fixture-task", operationId: "fixture-operation", updatedAt: Date.now() + 1,
+          } });
+        });
+        await waitForState(page, "error");
+        assert.equal(await page.$('[data-testid="button-native-continue"]'), null);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        assert.equal((await statsOf(page)).userSuggestions, 1);
+      } finally { await page.close(); }
+    });
+
+    await t.test("reopened active operation synchronizes a later stopped state without resending", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({ active: true, savedOperation: true }));
+      try {
+        await page.waitForFunction(() => ["running", "recovering"].includes(
+          document.querySelector('[data-testid="native-completion-state"]')?.getAttribute("data-state"),
+        ));
+        await page.evaluate(() => window.__nativeCompletionHarness.setRuntime({
+          active: false, nativeTaskLifecycle: {
+            status: "BLOCKED", customerStatus: "STOPPED",
+            taskId: "fixture-task", operationId: "fixture-operation", updatedAt: Date.now() + 1,
+          },
+        }));
+        await waitForState(page, "error");
+        assert.equal(await page.$('[data-testid="button-native-continue"]'), null);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+      } finally { await page.close(); }
+    });
+
     await t.test("BLOCKED lifecycle never renders the green completion state", async () => {
       const page = await startEditor(serverUrl, browser, fixture({
         nativeTaskLifecycle: {
