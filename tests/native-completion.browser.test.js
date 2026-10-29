@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { createServer as createHttpServer } from "node:http";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +13,10 @@ import { build } from "vite";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const projectRequire = createRequire(import.meta.url);
 const puppeteer = projectRequire("puppeteer");
+const browserExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+  || (existsSync("/repl/tools/bin/chromium")
+    ? "/repl/tools/bin/chromium"
+    : puppeteer.executablePath());
 
 const PROJECT_ID = 10;
 const BASELINE = "f8252595233caa93afc192a03a30d857279eae47";
@@ -643,7 +648,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
     assert.ok(address && typeof address !== "string");
     const serverUrl = `http://127.0.0.1:${address.port}`;
     browser = await puppeteer.launch({
-      executablePath: "/repl/tools/bin/chromium",
+      executablePath: browserExecutablePath,
       headless: true,
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
     });

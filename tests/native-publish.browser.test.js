@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createServer as createHttpServer } from "node:http";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +12,10 @@ import { build } from "vite";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const projectRequire = createRequire(import.meta.url);
 const puppeteer = projectRequire("puppeteer");
+const browserExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+  || (existsSync("/repl/tools/bin/chromium")
+    ? "/repl/tools/bin/chromium"
+    : puppeteer.executablePath());
 
 function installPublishMocks(options) {
   const originalFetch = window.fetch.bind(window);
@@ -168,7 +173,7 @@ test("native Publish sends one CSRF-protected project deployment and renders pub
     assert.ok(address && typeof address !== "string");
     const serverUrl = `http://127.0.0.1:${address.port}`;
     browser = await puppeteer.launch({
-      executablePath: "/repl/tools/bin/chromium",
+      executablePath: browserExecutablePath,
       headless: true,
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
     });
