@@ -9,8 +9,8 @@ import test from "node:test";
 import { build } from "vite";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const labRequire = createRequire(path.join(root, "lab/bc-vibesdk-lab-20260925/package.json"));
-const puppeteer = labRequire("puppeteer");
+const projectRequire = createRequire(import.meta.url);
+const puppeteer = projectRequire("puppeteer");
 
 function installPublishMocks(options) {
   const originalFetch = window.fetch.bind(window);
