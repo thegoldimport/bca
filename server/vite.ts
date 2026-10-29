@@ -5,6 +5,7 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
+import { getAllowedDevHosts } from "./vite-hosts";
 
 const viteLogger = createLogger();
 
@@ -12,7 +13,7 @@ export async function setupVite(server: Server, app: Express) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server, path: "/vite-hmr" },
-    allowedHosts: true as const,
+    allowedHosts: getAllowedDevHosts(),
   };
 
   const vite = await createViteServer({

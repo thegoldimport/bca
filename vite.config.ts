@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { metaImagesPlugin } from "./vite-plugin-meta-images";
+import { getAllowedDevHosts } from "./server/vite-hosts";
 
 export default defineConfig({
   plugins: [
@@ -42,7 +43,7 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
-    allowedHosts: true,
+    allowedHosts: getAllowedDevHosts(),
     fs: {
       strict: true,
       deny: ["**/.*"],
