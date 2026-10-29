@@ -40,6 +40,7 @@
 - [Stock service-binding redirects](stock-service-binding-redirects.md) — use manual redirects with explicit rejection for owner-bound Worker-to-Worker requests.
 - [Offline completion validation](offline-completion-validation.md) — the stock coding loop is functionally accepted; validate missing completion signals by replay, not additional generation.
 - [Browser test watcher limits](browser-test-watcher-limits.md) — parallel Vite dev servers can exhaust inotify watches; serve a built client for Chromium recovery tests.
+- [Portable browser tests](portable-browser-tests.md) — use Replit Chromium locally when available and Puppeteer’s managed browser in external CI.
 - [Staging publish recovery safety](staging-publish-recovery.md) — recovery needs a distinct fail-closed route; validate stock script identity through lab dispatch, not its returned URL alone.
 - [Staging D1 ledger drift](staging-d1-ledger-drift.md) — verify live schema against pending migrations before replaying an already-present ALTER.
 - [Stock runtime logout revocation](stock-logout-revocation.md) — a successful logout is not proof that the old session is revoked; test the pre-logout credential.
