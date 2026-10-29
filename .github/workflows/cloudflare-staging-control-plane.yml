@@ -1,0 +1,108 @@
+name: Cloudflare staging control-plane release
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Deploy the staging Worker or roll it back to a previous version
+        required: true
+        type: choice
+        options:
+          - deploy
+          - rollback
+      confirm:
+        description: Type DEPLOY STAGING or ROLL BACK STAGING exactly
+        required: true
+        type: string
+      version_id:
+        description: Required for rollback; an earlier version of the staging control-plane Worker
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-staging-control-plane
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 03ef1e6e42498920987f07059e107538
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_STAGING_API_TOKEN }}
+      OPERATION: ${{ inputs.operation }}
+      CONFIRMATION: ${{ inputs.confirm }}
+      ROLLBACK_VERSION_ID: ${{ inputs.version_id }}
+    steps:
+      - name: Require main and explicit confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || {
+            echo "Run this workflow from main only." >&2
+            exit 1
+          }
+          case "$OPERATION:$CONFIRMATION" in
+            deploy:"DEPLOY STAGING") ;;
+            rollback:"ROLL BACK STAGING") ;;
+            *)
+              echo "The operation and typed confirmation do not match." >&2
+              exit 1
+              ;;
+          esac
+          if [[ "$OPERATION" == "rollback" && -z "$ROLLBACK_VERSION_ID" ]]; then
+            echo "A prior staging Worker version ID is required for rollback." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Guard the staging-only config
+        run: node scripts/cloudflare-staging-release.mjs assert-config
+
+      - name: Validate the staging Worker bundle
+        run: npx wrangler deploy --dry-run --config wrangler.staging.jsonc --name buildcustom-control-plane-staging
+
+      - name: Verify staging-only Cloudflare token access
+        run: node scripts/cloudflare-staging-release.mjs scope-check
+
+      - name: Deploy staging control plane
+        if: inputs.operation == 'deploy'
+        run: npx wrangler deploy --config wrangler.staging.jsonc --name buildcustom-control-plane-staging --yes
+
+      - name: Verify rollback target exists
+        if: inputs.operation == 'rollback'
+        run: node scripts/cloudflare-staging-release.mjs assert-rollback-version
+
+      - name: Roll back staging control plane
+        if: inputs.operation == 'rollback'
+        run: npx wrangler rollback "$ROLLBACK_VERSION_ID" --config wrangler.staging.jsonc --name buildcustom-control-plane-staging --message "GitHub staging rollback ${GITHUB_SHA}" --yes
+
+      - name: Record commit and Cloudflare version
+        run: node scripts/cloudflare-staging-release.mjs record
+
+      - name: Check staging health with a safe GET
+        run: node scripts/cloudflare-staging-release.mjs health
