@@ -285,7 +285,7 @@ test("native Publish sends one CSRF-protected project deployment and renders pub
     await t.test("stale capability build cannot save settings or invoke publish", async () => {
       const page = await openEditor(serverUrl, browser, { staleCapabilities: true });
       try {
-        await page.click('[data-testid="button-publish-native"]');
+        await page.locator('[data-testid="button-publish-native"]').click();
         await page.waitForFunction(() => document.querySelector('[data-testid="native-publish-status"]')?.textContent?.includes("Publish failed"));
         const result = await page.evaluate(() => ({
           requests: window.__nativePublishHarness.requests,
