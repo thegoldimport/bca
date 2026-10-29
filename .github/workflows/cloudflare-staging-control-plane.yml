@@ -33,7 +33,6 @@ jobs:
       name: staging
     env:
       CLOUDFLARE_ACCOUNT_ID: 03ef1e6e42498920987f07059e107538
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_STAGING_API_TOKEN }}
       OPERATION: ${{ inputs.operation }}
       CONFIRMATION: ${{ inputs.confirm }}
       ROLLBACK_VERSION_ID: ${{ inputs.version_id }}
@@ -62,6 +61,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -88,21 +88,31 @@ jobs:
 
       - name: Verify staging-only Cloudflare token access
         run: node scripts/cloudflare-staging-release.mjs scope-check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_STAGING_API_TOKEN }}
 
       - name: Deploy staging control plane
         if: inputs.operation == 'deploy'
         run: npx wrangler deploy --config wrangler.staging.jsonc --name buildcustom-control-plane-staging --yes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_STAGING_API_TOKEN }}
 
       - name: Verify rollback target exists
         if: inputs.operation == 'rollback'
         run: node scripts/cloudflare-staging-release.mjs assert-rollback-version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_STAGING_API_TOKEN }}
 
       - name: Roll back staging control plane
         if: inputs.operation == 'rollback'
         run: npx wrangler rollback "$ROLLBACK_VERSION_ID" --config wrangler.staging.jsonc --name buildcustom-control-plane-staging --message "GitHub staging rollback ${GITHUB_SHA}" --yes
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_STAGING_API_TOKEN }}
 
       - name: Record commit and Cloudflare version
         run: node scripts/cloudflare-staging-release.mjs record
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_STAGING_API_TOKEN }}
 
       - name: Check staging health with a safe GET
         run: node scripts/cloudflare-staging-release.mjs health
