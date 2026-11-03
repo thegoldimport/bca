@@ -4,6 +4,7 @@ import { assertControlPlaneEnvironment, assertSafeStagingTarget } from "./stagin
 import { ProjectOperationDO } from "./staging/project-do";
 import { createVibeSdkAdapter, VibeSdkAdapterError, type VibeSdkImage } from "./staging/vibesdk-adapter";
 import { handleAdminRoute } from "./admin-routes";
+import { handleLaunchAdminRoute } from "./launch-admin-routes";
 import { handleContentRoute } from "./content-routes";
 import { handleDomainRoute } from "./domain-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
@@ -219,7 +220,8 @@ export default {
         const adminResponse = await handleAdminRoute({ request, env, url, input });
         if (adminResponse) return adminResponse;
       } else if (url.pathname.startsWith("/api/admin/")) {
-        return json({ message: "Not found" }, { status: 404 });
+        const adminResponse = await handleLaunchAdminRoute({ request, env, url, input });
+        if (adminResponse) return adminResponse;
       }
       const contentResponse = await handleContentRoute({ request, env, url, input });
       if (contentResponse) return contentResponse;
@@ -278,6 +280,9 @@ export default {
         if (url.pathname.startsWith("/api/")) return json({ message: "Unauthorized" }, { status: 401 });
         const asset = await env.ASSETS.fetch(request);
         return asset.status === 404 ? env.ASSETS.fetch(new Request(new URL("/index.html", request.url))) : asset;
+      }
+      if (runtimeCustomer && user.account_status === "suspended") {
+        return json({ message: "Account access is suspended." }, { status: 403 });
       }
       if (url.pathname === "/api/auth/profile" && request.method === "PUT") {
         if (launchCustomer) return json({ message: "This account setting is not available yet." }, { status: 404 });

@@ -80,7 +80,8 @@ import previewFitness from "@/assets/preview-fitness.jpg";
 import previewGame from "@/assets/preview-game.jpg";
 import previewEcommerce from "@/assets/preview-ecommerce.jpg";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
-import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } from "@/pages/app-admin-pages";
+import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } from "@/pages/app-admin-live-pages";
+import OwnerBootstrapPage from "@/pages/owner-bootstrap-page";
 import ProjectDetail from "@/pages/project-detail";
 import { getPlanEntitlement } from "@shared/plans";
 import {
@@ -90,7 +91,12 @@ import {
   isContextualContinuationApproval,
 } from "@/lib/native-continuation";
 
-function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onToggle: () => void; isAdmin: boolean }) {
+function AppSidebar({ collapsed, onToggle, isAdmin, ownerCandidate }: {
+  collapsed: boolean;
+  onToggle: () => void;
+  isAdmin: boolean;
+  ownerCandidate: boolean;
+}) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
 
@@ -111,6 +117,9 @@ function AppSidebar({ collapsed, onToggle, isAdmin }: { collapsed: boolean; onTo
   const navItems = [
     ...baseItems,
     ...(isAdmin ? adminItems : []),
+    ...(ownerCandidate && !isAdmin
+      ? [{ path: "/app/owner-authorization", icon: Shield, label: "Owner access" }]
+      : []),
     { path: "/app/settings", icon: Settings, label: "Settings" },
   ];
 
@@ -5676,7 +5685,12 @@ function AppDashboardContent({ user }: { user: AppUser }) {
         : "bg-gray-50"
     }`}>
       {showOnboarding && <OnboardingWizard onComplete={handleOnboardingComplete} />}
-      <AppSidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} isAdmin={isAdminUser(user)} />
+      <AppSidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        isAdmin={isAdminUser(user)}
+        ownerCandidate={user.email.toLowerCase() === "support@buildcustom.ai"}
+      />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <AppTopBar />
@@ -5691,6 +5705,8 @@ function AppDashboardContent({ user }: { user: AppUser }) {
             {isAdminUser(user) && <Route path="/app/billing" component={BillingPage} />}
             {isAdminUser(user) && <Route path="/app/support" component={SupportPage} />}
             {isAdminUser(user) && <Route path="/app/deployments" component={DeploymentsPage} />}
+            {user.email.toLowerCase() === "support@buildcustom.ai" && !isAdminUser(user)
+              && <Route path="/app/owner-authorization" component={OwnerBootstrapPage} />}
             <Route path="/app/settings" component={SettingsPage} />
             <Route path="/app/project/:id" component={ProjectDetail} />
             <Route>{() => <ProjectsPage />}</Route>

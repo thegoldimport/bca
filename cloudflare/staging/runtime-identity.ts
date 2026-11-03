@@ -124,16 +124,54 @@ async function productUser(env: RuntimeAuthEnv, identity: RuntimeIdentity): Prom
   } catch {
     throw new RuntimeIdentityError("This account conflicts with an existing staging account.", 409);
   }
+  const accountStatusColumn = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
+    ? ",account_status" : "";
   const user = await env.DB.prepare(
-    "SELECT id,display_name AS username,email,role,plan,created_at FROM users WHERE id=?",
+    `SELECT id,display_name AS username,email,role,plan,created_at${accountStatusColumn} FROM users WHERE id=?`,
   ).bind(identity.id).first<SessionUser>();
   if (!user) throw new RuntimeIdentityError("Could not load your BuildCustom account.");
+  user.account_status ||= "active";
   return user;
 }
 
 export async function resolveRuntimeProductUser(env: RuntimeAuthEnv, request: Request): Promise<SessionUser | null> {
   const identity = await verifiedIdentity(env, request);
   return identity ? productUser(env, identity) : null;
+}
+
+export async function hasVerifiedRuntimeEmailIdentity(
+  env: RuntimeAuthEnv,
+  request: Request,
+  email: string,
+): Promise<{ available: boolean; verified: boolean }> {
+  try {
+    const response = await runtimeRequest(env, request, "/api/auth/identities", { timeoutMs: 5_000 });
+    if (!response.ok) return { available: true, verified: false };
+    const result = await response.json().catch(() => null) as any;
+    const identities = result?.success === true && Array.isArray(result?.data?.identities)
+      ? result.data.identities : [];
+    const verified = identities.some((identity: any) =>
+      typeof identity?.provider === "string" && ["google", "github"].includes(identity.provider.toLowerCase())
+      && typeof identity?.email === "string" && identity.email.trim().toLowerCase() === email.trim().toLowerCase()
+      && identity.emailVerified === true);
+    return { available: true, verified };
+  } catch {
+    return { available: false, verified: false };
+  }
+}
+
+export async function checkRuntimeAvailability(env: RuntimeAuthEnv): Promise<boolean> {
+  try {
+    const request = new Request(`${env.AUTH_RUNTIME_URL}/api/auth/check`, {
+      headers: { Accept: "application/json" },
+    });
+    const response = await authRuntime(env).fetch(request);
+    if (!response.ok) return false;
+    const result = await response.json().catch(() => null) as any;
+    return result?.success === true && result?.data?.authenticated === false;
+  } catch {
+    return false;
+  }
 }
 
 function responseCookies(response: Response): Headers {
@@ -177,6 +215,12 @@ export async function handleStagingCustomerAuth(
     const identity = await verifiedIdentity(env, request, cookie);
     if (!identity) throw new RuntimeIdentityError("Could not establish your session.");
     const user = await productUser(env, identity);
+    if (user.account_status === "suspended") {
+      return Response.json({ message: "Account access is suspended." }, {
+        status: 403,
+        headers: { "Set-Cookie": clearCookie(AUTH_COOKIE), "Cache-Control": "no-store" },
+      });
+    }
     return Response.json(user, { headers: responseCookies(response) });
   }
 
@@ -229,7 +273,8 @@ export async function handleStagingCustomerAuth(
   }
 
   if (pathname === "/api/auth/me" && request.method === "GET") {
-    return Response.json(await resolveRuntimeProductUser(env, request), {
+    const user = await resolveRuntimeProductUser(env, request);
+    return Response.json(user?.account_status === "suspended" ? null : user, {
       headers: { "Cache-Control": "no-store" },
     });
   }
