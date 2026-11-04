@@ -4,7 +4,6 @@ import { handleOwnerBootstrapRoute } from "../cloudflare/owner-bootstrap";
 
 const origin = "https://app.buildcustom.ai";
 const ownerEmail = "support@buildcustom.ai";
-const ownerSecret = "operator-generated-secret-with-at-least-32-characters";
 
 type User = {
   id: string;
@@ -217,7 +216,7 @@ function ownerEnv(options: {
     CONTROL_PLANE_PROFILE: "launch",
     AUTH_RUNTIME_URL: "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
     CONTROL_PLANE_ALLOWED_ORIGIN: origin,
-    OWNER_BOOTSTRAP_SECRET: options.secret ?? ownerSecret,
+    OWNER_BOOTSTRAP_SECRET: options.secret ?? "x".repeat(64),
     ...(options.emailAvailable === false ? {} : {
       EMAIL: {
         async send(message: Record<string, string>) {
@@ -311,7 +310,7 @@ async function verifyToken(env: any, token: string, withOrigin = true) {
 async function activate(env: any, body: Record<string, unknown> = {}, csrf = true) {
   return route(env, request("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail, ownerSecret, ...body },
+    body: { confirmEmail: ownerEmail, ...body },
     csrf,
   }));
 }
@@ -401,7 +400,7 @@ test("anonymous verification requests reveal no account existence and send no em
   assert.equal(fixture.sent.length, 0);
 });
 
-test("owner activation requires a fresh proof, exact origin, CSRF, and a valid private secret", async () => {
+test("owner activation requires fresh proof, exact origin, CSRF, and exact email confirmation", async () => {
   const fixture = ownerEnv();
   await requestLink(fixture.env);
   const token = tokenFromMail(fixture.sent[0]);
@@ -409,23 +408,31 @@ test("owner activation requires a fresh proof, exact origin, CSRF, and a valid p
   assert.equal((await verifyToken(fixture.env, token))?.status, 200);
 
   assert.equal((await activate(fixture.env, {}, false))?.status, 403);
-  assert.equal((await activate(fixture.env, { ownerSecret: "" }))?.status, 403);
-  assert.equal((await activate(fixture.env, { ownerSecret: "incorrect".repeat(8) }))?.status, 403);
   assert.equal((await activate(fixture.env, { confirmEmail: "wrong@example.test" }))?.status, 400);
   assert.equal(fixture.user.role, "user");
 });
 
-test("owner activation stays disabled when the Cloudflare secret is not provisioned", async () => {
+test("owner activation stays disabled unless the server-side operator authorization is provisioned", async () => {
   const fixture = ownerEnv({ secret: "" });
   const stateResponse = await route(fixture.env, request("/api/admin/owner-bootstrap"));
-  assert.equal((await stateResponse?.json() as any).ownerSecretConfigured, false);
+  const state = await stateResponse?.json() as any;
+  assert.equal(state.operatorAuthorizationReady, false);
+  assert.equal(state.eligible, false);
 
   await requestLink(fixture.env);
   const token = tokenFromMail(fixture.sent[0]);
   await verifyToken(fixture.env, token);
-  const response = await activate(fixture.env);
+  const response = await activate(fixture.env, { ownerSecret: "client-supplied-value-that-is-not-authoritative" });
   assert.equal(response?.status, 403);
   assert.equal(fixture.user.role, "user");
+});
+
+test("owner state exposes readiness only, never the server-side secret", async () => {
+  const fixture = ownerEnv();
+  const stateResponse = await route(fixture.env, request("/api/admin/owner-bootstrap"));
+  const state = await stateResponse?.json() as any;
+  assert.equal(state.operatorAuthorizationReady, true);
+  assert.equal(JSON.stringify(state).includes(fixture.env.OWNER_BOOTSTRAP_SECRET), false);
 });
 
 test("only the existing verified owner can be promoted once", async () => {

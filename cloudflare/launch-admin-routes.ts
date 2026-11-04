@@ -141,6 +141,35 @@ function safeDeploymentUrl(value: unknown): string | null {
   }
 }
 
+async function getProjects(env: LaunchAdminEnv, url: URL) {
+  const search = (url.searchParams.get("search") || "").trim().slice(0, 100);
+  const pattern = `%${search}%`;
+  const result = await env.DB.prepare(
+    `SELECT p.id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at,
+       COALESCE(u.display_name,u.username) AS owner_name,u.email AS owner_email
+     FROM projects p
+     JOIN users u ON u.id=p.user_id
+     WHERE u.role='user'
+       AND (?='' OR p.name LIKE ? COLLATE NOCASE
+         OR COALESCE(u.display_name,u.username) LIKE ? COLLATE NOCASE
+         OR u.email LIKE ? COLLATE NOCASE)
+     ORDER BY p.updated_at DESC LIMIT 200`,
+  ).bind(search, pattern, pattern, pattern).all();
+  return {
+    projects: (result.results || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      status: row.status,
+      framework: row.framework,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      ownerName: row.owner_name,
+      ownerEmail: row.owner_email,
+    })),
+  };
+}
+
 async function getDeployments(env: LaunchAdminEnv) {
   const result = await env.DB.prepare(
     `SELECT p.id,p.name,p.type,p.status,p.updated_at,u.display_name AS owner_name,u.email AS owner_email,
@@ -224,6 +253,9 @@ export async function handleLaunchAdminRoute(args: {
   }
   if (url.pathname === "/api/admin/customers" && request.method === "GET") {
     return json(await getCustomers(env, url));
+  }
+  if (url.pathname === "/api/admin/projects" && request.method === "GET") {
+    return json(await getProjects(env, url));
   }
   if (url.pathname === "/api/admin/deployments" && request.method === "GET") {
     return json(await getDeployments(env));

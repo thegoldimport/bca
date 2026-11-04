@@ -22,6 +22,7 @@ function makeDb(options: {
   users?: TestUser[];
   customers?: Record<string, unknown>[];
   projects?: Record<string, unknown>[];
+  adminProjects?: Record<string, unknown>[];
   deployments?: Record<string, unknown>[];
 }): { DB: any; state: { users: TestUser[]; statements: string[]; auditEvents: string[] } } {
   const state = {
@@ -65,6 +66,9 @@ function makeDb(options: {
         async all() {
           if (sql.includes("SELECT u.id,COALESCE(u.display_name,u.username) AS name")) {
             return { results: options.customers || [] };
+          }
+          if (sql.includes("COALESCE(u.display_name,u.username) AS owner_name")) {
+            return { results: options.adminProjects || [] };
           }
           if (sql.includes("SELECT id,name,type,status,framework,created_at,updated_at")) {
             return { results: options.projects || [] };
@@ -122,6 +126,7 @@ function makeEnv(options: {
   users?: TestUser[];
   customers?: Record<string, unknown>[];
   projects?: Record<string, unknown>[];
+  adminProjects?: Record<string, unknown>[];
   deployments?: Record<string, unknown>[];
   identities?: { provider: string; email: string; emailVerified: boolean }[];
 }) {
@@ -235,6 +240,7 @@ test("regular customers cannot access launch admin data", async () => {
   const response = await route(env, makeRequest("/api/admin/customers"));
   assert.equal(response?.status, 403);
   assert.deepEqual(await response?.json(), { message: "Admin access required." });
+  assert.equal((await route(env, makeRequest("/api/admin/projects")))?.status, 403);
 });
 
 test("admin health reports actual D1 and runtime connectivity checks", async () => {
@@ -341,6 +347,49 @@ test("authorized admins receive real customer and project metadata without sensi
   assert.equal(state.statements.some((sql) => /\b(password|session_token|api_key|source_files)\b/i.test(sql)), false);
 });
 
+test("anonymous visitors cannot read the all-projects admin endpoint", async () => {
+  const { env } = makeEnv({ actor: testUser() });
+  const response = await route(env, makeRequest("/api/admin/projects", { authenticated: false }));
+  assert.equal(response?.status, 401);
+});
+
+test("authorized admins receive only safe metadata from all customer projects", async () => {
+  const { env, state } = makeEnv({
+    actor: testUser({ id: "admin-1", role: "super_admin" }),
+    adminProjects: [{
+      id: 31,
+      name: "Customer project",
+      type: "website",
+      status: "published",
+      framework: "React",
+      created_at: "2026-05-10 09:00:00",
+      updated_at: "2026-05-11 10:00:00",
+      owner_name: "Customer One",
+      owner_email: "customer@example.test",
+      password: "must-not-return",
+      session_token: "must-not-return",
+      api_key: "must-not-return",
+      source_files: "must-not-return",
+    }],
+  });
+  const response = await route(env, makeRequest("/api/admin/projects"));
+  assert.equal(response?.status, 200);
+  const body = await response?.json() as { projects: Record<string, unknown>[] };
+  assert.deepEqual(body.projects[0], {
+    id: 31,
+    name: "Customer project",
+    type: "website",
+    status: "published",
+    framework: "React",
+    createdAt: "2026-05-10 09:00:00",
+    updatedAt: "2026-05-11 10:00:00",
+    ownerName: "Customer One",
+    ownerEmail: "customer@example.test",
+  });
+  assert.equal(JSON.stringify(body).includes("must-not-return"), false);
+  assert.equal(state.statements.some((sql) => /\b(password|session_token|api_key|source_files)\b/i.test(sql)), false);
+});
+
 test("email/password signup flag alone cannot authorize owner bootstrap", async () => {
   const { env, state } = makeEnv({ actor: testUser({ id: "owner-1", email: ownerEmail }) });
   const statusResponse = await route(env, makeRequest("/api/admin/owner-bootstrap"));
@@ -359,14 +408,14 @@ test("email/password signup flag alone cannot authorize owner bootstrap", async 
   assert.equal(state.users[0].role, "user");
 });
 
-test("a provider identity alone cannot replace fresh email proof and the private owner secret", async () => {
+test("a provider identity and client-supplied value cannot replace server operator authorization", async () => {
   const { env, state } = makeEnv({
     actor: testUser({ id: "owner-1", email: ownerEmail }),
     identities: [{ provider: "google", email: ownerEmail, emailVerified: true }],
   });
   const missingConfirmation = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: "wrong@example.test", ownerSecret: "a".repeat(64) },
+    body: { confirmEmail: "wrong@example.test" },
     csrf: true,
   }));
   assert.equal(missingConfirmation?.status, 400);
@@ -374,7 +423,7 @@ test("a provider identity alone cannot replace fresh email proof and the private
 
   const response = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
+    body: { confirmEmail: ownerEmail, ownerSecret: "x".repeat(64) },
     csrf: true,
   }));
   assert.equal(response?.status, 403);
@@ -388,7 +437,7 @@ test("a different verified identity cannot hijack the owner bootstrap", async ()
   });
   const response = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
+    body: { confirmEmail: ownerEmail },
     csrf: true,
   }));
   assert.equal(response?.status, 403);
@@ -402,7 +451,7 @@ test("a provider without an explicit verified-email claim cannot authorize owner
   });
   const response = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
+    body: { confirmEmail: ownerEmail },
     csrf: true,
   }));
   assert.equal(response?.status, 403);
@@ -439,17 +488,17 @@ test("owner bootstrap cannot run without CSRF or after another owner exists", as
     users: [existingOwner],
     identities: [{ provider: "google", email: ownerEmail, emailVerified: true }],
   });
-  env.OWNER_BOOTSTRAP_SECRET = "a".repeat(64);
+  env.OWNER_BOOTSTRAP_SECRET = "x".repeat(64);
   const noCsrf = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
+    body: { confirmEmail: ownerEmail },
   }));
   assert.equal(noCsrf?.status, 403);
   assert.equal(candidate.role, "user");
 
   const alreadyInitialized = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
+    body: { confirmEmail: ownerEmail },
     csrf: true,
   }));
   assert.equal(alreadyInitialized?.status, 409);

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Mail, ShieldCheck } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
 import { csrfToken } from "@/lib/auth";
+import { ownerActivationButtonEnabled, ownerActivationRequestBody } from "@/lib/owner-activation";
 
 const OWNER_EMAIL = "support@buildcustom.ai";
 
@@ -13,7 +14,7 @@ type BootstrapState = {
   ownerAlreadyInitialized: boolean;
   emailOwnershipVerified: boolean;
   verificationServiceAvailable: boolean;
-  ownerSecretConfigured: boolean;
+  operatorAuthorizationReady: boolean;
   eligible: boolean;
   verifiedAt: number | null;
 };
@@ -46,7 +47,6 @@ export default function OwnerBootstrapPage() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const [confirmation, setConfirmation] = useState("");
-  const [ownerSecret, setOwnerSecret] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
   const stateQuery = useQuery<BootstrapState, Error>({
     queryKey: ["owner-bootstrap-state"],
@@ -58,12 +58,11 @@ export default function OwnerBootstrapPage() {
     onSuccess: (result) => setRequestMessage(result.message),
   });
   const bootstrap = useMutation({
-    mutationFn: () => postProtected("/api/admin/owner-bootstrap", {
-      confirmEmail: confirmation.trim().toLowerCase(),
-      ownerSecret,
-    }),
+    mutationFn: () => postProtected(
+      "/api/admin/owner-bootstrap",
+      ownerActivationRequestBody(confirmation),
+    ),
     onSuccess: async () => {
-      setOwnerSecret("");
       await queryClient.invalidateQueries({ queryKey: ["owner-bootstrap-state"] });
       window.location.assign("/app/users");
     },
@@ -143,11 +142,10 @@ export default function OwnerBootstrapPage() {
             )}
 
             {state.emailOwnershipVerified && !state.ownerAlreadyInitialized && (
-              <div className={`mt-6 border-t border-white/10 pt-5 ${!state.ownerSecretConfigured ? "opacity-80" : ""}`}>
-                {!state.ownerSecretConfigured && (
+              <div className="mt-6 border-t border-white/10 pt-5">
+                {!state.operatorAuthorizationReady && (
                   <p className="mb-4 rounded-xl bg-amber-500/10 p-4 text-sm text-amber-400">
-                    The operator must first provision the one-time authorization secret as a Cloudflare Worker secret.
-                    It is never displayed or stored in this page.
+                    Owner activation is waiting for one-time operator authorization. No secret is entered or sent from this page.
                   </p>
                 )}
                 <label htmlFor="owner-email-confirmation" className="mb-2 block text-sm font-medium">
@@ -163,26 +161,10 @@ export default function OwnerBootstrapPage() {
                     theme === "dark" ? "border-white/10 bg-black/20 text-white" : "border-gray-200 bg-white"
                   }`}
                 />
-                <label htmlFor="owner-bootstrap-secret" className="mb-2 mt-4 block text-sm font-medium">
-                  One-time owner authorization secret
-                </label>
-                <input
-                  id="owner-bootstrap-secret"
-                  type="password"
-                  autoComplete="off"
-                  value={ownerSecret}
-                  onChange={(event) => setOwnerSecret(event.target.value)}
-                  className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${
-                    theme === "dark" ? "border-white/10 bg-black/20 text-white" : "border-gray-200 bg-white"
-                  }`}
-                />
                 {bootstrap.error && <p role="alert" className="mt-3 text-sm text-red-400">{bootstrap.error.message}</p>}
                 <button
                   type="button"
-                  disabled={!state.ownerSecretConfigured
-                    || confirmation.trim().toLowerCase() !== OWNER_EMAIL
-                    || ownerSecret.length < 32
-                    || bootstrap.isPending}
+                  disabled={!ownerActivationButtonEnabled(state.eligible, confirmation, bootstrap.isPending)}
                   onClick={() => bootstrap.mutate()}
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-500 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -190,7 +172,7 @@ export default function OwnerBootstrapPage() {
                   {bootstrap.isPending ? "Authorizing…" : "Authorize owner access"}
                 </button>
                 <p className={`mt-3 text-xs ${subText}`}>
-                  This promotes only the existing account after fresh email proof, exact confirmation, and the operator secret.
+                  This promotes only the existing account after fresh email proof, exact confirmation, and server-side operator approval.
                 </p>
               </div>
             )}
