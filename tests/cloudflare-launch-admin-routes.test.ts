@@ -30,6 +30,11 @@ function makeDb(options: {
     auditEvents: [] as string[],
   };
   const db = {
+    async batch(items: Array<{ run: () => Promise<unknown> }>) {
+      const results = [];
+      for (const item of items) results.push(await item.run());
+      return results;
+    },
     prepare(sql: string) {
       state.statements.push(sql);
       let values: unknown[] = [];
@@ -178,7 +183,7 @@ function makeRequest(
   path: string,
   options: { method?: string; body?: unknown; authenticated?: boolean; csrf?: boolean } = {},
 ) {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { "Content-Type": "application/json", Origin: appOrigin };
   if (options.authenticated !== false) headers.Cookie = "accessToken=session-token";
   if (options.csrf) {
     headers.Cookie = `${headers.Cookie ? `${headers.Cookie}; ` : ""}csrf-token=csrf-value`;
@@ -352,14 +357,14 @@ test("email/password signup flag alone cannot authorize owner bootstrap", async 
   assert.equal(state.users[0].role, "user");
 });
 
-test("only an authenticated, explicitly confirmed owner with a matching verified provider identity can bootstrap", async () => {
+test("a provider identity alone cannot replace fresh email proof and the private owner secret", async () => {
   const { env, state } = makeEnv({
     actor: testUser({ id: "owner-1", email: ownerEmail }),
     identities: [{ provider: "google", email: ownerEmail, emailVerified: true }],
   });
   const missingConfirmation = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: "wrong@example.test" },
+    body: { confirmEmail: "wrong@example.test", ownerSecret: "a".repeat(64) },
     csrf: true,
   }));
   assert.equal(missingConfirmation?.status, 400);
@@ -367,22 +372,21 @@ test("only an authenticated, explicitly confirmed owner with a matching verified
 
   const response = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail },
+    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
     csrf: true,
   }));
-  assert.equal(response?.status, 200);
-  assert.equal(state.users[0].role, "super_admin");
-  assert.ok(state.auditEvents.includes("initial_owner_bootstrap"));
+  assert.equal(response?.status, 403);
+  assert.equal(state.users[0].role, "user");
 });
 
-test("a verified identity for a different address cannot hijack the owner bootstrap", async () => {
+test("a different verified identity cannot hijack the owner bootstrap", async () => {
   const { env, state } = makeEnv({
     actor: testUser({ id: "owner-1", email: ownerEmail }),
     identities: [{ provider: "google", email: "attacker@example.test", emailVerified: true }],
   });
   const response = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail },
+    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
     csrf: true,
   }));
   assert.equal(response?.status, 403);
@@ -396,7 +400,7 @@ test("a provider without an explicit verified-email claim cannot authorize owner
   });
   const response = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail },
+    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
     csrf: true,
   }));
   assert.equal(response?.status, 403);
@@ -433,16 +437,17 @@ test("owner bootstrap cannot run without CSRF or after another owner exists", as
     users: [existingOwner],
     identities: [{ provider: "google", email: ownerEmail, emailVerified: true }],
   });
+  env.OWNER_BOOTSTRAP_SECRET = "a".repeat(64);
   const noCsrf = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail },
+    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
   }));
   assert.equal(noCsrf?.status, 403);
   assert.equal(candidate.role, "user");
 
   const alreadyInitialized = await route(env, makeRequest("/api/admin/owner-bootstrap", {
     method: "POST",
-    body: { confirmEmail: ownerEmail },
+    body: { confirmEmail: ownerEmail, ownerSecret: "a".repeat(64) },
     csrf: true,
   }));
   assert.equal(alreadyInitialized?.status, 409);

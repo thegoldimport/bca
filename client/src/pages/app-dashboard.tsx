@@ -5707,6 +5707,7 @@ function AppDashboardContent({ user }: { user: AppUser }) {
             {isAdminUser(user) && <Route path="/app/deployments" component={DeploymentsPage} />}
             {user.email.toLowerCase() === "support@buildcustom.ai" && !isAdminUser(user)
               && <Route path="/app/owner-authorization" component={OwnerBootstrapPage} />}
+            {isAdminUser(user) && <Route path="/app/owner-authorization" component={OwnerBootstrapPage} />}
             <Route path="/app/settings" component={SettingsPage} />
             <Route path="/app/project/:id" component={ProjectDetail} />
             <Route>{() => <ProjectsPage />}</Route>

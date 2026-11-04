@@ -8,6 +8,7 @@ import AppAuth from "@/pages/app-auth";
 import ResetPassword from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
 import AppEntry from "@/pages/app-entry";
+import OwnerEmailVerificationPage from "@/pages/owner-email-verification";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 
@@ -27,6 +28,7 @@ function Router() {
       {appHost && <Route path="/login" component={AppAuth} />}
       {appHost && <Route path="/signup" component={AppAuth} />}
       {appHost && <Route path="/forgot-password" component={AppAuth} />}
+      <Route path="/owner-email-verification" component={OwnerEmailVerificationPage} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/app/login">{() => <LegacyAuthRedirect to="/login" />}</Route>
       <Route path="/app/signup">{() => <LegacyAuthRedirect to="/signup" />}</Route>

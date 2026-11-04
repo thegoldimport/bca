@@ -1,11 +1,10 @@
 import { hasValidCsrfToken, type SessionUser } from "./staging/auth";
 import {
   checkRuntimeAvailability,
-  hasVerifiedRuntimeEmailIdentity,
   resolveRuntimeProductUser,
 } from "./staging/runtime-identity";
+import { handleOwnerBootstrapRoute } from "./owner-bootstrap";
 
-const OWNER_EMAIL = "support@buildcustom.ai";
 const json = (body: unknown, status = 200) => Response.json(body, {
   status,
   headers: { "Cache-Control": "no-store" },
@@ -17,6 +16,9 @@ type LaunchAdminEnv = {
   AUTH_RUNTIME_URL?: string;
   ENVIRONMENT?: string;
   CONTROL_PLANE_PROFILE?: string;
+  CONTROL_PLANE_ALLOWED_ORIGIN?: string;
+  OWNER_BOOTSTRAP_SECRET?: string;
+  EMAIL?: { send(message: { from: string; to: string; subject: string; text: string; html: string }): Promise<unknown> };
 };
 
 type AuthorizedUser = { user: SessionUser } | { response: Response };
@@ -31,88 +33,6 @@ async function requireAdmin(env: LaunchAdminEnv, request: Request): Promise<Auth
     return { response: json({ message: "Admin access required." }, 403) };
   }
   return { user };
-}
-
-async function ownerBootstrapState(
-  env: LaunchAdminEnv,
-  request: Request,
-  user: SessionUser,
-) {
-  const ownership = await hasVerifiedRuntimeEmailIdentity(env, request, OWNER_EMAIL);
-  const owners = await env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM users WHERE role='super_admin'",
-  ).first<{ count: number }>();
-  const ownerAlreadyInitialized = Number(owners?.count || 0) > 0;
-  let identitySettingsUrl: string | null = null;
-  try {
-    const runtimeUrl = new URL(env.AUTH_RUNTIME_URL || "");
-    if (runtimeUrl.protocol === "https:") {
-      identitySettingsUrl = new URL("/settings", runtimeUrl).toString();
-    }
-  } catch {
-    identitySettingsUrl = null;
-  }
-  return {
-    candidateEmail: OWNER_EMAIL,
-    identitySettingsUrl,
-    accountStatus: user.account_status || "active",
-    alreadyAdmin: user.role === "super_admin",
-    ownerAlreadyInitialized,
-    emailOwnershipVerified: ownership.verified,
-    verificationServiceAvailable: ownership.available,
-    eligible: user.role === "user"
-      && user.account_status !== "suspended"
-      && ownership.verified
-      && !ownerAlreadyInitialized,
-  };
-}
-
-async function handleOwnerBootstrap(
-  env: LaunchAdminEnv,
-  request: Request,
-  input: Record<string, unknown>,
-): Promise<Response> {
-  const user = await resolveRuntimeProductUser(env, request);
-  if (!user) return json({ message: "Unauthorized" }, 401);
-  if (user.account_status === "suspended") return json({ message: "Account access is suspended." }, 403);
-  if (user.email.trim().toLowerCase() !== OWNER_EMAIL) {
-    return json({ message: "Owner authorization is restricted to the configured owner account." }, 403);
-  }
-
-  if (request.method === "GET") {
-    return json(await ownerBootstrapState(env, request, user));
-  }
-  if (request.method !== "POST") return json({ message: "Method not allowed." }, 405);
-  if (!hasValidCsrfToken(request)) return json({ message: "A secure request is required." }, 403);
-  if (input.confirmEmail !== OWNER_EMAIL) {
-    return json({ message: "Type the exact owner email to confirm authorization." }, 400);
-  }
-  if (user.role !== "user") {
-    return json({ message: "Owner bootstrap is only available before an owner is initialized." }, 409);
-  }
-
-  const ownership = await hasVerifiedRuntimeEmailIdentity(env, request, OWNER_EMAIL);
-  if (!ownership.available) {
-    return json({ message: "Could not verify a linked identity. Try again later." }, 503);
-  }
-  if (!ownership.verified) {
-    return json({
-      message: "A provider-verified identity matching the owner email is required. The email/password signup flag is not accepted as proof.",
-    }, 403);
-  }
-
-  const result = await env.DB.prepare(
-    "UPDATE users SET role='super_admin' WHERE id=? AND lower(email)=? AND role='user' AND account_status='active' AND NOT EXISTS (SELECT 1 FROM users WHERE role='super_admin')",
-  ).bind(user.id, OWNER_EMAIL).run();
-  if (Number(result.meta?.changes || 0) !== 1) {
-    return json({ message: "Owner bootstrap is no longer available for this account." }, 409);
-  }
-
-  await env.DB.prepare(
-    "INSERT INTO audit_events(actor_user_id,action,metadata_json) VALUES(?,?,?)",
-  ).bind(user.id, "initial_owner_bootstrap", JSON.stringify({ method: "verified-linked-identity" })).run();
-
-  return json({ success: true, role: "super_admin" });
 }
 
 async function getHealth(env: LaunchAdminEnv) {
@@ -287,7 +207,10 @@ export async function handleLaunchAdminRoute(args: {
   if (!url.pathname.startsWith("/api/admin/")) return null;
 
   if (url.pathname === "/api/admin/owner-bootstrap") {
-    return handleOwnerBootstrap(env, request, input);
+    return handleOwnerBootstrapRoute({ env, request, url, input });
+  }
+  if (url.pathname.startsWith("/api/admin/owner-bootstrap/")) {
+    return handleOwnerBootstrapRoute({ env, request, url, input });
   }
 
   const auth = await requireAdmin(env, request);
