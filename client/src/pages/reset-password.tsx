@@ -4,7 +4,10 @@ import logo from "@/assets/logo.png";
 import { csrfToken } from "@/lib/auth";
 
 export default function ResetPassword() {
-  const [token, setToken] = useState(() => new URLSearchParams(window.location.search).get("token") || "");
+  const [token, setToken] = useState(() => {
+    const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    return fragment.get("token") || new URLSearchParams(window.location.search).get("token") || "";
+  });
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,8 +26,8 @@ export default function ResetPassword() {
       setError("This reset link is invalid or has expired. Request a new one.");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setError("Use at least 8 characters with upper- and lowercase letters and a number.");
       return;
     }
     if (password !== confirmPassword) {
@@ -86,14 +89,14 @@ export default function ResetPassword() {
               <div>
                 <label className="block text-xs font-medium text-white/50 mb-1.5" htmlFor="new-password">New password</label>
                 <input id="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="new-password" minLength={6} maxLength={256} required
+                  autoComplete="new-password" minLength={8} maxLength={128} required
                   className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/20 text-sm outline-none focus:border-cyan-400/50 transition-colors"
                   data-testid="input-new-password" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-white/50 mb-1.5" htmlFor="confirm-password">Confirm new password</label>
                 <input id="confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)}
-                  autoComplete="new-password" minLength={6} maxLength={256} required
+                  autoComplete="new-password" minLength={8} maxLength={128} required
                   className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/20 text-sm outline-none focus:border-cyan-400/50 transition-colors"
                   data-testid="input-confirm-password" />
               </div>

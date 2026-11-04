@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const authPage = readFileSync("client/src/pages/app-auth.tsx", "utf8");
 const resetPage = readFileSync("client/src/pages/reset-password.tsx", "utf8");
+const verifyPage = readFileSync("client/src/pages/verify-email.tsx", "utf8");
 const routes = readFileSync("client/src/App.tsx", "utf8");
 
 test("BuildCustom sign-in exposes forgot-password flow without opening registration", () => {
@@ -21,4 +22,15 @@ test("reset-password route submits confirmed password and returns to sign in on 
   assert.match(resetPage, /confirmPassword \}/);
   assert.match(resetPage, /link-sign-in-success/);
   assert.match(resetPage, /history\.replaceState/);
+  assert.match(resetPage, /password.length < 8/);
+  assert.match(resetPage, /maxLength=\{128\}/);
+});
+
+test("email verification is a deliberate POST after the user opens the email link", () => {
+  assert.match(routes, /path="\/verify-email" component=\{VerifyEmail\}/);
+  assert.match(verifyPage, /\/api\/auth\/verify-email/);
+  assert.match(verifyPage, /onClick=\{confirmEmail\}/);
+  assert.match(verifyPage, /history\.replaceState/);
+  assert.match(authPage, /\/api\/auth\/request-verification/);
+  assert.match(authPage, /verificationRequired !== true/);
 });

@@ -59,7 +59,7 @@ function database() {
   return { sqlite, db };
 }
 
-type Account = { id: string; email: string; name: string; password: string };
+type Account = { id: string; email: string; name: string; password: string; verified: boolean };
 async function gitFixture() {
   const fs = createFsFromVolume(new Volume());
   const dir = "/fixture";
@@ -103,6 +103,7 @@ async function gitFixture() {
 
 function runtime(options: { silentLogout?: boolean; gitFixture?: Awaited<ReturnType<typeof gitFixture>> } = {}) {
   const accounts = new Map<string, Account>();
+  const verificationTokens = new Map<string, string>();
   const sessions = new Map<string, { account: Account; id: string }>();
   const calls: string[] = [];
   const requests: Array<{ url: string; method: string; headers: Headers }> = [];
@@ -152,9 +153,9 @@ function runtime(options: { silentLogout?: boolean; gitFixture?: Awaited<ReturnT
       const session = token ? sessions.get(token) : null;
       if (path === "/api/auth/csrf-token" && request.method === "GET") {
         if (!session || /(?:^|;\s*)csrf-token=/.test(cookie)) return Response.json({ success: true, data: { token: "csrf-value" } }, {
-          headers: { "Set-Cookie": "csrf-token=csrf-cookie; Path=/; Secure; HttpOnly; SameSite=Strict" },
+          headers: { "Set-Cookie": "csrf-token=csrf-value; Path=/; Secure; HttpOnly; SameSite=Strict" },
         });
-        const csrf = { token: `csrf-header-${session.id}`, cookie: `csrf-cookie-${session.id}` };
+        const csrf = { token: `csrf-${session.id}`, cookie: `csrf-${session.id}` };
         freshCsrf.set(session.id, csrf);
         return Response.json({ success: true, data: { token: csrf.token } }, {
           headers: { "Set-Cookie": `csrf-token=${csrf.cookie}; Path=/; Secure; HttpOnly; SameSite=Strict` },
@@ -253,21 +254,49 @@ function runtime(options: { silentLogout?: boolean; gitFixture?: Awaited<ReturnT
       }
       if (path === "/api/auth/check") {
         return Response.json({ success: true, data: session
-          ? { authenticated: true, user: { id: session.account.id, email: session.account.email, displayName: session.account.name }, sessionId: session.id }
+          ? { authenticated: true, user: {
+            id: session.account.id,
+            email: session.account.email,
+            displayName: session.account.name,
+            provider: "email",
+            emailVerified: session.account.verified,
+            emailVerifiedAt: session.account.verified ? "2026-11-03T12:00:00.000Z" : null,
+          }, sessionId: session.id }
           : { authenticated: false, user: null } });
       }
+      if (path === "/api/auth/request-verification") {
+        const body = await request.json() as { email: string };
+        const account = accounts.get(body.email);
+        if (account && !account.verified) verificationTokens.set(body.email, `verify-${account.id}`);
+        return Response.json({ success: true, data: { message: "If an unverified account exists, verification instructions will be sent." } });
+      }
+      if (path === "/api/auth/verify-email") {
+        const body = await request.json() as { token: string };
+        const match = [...verificationTokens].find(([, token]) => token === body.token);
+        if (!match) return Response.json({ success: false }, { status: 400 });
+        const account = accounts.get(match[0]);
+        if (!account || account.verified) return Response.json({ success: false }, { status: 400 });
+        account.verified = true;
+        verificationTokens.delete(match[0]);
+        return Response.json({ success: true, data: { verified: true } });
+      }
       if (path === "/api/auth/register" || path === "/api/auth/login") {
-        if (request.headers.get("X-CSRF-Token") !== "csrf-value" || !cookie.includes("csrf-token=csrf-cookie")) {
+        if (request.headers.get("X-CSRF-Token") !== "csrf-value" || !cookie.includes("csrf-token=csrf-value")) {
           return Response.json({ success: false }, { status: 403 });
         }
         const body = await request.json() as { email: string; password: string; name?: string };
         let account = accounts.get(body.email);
         if (path.endsWith("register")) {
           if (account) return Response.json({ success: false }, { status: 409 });
-          account = { id: `runtime-user-${++nextUser}`, email: body.email, name: body.name!, password: body.password };
+          account = { id: `runtime-user-${++nextUser}`, email: body.email, name: body.name!, password: body.password, verified: false };
           accounts.set(body.email, account);
+          verificationTokens.set(body.email, `verify-${account.id}`);
+          return Response.json({ success: true, data: { email: body.email, verificationRequired: true } });
         } else if (!account || account.password !== body.password) {
           return Response.json({ success: false }, { status: 401 });
+        }
+        if (!account.verified) {
+          return Response.json({ success: false, code: "EMAIL_VERIFICATION_REQUIRED" }, { status: 403 });
         }
         const issuedToken = `runtime-token-${++nextSession}`;
         const issuedId = `runtime-session-${nextSession}`;
@@ -279,7 +308,7 @@ function runtime(options: { silentLogout?: boolean; gitFixture?: Awaited<ReturnT
       }
       if (path === "/api/auth/logout") {
         if (request.headers.get("X-CSRF-Token") !== "csrf-value"
-          || !cookie.includes("csrf-token=csrf-cookie")) {
+          || !cookie.includes("csrf-token=csrf-value")) {
           return Response.json({ success: false }, { status: 403 });
         }
         const verifiedId = cookie.match(/(?:^|;\s*)sessionId=([^;]+)/)?.[1];
@@ -296,7 +325,11 @@ function runtime(options: { silentLogout?: boolean; gitFixture?: Awaited<ReturnT
       return new Response("Unexpected runtime call", { status: 500 });
     },
   };
-  return { fetcher: fetcher as Fetcher, calls, requests, ticketScopes, sockets, agents, failures, gitFixture: options.gitFixture };
+  return {
+    fetcher: fetcher as Fetcher, calls, requests, ticketScopes, sockets, agents, failures,
+    gitFixture: options.gitFixture,
+    verificationToken: (email: string) => verificationTokens.get(email) || null,
+  };
 }
 
 async function withMockSocketPlatform<T>(
@@ -415,19 +448,27 @@ test("browser-equivalent logout requires matching CSRF and revokes only the veri
     const a = browser(env), aOther = browser(env), b = browser(env);
     assert.equal((await a.auth("/api/auth/register", {
       name: "User A", email: "a@example.test", password: "Str0ng!PasswordA",
+    })).status, 201);
+    assert.equal((await a.auth("/api/auth/verify-email", { token: stock.verificationToken("a@example.test") })).status, 200);
+    assert.equal((await a.auth("/api/auth/login", {
+      email: "a@example.test", password: "Str0ng!PasswordA",
     })).status, 200);
     assert.equal((await aOther.auth("/api/auth/login", {
       email: "a@example.test", password: "Str0ng!PasswordA",
     })).status, 200);
     assert.equal((await b.auth("/api/auth/register", {
       name: "User B", email: "b@example.test", password: "Str0ng!PasswordB",
+    })).status, 201);
+    assert.equal((await b.auth("/api/auth/verify-email", { token: stock.verificationToken("b@example.test") })).status, 200);
+    assert.equal((await b.auth("/api/auth/login", {
+      email: "b@example.test", password: "Str0ng!PasswordB",
     })).status, 200);
 
     const csrf = await a.send("/api/auth/csrf-token");
     assert.equal(csrf.status, 200);
     const { token } = await csrf.json() as { token: string };
     assert.equal(token, "csrf-value");
-    assert.equal(a.jar.get("csrf-token"), "csrf-cookie");
+    assert.equal(a.jar.get("csrf-token"), "csrf-value");
     const oldCookie = [...a.jar].map(([name, value]) => `${name}=${value}`).join("; ");
     const check = async (cookie: string) => (await (await stock.fetcher.fetch(new Request(
       `${env.AUTH_RUNTIME_URL}/api/auth/check`, { headers: { Cookie: cookie } },
@@ -454,7 +495,7 @@ test("browser-equivalent logout requires matching CSRF and revokes only the veri
     const forwarded = stock.requests.filter((request) => new URL(request.url).pathname === "/api/auth/logout");
     assert.equal(forwarded.length, 3);
     assert.equal(forwarded[2].headers.get("X-CSRF-Token"), token);
-    assert.match(forwarded[2].headers.get("Cookie") || "", /csrf-token=csrf-cookie/);
+    assert.match(forwarded[2].headers.get("Cookie") || "", /csrf-token=csrf-value/);
     assert.match(forwarded[2].headers.get("Cookie") || "", new RegExp(`sessionId=${originalSession}`));
     assert.equal(forwarded[2].headers.get("Origin"), null);
     assert.equal((await check(oldCookie)).authenticated, false);
@@ -503,10 +544,24 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await anonymous.send("/api/projects/1/runtime/files")).status, 401);
 
   const aSignup = await a.auth("/api/auth/register", { name: "User A", email: "a@example.test", password: "Str0ng!PasswordA" });
-  assert.equal(aSignup.status, 200);
+  assert.equal(aSignup.status, 201);
   const aSignupBody = await aSignup.text();
   assert.doesNotMatch(aSignupBody, /sessionId|accessToken|password|api.?key/i);
-  assert.equal((await b.auth("/api/auth/register", { name: "User B", email: "b@example.test", password: "Str0ng!PasswordB" })).status, 200);
+  assert.equal(a.jar.has("accessToken"), false);
+  const unverifiedLogin = await anonymous.auth("/api/auth/login", {
+    email: "a@example.test", password: "Str0ng!PasswordA",
+  });
+  assert.equal(unverifiedLogin.status, 403);
+  assert.equal((await unverifiedLogin.json() as any).code, "EMAIL_VERIFICATION_REQUIRED");
+  assert.equal(anonymous.jar.has("accessToken"), false);
+  const verificationToken = stock.verificationToken("a@example.test");
+  assert.ok(verificationToken);
+  assert.equal((await a.auth("/api/auth/verify-email", { token: verificationToken })).status, 200);
+  assert.equal((await a.auth("/api/auth/verify-email", { token: verificationToken })).status, 400);
+  assert.equal((await a.auth("/api/auth/login", { email: "a@example.test", password: "Str0ng!PasswordA" })).status, 200);
+  assert.equal((await b.auth("/api/auth/register", { name: "User B", email: "b@example.test", password: "Str0ng!PasswordB" })).status, 201);
+  assert.equal((await b.auth("/api/auth/verify-email", { token: stock.verificationToken("b@example.test") })).status, 200);
+  assert.equal((await b.auth("/api/auth/login", { email: "b@example.test", password: "Str0ng!PasswordB" })).status, 200);
   const aMe = await (await a.send("/api/auth/me")).json() as { id: string };
   const bMe = await (await b.send("/api/auth/me")).json() as { id: string };
   assert.notEqual(aMe.id, bMe.id);
@@ -832,7 +887,9 @@ test("concurrent project creates with one key claim only one stock Think agent",
   const a = browser(env);
   assert.equal((await a.auth("/api/auth/register", {
     name: "Parallel", email: "parallel@example.test", password: "Str0ng!PasswordP",
-  })).status, 200);
+  })).status, 201);
+  assert.equal((await a.auth("/api/auth/verify-email", { token: stock.verificationToken("parallel@example.test") })).status, 200);
+  assert.equal((await a.auth("/api/auth/login", { email: "parallel@example.test", password: "Str0ng!PasswordP" })).status, 200);
   const key = crypto.randomUUID();
   const [first, second] = await Promise.all([
     a.create({ name: "Concurrent project" }, key),

@@ -1,4 +1,12 @@
-export type SessionUser = { id: string; username: string; email: string; role: string; plan?: string; created_at?: string };
+export type SessionUser = {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  plan?: string;
+  created_at?: string;
+  account_status?: "active" | "suspended";
+};
 export const SESSION_COOKIE = "__Host-bc_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 

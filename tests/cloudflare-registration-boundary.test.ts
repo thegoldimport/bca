@@ -12,7 +12,14 @@ async function register(input: Input, runtime: (request: Request) => Promise<Res
     AUTH_RUNTIME: { fetch: runtime },
   } as unknown as Parameters<typeof handleStagingCustomerAuth>[0];
   return handleStagingCustomerAuth(env,
-    new Request(`${origin}/api/auth/register`, { method: "POST" }),
+    new Request(`${origin}/api/auth/register`, {
+      method: "POST",
+      headers: {
+        Origin: origin,
+        Cookie: "csrf-token=known-token",
+        "X-CSRF-Token": "known-token",
+      },
+    }),
     "/api/auth/register", input);
 }
 

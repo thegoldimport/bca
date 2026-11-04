@@ -108,7 +108,7 @@ test("production launch registration rejects missing and invalid Origin before r
   }
 });
 
-test("valid Origin reaches registration and forwards valid, missing, and invalid CSRF values", async () => {
+test("valid Origin forwards registration only with a valid CSRF token", async () => {
   const cases = [
     {
       label: "valid CSRF",
@@ -141,6 +141,13 @@ test("valid Origin reaches registration and forwards valid, missing, and invalid
       return Response.json({ success: false }, { status: scenario.runtimeStatus });
     });
 
+    if (scenario.label !== "valid CSRF") {
+      assert.equal(response.status, 403, scenario.label);
+      assert.deepEqual(await response.json(), { message: "A secure request is required." }, scenario.label);
+      assert.equal(runtimeCalls, 0, scenario.label);
+      assert.equal(db.mutations, 0, scenario.label);
+      continue;
+    }
     assert.equal(response.status, scenario.runtimeStatus, scenario.label);
     assert.deepEqual(await response.json(), { message: "Could not create your account. Check your details." }, scenario.label);
     assert.equal(runtimeCalls, 1, scenario.label);
@@ -150,7 +157,11 @@ test("valid Origin reaches registration and forwards valid, missing, and invalid
 
 test("a duplicate runtime 400 with valid Origin is not classified as ORIGIN_REJECTED", async () => {
   let runtimeCalls = 0;
-  const { response, db } = await fetchRegistration(request({ Origin: appOrigin }), async () => {
+  const { response, db } = await fetchRegistration(request({
+    Origin: appOrigin,
+    Cookie: "csrf-token=known-token",
+    "X-CSRF-Token": "known-token",
+  }), async () => {
     runtimeCalls += 1;
     return Response.json({ success: false, message: "duplicate" }, { status: 400 });
   });
@@ -161,9 +172,13 @@ test("a duplicate runtime 400 with valid Origin is not classified as ORIGIN_REJE
   assert.equal(db.mutations, 0);
 });
 
-test("malformed downstream identity schema stays a runtime failure with valid Origin", async () => {
+test("signup missing the verification marker fails closed without forwarding cookies", async () => {
   const runtimePaths: string[] = [];
-  const { response, db } = await fetchRegistration(request({ Origin: appOrigin }), async (upstream) => {
+  const { response, db } = await fetchRegistration(request({
+    Origin: appOrigin,
+    Cookie: "csrf-token=known-token",
+    "X-CSRF-Token": "known-token",
+  }), async (upstream) => {
     const path = new URL(upstream.url).pathname;
     runtimePaths.push(path);
     if (path === "/api/auth/register") {
@@ -175,9 +190,10 @@ test("malformed downstream identity schema stays a runtime failure with valid Or
     return Response.json({ success: true, data: { authenticated: true, user: {}, sessionId: 7 } });
   });
 
-  assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { message: "Could not verify your session." });
-  assert.deepEqual(runtimePaths, ["/api/auth/register", "/api/auth/check"]);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { message: "Email verification is not available yet." });
+  assert.deepEqual(runtimePaths, ["/api/auth/register"]);
+  assert.equal(response.headers.getSetCookie().some((cookie) => cookie.startsWith("accessToken=")), false);
   assert.equal(db.mutations, 0);
 });
 
@@ -208,5 +224,39 @@ test("closed launch registration gate does not mask a missing Origin rejection",
   assert.equal(response.status, 400);
   assert.equal(await response.text(), '{"message":"ORIGIN_REJECTED"}');
   assert.equal(runtimeCalls, 0);
+  assert.equal(db.mutations, 0);
+});
+
+test("launch signup returns a verification-pending account without issuing a session", async () => {
+  const forwarded: Request[] = [];
+  const { response, db } = await fetchRegistration(
+    request({
+      Origin: appOrigin,
+      Cookie: "csrf-token=known-token",
+      "X-CSRF-Token": "known-token",
+      Authorization: "Bearer must-not-forward",
+    }),
+    async (upstream) => {
+      forwarded.push(upstream);
+      return Response.json({
+        success: true,
+        data: { verificationRequired: true, email: "owner@example.test" },
+      });
+    },
+  );
+
+  assert.equal(response.status, 201);
+  const responseText = await response.text();
+  assert.deepEqual(JSON.parse(responseText), {
+    email: "new@example.test",
+    verificationRequired: true,
+    message: "Check your inbox for a link to verify your email before signing in.",
+  });
+  assert.doesNotMatch(responseText, /sessionId|accessToken|password|api.?key/i);
+  assert.equal(response.headers.getSetCookie().some((cookie) => cookie.startsWith("accessToken=")), false);
+  assert.equal(forwarded.length, 1);
+  assert.equal(new URL(forwarded[0].url).pathname, "/api/auth/register");
+  assert.equal(forwarded[0].headers.has("Authorization"), false);
+  assert.deepEqual(await forwarded[0].json(), registration);
   assert.equal(db.mutations, 0);
 });

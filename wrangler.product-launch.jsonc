@@ -44,6 +44,13 @@
       "service": "buildcustom-apps-gateway-launch"
     }
   ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["security@buildcustom.ai"],
+      "allowed_destination_addresses": ["support@buildcustom.ai"]
+    }
+  ],
   "browser": {
     "binding": "BROWSER"
   },

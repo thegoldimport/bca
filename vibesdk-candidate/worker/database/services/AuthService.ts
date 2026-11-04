@@ -50,6 +50,11 @@ export interface RegistrationData {
     name?: string;
 }
 
+export interface RegistrationResult {
+    email: string;
+    verificationRequired: true;
+}
+
 /**
  * Human-friendly label for a stored auth provider, used in user-facing messages.
  */
@@ -87,13 +92,24 @@ export class AuthService extends BaseService {
     /**
      * Register a new user
      */
-    async register(data: RegistrationData, request: Request): Promise<AuthResult> {
+    async register(data: RegistrationData, request: Request): Promise<RegistrationResult> {
+        const normalizedEmail = data.email.trim().toLowerCase();
         try {
+            await this.enforceAuthAttemptLimit('register', normalizedEmail, request, 5, 60);
+
             // Deployment-level admission gate (ALLOWED_EMAIL)
-            enforceAllowedEmail(this.env, data.email, 'register');
+            enforceAllowedEmail(this.env, normalizedEmail, 'register');
+
+            if (!this.env.EMAIL) {
+                throw new SecurityError(
+                    SecurityErrorType.INVALID_INPUT,
+                    'Email verification is temporarily unavailable. Please try again later.',
+                    503
+                );
+            }
 
             // Validate email format using centralized utility
-            const emailValidation = validateEmail(data.email);
+            const emailValidation = validateEmail(normalizedEmail);
             if (!emailValidation.valid) {
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
@@ -104,7 +120,7 @@ export class AuthService extends BaseService {
             
             // Validate password using centralized utility
             const passwordValidation = validatePassword(data.password, undefined, {
-                email: data.email,
+                email: normalizedEmail,
                 name: data.name
             });
             if (!passwordValidation.valid) {
@@ -119,7 +135,7 @@ export class AuthService extends BaseService {
             const existingUser = await this.database
                 .select()
                 .from(schema.users)
-                .where(eq(schema.users.email, data.email.toLowerCase()))
+                .where(eq(schema.users.email, normalizedEmail))
                 .get();
             
             if (existingUser) {
@@ -147,13 +163,14 @@ export class AuthService extends BaseService {
             const userId = generateId();
             const now = new Date();
             
-            // Store user as verified immediately (no OTP verification required)
+            // A password-based account is not trusted until the user confirms a
+            // single-use link sent to the mailbox.
             await this.database.insert(schema.users).values({
                 id: userId,
-                email: data.email.toLowerCase(),
+                email: normalizedEmail,
                 passwordHash,
-                displayName: data.name || data.email.split('@')[0],
-                emailVerified: true, // Set as verified immediately
+                displayName: data.name || normalizedEmail.split('@')[0],
+                emailVerified: false,
                 provider: 'email',
                 providerId: userId,
                 createdAt: now,
@@ -175,24 +192,12 @@ export class AuthService extends BaseService {
                 );
             }
             
-            // Log successful registration
-            await this.logAuthAttempt(data.email, 'register', true, request);
-            logger.info('User registered and logged in directly', { userId, email: data.email });
-            
-            // Create session and tokens immediately (log user in after registration)
-            const { accessToken, session } = await this.sessionService.createSession(
-                userId,
-                request
-            );
-            
-            return {
-                user: mapUserResponse(newUser),
-                sessionId: session.sessionId,
-                expiresAt: session.expiresAt,
-                accessToken,
-            };
+            await this.issueEmailVerificationEmail(newUser, now);
+            await this.logAuthAttempt(normalizedEmail, 'register', true, request);
+            logger.info('Unverified email/password account registered', { userId });
+            return { email: normalizedEmail, verificationRequired: true };
         } catch (error) {
-            await this.logAuthAttempt(data.email, 'register', false, request);
+            await this.logAuthAttempt(normalizedEmail, 'register', false, request);
             
             if (error instanceof SecurityError) {
                 throw error;
@@ -211,9 +216,12 @@ export class AuthService extends BaseService {
      * Login with email and password
      */
     async login(credentials: LoginCredentials, request: Request): Promise<AuthResult> {
+        const normalizedEmail = credentials.email.trim().toLowerCase();
         try {
+            await this.enforceAuthAttemptLimit('login', normalizedEmail, request, 10, 120);
+
             // Deployment-level admission gate (ALLOWED_EMAIL)
-            enforceAllowedEmail(this.env, credentials.email, 'login');
+            enforceAllowedEmail(this.env, normalizedEmail, 'login');
 
             // Find user
             const user = await this.database
@@ -221,14 +229,14 @@ export class AuthService extends BaseService {
                 .from(schema.users)
                 .where(
                     and(
-                        eq(schema.users.email, credentials.email.toLowerCase()),
+                        eq(schema.users.email, normalizedEmail),
                         sql`${schema.users.deletedAt} IS NULL`
                     )
                 )
                 .get();
             
             if (!user) {
-                await this.logAuthAttempt(credentials.email, 'login', false, request);
+                await this.logAuthAttempt(normalizedEmail, 'login', false, request);
                 throw new SecurityError(
                     SecurityErrorType.UNAUTHORIZED,
                     'Invalid email or password',
@@ -239,7 +247,7 @@ export class AuthService extends BaseService {
             // The email belongs to an OAuth-only account (no password set). Tell the
             // user which provider to use instead of a misleading credentials error.
             if (!user.passwordHash) {
-                await this.logAuthAttempt(credentials.email, 'login', false, request);
+                await this.logAuthAttempt(normalizedEmail, 'login', false, request);
                 const label = providerLabel(user.provider);
                 throw new SecurityError(
                     SecurityErrorType.CONFLICT,
@@ -255,11 +263,30 @@ export class AuthService extends BaseService {
             );
             
             if (!passwordValid) {
-                await this.logAuthAttempt(credentials.email, 'login', false, request);
+                await this.logAuthAttempt(normalizedEmail, 'login', false, request);
                 throw new SecurityError(
                     SecurityErrorType.UNAUTHORIZED,
                     'Invalid email or password',
                     401
+                );
+            }
+
+            if (!user.isActive || user.isSuspended) {
+                await this.logAuthAttempt(normalizedEmail, 'login', false, request);
+                throw new SecurityError(
+                    SecurityErrorType.UNAUTHORIZED,
+                    'Account access is unavailable.',
+                    403
+                );
+            }
+
+            if (user.provider === 'email'
+                && (user.emailVerified !== true || !user.emailVerifiedAt)) {
+                await this.logAuthAttempt(normalizedEmail, 'login', false, request);
+                throw new SecurityError(
+                    SecurityErrorType.UNAUTHORIZED,
+                    'EMAIL_VERIFICATION_REQUIRED',
+                    403
                 );
             }
             
@@ -270,7 +297,7 @@ export class AuthService extends BaseService {
             );
             
             // Log successful attempt
-            await this.logAuthAttempt(credentials.email, 'login', true, request);
+            await this.logAuthAttempt(normalizedEmail, 'login', true, request);
             
             logger.info('User logged in', { userId: user.id, email: user.email });
             
@@ -342,6 +369,150 @@ export class AuthService extends BaseService {
         await processing;
     }
 
+    private async enforceAuthAttemptLimit(
+        attemptType: 'login' | 'register' | 'email_verification',
+        identifier: string,
+        request: Request,
+        maxPerEmail: number,
+        maxPerIp: number
+    ): Promise<void> {
+        const metadata = extractRequestMetadata(request);
+        const windowStart = new Date(Date.now() - 15 * 60 * 1000);
+        const [emailAttempts, ipAttempts] = await Promise.all([
+            maxPerEmail > 0
+                ? this.database.select({ total: count() }).from(schema.authAttempts).where(and(
+                    eq(schema.authAttempts.attemptType, attemptType),
+                    eq(schema.authAttempts.identifier, identifier),
+                    gte(schema.authAttempts.attemptedAt, windowStart)
+                )).get()
+                : Promise.resolve({ total: 0 }),
+            maxPerIp > 0
+                ? this.database.select({ total: count() }).from(schema.authAttempts).where(and(
+                    eq(schema.authAttempts.attemptType, attemptType),
+                    eq(schema.authAttempts.ipAddress, metadata.ipAddress),
+                    gte(schema.authAttempts.attemptedAt, windowStart)
+                )).get()
+                : Promise.resolve({ total: 0 })
+        ]);
+
+        if ((maxPerEmail > 0 && (emailAttempts?.total ?? 0) >= maxPerEmail)
+            || (maxPerIp > 0 && (ipAttempts?.total ?? 0) >= maxPerIp)) {
+            await this.logAuthAttempt(identifier, attemptType, false, request);
+            throw new SecurityError(
+                SecurityErrorType.RATE_LIMITED,
+                'Too many authentication attempts. Please wait and try again.',
+                429
+            );
+        }
+    }
+
+    /**
+     * Public, enumeration-resistant request used by signup and the resend screen.
+     * Only accounts created with email/password can receive this verification.
+     */
+    async requestEmailVerification(email: string, request: Request): Promise<void> {
+        const normalizedEmail = email.trim().toLowerCase();
+        await this.enforceAuthAttemptLimit('email_verification', normalizedEmail, request, 3, 30);
+        await this.logAuthAttempt(normalizedEmail, 'email_verification', false, request);
+        if (!this.env.EMAIL) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                'Email verification is temporarily unavailable. Please try again later.',
+                503
+            );
+        }
+
+        const user = await this.database.select().from(schema.users).where(and(
+            eq(schema.users.email, normalizedEmail),
+            eq(schema.users.provider, 'email'),
+            eq(schema.users.isActive, true),
+            isNull(schema.users.deletedAt)
+        )).get();
+        if (!user?.passwordHash || user.emailVerified) return;
+        await this.issueEmailVerificationEmail(user, new Date());
+    }
+
+    /**
+     * Consume a verification token once. The link is only consumed by this
+     * explicit POST, never by the email link's initial GET.
+     */
+    async verifyEmail(token: string, request: Request): Promise<boolean> {
+        await this.enforceAuthAttemptLimit('email_verification', '__verification_link__', request, 0, 20);
+        await this.logAuthAttempt('__verification_link__', 'email_verification', false, request);
+        if (!token || token.length > 256) return false;
+
+        const tokenHash = await sha256Hash(token);
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const record = await this.env.DB.prepare(
+            'SELECT id,user_id,email FROM email_verification_tokens WHERE token_hash=? AND used=0 AND expires_at>? LIMIT 1'
+        ).bind(tokenHash, nowSeconds).first<{ id: string; user_id: string; email: string }>();
+        if (!record) return false;
+
+        const now = nowSeconds;
+        const results = await this.env.DB.batch([
+            this.env.DB.prepare(
+                'UPDATE email_verification_tokens SET used=1 WHERE id=? AND used=0 AND expires_at>?'
+            ).bind(record.id, nowSeconds),
+            this.env.DB.prepare(
+                `UPDATE users SET email_verified=1,email_verified_at=?,updated_at=?
+                 WHERE id=? AND email=? AND email_verified=0 AND deleted_at IS NULL AND is_active=1
+                 AND EXISTS (
+                   SELECT 1 FROM email_verification_tokens
+                   WHERE id=? AND token_hash=? AND used=1 AND expires_at>?
+                 )`
+            ).bind(now, now, record.user_id, record.email, record.id, tokenHash, nowSeconds)
+        ]);
+        const verified = (results[0]?.meta.changes ?? 0) === 1
+            && (results[1]?.meta.changes ?? 0) === 1;
+        if (verified) await this.logAuthAttempt(record.email, 'email_verification', true, request);
+        return verified;
+    }
+
+    private async issueEmailVerificationEmail(
+        user: typeof schema.users.$inferSelect,
+        now: Date
+    ): Promise<void> {
+        const rawToken = generateSecureToken(32);
+        const tokenHash = await sha256Hash(rawToken);
+        const tokenId = generateId();
+        const nowSeconds = Math.floor(now.getTime() / 1000);
+        const expiresAt = nowSeconds + 15 * 60;
+        await this.env.DB.batch([
+            this.env.DB.prepare(
+                'UPDATE email_verification_tokens SET used=1 WHERE user_id=? AND used=0'
+            ).bind(user.id),
+            this.env.DB.prepare(
+                'INSERT INTO email_verification_tokens(id,user_id,token_hash,email,expires_at,used,created_at) VALUES(?,?,?,?,?,0,?)'
+            ).bind(tokenId, user.id, tokenHash, user.email, expiresAt, nowSeconds)
+        ]);
+
+        const verifyUrl = `https://app.buildcustom.ai/verify-email#token=${encodeURIComponent(rawToken)}`;
+        const text = `Confirm your BuildCustom email address using this link (valid for 15 minutes):\n${verifyUrl}\n\nIf you did not create this account, you can ignore this email.`;
+        const html = `<p>Confirm your BuildCustom email address.</p><p><a href="${verifyUrl}">Confirm email</a> (valid for 15 minutes).</p><p>If you did not create this account, you can ignore this email.</p>`;
+        try {
+            const message = {
+                from: { email: 'security@buildcustom.ai', name: 'BuildCustom' },
+                to: user.email,
+                subject: 'Confirm your BuildCustom email',
+                text,
+                html
+            };
+            await this.env.EMAIL!.send(
+                message as unknown as Parameters<Env['EMAIL']['send']>[0]
+            );
+        } catch {
+            await this.env.DB.prepare(
+                'UPDATE email_verification_tokens SET used=1 WHERE id=? AND used=0'
+            ).bind(tokenId).run().catch(() => undefined);
+            logger.error('Email verification delivery failed');
+            throw new SecurityError(
+                SecurityErrorType.UNAUTHORIZED,
+                'Your account was created, but the verification email could not be sent. Please request a new link.',
+                503
+            );
+        }
+    }
+
     private async issuePasswordResetEmail(normalizedEmail: string, now: Date): Promise<void> {
         const user = await this.database.select().from(schema.users).where(and(
             eq(schema.users.email, normalizedEmail),
@@ -353,7 +524,7 @@ export class AuthService extends BaseService {
 
         const rawToken = generateSecureToken(32);
         const tokenHash = await sha256Hash(rawToken);
-        const expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+        const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
 
         await this.database.update(schema.passwordResetTokens)
             .set({ used: true })
@@ -370,9 +541,9 @@ export class AuthService extends BaseService {
             createdAt: now
         });
 
-        const resetUrl = `https://app.buildcustom.ai/reset-password?token=${encodeURIComponent(rawToken)}`;
-        const text = `We received a request to reset your password.\n\nReset your password using this link (valid for 60 minutes):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
-        const html = `<p>We received a request to reset your password.</p><p><a href="${resetUrl}">Reset your password</a> (valid for 60 minutes).</p><p>If you did not request this, you can ignore this email.</p>`;
+        const resetUrl = `https://app.buildcustom.ai/reset-password#token=${encodeURIComponent(rawToken)}`;
+        const text = `We received a request to reset your password.\n\nReset your password using this link (valid for 15 minutes):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
+        const html = `<p>We received a request to reset your password.</p><p><a href="${resetUrl}">Reset your password</a> (valid for 15 minutes).</p><p>If you did not request this, you can ignore this email.</p>`;
         try {
             // Cloudflare Email Service's documented builder accepts a named
             // sender, while the installed workers-types describes the raw
@@ -772,9 +943,14 @@ export class AuthService extends BaseService {
                 .set({
                     displayName: oauthUserInfo.name || undefined,
                     avatarUrl: oauthUserInfo.picture || undefined,
+                    emailVerified: true,
+                    emailVerifiedAt: now,
                     updatedAt: now
                 })
-                .where(eq(schema.users.id, identity.userId));
+                .where(and(
+                    eq(schema.users.id, identity.userId),
+                    eq(schema.users.email, email)
+                ));
 
             const user = await this.database
                 .select()
@@ -808,7 +984,11 @@ export class AuthService extends BaseService {
                 userId: emailRow.id,
                 provider
             });
-            return emailRow;
+            return await this.database
+                .select()
+                .from(schema.users)
+                .where(eq(schema.users.id, emailRow.id))
+                .get() ?? emailRow;
         }
 
         // 3. Brand-new identity: create the user and its first identity row.
@@ -833,6 +1013,7 @@ export class AuthService extends BaseService {
             displayName: oauthUserInfo.name || email.split('@')[0],
             avatarUrl: oauthUserInfo.picture,
             emailVerified: true,
+            emailVerifiedAt: now,
             provider,
             providerId: oauthUserInfo.id,
             createdAt: now,
@@ -949,6 +1130,10 @@ export class AuthService extends BaseService {
                 .update(schema.userOauthIdentities)
                 .set({ email, emailVerified: true, updatedAt: now })
                 .where(eq(schema.userOauthIdentities.id, existing.id));
+            await this.database
+                .update(schema.users)
+                .set({ emailVerified: true, emailVerifiedAt: now, updatedAt: now })
+                .where(and(eq(schema.users.id, userId), eq(schema.users.email, email)));
             return;
         }
 
@@ -962,6 +1147,11 @@ export class AuthService extends BaseService {
             createdAt: now,
             updatedAt: now
         });
+
+        await this.database
+            .update(schema.users)
+            .set({ emailVerified: true, emailVerifiedAt: now, updatedAt: now })
+            .where(and(eq(schema.users.id, userId), eq(schema.users.email, email)));
 
         logger.info('OAuth identity linked', { userId, provider });
     }
@@ -1042,7 +1232,7 @@ export class AuthService extends BaseService {
             
             await this.database.insert(schema.authAttempts).values({
                 identifier: identifier.toLowerCase(),
-                attemptType: attemptType as 'login' | 'register' | 'oauth_google' | 'oauth_github' | 'oauth_cloudflare' | 'refresh' | 'reset_password',
+                attemptType: attemptType as 'login' | 'register' | 'oauth_google' | 'oauth_github' | 'oauth_cloudflare' | 'refresh' | 'reset_password' | 'email_verification',
                 success: success,
                 ipAddress: requestMetadata.ipAddress
             });
@@ -1067,6 +1257,7 @@ export class AuthService extends BaseService {
                     timezone: schema.users.timezone,
                     provider: schema.users.provider,
                     emailVerified: schema.users.emailVerified,
+                    emailVerifiedAt: schema.users.emailVerifiedAt,
                     createdAt: schema.users.createdAt,
                 })
                 .from(schema.users)
