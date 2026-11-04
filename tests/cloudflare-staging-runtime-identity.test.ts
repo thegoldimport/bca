@@ -31,6 +31,40 @@ test("launch auth bridge targets only the reviewed stock runtime", async () => {
   assert.deepEqual(await response?.json(), { token: "launch-csrf" });
 });
 
+test("launch auth bridge forwards only Cloudflare's client IP to the runtime", async () => {
+  const launchUrl = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
+  let forwardedIp = "";
+  const response = await handleStagingCustomerAuth({
+    DB: {} as D1Database,
+    ENVIRONMENT: "production",
+    CONTROL_PLANE_PROFILE: "launch",
+    AUTH_RUNTIME_URL: launchUrl,
+    AUTH_RUNTIME: {
+      async fetch(request: Request) {
+        forwardedIp = request.headers.get("X-Forwarded-For") || "";
+        return Response.json({ success: false, code: "EMAIL_VERIFICATION_REQUIRED" }, { status: 403 });
+      },
+    } as Fetcher,
+  }, new Request("https://control.launch.test/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": "csrf-token=csrf-value",
+      "X-CSRF-Token": "csrf-value",
+      "CF-Connecting-IP": "203.0.113.10",
+      "X-Forwarded-For": "198.51.100.20",
+    },
+    body: JSON.stringify({ email: "owner@example.test", password: "valid-password" }),
+  }), "/api/auth/login", { email: "owner@example.test", password: "valid-password" });
+
+  assert.equal(forwardedIp, "203.0.113.10");
+  assert.equal(response?.status, 403);
+  assert.deepEqual(await response?.json(), {
+    code: "EMAIL_VERIFICATION_REQUIRED",
+    message: "Verify your email address before signing in.",
+  });
+});
+
 function database() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(readFileSync("migrations/d1/0001_control_plane.sql", "utf8"));

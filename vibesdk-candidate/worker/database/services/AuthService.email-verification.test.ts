@@ -1,21 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { SQLiteDialect } from 'drizzle-orm/sqlite-core';
 import * as schema from '../schema';
-import { AuthService } from './AuthService';
+import { AuthService, authAttemptWindowCondition } from './AuthService';
 
 type BoundStatement = {
     sql: string;
     bindings: unknown[];
 };
 
-function makeService(user: schema.User | undefined, attempts = 0) {
+function makeService(user: schema.User | undefined, attempts: number | number[] = 0) {
     let tokenRow: { id: string; userId: string; hash: string; email: string; expiresAt: number } | undefined;
     let tokenUsed = false;
+    let authAttemptReads = 0;
     const sends = vi.fn().mockResolvedValue(undefined);
     const database = {
         select: vi.fn(() => ({
             from: (table: unknown) => ({
                 where: () => ({
-                    get: async () => table === schema.authAttempts ? { total: attempts } : user,
+                    get: async () => {
+                        if (table !== schema.authAttempts) return user;
+                        const total = Array.isArray(attempts) ? attempts[authAttemptReads] ?? 0 : attempts;
+                        authAttemptReads += 1;
+                        return { total };
+                    },
                 }),
             }),
         })),
@@ -81,6 +89,7 @@ function makeService(user: schema.User | undefined, attempts = 0) {
         service,
         sends,
         database,
+        get authAttemptReads() { return authAttemptReads; },
         get storedTokenHash() { return tokenRow?.hash; },
         get tokenUsed() { return tokenUsed; },
     };
@@ -158,5 +167,63 @@ describe('AuthService email verification', () => {
             password: 'StrongPassword123!',
         }, request)).rejects.toThrow('EMAIL_VERIFICATION_REQUIRED');
         expect(createSession.mock.calls.length).toBe(0);
+    });
+
+    it('uses a real 15-minute window for text and numeric D1 timestamps', () => {
+        const database = new DatabaseSync(':memory:');
+        try {
+            database.exec('CREATE TABLE auth_attempts (attempted_at INTEGER)');
+            const insert = database.prepare('INSERT INTO auth_attempts (attempted_at) VALUES (?)');
+            insert.run('2026-11-04 16:00:00');
+            insert.run('2026-11-04 16:20:00');
+            insert.run(Math.floor(Date.parse('2026-11-04T16:00:00Z') / 1000));
+            insert.run(Math.floor(Date.parse('2026-11-04T16:20:00Z') / 1000));
+
+            const condition = new SQLiteDialect().sqlToQuery(
+                authAttemptWindowCondition(new Date('2026-11-04T16:15:00Z'))
+            );
+            const result = database.prepare(
+                `SELECT count(*) AS total FROM auth_attempts WHERE ${condition.sql}`
+            ).get(...condition.params as (string | number | bigint | null)[]) as { total: number };
+
+            expect(result.total).toBe(2);
+        } finally {
+            database.close();
+        }
+    });
+
+    it('allows valid credentials to reach email verification when the IP is unknown', async () => {
+        const test = makeService(unverifiedUser, [0, 282]);
+        const verify = vi.fn().mockResolvedValue(true);
+        const createSession = vi.fn();
+        Object.assign(test.service, {
+            passwordService: { verify },
+            sessionService: { createSession },
+        });
+
+        await expect(test.service.login({
+            email: unverifiedUser.email,
+            password: 'StrongPassword123!',
+        }, new Request('https://app.buildcustom.ai/api/auth/login')))
+            .rejects.toThrow('EMAIL_VERIFICATION_REQUIRED');
+
+        expect(test.authAttemptReads).toBe(1);
+        expect(verify).toHaveBeenCalledOnce();
+        expect(createSession).not.toHaveBeenCalled();
+    });
+
+    it('still enforces the per-account login limit when the IP is unknown', async () => {
+        const test = makeService(unverifiedUser, 10);
+        const verify = vi.fn().mockResolvedValue(true);
+        Object.assign(test.service, { passwordService: { verify } });
+
+        await expect(test.service.login({
+            email: unverifiedUser.email,
+            password: 'StrongPassword123!',
+        }, new Request('https://app.buildcustom.ai/api/auth/login')))
+            .rejects.toThrow('Too many authentication attempts');
+
+        expect(test.authAttemptReads).toBe(1);
+        expect(verify).not.toHaveBeenCalled();
     });
 });
