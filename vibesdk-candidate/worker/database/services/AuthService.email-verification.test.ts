@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import { env } from 'cloudflare:test';
 import { SQLiteDialect } from 'drizzle-orm/sqlite-core';
 import * as schema from '../schema';
 import { AuthService, authAttemptWindowCondition } from './AuthService';
@@ -169,26 +169,27 @@ describe('AuthService email verification', () => {
         expect(createSession.mock.calls.length).toBe(0);
     });
 
-    it('uses a real 15-minute window for text and numeric D1 timestamps', () => {
-        const database = new DatabaseSync(':memory:');
+    it('uses a real 15-minute window for text and numeric D1 timestamps', async () => {
+        const database = (env as unknown as { AUTH_TEST_DB: D1Database }).AUTH_TEST_DB;
+        await database.prepare('DROP TABLE IF EXISTS auth_attempts').run();
+        await database.prepare('CREATE TABLE auth_attempts (attempted_at INTEGER)').run();
         try {
-            database.exec('CREATE TABLE auth_attempts (attempted_at INTEGER)');
             const insert = database.prepare('INSERT INTO auth_attempts (attempted_at) VALUES (?)');
-            insert.run('2026-11-04 16:00:00');
-            insert.run('2026-11-04 16:20:00');
-            insert.run(Math.floor(Date.parse('2026-11-04T16:00:00Z') / 1000));
-            insert.run(Math.floor(Date.parse('2026-11-04T16:20:00Z') / 1000));
+            await insert.bind('2026-11-04 16:00:00').run();
+            await insert.bind('2026-11-04 16:20:00').run();
+            await insert.bind(Math.floor(Date.parse('2026-11-04T16:00:00Z') / 1000)).run();
+            await insert.bind(Math.floor(Date.parse('2026-11-04T16:20:00Z') / 1000)).run();
 
             const condition = new SQLiteDialect().sqlToQuery(
                 authAttemptWindowCondition(new Date('2026-11-04T16:15:00Z'))
             );
-            const result = database.prepare(
+            const result = await database.prepare(
                 `SELECT count(*) AS total FROM auth_attempts WHERE ${condition.sql}`
-            ).get(...condition.params as (string | number | bigint | null)[]) as { total: number };
+            ).bind(...condition.params as number[]).first<{ total: number }>();
 
-            expect(result.total).toBe(2);
+            expect(result?.total).toBe(2);
         } finally {
-            database.close();
+            await database.prepare('DROP TABLE IF EXISTS auth_attempts').run();
         }
     });
 
