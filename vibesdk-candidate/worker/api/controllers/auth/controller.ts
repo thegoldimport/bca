@@ -12,7 +12,8 @@ import {
     registerSchema, 
     oauthProviderSchema,
     forgotPasswordSchema,
-    resetPasswordSchema
+    resetPasswordSchema,
+    verifyEmailSchema
 } from './authSchemas';
 import { SecurityError } from 'shared/types/errors';
 import {
@@ -51,6 +52,8 @@ export class AuthController extends BaseController {
      */
     static async register(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
         try {
+            const csrfFailure = AuthController.validatePublicAuthMutation(request);
+            if (csrfFailure) return csrfFailure;
             if (!isEmailAuthEnabled(env)) {
                 return AuthController.createErrorResponse(
                     'Email/password authentication is disabled on this deployment.',
@@ -67,24 +70,20 @@ export class AuthController extends BaseController {
 
             const authService = new AuthService(env);
             const result = await authService.register(validatedData, request);
-            
-            const response = AuthController.createSuccessResponse(
-                formatAuthResponse(result.user, result.sessionId, result.expiresAt)
-            );
-            
-            setSecureAuthCookies(response, {
-                accessToken: result.accessToken,
-                accessTokenExpiry: SessionService.config.sessionTTL
+            return AuthController.createSuccessResponse({
+                email: result.email,
+                verificationRequired: true,
+                message: 'Check your inbox for a link to verify your email before signing in.'
             });
-            
-            // Rotate CSRF token on successful registration if configured
-            if (CsrfService.defaults.rotateOnAuth) {
-                CsrfService.rotateToken(response);
-            }
-            
-            return response;
         } catch (error) {
             if (error instanceof SecurityError) {
+                if (error.message === 'Your account was created, but the verification email could not be sent. Please request a new link.') {
+                    return Response.json({
+                        success: false,
+                        code: 'VERIFICATION_EMAIL_UNAVAILABLE',
+                        message: error.message
+                    }, { status: error.statusCode });
+                }
                 return AuthController.createErrorResponse(error.message, error.statusCode);
             }
             
@@ -98,6 +97,8 @@ export class AuthController extends BaseController {
      */
     static async login(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
         try {
+            const csrfFailure = AuthController.validatePublicAuthMutation(request);
+            if (csrfFailure) return csrfFailure;
             if (!isEmailAuthEnabled(env)) {
                 return AuthController.createErrorResponse(
                     'Email/password authentication is disabled on this deployment.',
@@ -132,6 +133,13 @@ export class AuthController extends BaseController {
             return response;
         } catch (error) {
             if (error instanceof SecurityError) {
+                if (error.message === 'EMAIL_VERIFICATION_REQUIRED') {
+                    return Response.json({
+                        success: false,
+                        code: 'EMAIL_VERIFICATION_REQUIRED',
+                        message: 'Verify your email address before signing in.'
+                    }, { status: error.statusCode });
+                }
                 return AuthController.createErrorResponse(error.message, error.statusCode);
             }
             
@@ -167,6 +175,66 @@ export class AuthController extends BaseController {
                 return AuthController.createErrorResponse(error.message, error.statusCode);
             }
             return AuthController.handleError(error, 'request password reset');
+        }
+    }
+
+    /**
+     * Request or resend a single-use email verification link.
+     */
+    static async requestEmailVerification(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const csrfFailure = AuthController.validatePublicAuthMutation(request);
+            if (csrfFailure) return csrfFailure;
+            if (!isEmailAuthEnabled(env)) {
+                return AuthController.createErrorResponse(
+                    'Email/password authentication is disabled on this deployment.',
+                    403
+                );
+            }
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+            const { email } = forgotPasswordSchema.parse(bodyResult.data);
+            await new AuthService(env).requestEmailVerification(email, request);
+            return AuthController.createSuccessResponse({
+                message: 'If an unverified email/password account exists, verification instructions will be sent.'
+            });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'request email verification');
+        }
+    }
+
+    /**
+     * Consume an email verification token only after an explicit POST action.
+     */
+    static async verifyEmail(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const csrfFailure = AuthController.validatePublicAuthMutation(request);
+            if (csrfFailure) return csrfFailure;
+            if (!isEmailAuthEnabled(env)) {
+                return AuthController.createErrorResponse(
+                    'Email/password authentication is disabled on this deployment.',
+                    403
+                );
+            }
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+            const { token } = verifyEmailSchema.parse(bodyResult.data);
+            const verified = await new AuthService(env).verifyEmail(token, request);
+            if (!verified) {
+                return AuthController.createErrorResponse('This verification link is invalid, expired, or already used.', 400);
+            }
+            return AuthController.createSuccessResponse({
+                verified: true,
+                message: 'Email verified. You can now sign in.'
+            });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+            return AuthController.handleError(error, 'verify email');
         }
     }
 
@@ -604,7 +672,10 @@ export class AuthController extends BaseController {
                 user: {
                     id: userSession.user.id,
                     email: userSession.user.email,
-                    displayName: userSession.user.displayName
+                    displayName: userSession.user.displayName,
+                    provider: userSession.user.provider,
+                    emailVerified: userSession.user.emailVerified === true,
+                    emailVerifiedAt: userSession.user.emailVerifiedAt?.toISOString() ?? null
                 },
                 sessionId: userSession.sessionId
             });

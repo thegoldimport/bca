@@ -149,8 +149,10 @@ function makeEnv(options: {
                 id: options.actor.id,
                 email: options.actor.email,
                 displayName: options.actor.username,
+                provider: "email",
                 // This field is deliberately not trusted for owner verification.
                 emailVerified: true,
+                emailVerifiedAt: "2026-11-03T12:00:00.000Z",
               } : null,
               ...(authenticated ? { sessionId: "test-session" } : {}),
             },

@@ -70,8 +70,8 @@ describe('AuthService.requestPasswordReset', () => {
         expect(send).toHaveBeenCalledWith(expect.objectContaining({
             from: { email: 'security@buildcustom.ai', name: 'BuildCustom' },
             to: 'person@example.com',
-            text: expect.stringContaining('valid for 60 minutes'),
-            html: expect.stringContaining('valid for 60 minutes')
+            text: expect.stringContaining('valid for 15 minutes'),
+            html: expect.stringContaining('valid for 15 minutes')
         }));
         expect(test.insertedToken).toMatchObject({ used: false, userId: 'user-1' });
         expect(test.tokenInvalidated).toBe(true);

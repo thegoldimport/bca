@@ -105,6 +105,9 @@ export async function routeAuthChecks(
                     response: createAuthRequiredResponse()
                 };
             }
+            if (!isVerifiedEmailUser(user)) {
+                return { success: false, response: createEmailVerificationRequiredResponse() };
+            }
 
             return { success: true };
         }
@@ -116,6 +119,9 @@ export async function routeAuthChecks(
                     success: false,
                     response: createAuthRequiredResponse('Account required')
                 };
+            }
+            if (!isVerifiedEmailUser(user)) {
+                return { success: false, response: createEmailVerificationRequiredResponse() };
             }
 
             // Check resource ownership if function provided
@@ -151,6 +157,24 @@ export async function routeAuthChecks(
             })
         };
     }
+}
+
+function isVerifiedEmailUser(user: AuthUser): boolean {
+    return user.emailVerified === true
+        && (user.provider !== 'email' || !!user.emailVerifiedAt);
+}
+
+function createEmailVerificationRequiredResponse(): Response {
+    return new Response(JSON.stringify({
+        success: false,
+        error: {
+            type: 'EMAIL_VERIFICATION_REQUIRED',
+            message: 'Verify your email address before accessing this account.'
+        }
+    }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+    });
 }
 
 /*

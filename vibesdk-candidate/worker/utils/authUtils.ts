@@ -286,6 +286,7 @@ export function mapUserResponse(
 		timezone: user.timezone || undefined,
 		provider: user.provider || undefined,
 		emailVerified: user.emailVerified || undefined,
+		emailVerifiedAt: user.emailVerifiedAt || undefined,
 		createdAt: user.createdAt || undefined,
 	};
 }

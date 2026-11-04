@@ -18,6 +18,9 @@ type RuntimeIdentity = {
   id: string;
   email: string;
   displayName?: string;
+  provider: string;
+  emailVerified: true;
+  emailVerifiedAt: string | null;
   sessionId: string;
 };
 
@@ -109,7 +112,18 @@ async function verifiedIdentity(env: RuntimeAuthEnv, request: Request, cookie?: 
     || !user.email || typeof result.data.sessionId !== "string" || !result.data.sessionId) {
     throw new RuntimeIdentityError("Could not verify your session.");
   }
-  return { id: user.id, email: user.email.toLowerCase(), displayName: user.displayName, sessionId: result.data.sessionId };
+  if (user.emailVerified !== true || typeof user.provider !== "string") return null;
+  const emailVerifiedAt = typeof user.emailVerifiedAt === "string" ? user.emailVerifiedAt : null;
+  if (user.provider === "email" && (!emailVerifiedAt || !Number.isFinite(Date.parse(emailVerifiedAt)))) return null;
+  return {
+    id: user.id,
+    email: user.email.toLowerCase(),
+    displayName: user.displayName,
+    provider: user.provider,
+    emailVerified: true,
+    emailVerifiedAt,
+    sessionId: result.data.sessionId,
+  };
 }
 
 async function productUser(env: RuntimeAuthEnv, identity: RuntimeIdentity): Promise<SessionUser> {
@@ -193,6 +207,11 @@ export async function handleStagingCustomerAuth(
     return Response.json({ token: result.data.token }, { headers: responseCookies(response) });
   }
 
+  if (["/api/auth/register", "/api/auth/login", "/api/auth/request-verification", "/api/auth/verify-email"]
+    .includes(pathname) && request.method === "POST" && !hasValidCsrfToken(request)) {
+    return Response.json({ message: "A secure request is required." }, { status: 403 });
+  }
+
   if ((pathname === "/api/auth/register" || pathname === "/api/auth/login") && request.method === "POST") {
     const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
     const password = typeof input.password === "string" ? input.password : "";
@@ -205,15 +224,58 @@ export async function handleStagingCustomerAuth(
       body: pathname.endsWith("register") ? { email, password, name } : { email, password },
     });
     if (!response.ok) {
-      const message = pathname.endsWith("register") ? "Could not create your account. Check your details." : "Invalid email or password.";
-      return Response.json({ message }, { status: [400, 401, 403, 409, 429].includes(response.status) ? response.status : 502 });
+      const runtimeResult = await response.json().catch(() => null) as any;
+      const code = runtimeResult?.code ?? runtimeResult?.error?.type;
+      if (code === "EMAIL_VERIFICATION_REQUIRED") {
+        return Response.json({
+          code,
+          message: "Verify your email address before signing in.",
+        }, { status: 403 });
+      }
+      if (code === "VERIFICATION_EMAIL_UNAVAILABLE") {
+        return Response.json({
+          code,
+          message: "Your account was created, but the verification email could not be sent. Request a new link below.",
+        }, { status: 503 });
+      }
+      const status = [400, 401, 403, 409, 429, 503].includes(response.status) ? response.status : 502;
+      const message = status === 429 ? "Too many attempts. Please wait and try again."
+        : pathname.endsWith("register") && status === 503
+          ? "Your account could not be verified because email delivery is unavailable. Please try again."
+          : pathname.endsWith("register") ? "Could not create your account. Check your details."
+            : "Invalid email or password.";
+      return Response.json({ message }, { status });
     }
+
+    if (pathname.endsWith("register")) {
+      const runtimeResult = await response.json().catch(() => null) as any;
+      if (runtimeResult?.success !== true || runtimeResult?.data?.verificationRequired !== true) {
+        throw new RuntimeIdentityError("Email verification is not available yet.", 503);
+      }
+      return Response.json({
+        email,
+        verificationRequired: true,
+        message: "Check your inbox for a link to verify your email before signing in.",
+      }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    }
+
     const issuedCookies = setCookies(response);
     const accessCookie = issuedCookies.find((value) => value.startsWith(`${AUTH_COOKIE}=`));
     if (!accessCookie) throw new RuntimeIdentityError("Could not establish your session.");
     const cookie = issuedCookies.map((value) => value.split(";")[0]).join("; ");
     const identity = await verifiedIdentity(env, request, cookie);
-    if (!identity) throw new RuntimeIdentityError("Could not establish your session.");
+    if (!identity) {
+      return Response.json({
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        message: "Verify your email address before signing in.",
+      }, {
+        status: 403,
+        headers: {
+          "Set-Cookie": clearCookie(AUTH_COOKIE),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
     const user = await productUser(env, identity);
     if (user.account_status === "suspended") {
       return Response.json({ message: "Account access is suspended." }, {
@@ -222,6 +284,55 @@ export async function handleStagingCustomerAuth(
       });
     }
     return Response.json(user, { headers: responseCookies(response) });
+  }
+
+  if ((pathname === "/api/auth/request-verification" || pathname === "/api/auth/verify-email")
+    && request.method === "POST") {
+    const requestVerification = pathname.endsWith("request-verification");
+    const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+    const token = typeof input.token === "string" ? input.token : "";
+    if (requestVerification && (!email || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) {
+      return Response.json({ message: "Enter a valid email address." }, { status: 400 });
+    }
+    if (!requestVerification && (!token || token.length > 256)) {
+      return Response.json({ message: "This verification link is invalid or expired." }, { status: 400 });
+    }
+    let response: Response;
+    try {
+      response = await runtimeRequest(env, request, pathname, {
+        method: "POST",
+        body: requestVerification ? { email } : { token },
+        timeoutMs: 10_000,
+      });
+    } catch {
+      return Response.json({ message: "Email verification is temporarily unavailable. Please try again." }, { status: 502 });
+    }
+    if (requestVerification) {
+      if (response.status === 429) {
+        return Response.json({ message: "Too many requests. Please wait before trying again." }, { status: 429 });
+      }
+      if (!response.ok) {
+        return Response.json({ message: "Email verification is temporarily unavailable. Please try again." }, { status: 502 });
+      }
+      return Response.json({
+        message: "If an unverified email/password account exists, verification instructions will be sent.",
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (!response.ok) {
+      const status = response.status === 429 ? 429 : 400;
+      return Response.json({
+        message: status === 429
+          ? "Too many requests. Please wait before trying again."
+          : "This verification link is invalid, expired, or already used.",
+      }, { status });
+    }
+    const result = await response.json().catch(() => null) as any;
+    if (result?.success !== true || result?.data?.verified !== true) {
+      return Response.json({ message: "This verification link is invalid, expired, or already used." }, { status: 400 });
+    }
+    return Response.json({ success: true, message: "Email verified. You can now sign in." }, {
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   if ((pathname === "/api/auth/forgot-password" || pathname === "/api/auth/reset-password") && request.method === "POST") {
@@ -237,9 +348,9 @@ export async function handleStagingCustomerAuth(
       // Keep the public response indistinguishable from an unknown account.
       return Response.json({ message: "If an account exists for that email, password reset instructions will be sent." });
     }
-    if (!forgot && (!token || token.length > 4096 || newPassword.length < 6 || newPassword.length > 256
+    if (!forgot && (!token || token.length > 4096 || newPassword.length < 8 || newPassword.length > 128
       || !confirmPassword || confirmPassword.length > 256 || newPassword !== confirmPassword)) {
-      return Response.json({ message: "Enter a valid reset link and a password of at least 6 characters." }, { status: 400 });
+      return Response.json({ message: "Enter a valid reset link and a password of at least 8 characters." }, { status: 400 });
     }
     const body = forgot ? { email } : { token, newPassword, confirmPassword };
     let response: Response;

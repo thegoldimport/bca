@@ -77,6 +77,15 @@ export const resetPasswordSchema = z.object({
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
 
 /**
+ * Email verification token submitted after an explicit user click.
+ */
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1).max(256)
+});
+
+export type VerifyEmailRequest = z.infer<typeof verifyEmailSchema>;
+
+/**
  * OAuth provider schema
  */
 export const oauthProviderSchema = z.enum(['google', 'github', 'cloudflare']);
