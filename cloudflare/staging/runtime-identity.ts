@@ -65,6 +65,9 @@ async function runtimeRequest(env: RuntimeAuthEnv, request: Request, path: strin
   const headers = new Headers({ Accept: "application/json" });
   const cookie = options.cookie ?? cookies(request);
   headers.set("Cookie", options.sessionId ? `${cookie}; sessionId=${encodeURIComponent(options.sessionId)}` : cookie);
+  // Cloudflare supplies this at ingress; do not trust a browser-provided X-Forwarded-For.
+  const clientIp = request.headers.get("CF-Connecting-IP");
+  if (clientIp) headers.set("X-Forwarded-For", clientIp);
   const csrf = request.headers.get("X-CSRF-Token");
   if (csrf) headers.set("X-CSRF-Token", csrf);
   if (options.body) headers.set("Content-Type", "application/json");

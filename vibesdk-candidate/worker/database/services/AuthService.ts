@@ -4,7 +4,7 @@
  */
 
 import * as schema from '../schema';
-import { eq, and, sql, or, lt, isNull, gte, count } from 'drizzle-orm';
+import { eq, and, sql, or, lt, isNull, count } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken, sha256Hash } from '../../utils/cryptoUtils';
 import { SessionService } from './SessionService';
@@ -32,6 +32,17 @@ import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
 
 const logger = createLogger('AuthService');
+
+export function authAttemptWindowCondition(windowStart: Date) {
+    const attemptedAt = schema.authAttempts.attemptedAt;
+    const windowStartSeconds = Math.floor(windowStart.getTime() / 1000);
+    // D1 stores CURRENT_TIMESTAMP defaults as text even though this column has INTEGER affinity.
+    // Normalize legacy text rows and timestamp-mode epoch values before comparing the window.
+    return sql`CASE
+        WHEN typeof(${attemptedAt}) = 'integer' THEN ${attemptedAt}
+        ELSE unixepoch(${attemptedAt})
+    END >= ${windowStartSeconds}`;
+}
 
 /**
  * Login credentials
@@ -340,13 +351,15 @@ export class AuthService extends BaseService {
             this.database.select({ total: count() }).from(schema.authAttempts).where(and(
                 eq(schema.authAttempts.attemptType, 'reset_password'),
                 eq(schema.authAttempts.identifier, normalizedEmail),
-                gte(schema.authAttempts.attemptedAt, windowStart)
+                authAttemptWindowCondition(windowStart)
             )).get(),
-            this.database.select({ total: count() }).from(schema.authAttempts).where(and(
-                eq(schema.authAttempts.attemptType, 'reset_password'),
-                eq(schema.authAttempts.ipAddress, metadata.ipAddress),
-                gte(schema.authAttempts.attemptedAt, windowStart)
-            )).get()
+            metadata.ipAddress !== 'unknown'
+                ? this.database.select({ total: count() }).from(schema.authAttempts).where(and(
+                    eq(schema.authAttempts.attemptType, 'reset_password'),
+                    eq(schema.authAttempts.ipAddress, metadata.ipAddress),
+                    authAttemptWindowCondition(windowStart)
+                )).get()
+                : Promise.resolve({ total: 0 })
         ]);
 
         if ((emailAttempts?.total ?? 0) >= 3 || (ipAttempts?.total ?? 0) >= 15) {
@@ -383,14 +396,15 @@ export class AuthService extends BaseService {
                 ? this.database.select({ total: count() }).from(schema.authAttempts).where(and(
                     eq(schema.authAttempts.attemptType, attemptType),
                     eq(schema.authAttempts.identifier, identifier),
-                    gte(schema.authAttempts.attemptedAt, windowStart)
+                    authAttemptWindowCondition(windowStart)
                 )).get()
                 : Promise.resolve({ total: 0 }),
-            maxPerIp > 0
+            // Never combine unrelated callers into a shared "unknown" IP bucket.
+            maxPerIp > 0 && metadata.ipAddress !== 'unknown'
                 ? this.database.select({ total: count() }).from(schema.authAttempts).where(and(
                     eq(schema.authAttempts.attemptType, attemptType),
                     eq(schema.authAttempts.ipAddress, metadata.ipAddress),
-                    gte(schema.authAttempts.attemptedAt, windowStart)
+                    authAttemptWindowCondition(windowStart)
                 )).get()
                 : Promise.resolve({ total: 0 })
         ]);
