@@ -54,14 +54,9 @@ async function sha256(value: string): Promise<string> {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function constantTimeSecretMatch(expected: string, supplied: string): Promise<boolean> {
-  if (expected.length < 32 || supplied.length > 512) return false;
-  const [left, right] = await Promise.all([sha256(expected), sha256(supplied)]);
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return difference === 0;
+function operatorAuthorizationReady(env: OwnerBootstrapEnv): boolean {
+  return typeof env.OWNER_BOOTSTRAP_SECRET === "string"
+    && env.OWNER_BOOTSTRAP_SECRET.length >= 32;
 }
 
 async function hashBucket(value: string): Promise<string> {
@@ -109,6 +104,7 @@ async function ownerState(env: OwnerBootstrapEnv, user: SessionUser) {
   const ownerAlreadyInitialized = Number(owners?.count || 0) > 0 || bootstrap?.consumed_at_ms != null;
   const isOwnerCandidate = user.email.trim().toLowerCase() === OWNER_EMAIL;
   const emailOwnershipVerified = Boolean(proof);
+  const operatorReady = operatorAuthorizationReady(env);
   return {
     candidateEmail: OWNER_EMAIL,
     accountStatus: user.account_status || "active",
@@ -117,12 +113,12 @@ async function ownerState(env: OwnerBootstrapEnv, user: SessionUser) {
     emailOwnershipVerified,
     verifiedAt: proof?.verified_at_ms ?? null,
     verificationServiceAvailable: Boolean(env.EMAIL),
-    ownerSecretConfigured: typeof env.OWNER_BOOTSTRAP_SECRET === "string"
-      && env.OWNER_BOOTSTRAP_SECRET.length >= 32,
+    operatorAuthorizationReady: operatorReady,
     eligible: isOwnerCandidate
       && user.role === "user"
       && user.account_status !== "suspended"
       && emailOwnershipVerified
+      && operatorReady
       && !ownerAlreadyInitialized,
   };
 }
@@ -264,10 +260,8 @@ async function activateOwner(
   if (input.confirmEmail !== OWNER_EMAIL) {
     return json({ message: "Type the exact owner email to confirm authorization." }, 400);
   }
-  const suppliedSecret = typeof input.ownerSecret === "string" ? input.ownerSecret : "";
-  const configuredSecret = env.OWNER_BOOTSTRAP_SECRET;
-  if (!configuredSecret || !(await constantTimeSecretMatch(configuredSecret, suppliedSecret))) {
-    return json({ message: "The owner authorization secret is invalid or not configured." }, 403);
+  if (!operatorAuthorizationReady(env)) {
+    return json({ message: "Owner activation has not been authorized by an operator." }, 403);
   }
 
   const now = Date.now();

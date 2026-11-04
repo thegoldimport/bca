@@ -38,6 +38,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   Zap,
+  Activity,
   Users,
   BarChart3,
   Receipt,
@@ -80,9 +81,22 @@ import previewFitness from "@/assets/preview-fitness.jpg";
 import previewGame from "@/assets/preview-game.jpg";
 import previewEcommerce from "@/assets/preview-ecommerce.jpg";
 import { ThemeProvider, useTheme } from "@/contexts/theme-context";
-import { UsersPage, AnalyticsPage, BillingPage, SupportPage, DeploymentsPage } from "@/pages/app-admin-live-pages";
+import {
+  UsersPage,
+  ProjectsPage as AdminProjectsPage,
+  AnalyticsPage,
+  BillingPage,
+  SupportPage,
+  DeploymentsPage,
+  SystemHealthPage,
+} from "@/pages/app-admin-live-pages";
 import OwnerBootstrapPage from "@/pages/owner-bootstrap-page";
 import ProjectDetail from "@/pages/project-detail";
+import {
+  adminNavigationForRole,
+  ownerAuthorizationVisible,
+  type AdminNavigationIcon,
+} from "@/lib/admin-navigation";
 import { getPlanEntitlement } from "@shared/plans";
 import {
   canContinueNativeTask,
@@ -91,14 +105,15 @@ import {
   isContextualContinuationApproval,
 } from "@/lib/native-continuation";
 
-function AppSidebar({ collapsed, onToggle, isAdmin, ownerCandidate }: {
+function AppSidebar({ collapsed, onToggle, role, email }: {
   collapsed: boolean;
   onToggle: () => void;
-  isAdmin: boolean;
-  ownerCandidate: boolean;
+  role: string;
+  email: string;
 }) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const isAdmin = role === "super_admin";
 
   const baseItems = [
     { path: "/app", icon: LayoutGrid, label: "Projects" },
@@ -106,22 +121,30 @@ function AppSidebar({ collapsed, onToggle, isAdmin, ownerCandidate }: {
     { path: "/app/editor", icon: Code2, label: "Builder" },
   ];
 
-  const adminItems = [
-    { path: "/app/users", icon: Users, label: "Users" },
-    { path: "/app/analytics", icon: BarChart3, label: "Analytics" },
-    { path: "/app/billing", icon: Receipt, label: "Billing" },
-    { path: "/app/support", icon: LifeBuoy, label: "Support" },
-    { path: "/app/deployments", icon: Cloud, label: "Deployments" },
-  ];
+  const adminIcons: Record<AdminNavigationIcon, typeof Users> = {
+    users: Users,
+    projects: FolderTree,
+    analytics: BarChart3,
+    deployments: Cloud,
+    health: Activity,
+    billing: Receipt,
+    support: LifeBuoy,
+  };
+  const adminItems = adminNavigationForRole(role).map((item) => ({
+    ...item,
+    icon: adminIcons[item.icon],
+  }));
 
   const navItems = [
     ...baseItems,
     ...(isAdmin ? adminItems : []),
-    ...(ownerCandidate && !isAdmin
+    ...(ownerAuthorizationVisible(email, role)
       ? [{ path: "/app/owner-authorization", icon: Shield, label: "Owner access" }]
       : []),
     { path: "/app/settings", icon: Settings, label: "Settings" },
   ];
+  const showAdminHeading = isAdmin && adminItems.length > 0;
+  const adminHeadingIndex = baseItems.length;
 
   const isActive = (path: string) => {
     if (path === "/app") return location === "/app" || location === "/app/";
@@ -166,32 +189,50 @@ function AppSidebar({ collapsed, onToggle, isAdmin, ownerCandidate }: {
             </button>
           </div>
           <nav className="flex flex-1 flex-col justify-start gap-1 py-4 px-2">
-            {navItems.map((item) => {
+            {navItems.map((item, index) => {
               const active = isActive(item.path);
               return (
-                <Link key={item.path} href={item.path}>
-                  <div
-                    className={`relative group flex items-center justify-center px-2 py-2.5 rounded-xl cursor-pointer transition-colors ${
-                      active
-                        ? theme === "dark" ? "bg-white/10 text-purple-400" : "bg-cyan-50 text-purple-500"
-                        : theme === "dark" ? "text-white/55 hover:bg-white/5 hover:text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                    }`}
-                    aria-label={item.label}
-                    data-testid={`nav-collapsed-${item.label.toLowerCase()}`}
-                  >
-                    <item.icon size={20} />
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-[1010] -translate-y-1/2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
-                        theme === "dark"
-                          ? "border-white/10 bg-[#0a0a12] text-white"
-                          : "border-gray-200 bg-white text-gray-700"
+                <div key={item.path}>
+                  {showAdminHeading && index === adminHeadingIndex && (
+                    <div className="relative group flex items-center justify-center px-2 py-2.5 text-purple-400"
+                      aria-label="Admin" data-testid="nav-section-admin-collapsed">
+                      <Shield size={18} />
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-[1010] -translate-y-1/2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
+                          theme === "dark"
+                            ? "border-white/10 bg-[#0a0a12] text-white"
+                            : "border-gray-200 bg-white text-gray-700"
+                        }`}
+                      >
+                        Admin
+                      </span>
+                    </div>
+                  )}
+                  <Link href={item.path}>
+                    <div
+                      className={`relative group flex items-center justify-center px-2 py-2.5 rounded-xl cursor-pointer transition-colors ${
+                        active
+                          ? theme === "dark" ? "bg-white/10 text-purple-400" : "bg-cyan-50 text-purple-500"
+                          : theme === "dark" ? "text-white/55 hover:bg-white/5 hover:text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                       }`}
+                      aria-label={item.label}
+                      data-testid={`nav-collapsed-${item.label.toLowerCase()}`}
                     >
-                      <span className={active ? "text-brand-gradient" : ""}>{item.label}</span>
-                    </span>
-                  </div>
-                </Link>
+                      <item.icon size={20} />
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-[1010] -translate-y-1/2 whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-medium opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${
+                          theme === "dark"
+                            ? "border-white/10 bg-[#0a0a12] text-white"
+                            : "border-gray-200 bg-white text-gray-700"
+                        }`}
+                      >
+                        <span className={active ? "text-brand-gradient" : ""}>{item.label}</span>
+                      </span>
+                    </div>
+                  </Link>
+                </div>
               );
             })}
           </nav>
@@ -262,6 +303,13 @@ function AppSidebar({ collapsed, onToggle, isAdmin, ownerCandidate }: {
           const active = isActive(item.path);
           return (
             <div key={item.path}>
+              {showAdminHeading && idx === adminHeadingIndex && (
+                <div className={`px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.18em] ${
+                  theme === "dark" ? "text-purple-300/75" : "text-purple-600/75"
+                }`} aria-label="Admin" data-testid="nav-section-admin">
+                  Admin
+                </div>
+              )}
               <Link href={item.path}>
                 <div
                   className={`flex items-center gap-2 px-2 py-2.5 rounded-xl cursor-pointer transition-all duration-200 group ${
@@ -5688,8 +5736,8 @@ function AppDashboardContent({ user }: { user: AppUser }) {
       <AppSidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-        isAdmin={isAdminUser(user)}
-        ownerCandidate={user.email.toLowerCase() === "support@buildcustom.ai"}
+        role={user.role}
+        email={user.email}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -5700,14 +5748,15 @@ function AppDashboardContent({ user }: { user: AppUser }) {
             <Route path="/app/templates" component={TemplatesPage} />
             <Route path="/app/editor" component={EditorPage} />
             <Route path="/app/editor/:id" component={EditorPage} />
+            {isAdminUser(user) && <Route path="/app/admin/projects" component={AdminProjectsPage} />}
             {isAdminUser(user) && <Route path="/app/users" component={UsersPage} />}
             {isAdminUser(user) && <Route path="/app/analytics" component={AnalyticsPage} />}
             {isAdminUser(user) && <Route path="/app/billing" component={BillingPage} />}
             {isAdminUser(user) && <Route path="/app/support" component={SupportPage} />}
             {isAdminUser(user) && <Route path="/app/deployments" component={DeploymentsPage} />}
-            {user.email.toLowerCase() === "support@buildcustom.ai" && !isAdminUser(user)
+            {isAdminUser(user) && <Route path="/app/system-health" component={SystemHealthPage} />}
+            {ownerAuthorizationVisible(user.email, user.role)
               && <Route path="/app/owner-authorization" component={OwnerBootstrapPage} />}
-            {isAdminUser(user) && <Route path="/app/owner-authorization" component={OwnerBootstrapPage} />}
             <Route path="/app/settings" component={SettingsPage} />
             <Route path="/app/project/:id" component={ProjectDetail} />
             <Route>{() => <ProjectsPage />}</Route>

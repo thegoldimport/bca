@@ -56,6 +56,18 @@ type Project = {
   updated_at: string;
 };
 
+type AdminProject = {
+  id: number;
+  name: string;
+  type: string;
+  status: string;
+  framework: string;
+  createdAt: string;
+  updatedAt: string;
+  ownerName: string;
+  ownerEmail: string;
+};
+
 type Deployment = {
   projectId: number;
   projectName: string;
@@ -349,6 +361,69 @@ export function AnalyticsPage() {
   );
 }
 
+export function ProjectsPage() {
+  const { theme } = useTheme();
+  const [search, setSearch] = useState("");
+  const query = useAdminQuery<{ projects: AdminProject[] }>(
+    `/api/admin/projects?search=${encodeURIComponent(search)}`,
+  );
+  const projects = query.data?.projects || [];
+
+  return (
+    <PageFrame title="Projects" description="Customer project metadata from the production product database.">
+      <Card className="mb-5">
+        <label className={`flex max-w-lg items-center gap-2 rounded-xl border px-3 py-2.5 ${
+          theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-50"
+        }`}>
+          <Search size={16} className={theme === "dark" ? "text-white/40" : "text-gray-400"} />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search projects or customer"
+            className={`w-full bg-transparent text-sm outline-none ${
+              theme === "dark" ? "text-white placeholder-white/35" : "text-gray-900 placeholder-gray-400"
+            }`}
+          />
+        </label>
+        <p className={`mt-3 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+          Project metadata only. Customer source files and runtime credentials are not returned.
+        </p>
+      </Card>
+      {query.isLoading || query.error ? (
+        <Card><StateMessage loading={query.isLoading} error={query.error} /></Card>
+      ) : projects.length === 0 ? (
+        <Card><StateMessage empty="No customer projects match this search." /></Card>
+      ) : (
+        <div className="space-y-3">
+          {projects.map((project) => (
+            <Card key={project.id} className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="rounded-xl bg-white/5 p-2.5">
+                  <FolderGit2 size={18} className="text-cyan-400" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className={`truncate font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                    {project.name}
+                  </h2>
+                  <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+                    {project.ownerName} · {project.ownerEmail}
+                  </p>
+                  <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>
+                    {project.type} · {project.framework} · Updated {formatDate(project.updatedAt)}
+                  </p>
+                </div>
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-xs ${
+                theme === "dark" ? "bg-white/10 text-white/60" : "bg-gray-100 text-gray-600"
+              }`}>{project.status}</span>
+            </Card>
+          ))}
+        </div>
+      )}
+    </PageFrame>
+  );
+}
+
 function HealthCard({ health }: { health: Overview["health"] }) {
   const { theme } = useTheme();
   const rows = [
@@ -379,6 +454,19 @@ function HealthCard({ health }: { health: Overview["health"] }) {
         Checked {formatDate(health.checkedAt)}. This is a connectivity check, not an uptime or performance guarantee.
       </p>
     </Card>
+  );
+}
+
+export function SystemHealthPage() {
+  const query = useAdminQuery<Overview["health"]>("/api/admin/health");
+  return (
+    <PageFrame title="System Health" description="Live connectivity checks for the product database and runtime.">
+      {query.isLoading || query.error ? (
+        <Card><StateMessage loading={query.isLoading} error={query.error} /></Card>
+      ) : query.data ? (
+        <HealthCard health={query.data} />
+      ) : null}
+    </PageFrame>
   );
 }
 
