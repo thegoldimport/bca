@@ -39,7 +39,7 @@ function Router() {
       <Route path="/app" component={AppDashboard} />
       <Route path="/app/project/:id" component={AppDashboard} />
       <Route path="/app/editor/:id" component={AppDashboard} />
-      <Route path="/app/:rest*" component={AppDashboard} />
+      <Route path="/app/*" component={AppDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

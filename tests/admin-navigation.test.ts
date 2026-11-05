@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { parse } from "regexparam";
 import { adminNavigationForRole, ownerAuthorizationVisible } from "../client/src/lib/admin-navigation";
 import {
   ownerActivationButtonEnabled,
@@ -24,6 +25,24 @@ test("super admins receive the required admin navigation and no owner activation
     "Support",
   ]);
   assert.equal(ownerAuthorizationVisible("support@buildcustom.ai", "super_admin"), false);
+});
+
+test("every admin sidebar destination has a matching admin-only route", () => {
+  const dashboard = readFileSync("client/src/pages/app-dashboard.tsx", "utf8");
+  const appRouter = readFileSync("client/src/App.tsx", "utf8");
+
+  const outerAppRoute = appRouter.match(/<Route path="(\/app\/\*)" component={AppDashboard} \/>/)?.[1];
+  assert.ok(outerAppRoute, "deep app URLs must use Wouter's multi-segment wildcard");
+  const outerAppRoutePattern = parse(outerAppRoute).pattern;
+
+  for (const { path, label } of adminNavigationForRole("super_admin")) {
+    assert.match(path, outerAppRoutePattern, `${label} destination ${path} must reach the dashboard router`);
+    const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const route = new RegExp(
+      `isAdminUser\\(user\\)\\s*&&\\s*<Route\\s+path="${escapedPath}"\\s+component=`,
+    );
+    assert.match(dashboard, route, `${label} sidebar destination ${path} must have an admin-only route`);
+  }
 });
 
 test("only the designated pre-activation account sees owner authorization", () => {

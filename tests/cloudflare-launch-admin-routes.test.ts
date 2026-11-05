@@ -75,7 +75,12 @@ function makeDb(options: {
             return { results: options.projects || [] };
           }
           if (sql.includes("SELECT p.id,p.name,p.type,p.status,p.updated_at")) {
-            return { results: options.deployments || [] };
+            const deployments = options.deployments || [];
+            return {
+              results: sql.includes("AND p.id=?")
+                ? deployments.filter((row) => Number(row.id) === Number(values[0]))
+                : deployments,
+            };
           }
           return { results: [] };
         },
@@ -367,6 +372,9 @@ test("authorized admins receive only safe metadata from all customer projects", 
       updated_at: "2026-05-11 10:00:00",
       owner_name: "Customer One",
       owner_email: "customer@example.test",
+      user_id: "customer-2",
+      hosting_provider: "cloudflare",
+      deployment_url: "https://apps.example.test/customer-project?private=must-not-return",
       password: "must-not-return",
       session_token: "must-not-return",
       api_key: "must-not-return",
@@ -384,11 +392,49 @@ test("authorized admins receive only safe metadata from all customer projects", 
     framework: "React",
     createdAt: "2026-05-10 09:00:00",
     updatedAt: "2026-05-11 10:00:00",
+    ownerId: "customer-2",
     ownerName: "Customer One",
     ownerEmail: "customer@example.test",
+    deploymentStatus: "Published",
+    hostingProvider: "cloudflare",
+    publishedUrl: "https://apps.example.test/customer-project",
   });
   assert.equal(JSON.stringify(body).includes("must-not-return"), false);
   assert.equal(state.statements.some((sql) => /\b(password|session_token|api_key|source_files)\b/i.test(sql)), false);
+});
+
+test("admin deployment diagnostics can be filtered to one project", async () => {
+  const { env } = makeEnv({
+    actor: testUser({ id: "admin-1", role: "super_admin" }),
+    deployments: [
+      {
+        id: 31,
+        name: "Project One",
+        type: "website",
+        status: "published",
+        updated_at: "2026-05-11 10:00:00",
+        owner_name: "Customer One",
+        owner_email: "one@example.test",
+        hosting_provider: "cloudflare",
+        deployment_url: "https://one.example.test",
+      },
+      {
+        id: 32,
+        name: "Project Two",
+        type: "website",
+        status: "published",
+        updated_at: "2026-05-12 10:00:00",
+        owner_name: "Customer Two",
+        owner_email: "two@example.test",
+        hosting_provider: "cloudflare",
+        deployment_url: "https://two.example.test",
+      },
+    ],
+  });
+  const response = await route(env, makeRequest("/api/admin/deployments?projectId=31"));
+  assert.equal(response?.status, 200);
+  const body = await response?.json() as { deployments: Record<string, unknown>[] };
+  assert.deepEqual(body.deployments.map((deployment) => deployment.projectId), [31]);
 });
 
 test("email/password signup flag alone cannot authorize owner bootstrap", async () => {
