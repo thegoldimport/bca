@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import {
   Activity,
   CheckCircle2,
@@ -64,8 +65,12 @@ type AdminProject = {
   framework: string;
   createdAt: string;
   updatedAt: string;
+  ownerId: string;
   ownerName: string;
   ownerEmail: string;
+  deploymentStatus: string;
+  hostingProvider: string | null;
+  publishedUrl: string | null;
 };
 
 type Deployment = {
@@ -176,8 +181,10 @@ function formatDate(value: string | null | undefined) {
 export function UsersPage() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("search") || "");
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("customerId"),
+  );
   const endpoint = `/api/admin/customers?search=${encodeURIComponent(search)}`;
   const customersQuery = useAdminQuery<{ customers: Customer[] }>(endpoint);
   const selected = customersQuery.data?.customers.find((customer) => customer.id === selectedId);
@@ -406,16 +413,43 @@ export function ProjectsPage() {
                     {project.name}
                   </h2>
                   <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
-                    {project.ownerName} · {project.ownerEmail}
+                    <Link
+                      href={`/app/users?customerId=${encodeURIComponent(project.ownerId)}&search=${encodeURIComponent(project.ownerEmail)}`}
+                      className="text-cyan-400 hover:underline"
+                    >
+                      {project.ownerName} · {project.ownerEmail}
+                    </Link>
                   </p>
                   <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>
-                    {project.type} · {project.framework} · Updated {formatDate(project.updatedAt)}
+                    Created {formatDate(project.createdAt)} · Updated {formatDate(project.updatedAt)} · {project.type} · {project.framework}
+                  </p>
+                  <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+                    Deployment: {project.deploymentStatus}
+                    {project.hostingProvider ? ` · ${project.hostingProvider}` : ""}
                   </p>
                 </div>
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs ${
-                theme === "dark" ? "bg-white/10 text-white/60" : "bg-gray-100 text-gray-600"
-              }`}>{project.status}</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`rounded-full px-2.5 py-1 text-xs ${
+                  theme === "dark" ? "bg-white/10 text-white/60" : "bg-gray-100 text-gray-600"
+                }`}>{project.status}</span>
+                {project.publishedUrl && (
+                  <a
+                    href={project.publishedUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-cyan-400 hover:underline"
+                  >
+                    Published URL
+                  </a>
+                )}
+                <Link
+                  href={`/app/deployments?projectId=${encodeURIComponent(String(project.id))}`}
+                  className="text-xs text-cyan-400 hover:underline"
+                >
+                  Project diagnostics
+                </Link>
+              </div>
             </Card>
           ))}
         </div>
@@ -504,10 +538,19 @@ export function SupportPage() {
 
 export function DeploymentsPage() {
   const { theme } = useTheme();
-  const query = useAdminQuery<{ deployments: Deployment[] }>("/api/admin/deployments");
+  const projectId = new URLSearchParams(window.location.search).get("projectId");
+  const endpoint = projectId
+    ? `/api/admin/deployments?projectId=${encodeURIComponent(projectId)}`
+    : "/api/admin/deployments";
+  const query = useAdminQuery<{ deployments: Deployment[] }>(endpoint);
   const deployments = query.data?.deployments || [];
   return (
-    <PageFrame title="Deployments" description="Deployment records stored for customer projects.">
+    <PageFrame
+      title="Deployments"
+      description={projectId
+        ? `Deployment diagnostics for project ${projectId}.`
+        : "Deployment records stored for customer projects."}
+    >
       <div className="mb-4 flex justify-end">
         <button
           className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
@@ -521,7 +564,9 @@ export function DeploymentsPage() {
       {query.isLoading || query.error ? (
         <Card><StateMessage loading={query.isLoading} error={query.error} /></Card>
       ) : deployments.length === 0 ? (
-        <Card><StateMessage empty="No deployment records are available." /></Card>
+        <Card><StateMessage empty={projectId
+          ? "No deployment record is available for this project."
+          : "No deployment records are available."} /></Card>
       ) : (
         <div className="space-y-3">
           {deployments.map((deployment) => (

@@ -145,10 +145,12 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
   const search = (url.searchParams.get("search") || "").trim().slice(0, 100);
   const pattern = `%${search}%`;
   const result = await env.DB.prepare(
-    `SELECT p.id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at,
-       COALESCE(u.display_name,u.username) AS owner_name,u.email AS owner_email
+    `SELECT p.id,p.user_id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at,
+       COALESCE(u.display_name,u.username) AS owner_name,u.email AS owner_email,
+       l.hosting_provider,l.deployment_url
      FROM projects p
      JOIN users u ON u.id=p.user_id
+     LEFT JOIN runtime_project_links l ON l.project_id=p.id
      WHERE u.role='user'
        AND (?='' OR p.name LIKE ? COLLATE NOCASE
          OR COALESCE(u.display_name,u.username) LIKE ? COLLATE NOCASE
@@ -156,30 +158,39 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
      ORDER BY p.updated_at DESC LIMIT 200`,
   ).bind(search, pattern, pattern, pattern).all();
   return {
-    projects: (result.results || []).map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      status: row.status,
-      framework: row.framework,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      ownerName: row.owner_name,
-      ownerEmail: row.owner_email,
-    })),
+    projects: (result.results || []).map((row: any) => {
+      const publishedUrl = safeDeploymentUrl(row.deployment_url);
+      return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        status: row.status,
+        framework: row.framework,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        ownerId: row.user_id,
+        ownerName: row.owner_name,
+        ownerEmail: row.owner_email,
+        deploymentStatus: publishedUrl ? "Published" : "No deployment record",
+        hostingProvider: row.hosting_provider || null,
+        publishedUrl,
+      };
+    }),
   };
 }
 
-async function getDeployments(env: LaunchAdminEnv) {
-  const result = await env.DB.prepare(
+async function getDeployments(env: LaunchAdminEnv, projectId: number | null) {
+  const projectFilter = projectId === null ? "" : " AND p.id=?";
+  const statement = env.DB.prepare(
     `SELECT p.id,p.name,p.type,p.status,p.updated_at,u.display_name AS owner_name,u.email AS owner_email,
       l.hosting_provider,l.deployment_url
      FROM projects p
      JOIN users u ON u.id=p.user_id
      JOIN runtime_project_links l ON l.project_id=p.id
-     WHERE u.role='user' AND l.deployment_url IS NOT NULL AND TRIM(l.deployment_url)<>''
+     WHERE u.role='user' AND l.deployment_url IS NOT NULL AND TRIM(l.deployment_url)<>''${projectFilter}
      ORDER BY l.updated_at DESC LIMIT 100`,
-  ).all();
+  );
+  const result = await (projectId === null ? statement : statement.bind(projectId)).all();
   const deployments = (result.results || []).map((row: any) => ({
     projectId: row.id,
     projectName: row.name,
@@ -258,7 +269,12 @@ export async function handleLaunchAdminRoute(args: {
     return json(await getProjects(env, url));
   }
   if (url.pathname === "/api/admin/deployments" && request.method === "GET") {
-    return json(await getDeployments(env));
+    const projectIdParam = url.searchParams.get("projectId");
+    if (projectIdParam !== null && (!/^[1-9]\d*$/.test(projectIdParam)
+      || !Number.isSafeInteger(Number(projectIdParam)))) {
+      return json({ message: "Project id must be a positive integer." }, 400);
+    }
+    return json(await getDeployments(env, projectIdParam === null ? null : Number(projectIdParam)));
   }
 
   const statusMatch = url.pathname.match(/^\/api\/admin\/customers\/([^/]+)\/status$/);
