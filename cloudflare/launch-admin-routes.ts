@@ -229,7 +229,7 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
 async function getDeployments(env: LaunchAdminEnv, projectId: number | null) {
   const projectFilter = projectId === null ? "" : " AND p.id=?";
   const statement = env.DB.prepare(
-    `SELECT p.id,p.name,p.type,p.status,p.updated_at,u.display_name AS owner_name,u.email AS owner_email,
+    `SELECT p.id,p.name,p.type,p.status,p.updated_at,COALESCE(u.profile_name,u.display_name,u.username) AS owner_name,u.email AS owner_email,
       l.hosting_provider,l.deployment_url,l.subdomain_slug,
       l.custom_domain,l.custom_domain_status,l.custom_domain_ssl_status,
       l.custom_domain_secondary,l.custom_domain_secondary_status,l.custom_domain_secondary_ssl_status,

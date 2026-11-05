@@ -61,7 +61,8 @@ function ownerEnv(options: {
         return current;
       },
       async first() {
-        if (sql.includes("SELECT id,display_name AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")) {
+        if (sql.includes("SELECT id,COALESCE(profile_name,display_name,username) AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")
+          || sql.includes("SELECT id,display_name AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")) {
           const found = users.find((row) => row.id === values[0]);
           return found ? {
             id: found.id,

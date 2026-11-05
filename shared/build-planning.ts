@@ -16,7 +16,7 @@ export type PlanningQuestion = {
 export type PlanningSession = {
   version: 1;
   mode: "build" | "plan";
-  phase: "clarifying" | "awaiting_approval";
+  phase: "clarifying" | "awaiting_approval" | "submitted";
   originalPrompt: string;
   audience: string | null;
   outcomes: string[];
@@ -122,7 +122,9 @@ function hasAudience(prompt: string): boolean {
 }
 
 function detailCount(prompt: string): number {
-  const terms = DETAIL_TERMS.flatMap((pattern) => [...prompt.matchAll(pattern)].map((match) => match[0].toLowerCase()));
+  const terms = DETAIL_TERMS
+    .map((pattern) => prompt.match(pattern)?.[0]?.toLowerCase())
+    .filter((term): term is string => Boolean(term));
   const uniqueTerms = new Set(terms);
   const clauses = prompt
     .split(/[,;]|\band\b|\bwith\b/gi)
@@ -186,7 +188,7 @@ function planSummary(session: PlanningSession): string {
   return `I'll build a first version for ${audience}, focused on ${outcomes}. I'll start with the core experience and use sensible defaults for technical and visual details.`;
 }
 
-function implementationPrompt(session: PlanningSession): string {
+export function buildPromptFromPlanningSession(session: PlanningSession): string {
   const audience = session.audience ? `Target users: ${session.audience}.` : "Use the audience implied by the request.";
   const outcomes = session.outcomes.length ? `Core outcomes: ${session.outcomes.join(", ")}.` : "Choose a useful core workflow from the request.";
   const transcript = session.messages
@@ -275,6 +277,9 @@ export function answerPlanningQuestion(
   action: "answer" | "skip" | "decide" = "answer",
   now = Date.now(),
 ): PlanningAdvance {
+  if (action === "answer" && /\b(?:you decide|just build(?: it)?|skip (?:this|the question|questions?))\b/i.test(answer)) {
+    action = /\bskip\b/i.test(answer) ? "skip" : "decide";
+  }
   const session: PlanningSession = {
     ...current,
     messages: [...current.messages],
@@ -301,7 +306,7 @@ export function answerPlanningQuestion(
     return {
       kind: "build",
       session,
-      buildPrompt: implementationPrompt(session),
+      buildPrompt: buildPromptFromPlanningSession(session),
       acknowledgement,
     };
   }
@@ -341,7 +346,7 @@ export function answerPlanningQuestion(
   return {
     kind: "build",
     session,
-    buildPrompt: implementationPrompt(session),
+    buildPrompt: buildPromptFromPlanningSession(session),
     acknowledgement,
   };
 }
@@ -360,7 +365,7 @@ export function isValidPlanningSession(value: unknown): value is PlanningSession
   const session = value as Partial<PlanningSession>;
   if (session.version !== 1
     || (session.mode !== "build" && session.mode !== "plan")
-    || (session.phase !== "clarifying" && session.phase !== "awaiting_approval")
+    || (session.phase !== "clarifying" && session.phase !== "awaiting_approval" && session.phase !== "submitted")
     || typeof session.originalPrompt !== "string" || session.originalPrompt.length > 6000
     || !(session.audience === null || typeof session.audience === "string")
     || !Array.isArray(session.outcomes) || session.outcomes.length > 8

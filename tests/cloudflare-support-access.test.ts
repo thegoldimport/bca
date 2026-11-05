@@ -119,7 +119,8 @@ function isGrantActive(grant: Record<string, any> | undefined): boolean {
 
 function createDb(state: State) {
   const first = async (sql: string, values: unknown[]) => {
-    if (sql.includes("SELECT id,display_name AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")) {
+    if (sql.includes("SELECT id,COALESCE(profile_name,display_name,username) AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")
+      || sql.includes("SELECT id,display_name AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")) {
       const user = state.users.get(String(values[0]));
       return user ? { ...user, account_status: user.account_status } : null;
     }

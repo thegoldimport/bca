@@ -76,6 +76,8 @@ function database() {
   // Apply the native publish migration after legacy data and project rows have
   // been inserted above; this exercises upgrade compatibility on a populated D1.
   sqlite.exec(readFileSync("migrations/d1/0004_native_publish.sql", "utf8"));
+  sqlite.exec(readFileSync("migrations/d1/0007_admin_account_status.sql", "utf8"));
+  sqlite.exec(readFileSync("migrations/d1/0010_customer_experience.sql", "utf8"));
   const db = {
     prepare(sql: string) {
       let args: unknown[] = [];
@@ -900,6 +902,60 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await a.send(`/api/projects/${projectA.id}`)).status, 200);
   assert.equal(stock.calls.filter((path) => path === "/api/agent").length, 8);
   sqlite.close();
+});
+
+test("launch profile updates only the customer display name and preserves account identity and role", async () => {
+  const { sqlite, db } = database();
+  const stock = runtime();
+  const env = {
+    DB: db,
+    ENVIRONMENT: "production",
+    CONTROL_PLANE_PROFILE: "launch",
+    CONTROL_PLANE_ALLOWED_ORIGIN: origin,
+    AUTH_RUNTIME: stock.fetcher,
+    AUTH_RUNTIME_URL: "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev",
+    PUBLIC_GENERATED_APPS_ENABLED: "false",
+    STAGING_REGISTRATION_ENABLED: "true",
+    RUNTIME_OPERATIONS_ENABLED: "false",
+  } as Env;
+  const customer = browser(env);
+  try {
+    assert.equal((await customer.auth("/api/auth/register", {
+      name: "Original Name",
+      email: "profile@example.test",
+      password: "Str0ng!PasswordP",
+    })).status, 201);
+    assert.equal((await customer.auth("/api/auth/verify-email", {
+      token: stock.verificationToken("profile@example.test"),
+    })).status, 200);
+    assert.equal((await customer.auth("/api/auth/login", {
+      email: "profile@example.test",
+      password: "Str0ng!PasswordP",
+    })).status, 200);
+
+    const csrf = await customer.send("/api/auth/csrf-token");
+    const { token } = await csrf.json() as { token: string };
+    const profile = await customer.send("/api/auth/profile", "PUT", {
+      name: "Updated Display Name",
+      email: "attacker@example.test",
+      role: "super_admin",
+    }, { "X-CSRF-Token": token });
+    assert.equal(profile.status, 200, await profile.clone().text());
+    const updated = await profile.json() as { username: string; email: string; role: string };
+    assert.equal(updated.username, "Updated Display Name");
+    assert.equal(updated.email, "profile@example.test");
+    assert.equal(updated.role, "user");
+
+    const stored = sqlite.prepare("SELECT profile_name,email,role FROM users WHERE email=?")
+      .get("profile@example.test") as { profile_name: string; email: string; role: string };
+    assert.deepEqual(stored, {
+      profile_name: "Updated Display Name",
+      email: "profile@example.test",
+      role: "user",
+    });
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("concurrent project creates with one key claim only one stock Think agent", async () => {

@@ -241,6 +241,7 @@ export function BuildActivityTimeline(props: {
     <section className={`overflow-hidden rounded-2xl border ${border} ${dark ? "bg-[#121a1e]" : "bg-[#f8fbfa]"}`}>
       <button
         type="button"
+        id="build-activity-timeline-toggle"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
         className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500/70 dark:hover:bg-white/[0.025] sm:px-5"
@@ -412,14 +413,24 @@ export function BuildPreviewPlaceholder(props: {
   theme: string;
   phase: BuilderPhase;
   message: string;
-  elapsedMs: number | null;
+  startedAt: number | null;
   onOpenActivity(): void;
 }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (props.startedAt === null || props.startedAt <= 0) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [props.startedAt]);
   const dark = isDark(props.theme);
   const presentation = phasePresentation(props.phase);
   const Icon = presentation.icon;
   const working = ["starting", "running", "recovering", "stopping"].includes(props.phase);
   const waiting = ["paused", "needs_input"].includes(props.phase);
+  const elapsedMs = props.startedAt !== null && props.startedAt > 0
+    ? Math.max(0, now - props.startedAt)
+    : null;
 
   return (
     <section
@@ -515,7 +526,7 @@ export function BuildPreviewPlaceholder(props: {
           <div className={`mt-5 flex items-center gap-3 text-[11px] ${dark ? "text-white/35" : "text-[#879b95]"}`}>
             <span className="flex items-center gap-1.5">
               <Clock3 size={12} aria-hidden="true" />
-              {props.elapsedMs === null ? "Timer starts with the build" : `${formatElapsed(props.elapsedMs)} elapsed`}
+              {elapsedMs === null ? "Timer starts with the build" : `${formatElapsed(elapsedMs)} elapsed`}
             </span>
             <span className={`h-1 w-1 rounded-full ${dark ? "bg-white/20" : "bg-[#afc1bb]"}`} />
             <span>Activity updates as they arrive</span>
@@ -538,9 +549,9 @@ export function BuildPreviewPlaceholder(props: {
           <p aria-live="polite" className={`mt-2 max-w-sm text-sm leading-6 ${dark ? "text-white/45" : "text-[#6d847e]"}`}>
             {props.message || presentation.detail}
           </p>
-          {props.elapsedMs !== null && (
+          {elapsedMs !== null && (
             <p className={`mt-3 font-mono text-[11px] ${dark ? "text-white/30" : "text-[#8da19a]"}`}>
-              {formatElapsed(props.elapsedMs)} elapsed
+              {formatElapsed(elapsedMs)} elapsed
             </p>
           )}
         </div>

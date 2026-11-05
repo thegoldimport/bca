@@ -3,12 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   Activity,
+  ArrowUpRight,
   CheckCircle2,
   Clock3,
   FolderGit2,
   Globe,
+  LifeBuoy,
+  MessageSquareText,
   RefreshCw,
   Search,
+  Send,
   Server,
   Shield,
   Users,
@@ -565,15 +569,236 @@ export function BillingPage() {
 
 export function SupportPage() {
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [reply, setReply] = useState("");
+  const ticketsPath = `/api/admin/support/tickets?status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`;
+  const ticketsQuery = useAdminQuery<{ tickets: AdminSupportTicket[] }>(ticketsPath);
+  const detailQuery = useAdminQuery<{ ticket: AdminSupportTicket; messages: AdminSupportMessage[] }>(
+    selectedId ? `/api/admin/support/tickets/${encodeURIComponent(selectedId)}` : "/api/admin/support/tickets",
+    Boolean(selectedId),
+  );
+  const detail = selectedId ? detailQuery.data : null;
+  const tickets = ticketsQuery.data?.tickets || [];
+  const statuses: Array<{ value: AdminSupportStatus; label: string }> = [
+    { value: "open", label: "Open" },
+    { value: "waiting_for_support", label: "Waiting for support" },
+    { value: "waiting_for_customer", label: "Waiting for customer" },
+    { value: "resolved", label: "Resolved" },
+  ];
+  const queryPrefix = ["launch-admin"] as const;
+
+  const replyMutation = useMutation({
+    mutationFn: async () => {
+      const token = await csrfToken();
+      const response = await fetch(`/api/admin/support/tickets/${encodeURIComponent(selectedId)}/replies`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify({ body: reply.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Reply could not be sent.");
+      return data as { ticket: AdminSupportTicket; messages: AdminSupportMessage[] };
+    },
+    onSuccess: async (data) => {
+      setReply("");
+      queryClient.setQueryData(["launch-admin", `/api/admin/support/tickets/${encodeURIComponent(selectedId)}`], data);
+      await queryClient.invalidateQueries({ queryKey: queryPrefix });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async (nextStatus: AdminSupportStatus) => {
+      const token = await csrfToken();
+      const response = await fetch(`/api/admin/support/tickets/${encodeURIComponent(selectedId)}/status`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Ticket status could not be updated.");
+      return data as { ticket: AdminSupportTicket };
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryPrefix });
+    },
+  });
+
+  const inputClass = `rounded-xl border px-3 py-2 text-sm outline-none focus:border-cyan-500 ${
+    theme === "dark" ? "border-white/10 bg-white/[0.04] text-white" : "border-gray-200 bg-white text-gray-900"
+  }`;
+
   return (
-    <PageFrame title="Support" description="Support ticket data is not connected to the product control plane.">
-      <Card>
-        <p className={`text-sm ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>
-          Not configured. No demo tickets or customer messages are shown.
+    <PageFrame title="Support" description="Customer support tickets and replies from the live product database.">
+      {(ticketsQuery.error || detailQuery.error || replyMutation.error || statusMutation.error) && (
+        <p role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-400">
+          {(ticketsQuery.error || detailQuery.error || replyMutation.error || statusMutation.error)?.message}
         </p>
-      </Card>
+      )}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <label className="relative min-w-0 flex-1">
+          <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${theme === "dark" ? "text-white/35" : "text-gray-400"}`} />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search subject or customer"
+            className={`${inputClass} w-full pl-9`} aria-label="Search support tickets" />
+        </label>
+        <select value={status} onChange={(event) => setStatus(event.target.value)} className={inputClass} aria-label="Filter ticket status">
+          <option value="">All statuses</option>
+          {statuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button type="button" onClick={() => { void ticketsQuery.refetch(); if (selectedId) void detailQuery.refetch(); }}
+          className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+            theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-gray-50"
+          }`}>
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.4fr)]">
+        <Card className="!p-0">
+          <div className={`flex items-center justify-between border-b px-4 py-3 ${theme === "dark" ? "border-white/10" : "border-gray-100"}`}>
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <LifeBuoy size={16} className="text-cyan-400" /> Tickets
+            </span>
+            <span className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{tickets.length}</span>
+          </div>
+          {ticketsQuery.isLoading ? <StateMessage loading /> : tickets.length ? (
+            <div className="max-h-[680px] overflow-y-auto">
+              {tickets.map((ticket) => (
+                <button key={ticket.id} type="button" onClick={() => setSelectedId(ticket.id)}
+                  className={`block w-full border-b px-4 py-4 text-left ${
+                    selectedId === ticket.id
+                      ? theme === "dark" ? "bg-cyan-400/10" : "bg-cyan-50"
+                      : theme === "dark" ? "border-white/[0.06] hover:bg-white/[0.035]" : "border-gray-100 hover:bg-gray-50"
+                  }`}>
+                  <span className="flex items-start justify-between gap-3">
+                    <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${theme === "dark" ? "text-white/90" : "text-gray-800"}`}>{ticket.subject}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${supportStatusClass(theme, ticket.status)}`}>
+                      {supportStatusLabel(ticket.status)}
+                    </span>
+                  </span>
+                  <span className={`mt-1 block truncate text-xs ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
+                    {ticket.customer_name} · {ticket.customer_email}
+                  </span>
+                  <span className={`mt-1 block text-[11px] ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>
+                    {ticket.project_name ? `${ticket.project_name} · ` : ""}{formatDate(ticket.last_message_at || ticket.updated_at)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <StateMessage empty={ticketsQuery.error ? undefined : "No real support tickets match this filter."} />
+          )}
+        </Card>
+
+        <Card className="min-h-[480px]">
+          {!selectedId ? (
+            <div className="flex min-h-[440px] flex-col items-center justify-center text-center">
+              <MessageSquareText size={22} className="text-cyan-400" />
+              <h2 className={`mt-3 text-sm font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>Select a ticket</h2>
+              <p className={`mt-1 max-w-sm text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>Customer messages and replies will appear here.</p>
+            </div>
+          ) : detailQuery.isLoading || !detail ? <StateMessage loading={detailQuery.isLoading} error={detailQuery.error} /> : (
+            <div className="space-y-4">
+              <header className={`flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-start sm:justify-between ${theme === "dark" ? "border-white/10" : "border-gray-100"}`}>
+                <div className="min-w-0">
+                  <h2 className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{detail.ticket.subject}</h2>
+                  <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
+                    {detail.ticket.customer_name} · {detail.ticket.customer_email} · {detail.ticket.category}
+                  </p>
+                </div>
+                <select value={detail.ticket.status} disabled={statusMutation.isPending}
+                  onChange={(event) => statusMutation.mutate(event.target.value as AdminSupportStatus)}
+                  className={inputClass} aria-label="Update ticket status">
+                  {statuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </header>
+
+              <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl px-3 py-2.5 text-xs ${
+                theme === "dark" ? "bg-white/[0.035] text-white/55" : "bg-gray-50 text-gray-600"
+              }`}>
+                <Link href={`/app/admin/customers/${encodeURIComponent(detail.ticket.customer_user_id)}`} className="inline-flex items-center gap-1 text-cyan-500 hover:underline">
+                  Customer profile <ArrowUpRight size={12} />
+                </Link>
+                {detail.ticket.project_id && detail.ticket.projectDiagnosticsAvailable && (
+                  <Link href={`/app/deployments?projectId=${encodeURIComponent(String(detail.ticket.project_id))}`} className="inline-flex items-center gap-1 text-cyan-500 hover:underline">
+                    Approved project diagnostics <ArrowUpRight size={12} />
+                  </Link>
+                )}
+                {detail.ticket.project_id && !detail.ticket.projectDiagnosticsAvailable && (
+                  <span>Private project diagnostics are unavailable without a current customer approval.</span>
+                )}
+                {!detail.ticket.project_id && <span>This ticket is not linked to a project.</span>}
+              </div>
+
+              <div className={`max-h-[420px] space-y-3 overflow-y-auto rounded-xl border p-3 ${
+                theme === "dark" ? "border-white/10 bg-black/10" : "border-gray-100 bg-gray-50/60"
+              }`}>
+                {detail.messages.map((message) => (
+                  <article key={message.id} className={`rounded-xl border p-3 ${
+                    message.senderType === "support"
+                      ? theme === "dark" ? "border-cyan-300/15 bg-cyan-300/[0.05]" : "border-cyan-100 bg-cyan-50/60"
+                      : theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-white"
+                  }`}>
+                    <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <span className={`text-xs font-semibold ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{message.sender}</span>
+                      <time className={`text-[10px] ${theme === "dark" ? "text-white/35" : "text-gray-400"}`} dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>
+                    </div>
+                    <p className={`whitespace-pre-wrap break-words text-sm leading-6 ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>{message.body}</p>
+                  </article>
+                ))}
+              </div>
+
+              <form onSubmit={(event) => { event.preventDefault(); if (reply.trim()) replyMutation.mutate(); }} className="space-y-3">
+                <textarea value={reply} onChange={(event) => setReply(event.target.value)} maxLength={8000} rows={3}
+                  placeholder="Reply to this customer" aria-label="Support reply"
+                  className={`${inputClass} w-full resize-y`} />
+                <div className="flex justify-end">
+                  <button type="submit" disabled={!reply.trim() || replyMutation.isPending}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-cyan-400 px-3.5 text-xs font-semibold text-gray-950 disabled:opacity-50">
+                    <Send size={13} /> {replyMutation.isPending ? "Sending…" : "Send reply"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </Card>
+      </div>
     </PageFrame>
   );
+}
+
+type AdminSupportStatus = "open" | "waiting_for_support" | "waiting_for_customer" | "resolved";
+type AdminSupportTicket = {
+  id: string;
+  customer_user_id: string;
+  customer_name: string;
+  customer_email: string;
+  category: string;
+  subject: string;
+  status: AdminSupportStatus;
+  project_id: number | null;
+  project_name: string | null;
+  projectDiagnosticsAvailable?: boolean;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
+};
+type AdminSupportMessage = { id: string; sender: string; senderType: "customer" | "support"; body: string; createdAt: string };
+
+function supportStatusLabel(status: AdminSupportStatus) {
+  return status === "waiting_for_support" ? "Waiting for support"
+    : status === "waiting_for_customer" ? "Waiting for customer"
+      : status === "resolved" ? "Resolved" : "Open";
+}
+
+function supportStatusClass(theme: string, status: AdminSupportStatus) {
+  if (status === "resolved") return theme === "dark" ? "bg-emerald-300/10 text-emerald-200" : "bg-emerald-50 text-emerald-700";
+  if (status === "waiting_for_customer") return theme === "dark" ? "bg-amber-300/10 text-amber-200" : "bg-amber-50 text-amber-700";
+  return theme === "dark" ? "bg-white/5 text-white/60" : "bg-gray-100 text-gray-600";
 }
 
 export function DeploymentsPage() {

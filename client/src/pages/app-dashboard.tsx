@@ -92,6 +92,7 @@ import {
 } from "@/pages/app-admin-live-pages";
 import { AdminCustomerDetailPage, AdminSupportWorkspacePage } from "@/pages/admin-customer-detail";
 import CustomerSupportAccessPage from "@/pages/customer-support-access";
+import CustomerSupportTicketsPage from "@/pages/customer-support-tickets";
 import OwnerBootstrapPage from "@/pages/owner-bootstrap-page";
 import ProjectDetail from "@/pages/project-detail";
 import {
@@ -100,6 +101,22 @@ import {
   type AdminNavigationIcon,
 } from "@/lib/admin-navigation";
 import { getPlanEntitlement } from "@shared/plans";
+import {
+  answerPlanningQuestion,
+  approveBuildPlan,
+  buildPromptFromPlanningSession,
+  isValidPlanningSession,
+  startBuildPlanning,
+  type PlanningQuestion,
+  type PlanningSession,
+} from "@shared/build-planning";
+import {
+  BuildActivityTimeline,
+  BuildPreviewPlaceholder,
+  ClarificationOptions,
+  type BuildActivityEvent,
+  type BuilderPhase,
+} from "@/components/customer-experience/BuilderExperience";
 import {
   canContinueNativeTask,
   customerLifecycleStatus,
@@ -139,6 +156,7 @@ function AppSidebar({ collapsed, onToggle, role, email }: {
 
   const navItems = [
     ...baseItems,
+    ...(!isAdmin ? [{ path: "/app/support", icon: LifeBuoy, label: "Support" }] : []),
     ...(isAdmin ? adminItems : []),
     ...(ownerAuthorizationVisible(email, role)
       ? [{ path: "/app/owner-authorization", icon: Shield, label: "Owner access" }]
@@ -859,7 +877,81 @@ function BuildActivity({
   );
 }
 
-type NativeCompletionPhase = "idle" | "starting" | "running" | "recovering" | "paused" | "needs_input" | "success" | "error";
+function NativeBuildActivity({
+  projectId,
+  theme,
+  phase,
+  message,
+  startedAt,
+  events,
+  connectionState,
+}: {
+  projectId: number;
+  theme: string;
+  phase: BuilderPhase;
+  message: string;
+  startedAt: number | null;
+  events: BuildActivityEvent[];
+  connectionState: string;
+}) {
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const isActive = ["starting", "running", "recovering", "stopping"].includes(phase);
+  const statusQuery = useQuery({
+    queryKey: ["runtime-status", projectId, "native-activity"],
+    enabled: !!projectId,
+    refetchInterval: isActive ? 5_000 : false,
+    queryFn: async () => {
+      const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
+        credentials: "same-origin",
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Runtime status unavailable.");
+      return data;
+    },
+  });
+
+  const openFile = async (path: string) => {
+    setSelectedFile(path);
+    setFileContent(null);
+    setFileLoading(true);
+    try {
+      const response = await fetch(
+        `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(path)}`,
+        { credentials: "same-origin", headers: authHeaders(), cache: "no-store" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Source content is unavailable.");
+      setFileContent(typeof data.content === "string" ? data.content : "");
+    } catch (error) {
+      setFileContent(error instanceof Error ? error.message : "Source content is unavailable.");
+    } finally {
+      setFileLoading(false);
+    }
+  };
+
+  return (
+    <BuildActivityTimeline
+      theme={theme}
+      phase={phase}
+      message={message || (statusQuery.isError
+        ? "A runtime status check failed. The latest build state is not confirmed."
+        : phase === "idle" ? "Ready when you are." : "Waiting for runtime activity.")}
+      startedAt={startedAt}
+      events={events}
+      connectionState={connectionState}
+      currentFile={selectedFile}
+      currentFileContent={fileContent}
+      fileLoading={fileLoading}
+      onOpenFile={(path) => void openFile(path)}
+    />
+  );
+}
+
+type NativeCompletionPhase = "idle" | "starting" | "running" | "recovering" | "stopping" | "paused" | "needs_input" | "success" | "error";
 
 type NativeTaskLifecycle = {
   autoContinue?: { taskId: string; enabled: boolean; version: number; changedAt: number };
@@ -1025,6 +1117,55 @@ function clearNativeOperationBaseline(projectId: number): void {
   }
 }
 
+type NativeActivitySnapshot = { events: BuildActivityEvent[]; startedAt: number | null };
+
+function nativeActivityStorageKey(projectId: number): string {
+  return `buildcustom:native-activity:${projectId}`;
+}
+
+function readNativeActivitySnapshot(projectId: number): NativeActivitySnapshot {
+  try {
+    const raw = window.sessionStorage.getItem(nativeActivityStorageKey(projectId));
+    if (!raw) return { events: [], startedAt: null };
+    const parsed = JSON.parse(raw);
+    const events = Array.isArray(parsed?.events)
+      ? parsed.events.filter((event: any) => event
+        && typeof event.id === "string"
+        && typeof event.label === "string"
+        && event.label.length <= 300
+        && Number.isFinite(event.observedAt)
+        && ["active", "complete", "error", "info"].includes(event.status)
+        && (event.path === undefined || (typeof event.path === "string" && event.path.length <= 500)))
+        .slice(-60) as BuildActivityEvent[]
+      : [];
+    return {
+      events,
+      startedAt: Number.isFinite(parsed?.startedAt) && parsed.startedAt > 0 ? parsed.startedAt : null,
+    };
+  } catch {
+    return { events: [], startedAt: null };
+  }
+}
+
+function writeNativeActivitySnapshot(projectId: number, snapshot: NativeActivitySnapshot): void {
+  try {
+    window.sessionStorage.setItem(nativeActivityStorageKey(projectId), JSON.stringify({
+      events: snapshot.events.slice(-60),
+      startedAt: snapshot.startedAt,
+    }));
+  } catch {
+    // Activity history is a convenience; the runtime remains authoritative.
+  }
+}
+
+function normalizeBuilderAssistantText(value: string): string {
+  return value
+    .replace(/using the question panel above/gi, "by replying in this chat")
+    .replace(/question panel above/gi, "chat below")
+    .replace(/question panel/gi, "chat")
+    .replace(/\*\*(.*?)\*\*/g, "$1");
+}
+
 function EditorPage() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -1052,7 +1193,7 @@ function EditorPage() {
   const canManageProduction = Boolean(currentRuntimeCapability && !nativeThink);
   const [chatInput, setChatInput] = useState("");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [messages, setMessages] = useState<{ id?: string; role: "user" | "assistant"; content: string }[]>([]);
   const [turns, setTurns] = useState<RuntimeBuilderTurn[]>([]);
   const [restoringTurnId, setRestoringTurnId] = useState<number | null>(null);
   const [openTurnFile, setOpenTurnFile] = useState<string | null>(null);
@@ -1090,7 +1231,19 @@ function EditorPage() {
   const [autoContinueSaving, setAutoContinueSaving] = useState(false);
   const [nativeCompletionMessage, setNativeCompletionMessage] = useState("");
   const [nativeRecoveryUnverified, setNativeRecoveryUnverified] = useState(false);
-  const [nativeProgress, setNativeProgress] = useState<string[]>([]);
+  const [nativeProgress, setNativeProgress] = useState<BuildActivityEvent[]>(() => (
+    typeof window === "undefined" || !projectId ? [] : readNativeActivitySnapshot(projectId).events
+  ));
+  const [nativeOperationStartedAt, setNativeOperationStartedAt] = useState<number | null>(() => (
+    typeof window === "undefined" || !projectId ? null : readNativeActivitySnapshot(projectId).startedAt
+  ));
+  const [planningSession, setPlanningSession] = useState<PlanningSession | null>(null);
+  const [planningLoaded, setPlanningLoaded] = useState(false);
+  const [planningSaving, setPlanningSaving] = useState(false);
+  const [selectedClarificationOptions, setSelectedClarificationOptions] = useState<string[]>([]);
+  const [selectedActivityFile, setSelectedActivityFile] = useState<string | null>(null);
+  const [activityFileContent, setActivityFileContent] = useState<string | null>(null);
+  const [activityFileLoading, setActivityFileLoading] = useState(false);
   const [nativeConnected, setNativeConnected] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [chatWidth, setChatWidth] = useState(420);
@@ -1106,6 +1259,14 @@ function EditorPage() {
   const [selectorEnabled, setSelectorEnabled] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const sendAttemptRef = useRef(false);
+  const stopConfirmedRef = useRef(false);
+  const planningRequestRef = useRef(false);
+  const planningPersistRef = useRef<Promise<void>>(Promise.resolve());
+  const planningSessionRef = useRef<PlanningSession | null>(null);
+  const planningLoadSequenceRef = useRef(0);
+  const nativeProgressRef = useRef(nativeProgress);
+  const nativeOperationStartedAtRef = useRef<number | null>(nativeOperationStartedAt);
   const nativeSocketRef = useRef<WebSocket | null>(null);
   const nativeIdleSocketRef = useRef<WebSocket | null>(null);
   const nativeIdleStopRef = useRef<() => void>(() => undefined);
@@ -1128,6 +1289,71 @@ function EditorPage() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<any>(null);
+
+  const updatePlanningSession = (session: PlanningSession | null) => {
+    planningSessionRef.current = session;
+    setPlanningSession(session);
+    setSelectedClarificationOptions([]);
+    if (session) setMessages(session.messages);
+  };
+
+  const savePlanningSession = async (session: PlanningSession, updateConversation = true) => {
+    setPlanningSaving(true);
+    try {
+      const token = await csrfToken();
+      const response = await fetch(`/api/projects/${projectId}/planning`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
+        body: JSON.stringify({ session }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Your planning conversation could not be saved.");
+      if (updateConversation) updatePlanningSession(session);
+      else {
+        planningSessionRef.current = session;
+        setPlanningSession(session);
+      }
+      setRuntimeError("");
+    } finally {
+      setPlanningSaving(false);
+    }
+  };
+
+  const deletePlanningSession = async () => {
+    if (!projectId) return;
+    await planningPersistRef.current;
+    const token = await csrfToken();
+    const response = await fetch(`/api/projects/${projectId}/planning`, {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "X-CSRF-Token": token, ...authHeaders() },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || "The saved planning conversation could not be cleared.");
+    updatePlanningSession(null);
+  };
+
+  const markPlanningSubmitted = () => {
+    const current = planningSessionRef.current;
+    if (!current || current.phase === "submitted") return;
+    const submitted: PlanningSession = { ...current, phase: "submitted", currentQuestion: null };
+    planningSessionRef.current = submitted;
+    setPlanningSession(submitted);
+    planningPersistRef.current = savePlanningSession(submitted, false).catch((error) => {
+      setRuntimeError(error instanceof Error
+        ? `The build request was sent, but its planning record could not be updated: ${error.message}`
+        : "The build request was sent, but its planning record could not be updated.");
+    });
+  };
+
+  const restoreNativeActivity = (id: number) => {
+    const snapshot = readNativeActivitySnapshot(id);
+    nativeProgressRef.current = snapshot.events;
+    nativeOperationStartedAtRef.current = snapshot.startedAt;
+    setNativeProgress(snapshot.events);
+    setNativeOperationStartedAt(snapshot.startedAt);
+  };
 
   useEffect(() => {
     const receiveElement = (event: MessageEvent) => {
@@ -1298,6 +1524,12 @@ function EditorPage() {
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
+    restoreNativeActivity(projectId);
+    setSelectedActivityFile(null);
+    setActivityFileContent(null);
+    setPlanningLoaded(false);
+    planningSessionRef.current = null;
+    setPlanningSession(null);
     setProductionUrl("");
     setNativeDeploymentComplete(false);
     setNativePublicAvailable(null);
@@ -1312,7 +1544,6 @@ function EditorPage() {
         if (!statusResponse.ok) throw new Error(status.message || "Project status is unavailable.");
         const isNativeThink = status.nativeThink === true;
         setRuntimeCapability({ projectId, nativeThink: isNativeThink, status });
-        setNativeProgress([]);
         if (isNativeThink) {
           setProductionUrl("");
           if (status.deploymentUrl || status.publicAvailable === true
@@ -1663,6 +1894,7 @@ function EditorPage() {
     requestController.current?.abort();
     requestController.current = null;
     setSending(false);
+    sendAttemptRef.current = false;
     setNativeCompletionPhase("idle");
     setNativeCompletionMessage("");
     setNativeRecoveryUnverified(false);
@@ -1670,7 +1902,7 @@ function EditorPage() {
     setMessages([]);
     setChatInput("");
     setRuntimeError("");
-    setNativeProgress([]);
+    restoreNativeActivity(projectId);
     setNativeConnected(false);
     setPlanMode(false);
     setPendingPlan("");
@@ -1679,6 +1911,40 @@ function EditorPage() {
     setSelectedElement(null);
     loadTurns().catch(() => undefined);
   }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || currentRuntimeCapability?.projectId !== projectId) return;
+    const sequence = ++planningLoadSequenceRef.current;
+    let cancelled = false;
+    setPlanningLoaded(false);
+    const loadPlanningSession = async () => {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/planning`, {
+          credentials: "same-origin",
+          headers: authHeaders(),
+          cache: "no-store",
+        });
+        if (response.status === 404) return;
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || "Saved planning could not be restored.");
+        if (cancelled || sequence !== planningLoadSequenceRef.current) return;
+        if (data.session !== null && data.session !== undefined) {
+          if (!isValidPlanningSession(data.session)) throw new Error("Saved planning data is invalid.");
+          updatePlanningSession(data.session);
+        } else {
+          updatePlanningSession(null);
+        }
+      } catch (error) {
+        if (!cancelled && sequence === planningLoadSequenceRef.current) {
+          setRuntimeError(error instanceof Error ? error.message : "Saved planning could not be restored.");
+        }
+      } finally {
+        if (!cancelled && sequence === planningLoadSequenceRef.current) setPlanningLoaded(true);
+      }
+    };
+    void loadPlanningSession();
+    return () => { cancelled = true; };
+  }, [projectId, currentRuntimeCapability?.projectId]);
 
   useEffect(() => {
     if (!nativeThink) return;
@@ -1766,7 +2032,12 @@ function EditorPage() {
         headers: { ...authHeaders(), ...(init?.headers || {}) },
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || `Unable to load ${path.replaceAll("/", " ")}.`);
+      if (!response.ok) {
+        const message = response.status === 401
+          ? `The runtime returned HTTP 401 while checking ${path.replaceAll("/", " ")}. The build outcome is unverified.`
+          : body.message || `Unable to load ${path.replaceAll("/", " ")}.`;
+        throw new Error(message);
+      }
       return body;
     };
     const isIdle = (runtimeStatus: any) => {
@@ -2000,12 +2271,40 @@ function EditorPage() {
     };
   }, [projectId, nativeThink]);
 
-  const recordNativeProgress = (label: string) => {
+  const setNativeActivityStart = (startedAt: number | null) => {
+    nativeOperationStartedAtRef.current = startedAt;
+    setNativeOperationStartedAt(startedAt);
+    writeNativeActivitySnapshot(projectId, {
+      events: nativeProgressRef.current,
+      startedAt,
+    });
+  };
+
+  const recordNativeProgress = (
+    label: string,
+    status: BuildActivityEvent["status"] = "info",
+    path?: string,
+  ) => {
     const cleanLabel = label.trim();
     if (!cleanLabel) return;
-    setNativeProgress((current) => current[current.length - 1] === cleanLabel
-      ? current
-      : [...current.slice(-8), cleanLabel]);
+    const current = nativeProgressRef.current;
+    const last = current[current.length - 1];
+    if (last?.label === cleanLabel && last.status === status && last.path === path
+      && Date.now() - last.observedAt < 1500) return;
+    const event: BuildActivityEvent = {
+      id: `${projectId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      label: cleanLabel.slice(0, 300),
+      observedAt: Date.now(),
+      status,
+      ...(path ? { path: path.slice(0, 500) } : {}),
+    };
+    const next = [...current, event].slice(-60);
+    nativeProgressRef.current = next;
+    setNativeProgress(next);
+    writeNativeActivitySnapshot(projectId, {
+      events: next,
+      startedAt: nativeOperationStartedAtRef.current,
+    });
   };
 
   const streamNativeTurn = async (
@@ -2013,6 +2312,7 @@ function EditorPage() {
     images: ComposerImage[],
     lifecycle: number,
     continuationApproval?: { taskId: string; operationId: string; updatedAt: number },
+    assistantMessageId?: string,
   ) => {
     nativeIdleStopRef.current();
     const operationController = new AbortController();
@@ -2150,8 +2450,10 @@ function EditorPage() {
 
       const replaceAssistantMessage = (content: string) => {
         setMessages((current) => {
-          const index = current.findLastIndex((message) => message.role === "assistant");
-          if (index < 0) return [...current, { role: "assistant", content }];
+          const index = assistantMessageId
+            ? current.findIndex((message) => message.id === assistantMessageId)
+            : current.findLastIndex((message) => message.role === "assistant");
+          if (index < 0) return [...current, { id: assistantMessageId, role: "assistant", content }];
           return current.map((message, messageIndex) => messageIndex === index ? { ...message, content } : message);
         });
       };
@@ -2530,6 +2832,7 @@ function EditorPage() {
           setNativeCompletionPhase("success");
           setNativeCompletionMessage("Your changes are ready to review.");
           setNativeRecoveryUnverified(false);
+          void deletePlanningSession().catch(() => undefined);
           setPreviewRevision((revision) => revision + 1);
           queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
           const runtimeFilesQueryKey = ["runtime-files", projectId] as const;
@@ -2708,6 +3011,7 @@ function EditorPage() {
                 ...(images.length ? { images } : {}),
               }));
               suggestionSent = true;
+              markPlanningSubmitted();
               lastFrameAt = Date.now();
             } catch {
               failTurn("BuildCustom could not send the request. No automatic retry was attempted.", true);
@@ -2717,11 +3021,14 @@ function EditorPage() {
           }
           case "conversation_response": {
             if (typeof frame.message === "string" && frame.message) {
+              const safeMessage = normalizeBuilderAssistantText(frame.message);
               setMessages((current) => {
-                const index = current.findLastIndex((message) => message.role === "assistant");
-                if (index < 0) return [...current, { role: "assistant", content: frame.message }];
+                const index = assistantMessageId
+                  ? current.findIndex((message) => message.id === assistantMessageId)
+                  : current.findLastIndex((message) => message.role === "assistant");
+                if (index < 0) return [...current, { id: assistantMessageId, role: "assistant", content: safeMessage }];
                 return current.map((message, messageIndex) => messageIndex === index
-                  ? { ...message, content: frame.isDelta ? `${message.content}${frame.message}` : frame.message }
+                  ? { ...message, content: frame.isDelta ? `${message.content}${safeMessage}` : safeMessage }
                   : message);
               });
             }
@@ -2735,20 +3042,24 @@ function EditorPage() {
               const label = toolPath
                 ? `${tool.status === "success" ? "Updated" : "Working on"} ${toolPath}`
                 : toolName.replaceAll("_", " ");
-              recordNativeProgress(label);
+              recordNativeProgress(label,
+                ["success", "complete", "completed"].includes(String(tool.status || "").toLowerCase()) ? "complete"
+                  : ["start", "running", "pending", "started"].includes(String(tool.status || "").toLowerCase()) ? "active" : "info",
+                toolPath || undefined);
             }
             break;
           }
           case "generation_started":
             activeWork.add("generation");
-            recordNativeProgress("Agent started the build");
+            setNativeActivityStart(nativeOperationStartedAtRef.current || Date.now());
+            recordNativeProgress("Agent started the build", "active");
             break;
           case "generation_complete":
             generationComplete = true;
             activeWork.delete("generation");
             setNativeCompletionPhase("recovering");
-            setNativeCompletionMessage("Agent reported completion · verifying committed files and preview…");
-            recordNativeProgress("Agent reported generation complete · verifying files and preview");
+            setNativeCompletionMessage("The runtime reported completion. Verifying committed files and preview…");
+            recordNativeProgress("Agent reported generation complete · verifying files and preview", "complete");
             break;
           case "phase_generating":
           case "phase_implementing":
@@ -2756,25 +3067,25 @@ function EditorPage() {
             const phase = frame.type.slice("phase_".length);
             activeWork.add(`phase:${phase}`);
             recordNativeProgress(phase === "generating" ? "Generating project files"
-              : phase === "implementing" ? "Applying project changes" : "Validating the project");
+              : phase === "implementing" ? "Applying project changes" : "Validating the project", "active");
             break;
           }
           case "phase_generated":
             activeWork.delete("phase:generating");
-            recordNativeProgress("Project file generation phase completed");
+            recordNativeProgress("Project file generation phase completed", "complete");
             break;
           case "phase_implemented":
             activeWork.delete("phase:implementing");
-            recordNativeProgress("Project implementation phase completed");
+            recordNativeProgress("Project implementation phase completed", "complete");
             break;
           case "phase_validated":
             activeWork.delete("phase:validating");
-            recordNativeProgress("Project validation phase completed");
+            recordNativeProgress("Project validation phase completed", "complete");
             break;
           case "file_generating":
             if (eventPath) {
               activeWork.add(`file:${eventPath}`);
-              recordNativeProgress(`Writing ${eventPath}`);
+              recordNativeProgress(`Writing ${eventPath}`, "active", eventPath);
             }
             break;
           case "file_generated":
@@ -2782,34 +3093,46 @@ function EditorPage() {
           case "file_chunk_generated":
             if (eventPath) {
               activeWork.delete(`file:${eventPath}`);
-              recordNativeProgress(`Updated ${eventPath}`);
+              recordNativeProgress(`Updated ${eventPath}`, "complete", eventPath);
             }
             break;
           case "file_deleted":
             if (eventPath) {
               activeWork.delete(`file:${eventPath}`);
-              recordNativeProgress(`Removed ${eventPath}`);
+              recordNativeProgress(`Removed ${eventPath}`, "complete", eventPath);
             }
             break;
           case "deployment_started":
             activeWork.add("deployment");
-            recordNativeProgress("Runtime is preparing the preview");
+            recordNativeProgress("Runtime is preparing the preview", "active");
             break;
           case "deployment_completed":
             activeWork.delete("deployment");
-            recordNativeProgress("Runtime preview deployment completed");
+            recordNativeProgress("Runtime preview deployment completed", "complete");
             break;
           case "deployment_failed":
             activeWork.delete("deployment");
-            recordNativeProgress(typeof frame.error === "string" ? `Preview deployment failed: ${frame.error}` : "Preview deployment failed");
+            recordNativeProgress("Runtime preview deployment failed", "error");
             break;
-          case "error":
-            failTurn("This build stopped before completion. Review the project and try again.");
+          case "error": {
+            const statusCode = Number(frame.status ?? frame.statusCode ?? frame.error?.status);
+            const message = statusCode === 401
+              ? "The runtime could not authorize a status or build request. The result is not confirmed; refresh the editor and check your account access."
+              : statusCode === 402
+                ? "The AI provider reported a payment or credit limit. The build result is not confirmed."
+                : statusCode === 429
+                  ? "The AI provider is rate-limiting this request. Wait before trying again."
+                  : "The runtime reported an error. Check the activity and current project before retrying.";
+            recordNativeProgress(message, "error");
+            failTurn(message);
             return;
+          }
           case "generation_stopped":
           case "generation_cancelled":
             activeWork.clear();
-            failTurn("Build stopped. The current authoritative files were not marked as a completed build.");
+            stopConfirmedRef.current = true;
+            recordNativeProgress("The runtime confirmed the build stopped. The project may contain partial saved changes.", "error");
+            failTurn("The runtime confirmed the build stopped. The project may contain partial saved changes.");
             return;
           default:
             break;
@@ -2923,10 +3246,12 @@ function EditorPage() {
     setRuntimeError("");
     setNativeCompletionPhase("starting");
     setNativeCompletionMessage("Starting...");
+    const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setNativeActivityStart(Date.now());
     setMessages((current) => [
       ...current,
       { role: "user", content: "Continue" },
-      { role: "assistant", content: "" },
+      { id: assistantMessageId, role: "assistant", content: "" },
     ]);
     try {
       const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
@@ -2949,7 +3274,7 @@ function EditorPage() {
         taskId: latestLifecycle.taskId!,
         operationId: latestLifecycle.operationId!,
         updatedAt: latestLifecycle.updatedAt!,
-      });
+      }, assistantMessageId);
       if (nativeLifecycleRef.current !== requestLifecycle || activeProjectIdRef.current !== projectId) return;
     } catch {
       if (nativeLifecycleRef.current === requestLifecycle && activeProjectIdRef.current === projectId) {
@@ -2958,8 +3283,7 @@ function EditorPage() {
         setNativeCompletionPhase("error");
         setNativeCompletionMessage("The request to continue could not be verified. Refresh and try again.");
         setRuntimeError("The request to continue could not be verified. Refresh and try again.");
-        setMessages((current) => current.map((message, index) => index === current.length - 1
-          && message.role === "assistant"
+        setMessages((current) => current.map((message) => message.id === assistantMessageId
           ? { ...message, content: "The request to continue could not be verified. Refresh and try again." }
           : message));
         // Retry is available only when an owner read still confirms this exact
@@ -2984,9 +3308,24 @@ function EditorPage() {
     }
   };
 
-  const handleSend = async (promptOverride?: string, planOverride?: boolean) => {
-    const prompt = (promptOverride ?? chatInput).trim();
+  const handleSend = async (
+    promptOverride?: string,
+    planOverride?: boolean,
+    options?: {
+      bypassPlanning?: boolean;
+      approvePlan?: boolean;
+      planningAction?: "answer" | "skip" | "decide";
+      selectedOptions?: string[];
+      agentPromptOverride?: string;
+      acknowledgement?: string;
+      appendUserMessage?: boolean;
+      appendAcknowledgement?: boolean;
+    },
+  ) => {
+    let prompt = (promptOverride ?? chatInput).trim();
+    let requestOptions = options || {};
     if (nativeThink
+      && !requestOptions.approvePlan
       && attachments.length === 0
       && textContext.length === 0
       && !selectedElement
@@ -2995,7 +3334,7 @@ function EditorPage() {
       void handleContinue();
       return;
     }
-    const activePlanMode = nativeThink ? false : planOverride ?? planMode;
+    if (sendAttemptRef.current) return;
     if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified)) {
       if (!sending && nativeRuntimeAlreadyWorking) {
         const message = "This Agent is already working. The existing operation was not restarted; refresh to check its latest state.";
@@ -3005,7 +3344,7 @@ function EditorPage() {
       }
       return;
     }
-    if (!prompt) return;
+    if (!prompt && !requestOptions.approvePlan) return;
     if (!projectId) {
       setRuntimeError("Open Builder from a runtime-backed project to start an Agent session.");
       return;
@@ -3014,117 +3353,237 @@ function EditorPage() {
       setRuntimeError(runtimeCapabilityError || "Checking project runtime before starting an Agent session.");
       return;
     }
+    if (!planningLoaded && !requestOptions.bypassPlanning && !requestOptions.approvePlan) {
+      setRuntimeError("Restoring saved planning before sending your request. No build has been started.");
+      return;
+    }
+
+    sendAttemptRef.current = true;
     const sendingProjectId = projectId;
     const sendingLifecycle = nativeLifecycleRef.current;
     const isSendingContextActive = () => nativeMountedRef.current
       && nativeLifecycleRef.current === sendingLifecycle
       && activeProjectIdRef.current === sendingProjectId;
-    setMessages((prev) => [
-      ...prev,
-      { role: "user" as const, content: prompt },
-    ]);
-    setNativeCompletionPhase(nativeThink ? "running" : "idle");
-    setNativeCompletionMessage("");
-    setChatInput("");
-    setSending(true);
-    setRuntimeError("");
-    const controller = new AbortController();
-    requestController.current = controller;
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant" as const, content: nativeThink ? "" : activePlanMode ? "Agent is preparing a plan…" : "Agent is working on your request…" },
-    ]);
-    const imageContext = attachments.length
-      ? `\n\nAttached images: ${attachments.map((image) => `${image.filename} (${image.mimeType}, ${image.size} bytes)`).join(", ")}`
-      : "";
-    const selectedContext = selectedElement
-      ? `\n\nSelected element from the preview:\n${JSON.stringify(selectedElement).slice(0, 6000)}`
-      : "";
-    const textFileContext = textContext.length
-      ? `\n\nAttached file context:\n${textContext.map((file) => `--- ${file.filename} ---\n${file.content}`).join("\n").slice(0, 30000)}`
-      : "";
-    const approvedPlanContext = !activePlanMode && pendingPlan
-      ? `\n\nApproved implementation plan from Plan mode:\n${pendingPlan}\n\nFollow this approved plan while applying the user's request.`
-      : "";
-    const agentPrompt = `${prompt}${imageContext}${selectedContext}${textFileContext}${approvedPlanContext}`;
-    if (nativeThink) {
-      requestController.current = null;
+    try {
+      let activePlanMode = planOverride ?? planMode;
+      const currentPlan = planningSessionRef.current;
+
+      if (requestOptions.approvePlan && currentPlan?.mode === "plan"
+        && currentPlan.phase === "awaiting_approval") {
+        const approved = approveBuildPlan(currentPlan);
+        const approvedWithAcknowledgement: PlanningSession = {
+          ...approved,
+          messages: [...approved.messages, {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: "Plan approved. I'll start building it now.",
+            createdAt: Date.now(),
+          }],
+        };
+        await savePlanningSession(approvedWithAcknowledgement);
+        prompt = currentPlan.originalPrompt;
+        requestOptions = {
+          ...requestOptions,
+          bypassPlanning: true,
+          agentPromptOverride: buildPromptFromPlanningSession(approvedWithAcknowledgement),
+          appendUserMessage: false,
+          appendAcknowledgement: false,
+        };
+        activePlanMode = false;
+        setPlanMode(false);
+      } else if (currentPlan?.phase === "clarifying" && !requestOptions.bypassPlanning) {
+        const advance = answerPlanningQuestion(
+          currentPlan,
+          prompt,
+          requestOptions.selectedOptions || [],
+          requestOptions.planningAction || "answer",
+        );
+        await savePlanningSession(advance.session);
+        setChatInput("");
+        if (advance.kind !== "build") return;
+        prompt = advance.session.originalPrompt;
+        requestOptions = {
+          ...requestOptions,
+          bypassPlanning: true,
+          agentPromptOverride: advance.buildPrompt,
+          appendUserMessage: false,
+          appendAcknowledgement: false,
+        };
+        activePlanMode = false;
+        setPlanMode(false);
+      } else if (currentPlan?.phase === "awaiting_approval"
+        && currentPlan.mode === "plan" && !requestOptions.bypassPlanning) {
+        const nextPlan: PlanningSession = {
+          ...currentPlan,
+          originalPrompt: `${currentPlan.originalPrompt}\nAdditional direction: ${prompt}`.trim().slice(0, 6000),
+          planSummary: `${currentPlan.planSummary || "First-pass plan"}\n\nAdditional direction: ${prompt}`.slice(0, 2000),
+          messages: [
+            ...currentPlan.messages,
+            { id: `user-${Date.now()}`, role: "user", content: prompt, createdAt: Date.now() },
+            { id: `assistant-${Date.now()}-note`, role: "assistant", content: "I added that direction to the plan. Review it, then approve the build when you're ready.", createdAt: Date.now() + 1 },
+          ],
+        };
+        await savePlanningSession(nextPlan);
+        setChatInput("");
+        return;
+      } else if (currentPlan?.phase === "submitted" && !requestOptions.bypassPlanning) {
+        await deletePlanningSession();
+      }
+
+      const hasSupportingContext = attachments.length > 0 || textContext.length > 0 || Boolean(selectedElement);
+      const shouldStartPlanning = !requestOptions.bypassPlanning
+        && !requestOptions.approvePlan
+        && (activePlanMode || (!turns.length && !messages.length))
+        && (!hasSupportingContext || activePlanMode);
+      if (shouldStartPlanning) {
+        const decision = startBuildPlanning(prompt, activePlanMode);
+        if (decision.kind === "planning") {
+          await savePlanningSession(decision.session);
+          setPlanMode(false);
+          setChatInput("");
+          return;
+        }
+        prompt = decision.prompt || prompt;
+        requestOptions = {
+          ...requestOptions,
+          acknowledgement: decision.acknowledgement,
+          agentPromptOverride: decision.prompt || prompt,
+        };
+      }
+
+      if (!prompt) return;
+      const appendUserMessage = requestOptions.appendUserMessage !== false;
+      const appendAcknowledgement = requestOptions.appendAcknowledgement !== false;
+      const acknowledgement = requestOptions.acknowledgement
+        || "I have enough detail to start. I'll focus on the workflow you described and show updates here as the runtime reports them.";
+      const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const visiblePrompt = prompt;
+      setMessages((previous) => [
+        ...previous,
+        ...(appendUserMessage ? [{ role: "user" as const, content: visiblePrompt }] : []),
+        ...(appendAcknowledgement ? [{ role: "assistant" as const, content: acknowledgement }] : []),
+        { id: assistantMessageId, role: "assistant" as const, content: "" },
+      ]);
+      setNativeCompletionPhase(nativeThink ? "starting" : "idle");
+      setNativeCompletionMessage(nativeThink ? "Connecting to the project runtime. No build request is sent until the connection is confirmed." : "");
+      setNativeActivityStart(Date.now());
+      setChatInput("");
+      setSending(true);
+      setRuntimeError("");
+      const controller = new AbortController();
+      requestController.current = controller;
+      const imageContext = attachments.length
+        ? `\n\nAttached images: ${attachments.map((image) => `${image.filename} (${image.mimeType}, ${image.size} bytes)`).join(", ")}`
+        : "";
+      const selectedContext = selectedElement
+        ? `\n\nSelected element from the preview:\n${JSON.stringify(selectedElement).slice(0, 6000)}`
+        : "";
+      const textFileContext = textContext.length
+        ? `\n\nAttached file context:\n${textContext.map((file) => `--- ${file.filename} ---\n${file.content}`).join("\n").slice(0, 30000)}`
+        : "";
+      const approvedPlanContext = !activePlanMode && pendingPlan
+        ? `\n\nApproved implementation plan from Plan mode:\n${pendingPlan}\n\nFollow this approved plan while applying the user's request.`
+        : "";
+      const conversationUiInstruction = nativeThink
+        ? "\n\nBuildCustom chat behavior: If you need another detail, ask the customer directly in this chat and wait for their reply here. Do not refer to a question panel or any external panel. Do not claim completion until the runtime confirms it."
+        : "";
+      const promptBase = requestOptions.agentPromptOverride || prompt;
+      const agentPrompt = `${promptBase}${imageContext}${selectedContext}${textFileContext}${approvedPlanContext}${conversationUiInstruction}`;
+      if (nativeThink) {
+        requestController.current = null;
+        try {
+          await streamNativeTurn(agentPrompt, attachments, sendingLifecycle, undefined, assistantMessageId);
+          if (!isSendingContextActive()) return;
+          setPendingPlan("");
+          setAttachments([]);
+          setTextContext([]);
+          setSelectedElement(null);
+          if (nativeCompletionPhase === "success" || nativeCompletionPhase === "paused"
+            || nativeCompletionPhase === "needs_input" || nativeCompletionPhase === "error") {
+            void deletePlanningSession().catch(() => undefined);
+          }
+        } catch (error: any) {
+          if (!isSendingContextActive()) return;
+          const message = error?.message || "The native Agent could not complete the request.";
+          setRuntimeError(message);
+          setNativeCompletionPhase("error");
+          setNativeCompletionMessage((current) => current || "The request could not be completed or verified.");
+          setMessages((previous) => previous.map((item) => item.id === assistantMessageId
+            ? { ...item, content: message }
+            : item));
+        } finally {
+          if (isSendingContextActive()) setSending(false);
+        }
+        return;
+      }
       try {
-        await streamNativeTurn(agentPrompt, attachments, sendingLifecycle);
-        if (!isSendingContextActive()) return;
-        setPendingPlan("");
+        const response = await fetch(`/api/projects/${projectId}/runtime/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            message: agentPrompt,
+            displayMessage: visiblePrompt,
+            images: attachments,
+            mode: activePlanMode ? "plan" : "build",
+          }),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || "Agent could not process the request.");
+        if (data.turn) setTurns((current) => [...current, data.turn]);
+        setMessages([]);
+        if (activePlanMode) {
+          setPendingPlan(data.message || "");
+          setPlanMode(false);
+        } else {
+          setPendingPlan("");
+        }
         setAttachments([]);
         setTextContext([]);
         setSelectedElement(null);
+        if (activePlanMode) return;
+        void deletePlanningSession().catch(() => undefined);
+        const token = await csrfToken();
+        const preview = await fetch(`/api/projects/${projectId}/runtime/previews`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
+          body: JSON.stringify({}),
+        });
+        const previewData = await preview.json().catch(() => ({}));
+        if (preview.ok && previewData.url) setPreviewUrl(previewData.url);
       } catch (error: any) {
-        if (!isSendingContextActive()) return;
-        const message = error?.message || "The native Agent could not complete the request.";
+        if (activeProjectIdRef.current !== sendingProjectId) return;
+        if (error?.name === "AbortError") {
+          const stopMessage = stopConfirmedRef.current
+            ? "The runtime confirmed the build stopped. The project may contain partial saved changes."
+            : "The local request was interrupted, but the runtime did not confirm cancellation. The build may still be running.";
+          setMessages((previous) => previous.map((item) => item.id === assistantMessageId
+            ? { ...item, content: stopMessage }
+            : item));
+          setNativeCompletionPhase(stopConfirmedRef.current ? "error" : "stopping");
+          setNativeCompletionMessage(stopMessage);
+          setRuntimeError(stopMessage);
+          return;
+        }
+        const message = error.message || "The Agent could not complete the request.";
         setRuntimeError(message);
-        setNativeCompletionPhase("error");
-        setNativeCompletionMessage((current) => current || "The request could not be completed or verified.");
-        setMessages((previous) => previous.map((item, index) => index === previous.length - 1 && item.role === "assistant"
+        setMessages((previous) => previous.map((item) => item.id === assistantMessageId
           ? { ...item, content: message }
           : item));
       } finally {
-        if (isSendingContextActive()) setSending(false);
+        if (requestController.current === controller) requestController.current = null;
+        if (activeProjectIdRef.current === sendingProjectId) setSending(false);
       }
-      return;
-    }
-    try {
-      const response = await fetch(`/api/projects/${projectId}/runtime/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ message: agentPrompt, displayMessage: prompt, images: attachments, mode: activePlanMode ? "plan" : "build" }),
-        signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.message || "Agent could not process the request.");
-      }
-      if (data.turn) setTurns((current) => [...current, data.turn]);
-      setMessages([]);
-      if (activePlanMode) {
-        setPendingPlan(data.message || "");
-        setPlanMode(false);
-      } else {
-        setPendingPlan("");
-      }
-      setAttachments([]);
-      setTextContext([]);
-      setSelectedElement(null);
-      if (activePlanMode) return;
-      const token = await csrfToken();
-      const preview = await fetch(`/api/projects/${projectId}/runtime/previews`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
-        body: JSON.stringify({}),
-      });
-      const previewData = await preview.json().catch(() => ({}));
-      if (preview.ok && previewData.url) setPreviewUrl(previewData.url);
-    } catch (error: any) {
-      if (activeProjectIdRef.current !== sendingProjectId) return;
-      if (error?.name === "AbortError") {
-        setMessages((prev) => [
-          ...prev.slice(0, -1),
-          { role: "assistant", content: "Build stopped. Your workspace is unchanged from the last completed step." },
-        ]);
-        return;
-      }
-      const message = error.message || "The Agent could not complete the request.";
-      setRuntimeError(message);
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "assistant", content: message },
-      ]);
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "The request could not be prepared.");
     } finally {
-      if (requestController.current === controller) requestController.current = null;
-      if (activeProjectIdRef.current === sendingProjectId) setSending(false);
+      sendAttemptRef.current = false;
     }
   };
 
   useEffect(() => {
-    if (!projectId || !currentRuntimeCapability || sending) return;
+    if (!projectId || !currentRuntimeCapability || !planningLoaded || sending) return;
     const key = `buildcustom:first-prompt:${projectId}`;
     const stored = sessionStorage.getItem(key);
     if (!stored) return;
@@ -3137,7 +3596,7 @@ function EditorPage() {
     } catch {
       // Leave the Builder ready for manual input if the handoff is malformed.
     }
-  }, [projectId, currentRuntimeCapability?.projectId, sending, handleSend]);
+  }, [projectId, currentRuntimeCapability?.projectId, planningLoaded, sending, handleSend]);
 
   const restoreBuilderTurn = async (turn: RuntimeBuilderTurn) => {
     if (!canManageProduction || !projectId || !turn.commitHash || restoringTurnId !== null) return;
@@ -3190,22 +3649,80 @@ function EditorPage() {
     if (nativeThink) {
       const socket = nativeSocketRef.current;
       if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "stop_generation" }));
-        recordNativeProgress("Stop requested");
+        try {
+          stopConfirmedRef.current = false;
+          socket.send(JSON.stringify({ type: "stop_generation" }));
+          setNativeCompletionPhase("stopping");
+          setNativeCompletionMessage("Stop requested. Waiting for the runtime to confirm what happens next.");
+          setRuntimeError("");
+          recordNativeProgress("Stop requested; waiting for runtime confirmation", "info");
+        } catch {
+          setNativeCompletionPhase("recovering");
+          setNativeCompletionMessage("The stop request could not be sent. The build may still be running.");
+          setRuntimeError("The runtime connection could not send the stop request. Its current state is not confirmed.");
+        }
       } else {
-        socket?.close(1000, "Build stopped before generation started");
+        setNativeCompletionPhase("recovering");
+        setNativeCompletionMessage("The runtime connection is unavailable. Checking status before reporting a stop.");
+        try {
+          const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
+            credentials: "same-origin",
+            headers: authHeaders(),
+            cache: "no-store",
+          });
+          const status = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(response.status === 401
+            ? "The runtime returned HTTP 401 while checking the stop request."
+            : status.message || "Runtime status could not be checked.");
+          if (isCurrentStoppedLifecycle(status.nativeTaskLifecycle, readNativeOperationBaseline(projectId))) {
+            stopConfirmedRef.current = true;
+            setNativeCompletionPhase("error");
+            setNativeCompletionMessage("The runtime confirmed the build stopped. The project may contain partial saved changes.");
+            setNativeRecoveryUnverified(false);
+            setSending(false);
+            recordNativeProgress("Runtime confirmed the build stopped", "error");
+            return;
+          }
+          setNativeRecoveryUnverified(true);
+          setSending(false);
+          setRuntimeError("The runtime did not confirm that the build stopped. It may still be working; no retry was sent.");
+          setNativeCompletionMessage("Stop status is unverified. Refresh to check the existing runtime state.");
+        } catch (error) {
+          setNativeRecoveryUnverified(true);
+          setSending(false);
+          const message = error instanceof Error ? error.message : "Runtime status could not be checked.";
+          setRuntimeError(`${message} The build may still be running; no retry was sent.`);
+          setNativeCompletionMessage("Stop status is unverified. Refresh to check the existing runtime state.");
+        }
       }
       return;
     }
-    if (projectId) {
-      await fetch(`/api/projects/${projectId}/runtime/stop`, {
+    if (!projectId) return;
+    try {
+      const token = await csrfToken();
+      const response = await fetch(`/api/projects/${projectId}/runtime/stop`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
         body: JSON.stringify({}),
-      }).catch(() => undefined);
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "The stop request could not be sent.");
+      if (data.stopped === true && data.acknowledged === true && data.terminalState === "generation_stopped") {
+        stopConfirmedRef.current = true;
+        requestController.current?.abort();
+        setSending(false);
+        setRuntimeError("The runtime confirmed the build stopped. The project may contain partial saved changes.");
+        return;
+      }
+      setRuntimeError(data.terminalState === "generation_complete"
+        ? "The runtime completed before it could stop. Checking the saved project state."
+        : "The stop request was accepted, but the runtime has not confirmed cancellation. It may still be working.");
+    } catch (error) {
+      setRuntimeError(error instanceof Error
+        ? `${error.message} The build may still be working.`
+        : "The stop request could not be verified. The build may still be working.");
     }
-    requestController.current?.abort();
-    setSending(false);
   };
 
   const requestPublishApproval = () => {
@@ -3532,8 +4049,11 @@ function EditorPage() {
               {nativeCompletionPhase === "success" ? "Build complete"
                 : nativeCompletionPhase === "paused" ? "Continue available"
                   : nativeCompletionPhase === "needs_input" ? "Needs your input"
-                    : nativeCompletionPhase === "error" ? "Stopped"
-                      : nativeCompletionPhase === "starting" ? "Starting..." : "Working"}
+                    : nativeCompletionPhase === "error"
+                      ? stopConfirmedRef.current ? "Stopped" : nativeRecoveryUnverified ? "Status unverified" : "Needs attention"
+                      : nativeCompletionPhase === "starting" ? "Connecting…"
+                        : nativeCompletionPhase === "stopping" ? "Stopping…"
+                          : nativeCompletionPhase === "recovering" ? "Checking status" : "Working"}
             </span>
           )}
           <button
@@ -3640,7 +4160,7 @@ function EditorPage() {
                 <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
                   theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
                 }`} data-testid={`builder-turn-plan-response-${turn.id}`}>
-                  {turn.response}
+                  {normalizeBuilderAssistantText(turn.response)}
                 </div>
               </div>}
               {turn.mode === "build" && (
@@ -3723,13 +4243,17 @@ function EditorPage() {
                 <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
                   theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
                 }`} data-testid={`builder-turn-build-response-${turn.id}`}>
-                  {turn.response}
+                  {normalizeBuilderAssistantText(turn.response)}
                 </div>
               </div>}
             </div>
           ))}
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+          {messages
+            .filter((msg) => msg.content.trim().length > 0
+              && !(planningSession?.currentQuestion && msg.role === "assistant"
+                && msg.content === planningSession.currentQuestion.prompt))
+            .map((msg, i) => (
+            <div key={msg.id || i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[85%] whitespace-pre-wrap px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-gradient-to-r from-cyan-500 to-cyan-400 text-black rounded-br-md"
@@ -3737,18 +4261,89 @@ function EditorPage() {
                   ? "bg-white/5 text-white/80 border border-white/10 rounded-bl-md"
                   : "bg-gray-100 text-gray-800 border border-gray-200 rounded-bl-md"
               }`}>
-                {msg.content}
+                {msg.role === "assistant" ? normalizeBuilderAssistantText(msg.content) : msg.content}
               </div>
             </div>
           ))}
-          {projectId > 0 && sending && (
+          {planningSession?.currentQuestion && (
+            <ClarificationOptions
+              theme={theme}
+              question={planningSession.currentQuestion}
+              selectedOptions={selectedClarificationOptions}
+              disabled={sending || planningSaving || !planningLoaded}
+              onToggle={(option) => setSelectedClarificationOptions((current) => (
+                planningSession.currentQuestion?.multiple
+                  ? current.includes(option) ? current.filter((item) => item !== option) : [...current, option]
+                  : current.includes(option) ? [] : [option]
+              ))}
+              onSubmit={() => void handleSend(selectedClarificationOptions.join(", "), undefined, {
+                selectedOptions: selectedClarificationOptions,
+              })}
+              onSkip={() => void handleSend("Skip", undefined, { planningAction: "skip" })}
+              onYouDecide={() => void handleSend("You decide", undefined, { planningAction: "decide" })}
+              onSomethingElse={() => {
+                setChatInput("");
+                window.setTimeout(() => textareaRef.current?.focus(), 0);
+              }}
+            />
+          )}
+          {planningSession?.phase === "awaiting_approval" && planningSession.mode === "plan" && (
+            <section className={`rounded-2xl border p-4 ${
+              theme === "dark" ? "border-teal-300/20 bg-[#101b20]" : "border-teal-900/10 bg-[#f5fbf9]"
+            }`} data-testid="approved-plan-card">
+              <p className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${theme === "dark" ? "text-teal-200/70" : "text-teal-800/70"}`}>
+                Review before building
+              </p>
+              <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 ${theme === "dark" ? "text-white/80" : "text-gray-700"}`}>
+                {planningSession.planSummary}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => void handleSend("", false, { approvePlan: true })}
+                  disabled={planningSaving || sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified}
+                  className="min-h-10 rounded-xl bg-cyan-400 px-4 text-sm font-semibold text-gray-950 disabled:cursor-not-allowed disabled:opacity-50">
+                  {planningSaving ? "Saving plan…" : "Approve and build"}
+                </button>
+                <button type="button" onClick={() => {
+                  setChatInput("");
+                  window.setTimeout(() => textareaRef.current?.focus(), 0);
+                }} className={`min-h-10 rounded-xl border px-4 text-sm font-medium ${
+                  theme === "dark" ? "border-white/10 text-white/70 hover:bg-white/5" : "border-gray-200 text-gray-700 hover:bg-white"
+                }`}>
+                  Add a note in chat
+                </button>
+              </div>
+            </section>
+          )}
+          {planningSession?.phase === "submitted" && (
+            <p className={`rounded-xl border px-3 py-2.5 text-xs leading-5 ${
+              theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"
+            }`}>
+              The build request was sent. The editor will check the existing runtime state and will not submit it again.
+            </p>
+          )}
+          {nativeThink ? (
+            <NativeBuildActivity
+              projectId={projectId}
+              theme={theme}
+              phase={planningSession?.phase === "clarifying"
+                ? "clarifying"
+                : planningSession?.phase === "awaiting_approval"
+                  ? "planning"
+                  : planningSession?.phase === "submitted" && nativeCompletionPhase === "idle"
+                    ? "recovering"
+                    : nativeCompletionPhase === "idle" && sending ? "starting" : nativeCompletionPhase as BuilderPhase}
+              message={planningSession?.phase === "submitted" && !nativeCompletionMessage
+                ? "A build request was sent. Checking the existing runtime state."
+                : nativeCompletionMessage}
+              startedAt={nativeOperationStartedAt}
+              events={nativeProgress}
+              connectionState={nativeConnected ? "Connected" : nativeCompletionPhase === "idle" ? "Idle" : "Disconnected"}
+            />
+          ) : projectId > 0 && sending && (
             <BuildActivity
               projectId={projectId}
               theme={theme}
               isBuilding={sending}
-              customerFacing={nativeThink}
-              progressEvents={nativeProgress}
-              connectionState={nativeThink ? (nativeConnected ? "connected" : "not connected") : undefined}
             />
           )}
         </div>
@@ -3899,8 +4494,14 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              disabled={!currentRuntimeCapability || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
-              placeholder={currentRuntimeCapability ? "Describe what you want to build..." : "Checking project runtime…"}
+              disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
+              placeholder={!currentRuntimeCapability
+                ? "Checking project runtime…"
+                : planningSession?.phase === "clarifying"
+                  ? "Reply here in the chat…"
+                  : planningSession?.phase === "awaiting_approval"
+                    ? "Add a note to the plan, or approve it above…"
+                    : "Describe what you want to build…"}
               rows={1}
               className={`block w-full min-h-10 max-h-[220px] bg-transparent border-none outline-none resize-none text-sm leading-6 ${
                 theme === "dark"
@@ -3950,7 +4551,7 @@ function EditorPage() {
               ) : (
               <button
                 onClick={() => handleSend()}
-                disabled={!currentRuntimeCapability || (nativeThink && (nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
+                disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
                 className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
                 data-testid="button-send-chat"
               >
@@ -4687,9 +5288,30 @@ function EditorPage() {
                  </button>
                </div>
              ) : (
-               <div className={`h-full flex items-center justify-center text-sm ${theme === "dark" ? "bg-[#0d0d1a] text-white/40" : "bg-white text-gray-500"}`}>
-                 {projectId ? "Send an Agent request to create a preview." : "A project is required for a live preview."}
-               </div>
+                <div className="h-full w-full">
+                  <BuildPreviewPlaceholder
+                    theme={theme}
+                    phase={planningSession?.phase === "clarifying"
+                      ? "clarifying"
+                      : planningSession?.phase === "awaiting_approval"
+                        ? "planning"
+                        : planningSession?.phase === "submitted" && nativeCompletionPhase === "idle"
+                          ? "recovering"
+                          : nativeThink
+                            ? nativeCompletionPhase === "idle" && sending ? "starting" : nativeCompletionPhase as BuilderPhase
+                            : sending ? "running" : "idle"}
+                    message={planningSession?.phase === "submitted" && !nativeCompletionMessage
+                      ? "A build request was sent. Checking the existing runtime state."
+                      : nativeCompletionMessage || (projectId ? "" : "A project is required for a live preview.")}
+                    startedAt={nativeOperationStartedAt}
+                    onOpenActivity={() => {
+                      const toggle = document.getElementById("build-activity-timeline-toggle");
+                      if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click();
+                      toggle?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
+                    }}
+                  />
+                </div>
              )}
           </motion.div>
         </div>
@@ -5253,10 +5875,12 @@ function AccountSettings() {
 
   const save = useMutation({
     mutationFn: async () => {
+      const token = await csrfToken();
       const res = await fetch("/api/auth/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ name: form.name.trim(), email: form.email.trim() }),
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
+        body: JSON.stringify({ name: form.name.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to save");
@@ -5295,7 +5919,7 @@ function AccountSettings() {
           <input
             type="email"
             value={form.email}
-            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            readOnly
             className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
             data-testid="input-email"
           />
@@ -5759,6 +6383,7 @@ function AppDashboardContent({ user }: { user: AppUser }) {
             {isAdminUser(user) && <Route path="/app/analytics" component={AnalyticsPage} />}
             {isAdminUser(user) && <Route path="/app/billing" component={BillingPage} />}
             {isAdminUser(user) && <Route path="/app/support" component={SupportPage} />}
+            {!isAdminUser(user) && <Route path="/app/support" component={CustomerSupportTicketsPage} />}
             {isAdminUser(user) && <Route path="/app/deployments" component={DeploymentsPage} />}
             {isAdminUser(user) && <Route path="/app/system-health" component={SystemHealthPage} />}
             {ownerAuthorizationVisible(user.email, user.role)
