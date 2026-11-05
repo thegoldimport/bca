@@ -29,6 +29,7 @@ type State = {
   operations: Record<string, any>[];
   turns: Record<string, any>[];
   releases: Record<string, any>[];
+  auditEvents: Record<string, any>[];
   auditActions: string[];
   writes: number;
 };
@@ -58,6 +59,8 @@ function makeState(): State {
     created_at: "2026-01-02 00:00:00",
     updated_at: "2026-02-02 00:00:00",
     deployment_updated_at: "2026-02-02 00:00:00",
+    subdomain_slug: "customer-site",
+    hosting_provider: "cloudflare",
     deployment_url: "https://customer.example.test/path?token=deployment-secret",
     description: "PRIVATE_PROJECT_DESCRIPTION",
     source_code: "PRIVATE_SOURCE_CODE",
@@ -92,8 +95,18 @@ function makeState(): State {
     releases: [{
       project_id: 101,
       deployment_url: "https://customer.example.test/app?token=release-secret",
+      subdomain_slug: "customer-site",
       created_at: "2026-02-02 00:00:00",
       commit_hash: "PRIVATE_COMMIT_HASH",
+    }],
+    auditEvents: [{
+      action: "customer_support_access_granted",
+      project_id: 101,
+      created_at: "2026-02-03 00:00:00",
+      actor_name: "BuildCustom Admin",
+      actor_email: "admin@example.test",
+      project_name: "Customer Site",
+      metadata_json: "PRIVATE_AUDIT_METADATA",
     }],
     auditActions: [],
     writes: 0,
@@ -120,6 +133,19 @@ function createDb(state: State) {
     }
     if (sql.includes("SELECT COUNT(*) AS total FROM operations")) {
       return { total: state.operations.length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM projects WHERE user_id=?")) {
+      return {
+        total: [...state.projects.values()].filter((project) => project.user_id === values[0]).length,
+      };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM projects p")
+      && sql.includes("l.deployment_url IS NOT NULL")) {
+      return {
+        total: [...state.projects.values()].filter((project) =>
+          project.user_id === values[0] && Boolean(project.deployment_url),
+        ).length,
+      };
     }
     if (sql.includes("SELECT COUNT(*) AS total,MAX(t.created_at) AS last_activity")) {
       return { total: state.turns.length, last_activity: state.turns[0]?.created_at || null };
@@ -164,6 +190,11 @@ function createDb(state: State) {
   };
 
   const all = async (sql: string, values: unknown[]) => {
+    if (sql.includes("FROM audit_events a") && sql.includes("JOIN projects p")) {
+      return state.auditEvents.filter((event) =>
+        state.projects.get(Number(event.project_id))?.user_id === values[0],
+      );
+    }
     if (sql.trimStart().startsWith("SELECT s.id,s.grant_id,s.project_id,s.started_at_ms")
       && sql.includes("s.admin_user_id=?")
       && sql.includes("g.expires_at_ms")) {
@@ -187,7 +218,12 @@ function createDb(state: State) {
     }
     if (sql.includes("FROM projects p LEFT JOIN runtime_project_links") && sql.includes("WHERE p.user_id=?")) {
       const userId = String(values[0]);
-      return [...state.projects.values()].filter((project) => project.user_id === userId);
+      const projects = [...state.projects.values()].filter((project) => project.user_id === userId);
+      const offset = Number(values[2]);
+      const limit = Number(values[1]);
+      return sql.includes("LIMIT ? OFFSET ?")
+        ? projects.slice(offset, offset + limit)
+        : projects;
     }
     if (sql.includes("FROM projects p") && sql.includes("WHERE p.user_id=?")) {
       const userId = String(values[0]);
@@ -482,6 +518,7 @@ test("admin detail requires server-side super-admin authorization", async () => 
 test("admin customer detail returns safe real-data projections only", async () => {
   const state = makeState();
   const adminEnv = makeEnv(state, "owner-1");
+  adminEnv.PUBLIC_GENERATED_APPS_ENABLED = "true";
   const response = await handleLaunchAdminRoute({
     request: request("/api/admin/customers/customer-1", { authenticated: true }),
     env: adminEnv as any,
@@ -493,10 +530,19 @@ test("admin customer detail returns safe real-data projections only", async () =
   assert.equal(body.customer.id, "customer-1");
   assert.equal(body.customer.email, "customer-1@example.test");
   assert.equal(body.projects[0].name, "Customer Site");
+  assert.equal(body.customer.productTier, "free");
   assert.equal(body.usage.operationCount, 1);
   assert.equal(body.usage.builderTurnCount, 1);
   assert.equal(body.customer.emailVerification, "Not tracked in product data");
   assert.equal(body.customer.credits, "Not tracked");
+  assert.deepEqual(body.projectPagination, { offset: 0, pageSize: 50, total: 1, hasMore: false });
+  assert.equal(body.hosting.projectsWithDeploymentRecords, 1);
+  assert.equal(body.hosting.hostingStatus, "Not tracked in product data");
+  assert.equal(body.hosting.subscriptionStatus, "Not configured");
+  assert.equal(body.billing.subscription, "Not configured");
+  assert.equal(body.supportTickets.label, "Not configured");
+  assert.equal(body.supportAccess.auditHistory[0].action, "customer_support_access_granted");
+  assert.equal(body.supportAccess.auditHistory[0].projectName, "Customer Site");
   const serialized = JSON.stringify(body);
   for (const secret of [
     "PRIVATE_PROJECT_DESCRIPTION",
@@ -510,8 +556,54 @@ test("admin customer detail returns safe real-data projections only", async () =
     "PRIVATE_COMMIT_HASH",
     "deployment-secret",
     "release-secret",
+    "PRIVATE_AUDIT_METADATA",
   ]) assert.equal(serialized.includes(secret), false, `response must omit ${secret}`);
-  assert.equal(body.projects[0].deploymentUrl, "https://customer.example.test");
+  assert.equal(body.projects[0].deploymentUrl, "https://customer-site.apps.buildcustom.ai/");
+  assert.equal(body.projects[0].gatewayDiagnosticUrl, "https://customer.example.test/path");
+  assert.equal(body.deployments[0].deploymentUrl, "https://customer-site.apps.buildcustom.ai/");
+  assert.equal(body.deployments[0].gatewayDiagnosticUrl, "https://customer.example.test/app");
+
+  const invalidPage = await handleLaunchAdminRoute({
+    request: request("/api/admin/customers/customer-1?projectOffset=-1", { authenticated: true }),
+    env: adminEnv as any,
+    url: new URL(`${origin}/api/admin/customers/customer-1?projectOffset=-1`),
+    input: {},
+  });
+  assert.equal(invalidPage?.status, 400);
+});
+
+test("admin customer project list paginates without hiding additional projects", async () => {
+  const state = makeState();
+  const template = state.projects.get(101)!;
+  for (let index = 1; index <= 51; index += 1) {
+    const id = 1000 + index;
+    state.projects.set(id, { ...template, id, name: `Customer Site ${index}` });
+  }
+  const adminEnv = makeEnv(state, "owner-1");
+
+  async function loadPage(offset: number) {
+    const path = `/api/admin/customers/customer-1?projectOffset=${offset}`;
+    return handleLaunchAdminRoute({
+      request: request(path, { authenticated: true }),
+      env: adminEnv as any,
+      url: new URL(`${origin}${path}`),
+      input: {},
+    });
+  }
+
+  const firstResponse = await loadPage(0);
+  assert.equal(firstResponse?.status, 200);
+  const firstPage = await firstResponse!.json() as any;
+  assert.equal(firstPage.projects.length, 50);
+  assert.equal(firstPage.projectPagination.total, 52);
+  assert.equal(firstPage.projectPagination.hasMore, true);
+
+  const secondResponse = await loadPage(50);
+  assert.equal(secondResponse?.status, 200);
+  const secondPage = await secondResponse!.json() as any;
+  assert.equal(secondPage.projects.length, 2);
+  assert.equal(secondPage.projectPagination.offset, 50);
+  assert.equal(secondPage.projectPagination.hasMore, false);
 });
 
 test("owner account is protected from customer suspend/reactivate controls", async () => {

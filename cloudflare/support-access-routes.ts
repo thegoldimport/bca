@@ -5,6 +5,7 @@ import {
   type SessionUser,
 } from "./staging/auth";
 import { resolveRuntimeProductUser } from "./staging/runtime-identity";
+import { adminDeploymentLinks, type AdminCustomDomain } from "./admin-deployment-url";
 
 const SUPPORT_SCOPE = "read_only_diagnostics" as const;
 const DEFAULT_ORIGIN = "https://app.buildcustom.ai";
@@ -20,6 +21,7 @@ type SupportEnv = {
   ENVIRONMENT?: string;
   CONTROL_PLANE_PROFILE?: string;
   CONTROL_PLANE_ALLOWED_ORIGIN?: string;
+  PUBLIC_GENERATED_APPS_ENABLED?: string;
 };
 
 type SupportRouteArgs = {
@@ -76,6 +78,49 @@ function safePublicOrigin(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+const CUSTOMER_PROJECT_PAGE_SIZE = 50;
+const CUSTOMER_HISTORY_LIMIT = 100;
+
+function domainsForProject(project: any, claims: any[]): AdminCustomDomain[] {
+  const projectId = Number(project.id ?? project.project_id);
+  const linked: AdminCustomDomain[] = [
+    {
+      hostname: project.custom_domain,
+      status: project.custom_domain_status,
+      sslStatus: project.custom_domain_ssl_status,
+      isPrimary: true,
+    },
+    {
+      hostname: project.custom_domain_secondary,
+      status: project.custom_domain_secondary_status,
+      sslStatus: project.custom_domain_secondary_ssl_status,
+      isPrimary: false,
+    },
+  ];
+  const claimed = claims
+    .filter((claim) => Number(claim.project_id) === projectId)
+    .map((claim) => ({
+      hostname: claim.hostname,
+      status: claim.status,
+      sslStatus: claim.ssl_status,
+      isPrimary: Number(claim.is_primary) === 1,
+    }));
+  const seen = new Set<string>();
+  return [...claimed, ...linked].filter((domain) => {
+    if (typeof domain.hostname !== "string") return false;
+    const key = domain.hostname.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isLaunchPublicAppsEnabled(env: SupportEnv): boolean {
+  return env.ENVIRONMENT === "production"
+    && env.CONTROL_PLANE_PROFILE === "launch"
+    && env.PUBLIC_GENERATED_APPS_ENABLED === "true";
 }
 
 async function getCustomerSupportAccess(env: SupportEnv, user: SessionUser) {
@@ -274,19 +319,48 @@ export async function handleCustomerSupportAccessRoute(args: SupportRouteArgs): 
   return json({ message: "Not found." }, 404);
 }
 
-async function getAdminCustomerDetail(env: SupportEnv, customerId: string): Promise<Response> {
+async function getAdminCustomerDetail(
+  env: SupportEnv,
+  customerId: string,
+  projectOffset: number,
+): Promise<Response> {
   const customer = await env.DB.prepare(
     `SELECT id,COALESCE(display_name,username) AS name,email,plan,role,account_status,created_at
      FROM users WHERE id=? AND role='user'`,
   ).bind(customerId).first<any>();
   if (!customer) return json({ message: "Customer not found." }, 404);
 
-  const [projectsResult, operationSummary, operationsResult, turnSummary, turnRows, releasesResult, grantsResult, sessionsResult] = await Promise.all([
+  const [projectsResult, projectCount, deploymentProjectCount, projectLinksResult, customDomainResult,
+    operationSummary, operationsResult, turnSummary, turnRows, releasesResult,
+    nativeReleasesResult, grantsResult, sessionsResult, supportAuditResult] = await Promise.all([
     env.DB.prepare(
       `SELECT p.id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at,
-        l.deployment_url,l.updated_at AS deployment_updated_at
+        l.deployment_url,l.updated_at AS deployment_updated_at,l.hosting_provider,l.subdomain_slug,
+        l.custom_domain,l.custom_domain_status,l.custom_domain_ssl_status,
+        l.custom_domain_secondary,l.custom_domain_secondary_status,l.custom_domain_secondary_ssl_status,
+        (SELECT o.status FROM operations o WHERE o.project_id=p.id ORDER BY o.created_at DESC LIMIT 1) AS latest_generation_status
        FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id
-       WHERE p.user_id=? ORDER BY p.updated_at DESC LIMIT 200`,
+       WHERE p.user_id=? ORDER BY p.updated_at DESC LIMIT ? OFFSET ?`,
+    ).bind(customerId, CUSTOMER_PROJECT_PAGE_SIZE + 1, projectOffset).all(),
+    env.DB.prepare("SELECT COUNT(*) AS total FROM projects WHERE user_id=?")
+      .bind(customerId).first<any>(),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM projects p
+       LEFT JOIN runtime_project_links l ON l.project_id=p.id
+       WHERE p.user_id=? AND l.deployment_url IS NOT NULL AND TRIM(l.deployment_url)<>''`,
+    ).bind(customerId).first<any>(),
+    env.DB.prepare(
+      `SELECT l.project_id,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_domain_status,
+        l.custom_domain_ssl_status,l.custom_domain_secondary,l.custom_domain_secondary_status,
+        l.custom_domain_secondary_ssl_status
+       FROM runtime_project_links l JOIN projects p ON p.id=l.project_id
+       WHERE p.user_id=?`,
+    ).bind(customerId).all(),
+    env.DB.prepare(
+      `SELECT c.project_id,c.hostname,c.role,c.status,c.ssl_status,c.created_at,c.is_primary
+       FROM runtime_custom_domain_claims c
+       JOIN projects p ON p.id=c.project_id AND p.user_id=?
+       ORDER BY c.is_primary DESC,c.hostname ASC LIMIT 200`,
     ).bind(customerId).all(),
     env.DB.prepare(
       "SELECT COUNT(*) AS total FROM operations WHERE user_id=?",
@@ -306,9 +380,20 @@ async function getAdminCustomerDetail(env: SupportEnv, customerId: string): Prom
        WHERE p.user_id=? ORDER BY t.created_at DESC LIMIT 50`,
     ).bind(customerId).all(),
     env.DB.prepare(
-      `SELECT r.project_id,r.deployment_url,r.created_at
+      `SELECT r.project_id,r.deployment_url,r.created_at,l.subdomain_slug,
+        l.custom_domain,l.custom_domain_status,l.custom_domain_ssl_status,
+        l.custom_domain_secondary,l.custom_domain_secondary_status,l.custom_domain_secondary_ssl_status
        FROM runtime_releases r JOIN projects p ON p.id=r.project_id
+       LEFT JOIN runtime_project_links l ON l.project_id=p.id
        WHERE p.user_id=? ORDER BY r.created_at DESC LIMIT 100`,
+    ).bind(customerId).all(),
+    env.DB.prepare(
+      `SELECT n.project_id,n.public_url AS deployment_url,n.slug,n.created_at,n.status,
+        l.custom_domain,l.custom_domain_status,l.custom_domain_ssl_status,
+        l.custom_domain_secondary,l.custom_domain_secondary_status,l.custom_domain_secondary_ssl_status
+       FROM native_publish_releases n
+       LEFT JOIN runtime_project_links l ON l.project_id=n.project_id
+       WHERE n.user_id=? ORDER BY n.created_at DESC LIMIT 100`,
     ).bind(customerId).all(),
     env.DB.prepare(
       `SELECT g.id,g.project_id,g.permission,g.granted_at_ms,g.expires_at_ms,g.revoked_at_ms,
@@ -326,21 +411,60 @@ async function getAdminCustomerDetail(env: SupportEnv, customerId: string): Prom
        LEFT JOIN users a ON a.id=s.admin_user_id
        WHERE s.customer_user_id=? ORDER BY s.started_at_ms DESC LIMIT 100`,
     ).bind(customerId).all(),
+    env.DB.prepare(
+      `SELECT a.action,a.project_id,a.created_at,
+        COALESCE(actor.display_name,actor.username) AS actor_name,actor.email AS actor_email,
+        p.name AS project_name
+       FROM audit_events a
+       JOIN projects p ON p.id=a.project_id AND p.user_id=?
+       LEFT JOIN users actor ON actor.id=a.actor_user_id
+       WHERE a.action IN (
+         'customer_support_access_granted','customer_support_access_revoked',
+         'admin_support_session_opened','admin_support_resource_accessed','admin_support_session_closed'
+       )
+       ORDER BY a.created_at DESC LIMIT 100`,
+    ).bind(customerId).all(),
   ]);
   const now = Date.now();
-  const projectRows = rows(projectsResult);
-  const projects = projectRows.map((project) => ({
-    id: Number(project.id),
-    name: String(project.name || "Untitled project"),
-    type: String(project.type || "project"),
-    framework: String(project.framework || "Not tracked"),
-    buildStatus: String(project.status || "unknown"),
-    createdAt: project.created_at ?? null,
-    updatedAt: project.updated_at ?? null,
-    deploymentStatus: safePublicOrigin(project.deployment_url) ? "published" : "not published",
-    deploymentUrl: safePublicOrigin(project.deployment_url),
-    deploymentUpdatedAt: project.deployment_updated_at ?? null,
-  }));
+  const fetchedProjectRows = rows(projectsResult);
+  const projectsHasMore = fetchedProjectRows.length > CUSTOMER_PROJECT_PAGE_SIZE;
+  const projectRows = fetchedProjectRows.slice(0, CUSTOMER_PROJECT_PAGE_SIZE);
+  const customDomainRows = rows(customDomainResult);
+  const projects = projectRows.map((project) => {
+    const domainCandidates = domainsForProject(project, customDomainRows);
+    const customDomains = domainCandidates.map((domain) => ({
+      hostname: domain.hostname,
+      role: customDomainRows.find((claim) => claim.hostname === domain.hostname)?.role || null,
+      status: domain.status || "Not tracked",
+      sslStatus: domain.sslStatus || "Not tracked",
+      isPrimary: Boolean(domain.isPrimary),
+    }));
+    const links = adminDeploymentLinks({
+      storedUrl: project.deployment_url,
+      slug: project.subdomain_slug,
+      publicAppsEnabled: isLaunchPublicAppsEnabled(env),
+      customDomains: domainCandidates,
+    });
+    return {
+      id: Number(project.id),
+      name: String(project.name || "Untitled project"),
+      type: String(project.type || "project"),
+      framework: String(project.framework || "Not tracked in product data"),
+      projectStatus: String(project.status || "unknown"),
+      buildStatus: project.latest_generation_status
+        ? String(project.latest_generation_status)
+        : "Not tracked in product data",
+      createdAt: project.created_at ?? null,
+      updatedAt: project.updated_at ?? null,
+      deploymentStatus: links.diagnosticUrl ? "Deployment record exists" : "No deployment record",
+      deploymentUrl: links.deploymentUrl,
+      gatewayDiagnosticUrl: links.diagnosticUrl,
+      deploymentUpdatedAt: project.deployment_updated_at ?? null,
+      hostingProvider: project.hosting_provider || "Not tracked in product data",
+      subdomainSlug: project.subdomain_slug || null,
+      customDomains,
+    };
+  });
   const grants = rows(grantsResult).map((grant) => ({
     id: String(grant.id),
     projectId: Number(grant.project_id),
@@ -362,6 +486,63 @@ async function getAdminCustomerDetail(env: SupportEnv, customerId: string): Prom
     closedAt: session.closed_at_ms == null ? null : Number(session.closed_at_ms),
     status: session.closed_at_ms != null ? "closed" : statusForGrant(session, now),
   }));
+  const projectLinks = rows(projectLinksResult);
+  const rawReleases = [
+    ...rows(nativeReleasesResult),
+    ...rows(releasesResult).map((release) => ({ ...release, status: "published" })),
+  ];
+  const uniqueReleases = new Map<string, any>();
+  for (const release of rawReleases) {
+    const key = `${Number(release.project_id)}|${String(release.created_at || "")}`;
+    if (!uniqueReleases.has(key)) uniqueReleases.set(key, release);
+  }
+  const releaseRows = [...uniqueReleases.values()]
+    .sort((a, b) => Date.parse(String(b.created_at || "")) - Date.parse(String(a.created_at || "")));
+  const deploymentHistoryHasMore = rows(nativeReleasesResult).length >= CUSTOMER_HISTORY_LIMIT
+    || rows(releasesResult).length >= CUSTOMER_HISTORY_LIMIT
+    || releaseRows.length > CUSTOMER_HISTORY_LIMIT;
+  const deployments = releaseRows.slice(0, CUSTOMER_HISTORY_LIMIT).map((release) => {
+    const project = projectLinks.find((row) => Number(row.project_id) === Number(release.project_id)) || release;
+    const links = adminDeploymentLinks({
+      storedUrl: release.deployment_url,
+      slug: release.slug || project.subdomain_slug,
+      publicAppsEnabled: isLaunchPublicAppsEnabled(env),
+      customDomains: domainsForProject({ ...project, id: release.project_id }, customDomainRows),
+    });
+    return {
+      projectId: Number(release.project_id),
+      deploymentUrl: links.deploymentUrl,
+      gatewayDiagnosticUrl: links.diagnosticUrl,
+      createdAt: release.created_at ?? null,
+      status: String(release.status || (links.diagnosticUrl ? "published" : "not published")),
+    };
+  });
+  const customerCustomDomains = projectLinks.flatMap((project) =>
+    domainsForProject(project, customDomainRows).map((domain) => ({
+      projectId: Number(project.project_id),
+      hostname: domain.hostname,
+      role: customDomainRows.find((claim) => claim.hostname === domain.hostname)?.role || null,
+      status: domain.status || "Not tracked",
+      sslStatus: domain.sslStatus || "Not tracked",
+      isPrimary: Boolean(domain.isPrimary),
+    })),
+  );
+  const knownDomainKeys = new Set(customerCustomDomains.map((domain) =>
+    `${domain.projectId}|${String(domain.hostname).toLowerCase()}`));
+  for (const domain of customDomainRows) {
+    const key = `${Number(domain.project_id)}|${String(domain.hostname).toLowerCase()}`;
+    if (knownDomainKeys.has(key)) continue;
+    knownDomainKeys.add(key);
+    customerCustomDomains.push({
+      projectId: Number(domain.project_id),
+      hostname: String(domain.hostname),
+      role: domain.role ? String(domain.role) : null,
+      status: domain.status || "Not tracked",
+      sslStatus: domain.ssl_status || "Not tracked",
+      isPrimary: Number(domain.is_primary) === 1,
+    });
+  }
+  const supportAuditRows = rows(supportAuditResult);
   return json({
     customer: {
       id: String(customer.id),
@@ -370,18 +551,41 @@ async function getAdminCustomerDetail(env: SupportEnv, customerId: string): Prom
       signupDate: customer.created_at ?? null,
       accountStatus: String(customer.account_status || "active"),
       role: String(customer.role),
-      plan: customer.plan ? String(customer.plan) : "Not configured",
+      productTier: customer.plan ? String(customer.plan) : "Not tracked in product data",
       emailVerification: "Not tracked in product data",
       lastLogin: "Not tracked in product data",
+      authenticationProvider: "Not tracked in product data",
       credits: "Not tracked",
     },
     projects,
-    deployments: rows(releasesResult).map((release) => ({
-      projectId: Number(release.project_id),
-      deploymentUrl: safePublicOrigin(release.deployment_url),
-      createdAt: release.created_at ?? null,
-      status: safePublicOrigin(release.deployment_url) ? "published" : "not published",
-    })),
+    projectPagination: {
+      offset: projectOffset,
+      pageSize: CUSTOMER_PROJECT_PAGE_SIZE,
+      total: Number(projectCount?.total || 0),
+      hasMore: projectsHasMore,
+    },
+    deployments,
+    deploymentHistoryHasMore,
+    hosting: {
+      subscriptionStatus: "Not configured",
+      hostingPlan: "Not configured",
+      hostingStatus: "Not tracked in product data",
+      projectsWithDeploymentRecords: Number(deploymentProjectCount?.total || 0),
+      hostingStartDate: "Not tracked in product data",
+      renewalDate: "Not tracked in product data",
+      usage: "Not tracked in product data",
+      customDomains: customerCustomDomains,
+    },
+    billing: {
+      configured: false,
+      subscription: "Not configured",
+      paymentStatus: "Not configured",
+      invoiceHistory: "Not configured",
+    },
+    supportTickets: {
+      configured: false,
+      label: "Not configured",
+    },
     usage: {
       operationCount: Number(operationSummary?.total || 0),
       operations: rows(operationsResult).map((operation) => ({
@@ -405,6 +609,17 @@ async function getAdminCustomerDetail(env: SupportEnv, customerId: string): Prom
     supportAccess: {
       grants,
       sessions,
+        auditHistory: supportAuditRows.map((event) => ({
+          action: String(event.action),
+          projectId: Number(event.project_id),
+          projectName: String(event.project_name || "Project"),
+          actorName: event.actor_name ? String(event.actor_name) : "BuildCustom support",
+          actorEmail: event.actor_email ? String(event.actor_email) : null,
+          createdAt: event.created_at ?? null,
+        })),
+        historyMayBeTruncated: grants.length >= CUSTOMER_HISTORY_LIMIT
+          || sessions.length >= CUSTOMER_HISTORY_LIMIT
+          || supportAuditRows.length >= CUSTOMER_HISTORY_LIMIT,
     },
   });
 }
@@ -673,7 +888,13 @@ export async function handleAdminSupportAccessRoute(args: AdminSupportRouteArgs)
   if (customerMatch) {
     if (request.method !== "GET") return json({ message: "Method not allowed." }, 405);
     const customerId = decodedId(customerMatch[1]);
-    return customerId ? getAdminCustomerDetail(env, customerId) : json({ message: "Invalid customer ID." }, 400);
+    if (!customerId) return json({ message: "Invalid customer ID." }, 400);
+    const rawOffset = url.searchParams.get("projectOffset");
+    const projectOffset = rawOffset === null ? 0 : Number(rawOffset);
+    if (!Number.isSafeInteger(projectOffset) || projectOffset < 0 || projectOffset > 1_000_000) {
+      return json({ message: "Invalid project page." }, 400);
+    }
+    return getAdminCustomerDetail(env, customerId, projectOffset);
   }
 
   const openMatch = url.pathname.match(/^\/api\/admin\/customers\/([^/]+)\/support-grants\/([^/]+)\/sessions$/);

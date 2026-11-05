@@ -8,3 +8,9 @@ Every plan includes BuildCustom.Ai managed hosting, SSL, CDN, and an automatic B
 **Why:** Workers for Platforms keeps hosting costs predictable enough to bundle hosting aggressively. AI generation and model usage are the unpredictable variable costs and must be metered separately. Infrastructure vendors must remain hidden from customer-facing copy.
 
 **How to apply:** Default publishing UI to one editable `project.apps.buildcustom.ai` address and a publish action. Hide custom-domain hosting and DNS controls until “Add a custom domain” is selected. Enforce live-project limits on first publish, not republish. Require Launch or higher only for BuildCustom-hosted custom domains; external hosting stores its origin and remains available independently.
+
+In admin reporting, distinguish a project deployment record from active hosting and from a paid hosting subscription. Use only stored billing or hosting evidence for those states; if no such integration/data exists, show “Not configured” or “Not tracked.” A product-tier field is not billing evidence.
+
+**Why:** The user explicitly requires accurate customer profiles and rejects inferring paid hosting, subscription, or revenue from a deployed project.
+
+**How to apply:** When building Admin customer, usage, or billing views, report deployment and subscription facts separately and never derive revenue or subscriber figures from project counts or the stored product tier.

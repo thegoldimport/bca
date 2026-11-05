@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
 import { csrfToken } from "@/lib/auth";
-import { Link } from "wouter";
 
 type Overview = {
   stats: {
@@ -72,6 +71,8 @@ type AdminProject = {
   deploymentStatus: string;
   hostingProvider: string | null;
   publishedUrl: string | null;
+  gatewayDiagnosticUrl: string | null;
+  customDomains: Array<{ hostname: string; status: string; sslStatus: string }>;
 };
 
 type Deployment = {
@@ -84,6 +85,9 @@ type Deployment = {
   ownerEmail: string;
   hostingProvider: string;
   deploymentUrl: string | null;
+  gatewayDiagnosticUrl: string | null;
+  subdomainSlug: string | null;
+  customDomains: Array<{ hostname: string; status: string; sslStatus: string }>;
 };
 
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -208,7 +212,7 @@ export function UsersPage() {
 
   const customers = customersQuery.data?.customers || [];
   return (
-    <PageFrame title="Customers" description="Live customer records, product access status, projects, and usage.">
+    <PageFrame title="Customers" description="Live customer records, product access status, projects, and usage. Product tier is not subscription or revenue data.">
       <Card className="mb-5">
         <label className={`flex max-w-lg items-center gap-2 rounded-xl border px-3 py-2.5 ${
           theme === "dark" ? "border-white/10 bg-white/5" : "border-gray-200 bg-gray-50"
@@ -238,7 +242,7 @@ export function UsersPage() {
           <table className="w-full min-w-[850px] text-left">
             <thead className={theme === "dark" ? "border-b border-white/10" : "border-b border-gray-200"}>
               <tr>
-                {["Customer", "Plan", "Projects", "Usage", "Product access", "Joined", "Manage"].map((label) => (
+                {["Customer", "Product tier", "Projects", "Usage", "Product access", "Joined", "Manage"].map((label) => (
                   <th key={label} className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide ${
                     theme === "dark" ? "text-white/40" : "text-gray-500"
                   }`}>{label}</th>
@@ -259,6 +263,12 @@ export function UsersPage() {
                   </td>
                   <td className={`px-4 py-4 text-sm ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>{customer.plan || "free"}</td>
                   <td className="px-4 py-4">
+                    <Link
+                      href={`/app/admin/customers/${encodeURIComponent(customer.id)}`}
+                      className="mr-3 text-xs font-medium text-cyan-400 hover:underline"
+                    >
+                      View details
+                    </Link>
                     <button
                       className="text-sm text-cyan-400 hover:underline"
                       onClick={() => setSelectedId(selectedId === customer.id ? null : customer.id)}
@@ -440,6 +450,13 @@ export function ProjectsPage() {
                     Deployment: {project.deploymentStatus}
                     {project.hostingProvider ? ` · ${project.hostingProvider}` : ""}
                   </p>
+                  {project.customDomains.length > 0 && (
+                    <p className={`mt-1 text-xs ${theme === "dark" ? "text-white/35" : "text-gray-400"}`}>
+                      Custom domains: {project.customDomains.map((domain) =>
+                        `${domain.hostname} (${domain.status}; SSL ${domain.sslStatus})`,
+                      ).join(" · ")}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -453,7 +470,17 @@ export function ProjectsPage() {
                     rel="noreferrer"
                     className="text-xs text-cyan-400 hover:underline"
                   >
-                    Published URL
+                    Open deployment
+                  </a>
+                )}
+                {project.gatewayDiagnosticUrl && (
+                  <a
+                    href={project.gatewayDiagnosticUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-white/40 hover:text-cyan-400 hover:underline"
+                  >
+                    Gateway diagnostics
                   </a>
                 )}
                 <Link
@@ -608,6 +635,16 @@ export function DeploymentsPage() {
                     className="text-xs text-cyan-400 hover:underline"
                   >
                     Open deployment
+                  </a>
+                )}
+                {deployment.gatewayDiagnosticUrl && (
+                  <a
+                    href={deployment.gatewayDiagnosticUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-white/40 hover:text-cyan-400 hover:underline"
+                  >
+                    Gateway diagnostics
                   </a>
                 )}
               </div>
