@@ -10,6 +10,7 @@ const json = (body: unknown, status = 200) => Response.json(body, {
   status,
   headers: { "Cache-Control": "no-store" },
 });
+const INITIAL_OWNER_EMAIL = "support@buildcustom.ai";
 
 type LaunchAdminEnv = {
   DB: D1Database;
@@ -214,10 +215,10 @@ async function updateCustomerStatus(
     return json({ message: "Account status must be active or suspended." }, 400);
   }
   if (customerId === admin.id) return json({ message: "You cannot change your own account status." }, 409);
-  const target = await env.DB.prepare("SELECT id,role FROM users WHERE id=?")
-    .bind(customerId).first<{ id: string; role: string }>();
+  const target = await env.DB.prepare("SELECT id,role,email FROM users WHERE id=?")
+    .bind(customerId).first<{ id: string; role: string; email: string }>();
   if (!target) return json({ message: "Customer not found." }, 404);
-  if (target.role !== "user") {
+  if (target.role !== "user" || target.email?.trim().toLowerCase() === INITIAL_OWNER_EMAIL) {
     return json({ message: "Owner accounts cannot be changed from customer status controls." }, 409);
   }
 

@@ -5161,7 +5161,7 @@ function SettingsPage() {
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "api", label: "API Keys", icon: Key },
     { id: "security", label: "Security", icon: Shield },
-    { id: "support", label: "Support Access", icon: LifeBuoy },
+    ...(getAppUser()?.role === "user" ? [{ id: "support", label: "Support Access", icon: LifeBuoy }] : []),
   ];
 
   return (

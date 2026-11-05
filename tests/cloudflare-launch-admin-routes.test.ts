@@ -52,9 +52,10 @@ function makeDb(options: {
           if (sql.includes("SELECT COUNT(*) AS count FROM users WHERE role='super_admin'")) {
             return { count: state.users.filter((row) => row.role === "super_admin").length };
           }
-          if (sql.includes("SELECT id,role FROM users WHERE id=?")) {
+          if (sql.includes("SELECT id,role,email FROM users WHERE id=?")
+            || sql.includes("SELECT id,role FROM users WHERE id=?")) {
             const user = state.users.find((row) => row.id === values[0]);
-            return user ? { id: user.id, role: user.role } : null;
+            return user ? { id: user.id, role: user.role, email: user.email } : null;
           }
           if (sql.includes("SELECT id FROM users WHERE id=? AND role='user'")) {
             const user = state.users.find((row) => row.id === values[0] && row.role === "user");

@@ -262,7 +262,7 @@ export function AdminCustomerDetailPage() {
                 ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
                 : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
             }`}
-            disabled={statusMutation.isPending || customer.role !== "user"}
+            disabled={statusMutation.isPending || customer.role !== "user" || customer.email.toLowerCase() === "support@buildcustom.ai"}
             onClick={() => {
               const nextStatus = customer.accountStatus === "active" ? "suspended" : "active";
               const effect = nextStatus === "suspended"
@@ -273,7 +273,9 @@ export function AdminCustomerDetailPage() {
               }
             }}
           >
-            {customer.accountStatus === "active" ? "Suspend account" : "Reactivate account"}
+            {customer.email.toLowerCase() === "support@buildcustom.ai"
+              ? "Owner protected"
+              : customer.accountStatus === "active" ? "Suspend account" : "Reactivate account"}
           </button>
         </div>
       </header>

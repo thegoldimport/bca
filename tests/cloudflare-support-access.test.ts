@@ -114,9 +114,9 @@ function createDb(state: State) {
       const user = state.users.get(String(values[0]));
       return user?.role === "user" ? { ...user, name: user.display_name } : null;
     }
-    if (sql.includes("SELECT id,role FROM users WHERE id=?")) {
+    if (sql.includes("SELECT id,role,email FROM users WHERE id=?") || sql.includes("SELECT id,role FROM users WHERE id=?")) {
       const user = state.users.get(String(values[0]));
-      return user ? { id: user.id, role: user.role } : null;
+      return user ? { id: user.id, role: user.role, email: user.email } : null;
     }
     if (sql.includes("SELECT COUNT(*) AS total FROM operations")) {
       return { total: state.operations.length };
@@ -164,7 +164,8 @@ function createDb(state: State) {
   };
 
   const all = async (sql: string, values: unknown[]) => {
-    if (sql.includes("FROM support_access_sessions s") && sql.includes("s.admin_user_id=?")
+    if (sql.trimStart().startsWith("SELECT s.id,s.grant_id,s.project_id,s.started_at_ms")
+      && sql.includes("s.admin_user_id=?")
       && sql.includes("g.expires_at_ms")) {
       const session = state.sessions.get(String(values[0]));
       const grant = session ? state.grants.get(String(session.grant_id)) : undefined;
@@ -207,7 +208,7 @@ function createDb(state: State) {
         project_name: state.projects.get(Number(grant.project_id))?.name,
       }));
     }
-    if (sql.includes("FROM support_access_sessions s")) {
+    if (sql.includes("FROM support_access_sessions s") && sql.includes("WHERE s.customer_user_id=?")) {
       return [...state.sessions.values()].filter((session) => session.customer_user_id === values[0]).map((session) => {
         const user = state.users.get(String(session.admin_user_id));
         const grant = state.grants.get(String(session.grant_id));
@@ -515,6 +516,10 @@ test("admin customer detail returns safe real-data projections only", async () =
 
 test("owner account is protected from customer suspend/reactivate controls", async () => {
   const state = makeState();
+  state.users.set("preactivation-owner", {
+    ...makeUser("preactivation-owner"),
+    email: "support@buildcustom.ai",
+  });
   const env = makeEnv(state, "owner-1");
   const response = await handleLaunchAdminRoute({
     request: request("/api/admin/customers/owner-1/status", {
@@ -528,7 +533,20 @@ test("owner account is protected from customer suspend/reactivate controls", asy
   });
   assert.equal(response?.status, 409);
   assert.equal(state.users.get("owner-1")?.account_status, "active");
-  assert.equal(state.writes, 1); // Only the normal authenticated product-user upsert ran.
+  assert.equal(state.auditActions.includes("admin_account_status_changed"), false);
+
+  const preactivationOwner = await handleLaunchAdminRoute({
+    request: request("/api/admin/customers/preactivation-owner/status", {
+      method: "PATCH",
+      csrf: true,
+      body: { accountStatus: "suspended" },
+    }),
+    env: env as any,
+    url: new URL(`${origin}/api/admin/customers/preactivation-owner/status`),
+    input: { accountStatus: "suspended" },
+  });
+  assert.equal(preactivationOwner?.status, 409);
+  assert.equal(state.users.get("preactivation-owner")?.account_status, "active");
   assert.equal(state.auditActions.includes("admin_account_status_changed"), false);
 });
 
@@ -673,6 +691,7 @@ test("support workspace is project-scoped, read-only, audited, and rechecks revo
   });
   assert.equal(opened?.status, 201);
   const { sessionId } = await opened!.json() as any;
+  assert.equal(state.sessions.has(sessionId), true, `created session ${sessionId}`);
   assert.equal(state.auditActions.includes("admin_support_session_opened"), true);
 
   const workspaceResponse = await handleLaunchAdminRoute({
