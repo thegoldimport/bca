@@ -45,6 +45,21 @@ test("every admin sidebar destination has a matching admin-only route", () => {
   }
 });
 
+test("customer names and a visible details action open the admin-only profile route", () => {
+  const dashboard = readFileSync("client/src/pages/app-dashboard.tsx", "utf8");
+  const usersPage = readFileSync("client/src/pages/app-admin-live-pages.tsx", "utf8");
+  const detailPage = readFileSync("client/src/pages/admin-customer-detail.tsx", "utf8");
+
+  assert.match(
+    dashboard,
+    /isAdminUser\(user\)\s*&&\s*<Route\s+path="\/app\/admin\/customers\/:customerId"\s+component=\{AdminCustomerDetailPage\}\s*\/>/,
+  );
+  assert.match(usersPage, /href=\{`\/app\/admin\/customers\/\$\{encodeURIComponent\(customer\.id\)\}`\}/);
+  assert.match(usersPage, />\s*View details\s*<\/Link>/i);
+  assert.match(detailPage, /useRoute\("\/app\/admin\/customers\/:customerId"\)/);
+  assert.match(detailPage, /projectOffset=/);
+});
+
 test("only the designated pre-activation account sees owner authorization", () => {
   assert.equal(ownerAuthorizationVisible(" SUPPORT@BUILDCUSTOM.AI ", "user"), true);
   assert.equal(ownerAuthorizationVisible("customer@example.test", "user"), false);

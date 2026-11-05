@@ -52,9 +52,10 @@ function makeDb(options: {
           if (sql.includes("SELECT COUNT(*) AS count FROM users WHERE role='super_admin'")) {
             return { count: state.users.filter((row) => row.role === "super_admin").length };
           }
-          if (sql.includes("SELECT id,role FROM users WHERE id=?")) {
+          if (sql.includes("SELECT id,role,email FROM users WHERE id=?")
+            || sql.includes("SELECT id,role FROM users WHERE id=?")) {
             const user = state.users.find((row) => row.id === values[0]);
-            return user ? { id: user.id, role: user.role } : null;
+            return user ? { id: user.id, role: user.role, email: user.email } : null;
           }
           if (sql.includes("SELECT id FROM users WHERE id=? AND role='user'")) {
             const user = state.users.find((row) => row.id === values[0] && row.role === "user");
@@ -373,6 +374,7 @@ test("authorized admins receive only safe metadata from all customer projects", 
       owner_email: "customer@example.test",
       user_id: "customer-2",
       hosting_provider: "cloudflare",
+      subdomain_slug: "customer-project",
       deployment_url: "https://apps.example.test/customer-project?private=must-not-return",
       password: "must-not-return",
       session_token: "must-not-return",
@@ -380,6 +382,7 @@ test("authorized admins receive only safe metadata from all customer projects", 
       source_files: "must-not-return",
     }],
   });
+  env.PUBLIC_GENERATED_APPS_ENABLED = "true";
   const response = await route(env, makeRequest("/api/admin/projects"));
   assert.equal(response?.status, 200);
   const body = await response?.json() as { projects: Record<string, unknown>[] };
@@ -394,9 +397,12 @@ test("authorized admins receive only safe metadata from all customer projects", 
     ownerId: "customer-2",
     ownerName: "Customer One",
     ownerEmail: "customer@example.test",
-    deploymentStatus: "Published",
+    deploymentStatus: "Deployment record exists",
     hostingProvider: "cloudflare",
-    publishedUrl: "https://apps.example.test/customer-project",
+    publishedUrl: "https://customer-project.apps.buildcustom.ai/",
+    gatewayDiagnosticUrl: "https://apps.example.test/customer-project",
+    subdomainSlug: "customer-project",
+    customDomains: [],
   });
   assert.equal(JSON.stringify(body).includes("must-not-return"), false);
   assert.equal(state.statements.some((sql) => /\b(password|session_token|api_key|source_files)\b/i.test(sql)), false);
@@ -415,6 +421,7 @@ test("admin deployment diagnostics can be filtered to one project", async () => 
         owner_name: "Customer One",
         owner_email: "one@example.test",
         hosting_provider: "cloudflare",
+        subdomain_slug: "project-one",
         deployment_url: "https://one.example.test",
       },
       {
@@ -430,10 +437,13 @@ test("admin deployment diagnostics can be filtered to one project", async () => 
       },
     ],
   });
+  env.PUBLIC_GENERATED_APPS_ENABLED = "true";
   const response = await route(env, makeRequest("/api/admin/deployments?projectId=31"));
   assert.equal(response?.status, 200);
   const body = await response?.json() as { deployments: Record<string, unknown>[] };
   assert.deepEqual(body.deployments.map((deployment) => deployment.projectId), [31]);
+  assert.equal(body.deployments[0].deploymentUrl, "https://project-one.apps.buildcustom.ai/");
+  assert.equal(body.deployments[0].gatewayDiagnosticUrl, "https://one.example.test/");
 });
 
 test("email/password signup flag alone cannot authorize owner bootstrap", async () => {

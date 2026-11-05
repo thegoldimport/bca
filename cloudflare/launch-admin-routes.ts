@@ -1,14 +1,17 @@
-import { hasValidCsrfToken, type SessionUser } from "./staging/auth";
+import { assertOrigin, hasValidCsrfToken, type SessionUser } from "./staging/auth";
 import {
   checkRuntimeAvailability,
   resolveRuntimeProductUser,
 } from "./staging/runtime-identity";
 import { handleOwnerBootstrapRoute } from "./owner-bootstrap";
+import { handleAdminSupportAccessRoute } from "./support-access-routes";
+import { adminDeploymentLinks, type AdminCustomDomain } from "./admin-deployment-url";
 
 const json = (body: unknown, status = 200) => Response.json(body, {
   status,
   headers: { "Cache-Control": "no-store" },
 });
+const INITIAL_OWNER_EMAIL = "support@buildcustom.ai";
 
 type LaunchAdminEnv = {
   DB: D1Database;
@@ -17,6 +20,7 @@ type LaunchAdminEnv = {
   ENVIRONMENT?: string;
   CONTROL_PLANE_PROFILE?: string;
   CONTROL_PLANE_ALLOWED_ORIGIN?: string;
+  PUBLIC_GENERATED_APPS_ENABLED?: string;
   OWNER_BOOTSTRAP_SECRET?: string;
   EMAIL?: { send(message: { from: string; to: string; subject: string; text: string; html: string }): Promise<unknown> };
 };
@@ -130,15 +134,37 @@ async function getCustomerProjects(env: LaunchAdminEnv, customerId: string) {
   };
 }
 
-function safeDeploymentUrl(value: unknown): string | null {
-  if (typeof value !== "string" || value.length > 2048) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password) return null;
-    return `${url.origin}${url.pathname}`;
-  } catch {
-    return null;
-  }
+function customerDomains(row: any): AdminCustomDomain[] {
+  return [
+    {
+      hostname: row.primary_claim_hostname,
+      status: row.primary_claim_status,
+      sslStatus: row.primary_claim_ssl_status,
+      isPrimary: true,
+    },
+    {
+      hostname: row.custom_domain,
+      status: row.custom_domain_status,
+      sslStatus: row.custom_domain_ssl_status,
+      isPrimary: true,
+    },
+    {
+      hostname: row.secondary_claim_hostname,
+      status: row.secondary_claim_status,
+      sslStatus: row.secondary_claim_ssl_status,
+      isPrimary: false,
+    },
+    {
+      hostname: row.custom_domain_secondary,
+      status: row.custom_domain_secondary_status,
+      sslStatus: row.custom_domain_secondary_ssl_status,
+      isPrimary: false,
+    },
+  ].filter((domain) => typeof domain.hostname === "string" && domain.hostname.trim());
+}
+
+function publicAppsEnabled(env: LaunchAdminEnv): boolean {
+  return env.CONTROL_PLANE_PROFILE === "launch" && env.PUBLIC_GENERATED_APPS_ENABLED === "true";
 }
 
 async function getProjects(env: LaunchAdminEnv, url: URL) {
@@ -147,7 +173,15 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
   const result = await env.DB.prepare(
     `SELECT p.id,p.user_id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at,
        COALESCE(u.display_name,u.username) AS owner_name,u.email AS owner_email,
-       l.hosting_provider,l.deployment_url
+       l.hosting_provider,l.deployment_url,l.subdomain_slug,
+       l.custom_domain,l.custom_domain_status,l.custom_domain_ssl_status,
+       l.custom_domain_secondary,l.custom_domain_secondary_status,l.custom_domain_secondary_ssl_status,
+       (SELECT c.hostname FROM runtime_custom_domain_claims c WHERE c.project_id=p.id ORDER BY c.is_primary DESC,c.hostname ASC LIMIT 1) AS primary_claim_hostname,
+       (SELECT c.status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id ORDER BY c.is_primary DESC,c.hostname ASC LIMIT 1) AS primary_claim_status,
+       (SELECT c.ssl_status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id ORDER BY c.is_primary DESC,c.hostname ASC LIMIT 1) AS primary_claim_ssl_status,
+       (SELECT c.hostname FROM runtime_custom_domain_claims c WHERE c.project_id=p.id AND c.is_primary=0 ORDER BY c.hostname ASC LIMIT 1) AS secondary_claim_hostname,
+       (SELECT c.status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id AND c.is_primary=0 ORDER BY c.hostname ASC LIMIT 1) AS secondary_claim_status,
+       (SELECT c.ssl_status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id AND c.is_primary=0 ORDER BY c.hostname ASC LIMIT 1) AS secondary_claim_ssl_status
      FROM projects p
      JOIN users u ON u.id=p.user_id
      LEFT JOIN runtime_project_links l ON l.project_id=p.id
@@ -159,7 +193,12 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
   ).bind(search, pattern, pattern, pattern).all();
   return {
     projects: (result.results || []).map((row: any) => {
-      const publishedUrl = safeDeploymentUrl(row.deployment_url);
+      const links = adminDeploymentLinks({
+        storedUrl: row.deployment_url,
+        slug: row.subdomain_slug,
+        publicAppsEnabled: publicAppsEnabled(env),
+        customDomains: customerDomains(row),
+      });
       return {
         id: row.id,
         name: row.name,
@@ -171,9 +210,16 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
         ownerId: row.user_id,
         ownerName: row.owner_name,
         ownerEmail: row.owner_email,
-        deploymentStatus: publishedUrl ? "Published" : "No deployment record",
+        deploymentStatus: links.diagnosticUrl ? "Deployment record exists" : "No deployment record",
         hostingProvider: row.hosting_provider || null,
-        publishedUrl,
+        publishedUrl: links.deploymentUrl,
+        gatewayDiagnosticUrl: links.diagnosticUrl,
+        subdomainSlug: row.subdomain_slug || null,
+        customDomains: customerDomains(row).map((domain) => ({
+          hostname: domain.hostname,
+          status: domain.status || "Not tracked",
+          sslStatus: domain.sslStatus || "Not tracked",
+        })),
       };
     }),
   };
@@ -183,7 +229,15 @@ async function getDeployments(env: LaunchAdminEnv, projectId: number | null) {
   const projectFilter = projectId === null ? "" : " AND p.id=?";
   const statement = env.DB.prepare(
     `SELECT p.id,p.name,p.type,p.status,p.updated_at,u.display_name AS owner_name,u.email AS owner_email,
-      l.hosting_provider,l.deployment_url
+      l.hosting_provider,l.deployment_url,l.subdomain_slug,
+      l.custom_domain,l.custom_domain_status,l.custom_domain_ssl_status,
+      l.custom_domain_secondary,l.custom_domain_secondary_status,l.custom_domain_secondary_ssl_status,
+      (SELECT c.hostname FROM runtime_custom_domain_claims c WHERE c.project_id=p.id ORDER BY c.is_primary DESC,c.hostname ASC LIMIT 1) AS primary_claim_hostname,
+      (SELECT c.status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id ORDER BY c.is_primary DESC,c.hostname ASC LIMIT 1) AS primary_claim_status,
+      (SELECT c.ssl_status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id ORDER BY c.is_primary DESC,c.hostname ASC LIMIT 1) AS primary_claim_ssl_status,
+      (SELECT c.hostname FROM runtime_custom_domain_claims c WHERE c.project_id=p.id AND c.is_primary=0 ORDER BY c.hostname ASC LIMIT 1) AS secondary_claim_hostname,
+      (SELECT c.status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id AND c.is_primary=0 ORDER BY c.hostname ASC LIMIT 1) AS secondary_claim_status,
+      (SELECT c.ssl_status FROM runtime_custom_domain_claims c WHERE c.project_id=p.id AND c.is_primary=0 ORDER BY c.hostname ASC LIMIT 1) AS secondary_claim_ssl_status
      FROM projects p
      JOIN users u ON u.id=p.user_id
      JOIN runtime_project_links l ON l.project_id=p.id
@@ -191,17 +245,33 @@ async function getDeployments(env: LaunchAdminEnv, projectId: number | null) {
      ORDER BY l.updated_at DESC LIMIT 100`,
   );
   const result = await (projectId === null ? statement : statement.bind(projectId)).all();
-  const deployments = (result.results || []).map((row: any) => ({
-    projectId: row.id,
-    projectName: row.name,
-    projectType: row.type,
-    projectStatus: row.status,
-    updatedAt: row.updated_at,
-    ownerName: row.owner_name,
-    ownerEmail: row.owner_email,
-    hostingProvider: row.hosting_provider,
-    deploymentUrl: safeDeploymentUrl(row.deployment_url),
-  }));
+  const deployments = (result.results || []).map((row: any) => {
+    const domains = customerDomains(row);
+    const links = adminDeploymentLinks({
+      storedUrl: row.deployment_url,
+      slug: row.subdomain_slug,
+      publicAppsEnabled: publicAppsEnabled(env),
+      customDomains: domains,
+    });
+    return {
+      projectId: row.id,
+      projectName: row.name,
+      projectType: row.type,
+      projectStatus: row.status,
+      updatedAt: row.updated_at,
+      ownerName: row.owner_name,
+      ownerEmail: row.owner_email,
+      hostingProvider: row.hosting_provider,
+      deploymentUrl: links.deploymentUrl,
+      gatewayDiagnosticUrl: links.diagnosticUrl,
+      subdomainSlug: row.subdomain_slug || null,
+      customDomains: domains.map((domain) => ({
+        hostname: domain.hostname,
+        status: domain.status || "Not tracked",
+        sslStatus: domain.sslStatus || "Not tracked",
+      })),
+    };
+  });
   return { deployments };
 }
 
@@ -214,26 +284,39 @@ async function updateCustomerStatus(
 ): Promise<Response> {
   if (request.method !== "PATCH") return json({ message: "Method not allowed." }, 405);
   if (!hasValidCsrfToken(request)) return json({ message: "A secure request is required." }, 403);
+  try {
+    assertOrigin(request, env.CONTROL_PLANE_ALLOWED_ORIGIN || "https://app.buildcustom.ai");
+  } catch {
+    return json({ message: "A secure request is required." }, 403);
+  }
   const accountStatus = input.accountStatus;
   if (accountStatus !== "active" && accountStatus !== "suspended") {
     return json({ message: "Account status must be active or suspended." }, 400);
   }
   if (customerId === admin.id) return json({ message: "You cannot change your own account status." }, 409);
-  const target = await env.DB.prepare("SELECT id,role FROM users WHERE id=?")
-    .bind(customerId).first<{ id: string; role: string }>();
+  const target = await env.DB.prepare("SELECT id,role,email FROM users WHERE id=?")
+    .bind(customerId).first<{ id: string; role: string; email: string }>();
   if (!target) return json({ message: "Customer not found." }, 404);
-  if (target.role !== "user") {
+  if (target.role !== "user" || target.email?.trim().toLowerCase() === INITIAL_OWNER_EMAIL) {
     return json({ message: "Owner accounts cannot be changed from customer status controls." }, 409);
   }
 
-  await env.DB.prepare("UPDATE users SET account_status=? WHERE id=? AND role='user'")
-    .bind(accountStatus, customerId).run();
-  await env.DB.prepare(
-    "INSERT INTO audit_events(actor_user_id,action,metadata_json) VALUES(?,?,?)",
-  ).bind(admin.id, "admin_account_status_changed", JSON.stringify({
-    targetUserId: customerId,
-    accountStatus,
-  })).run();
+  const result = await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE users SET account_status=? WHERE id=? AND role='user' AND account_status<>?",
+    ).bind(accountStatus, customerId, accountStatus),
+    env.DB.prepare(
+      "INSERT INTO audit_events(actor_user_id,action,metadata_json) SELECT ?,?,? WHERE changes()=1",
+    ).bind(admin.id, "admin_account_status_changed", JSON.stringify({
+      targetUserId: customerId,
+      accountStatus,
+    })),
+  ]);
+  if (Number(result[0]?.meta?.changes || 0) !== 1) {
+    const current = await env.DB.prepare("SELECT id,role FROM users WHERE id=? AND role='user'")
+      .bind(customerId).first();
+    if (!current) return json({ message: "Customer status could not be changed." }, 409);
+  }
   return json({ success: true, accountStatus });
 }
 
@@ -255,6 +338,15 @@ export async function handleLaunchAdminRoute(args: {
 
   const auth = await requireAdmin(env, request);
   if ("response" in auth) return auth.response;
+
+  const supportResponse = await handleAdminSupportAccessRoute({
+    request,
+    env,
+    url,
+    input,
+    admin: auth.user,
+  });
+  if (supportResponse) return supportResponse;
 
   if (url.pathname === "/api/admin/overview" && request.method === "GET") {
     return json(await getOverview(env));
