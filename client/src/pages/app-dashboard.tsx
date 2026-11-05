@@ -5818,7 +5818,7 @@ function SettingsPage() {
     { id: "account", label: "Account", icon: User },
     { id: "plan", label: "Plan & Billing", icon: CreditCard },
     { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "api", label: "API Keys", icon: Key },
+    { id: "api", label: "AI Provider", icon: Key },
     { id: "security", label: "Security", icon: Shield },
     ...(getAppUser()?.role === "user" ? [{ id: "support", label: "Support Access", icon: LifeBuoy }] : []),
   ];
@@ -6084,38 +6084,220 @@ function AppearanceSettings() {
 
 function ApiKeySettings() {
   const { theme } = useTheme();
+  const queryClient = useQueryClient();
+  const [apiKey, setApiKey] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [useOwnKey, setUseOwnKey] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const settings = useQuery({
+    queryKey: ["ai-credentials"],
+    queryFn: async () => {
+      const response = await fetch("/api/ai-credentials", {
+        credentials: "same-origin",
+        headers: authHeaders(),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "AI provider settings could not be loaded.");
+      return data as {
+        mode: "managed" | "byok";
+        provider: string | null;
+        modelId: string | null;
+        keySaved: boolean;
+        byokAvailable: boolean;
+        providers: Array<{ id: string; label: string; provider: string }>;
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (!settings.data) return;
+    setUseOwnKey(settings.data.mode === "byok");
+    if (settings.data.modelId) setModelId(settings.data.modelId);
+    else if (!modelId) setModelId("google-ai-studio/gemini-2.5-flash-lite");
+  }, [settings.data, modelId]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const token = await csrfToken();
+      const response = await fetch("/api/ai-credentials", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
+        body: JSON.stringify({ modelId, apiKey }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Your provider key could not be saved.");
+      return data;
+    },
+    onSuccess: async (data) => {
+      setApiKey("");
+      setError("");
+      setUseOwnKey(true);
+      setMessage(data.projectsPending
+        ? `Saved securely. ${data.projectsPending} existing project(s) will update when they reconnect.`
+        : "Provider key saved securely and applied to your projects.");
+      await queryClient.invalidateQueries({ queryKey: ["ai-credentials"] });
+    },
+    onError: (err: Error) => {
+      setMessage("");
+      setError(err.message);
+    },
+  });
+
+  const useManaged = useMutation({
+    mutationFn: async () => {
+      const token = await csrfToken();
+      const response = await fetch("/api/ai-credentials", {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": token, ...authHeaders() },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "BuildCustom AI could not be selected.");
+      return data;
+    },
+    onSuccess: async (data) => {
+      setApiKey("");
+      setError("");
+      setUseOwnKey(false);
+      setMessage(data.projectsPending
+        ? `BuildCustom AI is selected. ${data.projectsPending} existing project(s) will update when they reconnect.`
+        : "BuildCustom AI is selected for your projects.");
+      await queryClient.invalidateQueries({ queryKey: ["ai-credentials"] });
+    },
+    onError: (err: Error) => {
+      setMessage("");
+      setError(err.message);
+    },
+  });
+
+  const fieldClass = `w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${
+    theme === "dark"
+      ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50"
+      : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"
+  }`;
+
+  if (settings.isLoading) {
+    return <SettingsCard title="AI Provider" description="Choose how your Builder requests use AI.">Loading settings…</SettingsCard>;
+  }
+
+  if (settings.isError) {
+    return <SettingsCard title="AI Provider" description="Choose how your Builder requests use AI.">
+      <p className="text-sm text-red-400">{(settings.error as Error).message}</p>
+    </SettingsCard>;
+  }
+
+  const models = settings.data?.providers || [];
+  const savedKey = settings.data?.keySaved === true;
+
   return (
-    <SettingsCard title="API Keys" description="Manage your API access tokens">
-      <div className={`flex items-center justify-between p-4 rounded-xl mb-4 ${
-        theme === "dark"
-          ? "bg-white/5 border border-white/10"
-          : "bg-gray-50 border border-gray-200"
-      }`}>
-        <div>
-          <p className={`text-sm font-medium ${
-            theme === "dark" ? "text-white" : "text-gray-900"
-          }`}>Production Key</p>
-          <p className={`text-xs mt-0.5 font-mono ${
-            theme === "dark" ? "text-white/40" : "text-gray-500"
-          }`}>bc_live_••••••••••••••••</p>
+    <>
+      <SettingsCard title="AI Provider" description="Use BuildCustom’s managed Gemini by default, or connect a supported provider key.">
+        {settings.data?.byokAvailable !== true && (
+          <p className={`rounded-xl border px-4 py-3 mb-4 text-sm ${
+            theme === "dark" ? "border-amber-400/20 bg-amber-400/5 text-amber-200/80" : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}>
+            Bring-your-own-key setup is not available yet. BuildCustom AI remains the default.
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+          <button
+            type="button"
+            onClick={() => {
+              setMessage("");
+              setError("");
+              if (savedKey) useManaged.mutate();
+              else setUseOwnKey(false);
+            }}
+            className={`text-left rounded-xl border p-4 transition-colors ${
+              !useOwnKey
+                ? "border-cyan-400/60 bg-cyan-400/10"
+                : theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-white"
+            }`}
+            data-testid="button-managed-ai"
+          >
+            <span className="block text-sm font-semibold">BuildCustom AI</span>
+            <span className={`block text-xs mt-1 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
+              Managed Gemini. No provider key setup required.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setUseOwnKey(true); setMessage(""); setError(""); }}
+            disabled={settings.data?.byokAvailable !== true}
+            className={`text-left rounded-xl border p-4 transition-colors disabled:opacity-50 ${
+              useOwnKey
+                ? "border-cyan-400/60 bg-cyan-400/10"
+                : theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-white"
+            }`}
+            data-testid="button-own-ai-key"
+          >
+            <span className="block text-sm font-semibold">Use my provider key</span>
+            <span className={`block text-xs mt-1 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>
+              Google AI Studio, OpenAI, Anthropic, or xAI.
+            </span>
+          </button>
         </div>
-        <div className="flex gap-2">
-          <button className={`p-2 rounded-lg transition-colors ${
-            theme === "dark"
-              ? "hover:bg-white/10 text-white/40"
-              : "hover:bg-gray-200 text-gray-400"
-          }`}><Copy size={14} /></button>
-          <button className={`p-2 rounded-lg transition-colors ${
-            theme === "dark"
-              ? "hover:bg-red-500/10 text-red-400/60"
-              : "hover:bg-red-50 text-red-400"
-          }`}><Trash2 size={14} /></button>
-        </div>
-      </div>
-      <button className="px-4 py-2.5 rounded-xl bg-cyan-400 text-black font-semibold text-sm hover:bg-cyan-300 transition-colors" data-testid="button-generate-key">
-        Generate New Key
-      </button>
-    </SettingsCard>
+
+        {useOwnKey && (
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="ai-provider-model" className="block text-sm font-medium mb-2">Provider model</label>
+              <select
+                id="ai-provider-model"
+                value={modelId}
+                onChange={(event) => setModelId(event.target.value)}
+                className={fieldClass}
+                data-testid="select-ai-provider-model"
+              >
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label} · {model.provider}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ai-provider-key" className="block text-sm font-medium mb-2">Provider API key</label>
+              <input
+                id="ai-provider-key"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder={savedKey ? "Enter a new key to replace the saved key" : "Paste your provider API key"}
+                className={fieldClass}
+                data-testid="input-ai-provider-key"
+              />
+              <p className={`text-xs mt-2 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+                The key is encrypted before storage and is never shown again. Your provider’s usage charges apply; BuildCustom AI credits are not used for these requests.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setError(""); setMessage(""); save.mutate(); }}
+              disabled={!settings.data?.byokAvailable || !modelId || !apiKey.trim() || save.isPending}
+              className="px-5 py-2.5 rounded-xl bg-cyan-400 text-black font-semibold text-sm disabled:opacity-50"
+              data-testid="button-save-ai-provider"
+            >
+              {save.isPending ? "Saving securely…" : savedKey ? "Replace saved key" : "Save provider key"}
+            </button>
+          </div>
+        )}
+
+        {error && <p role="alert" className="mt-4 text-sm text-red-400">{error}</p>}
+        {message && <p role="status" className="mt-4 text-sm text-emerald-400">{message}</p>}
+        {savedKey && (
+          <p className={`mt-4 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+            A provider key is saved for {settings.data?.provider}. BuildCustom does not return the key to this page.
+          </p>
+        )}
+      </SettingsCard>
+    </>
   );
 }
 

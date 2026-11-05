@@ -289,6 +289,13 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         })();
     }
 
+    async refreshBuildCustomAIConfig(): Promise<void> {
+        if (!this.behavior || this.state.behaviorType !== 'think') {
+            throw new Error('AI settings are unavailable for this project.');
+        }
+        await (this.behavior as ThinkCodingBehavior).refreshBuildCustomAIConfig();
+    }
+
     private initLogger(agentId: string, userId: string, sessionId?: string) {
         this._logger = createObjectLogger(this, 'CodeGeneratorAgent');
         this._logger.setObjectId(agentId);

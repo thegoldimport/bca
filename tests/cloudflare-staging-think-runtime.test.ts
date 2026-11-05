@@ -14,6 +14,7 @@ import {
 const env = {
   DB: {} as D1Database,
   AUTH_RUNTIME_URL: "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev",
+  STAGING_ALLOWED_ORIGIN: "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
 };
 
 test("native Think bridge allows suggestions and read/stop messages, but never generate_all", () => {
@@ -149,6 +150,35 @@ test("stock requests use only allowlisted owner cookies and never browser bearer
     ...env,
     AUTH_RUNTIME: runtime as unknown as Fetcher,
   }, request, "/api/agent/attacker/preview", { method: "POST" }), /Unsupported owner-scoped runtime request/);
+});
+
+test("BuildCustom AI refresh is an owner-scoped POST with the CSRF cookie forwarded", async () => {
+  let forwarded: Request | null = null;
+  const runtime = {
+    async fetch(request: Request) {
+      forwarded = request;
+      return Response.json({ success: true, data: { refreshed: true } });
+    },
+  };
+  const request = new Request("https://buildcustom-control-plane-staging.thegoldimport.workers.dev/api/projects/1/runtime/ws", {
+    headers: {
+      Origin: "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
+      Cookie: "accessToken=stock-session; csrf-token=csrf-cookie; unrelated=do-not-forward",
+    },
+  });
+  const response = await stockThinkRequest({
+    ...env,
+    AUTH_RUNTIME: runtime as unknown as Fetcher,
+  }, request, "/api/agent/owner-linked-agent/buildcustom-ai-config/refresh", {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(response.status, 200);
+  assert.ok(forwarded);
+  assert.equal(forwarded!.method, "POST");
+  assert.equal(forwarded!.headers.get("Origin"), "https://buildcustom-control-plane-staging.thegoldimport.workers.dev");
+  assert.equal(forwarded!.headers.get("X-CSRF-Token"), "csrf-cookie");
+  assert.equal(forwarded!.headers.get("Authorization"), null);
 });
 
 test("ticket bootstrap couples the fresh stock CSRF cookie/header and keeps owner-bound ticket server-side", async () => {

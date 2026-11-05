@@ -78,6 +78,7 @@ function database() {
   sqlite.exec(readFileSync("migrations/d1/0004_native_publish.sql", "utf8"));
   sqlite.exec(readFileSync("migrations/d1/0007_admin_account_status.sql", "utf8"));
   sqlite.exec(readFileSync("migrations/d1/0010_customer_experience.sql", "utf8"));
+  sqlite.exec(readFileSync("migrations/d1/0011_user_ai_credentials.sql", "utf8"));
   const db = {
     prepare(sql: string) {
       let args: unknown[] = [];
@@ -275,6 +276,19 @@ function runtime(options: { silentLogout?: boolean; gitFixture?: Awaited<ReturnT
         failures.expireNextTicket = false;
         wsTickets.set(ticket, { agentId: body.resourceId, owner: session.account.id, expiresAt });
         return Response.json({ success: true, data: { ticket } });
+      }
+      if (/^\/api\/agent\/[a-zA-Z0-9_-]+\/buildcustom-ai-config\/refresh$/.test(path) && request.method === "POST") {
+        const agentId = path.split("/")[3];
+        const agent = agents.get(agentId);
+        if (!session) return Response.json({ success: false }, { status: 401 });
+        if (!agent) return Response.json({ success: false }, { status: 404 });
+        if (agent.owner !== session.account.id) return Response.json({ success: false }, { status: 403 });
+        const csrf = freshCsrf.get(session.id);
+        if (!csrf || request.headers.get("X-CSRF-Token") !== csrf.token
+          || cookie.match(/(?:^|;\s*)csrf-token=([^;]+)/)?.[1] !== csrf.cookie) {
+          return Response.json({ success: false }, { status: 403 });
+        }
+        return Response.json({ success: true, data: { refreshed: true } });
       }
       if (/^\/api\/agent\/[a-zA-Z0-9_-]+\/ws$/.test(path)) {
         const agentId = path.split("/")[3];

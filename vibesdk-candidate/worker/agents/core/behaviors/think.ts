@@ -28,6 +28,8 @@ import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
 import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
+import { AI_MODEL_CONFIG, type AIModels } from '../../inferutils/config.types';
+import { readAiCredentialForRuntime } from '../../../../../shared/ai-credential-storage';
 import { getUnifiedBillingThinkModel, isUnifiedBillingEnabled } from '../../think/unified-billing';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
@@ -221,11 +223,20 @@ export class ThinkCodingBehavior
 		const inf = this.getInferenceContext();
 		const userId = this.state.metadata.userId;
 
-		const modelName = THINK_MODEL_ID;
-		const aiModelConfig = THINK_MODEL_CONFIG;
+		const buildCustomModelId = inf.runtimeOverrides?.buildCustomModelId;
+		const selectedModelConfig = buildCustomModelId
+			? AI_MODEL_CONFIG[buildCustomModelId as AIModels]
+			: undefined;
+		const modelName = selectedModelConfig && buildCustomModelId
+			? buildCustomModelId.slice(buildCustomModelId.indexOf("/") + 1)
+			: THINK_MODEL_ID;
+		const aiModelConfig = selectedModelConfig || THINK_MODEL_CONFIG;
+		const hasBuildCustomByokKey = Boolean(
+			selectedModelConfig && inf.runtimeOverrides?.userApiKeys?.[selectedModelConfig.provider],
+		);
 
 		let conf: { baseURL: string; apiKey: string; defaultHeaders?: Record<string, string> };
-		if (isUnifiedBillingEnabled(this.env as unknown as { BUILDCUSTOM_UNIFIED_BILLING?: string })) {
+		if (!hasBuildCustomByokKey && isUnifiedBillingEnabled(this.env as unknown as { BUILDCUSTOM_UNIFIED_BILLING?: string })) {
 			// This explicit staging path intentionally bypasses model configuration:
 			// no Google key or stored AI Gateway credentials may enter the request.
 			const config: ThinkAgentConfig = {
@@ -298,6 +309,8 @@ export class ThinkCodingBehavior
 				contextSize: aiModelConfig.contextSize,
 				headers: Object.keys(headers).length > 0 ? headers : undefined,
 				useStoredKeys: usesStoredKeys,
+				encryptApiKey: hasBuildCustomByokKey,
+				usesCustomerKey: hasBuildCustomByokKey,
 			},
 			systemPrompt: this.buildSystemPrompt(modelName, aiModelConfig.provider),
 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
@@ -307,8 +320,32 @@ export class ThinkCodingBehavior
 			const stub = await this.getThinkStub();
 			await stub.configureVibe(config);
 		} catch (e) {
+			if (hasBuildCustomByokKey) {
+				throw new Error("Could not securely apply the saved AI provider key.");
+			}
 			this.logger.warn('ThinkAgent.configureVibe failed (continuing)', e);
 		}
+	}
+
+	async refreshBuildCustomAIConfig(): Promise<void> {
+		const runtimeEnv = this.env as unknown as {
+			BUILDCUSTOM_PRODUCT_DB?: D1Database;
+			BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string;
+		};
+		const userId = this.state.metadata.userId;
+		let credential: Awaited<ReturnType<typeof readAiCredentialForRuntime>> = null;
+		if (runtimeEnv.BUILDCUSTOM_PRODUCT_DB) {
+			credential = await readAiCredentialForRuntime(
+				runtimeEnv.BUILDCUSTOM_PRODUCT_DB,
+				runtimeEnv.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET,
+				userId,
+			);
+		}
+		this.setRuntimeOverrides(credential ? {
+			buildCustomModelId: credential.modelId,
+			userApiKeys: { [credential.provider]: credential.apiKey },
+		} : undefined);
+		await this.configureThinkAgent();
 	}
 
 	/**

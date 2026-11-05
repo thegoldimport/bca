@@ -30,6 +30,11 @@ export function setupCodegenRoutes(app: Hono<AppEnv>): void {
     // Connect to existing agent for editing - OWNER ONLY
     // Only the app owner should be able to connect for editing purposes
     app.get('/api/agent/:agentId/connect', setAuthLevel(AuthConfig.ownerOnly), adaptController(CodingAgentController, CodingAgentController.connectToExistingAgent));
+    app.post(
+        '/api/agent/:agentId/buildcustom-ai-config/refresh',
+        setAuthLevel(AuthConfig.ownerOnly),
+        adaptController(CodingAgentController, CodingAgentController.refreshBuildCustomAIConfig),
+    );
 
     // Deploy an ephemeral SANDBOX preview. Intentionally `authenticated` (not
     // `ownerOnly`): public-app previews must be viewer-triggerable, while

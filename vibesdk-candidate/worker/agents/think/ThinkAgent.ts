@@ -26,6 +26,7 @@ import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { THINK_MODEL_CONFIG } from './model-config';
+import { decryptAiCredential, protectAiCredentialForStorage } from '../../../../shared/ai-credential-crypto';
 
 /**
  * Per-instance configuration pushed into a {@link ThinkAgent} by the host
@@ -48,6 +49,10 @@ export interface ThinkAgentConfig {
 		modelName: string;
 		contextSize?: number;
 		headers?: Record<string, string>;
+/** Set only when the provider key belongs to a BuildCustom customer. */
+encryptApiKey?: boolean;
+/** Encrypted customer credential; never persisted in plaintext. */
+encryptedApiKey?: string;
 		/**
 		 * When true, the AI Gateway holds the provider keys (BYOK / stored
 		 * keys). In that mode the request must carry only `cf-aig-authorization`
@@ -56,6 +61,8 @@ export interface ThinkAgentConfig {
 		 * rejects it. `getModel()` strips `Authorization` when this is set.
 		 */
 		useStoredKeys?: boolean;
+/** Customer-supplied provider keys are billed by that provider, not platform credits. */
+usesCustomerKey?: boolean;
 	};
 	/** Builder system prompt (assembled host-side; falls back to a default). */
 	systemPrompt?: string;
@@ -234,6 +241,12 @@ export class ThinkAgent extends Think<Env> {
 		// drops them, which Gemini 3 rejects with `400 INVALID_ARGUMENT`).
 		const gatewayFetch: typeof fetch = async (input, init) => {
 			const headers = new Headers(init?.headers);
+if (model.encryptedApiKey) {
+const secret = (this.env as unknown as { BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string }).BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET;
+if (!secret) throw new Error('The saved AI provider key is unavailable.');
+const apiKey = await decryptAiCredential(secret, model.encryptedApiKey);
+headers.set('authorization', `Bearer ${apiKey}`);
+}
 			if (model.useStoredKeys) headers.delete('authorization');
 			let body = init?.body;
 			if (typeof body === 'string') body = this.injectThoughtSignatures(body);
@@ -361,7 +374,7 @@ export class ThinkAgent extends Think<Env> {
 	 */
 	override async beforeStep(ctx: PrepareStepContext): Promise<StepConfig | void> {
 		const config = this.getConfig<ThinkAgentConfig>();
-		if (this.turnUsage && config) {
+		if (this.turnUsage && config && !config.model.usesCustomerKey) {
 			await RateLimitService.enforceLLMCallsRateLimit(
 				this.env,
 				this.turnUsage.config,
@@ -398,7 +411,19 @@ export class ThinkAgent extends Think<Env> {
 	 * any stale cached value.
 	 */
 	async configureVibe(config: ThinkAgentConfig): Promise<void> {
-		this.configure<ThinkAgentConfig>(config);
+		const storedConfig: ThinkAgentConfig = {
+			...config,
+			model: { ...config.model },
+		};
+		if (storedConfig.model.encryptApiKey) {
+			const secret = (this.env as unknown as { BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string }).BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET;
+			if (!secret) throw new Error('AI credential encryption is unavailable.');
+			const protectedKey = await protectAiCredentialForStorage(secret, storedConfig.model.apiKey);
+			storedConfig.model.encryptedApiKey = protectedKey.encryptedApiKey;
+			storedConfig.model.apiKey = protectedKey.apiKey;
+			delete storedConfig.model.encryptApiKey;
+		}
+		this.configure<ThinkAgentConfig>(storedConfig);
 		try {
 			await this.session?.refreshSystemPrompt();
 		} catch {

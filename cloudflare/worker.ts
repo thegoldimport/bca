@@ -8,6 +8,7 @@ import { handleLaunchAdminRoute } from "./launch-admin-routes";
 import { handleCustomerSupportAccessRoute } from "./support-access-routes";
 import { handleCustomerSupportTicketRoute } from "./support-ticket-routes";
 import { handleBuilderPlanningRoute } from "./planning-routes";
+import { handleAiCredentialRoute } from "./ai-credential-routes";
 import { handleContentRoute } from "./content-routes";
 import { handleDomainRoute } from "./domain-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
@@ -33,6 +34,7 @@ export type Env = {
   STAGING_RUNTIME_URL: string;
   VIBESDK_RUNTIME_URL?: string;
   VIBESDK_API_KEY?: string;
+  BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string;
   VIBESDK_RUNTIME: Fetcher;
   AUTH_RUNTIME?: Fetcher;
   PREVIEW_VALIDATOR?: PreviewValidatorBinding;
@@ -294,6 +296,10 @@ export default {
       }
       if (runtimeCustomer && user.account_status === "suspended") {
         return json({ message: "Account access is suspended." }, { status: 403 });
+      }
+      if (runtimeCustomer && url.pathname === "/api/ai-credentials") {
+        const aiCredentialResponse = await handleAiCredentialRoute(env, request, url.pathname, input, user);
+        if (aiCredentialResponse) return aiCredentialResponse;
       }
       if (url.pathname === "/api/auth/profile" && request.method === "PUT") {
         if (launchCustomer) {
