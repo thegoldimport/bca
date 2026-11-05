@@ -67,4 +67,3 @@ export async function handleBuilderPlanningRoute(args: {
   }
   return json({ success: true });
 }
-

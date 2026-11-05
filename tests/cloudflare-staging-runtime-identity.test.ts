@@ -426,14 +426,14 @@ async function withMockSocketPlatform<T>(
   }
 }
 
-function browser(env: Env) {
+function browser(env: Env, baseOrigin = origin) {
   const jar = new Map<string, string>();
   const send = async (path: string, method = "GET", body?: Record<string, unknown>, headers: Record<string, string> = {}) => {
-    const request = new Request(`${origin}${path}`, {
+    const request = new Request(`${baseOrigin}${path}`, {
       method,
       headers: {
         ...(jar.size ? { Cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; ") } : {}),
-        ...(method !== "GET" ? { Origin: origin, "Content-Type": "application/json" } : {}),
+        ...(method !== "GET" ? { Origin: baseOrigin, "Content-Type": "application/json" } : {}),
         ...headers,
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -565,7 +565,7 @@ test("two runtime users have one verified session each and isolated BuildCustom 
     AUTH_RUNTIME: stock.fetcher,
     AUTH_RUNTIME_URL: "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev",
     STAGING_RUNTIME_URL: "https://buildcustom-vibesdk-migration-staging.thegoldimport.workers.dev",
-    STAGING_ROUTE_KV_ID: "e5e119fa2abc4c26a8c027e0d8a8d82c",
+    STAGING_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
     STAGING_DISPATCH_NAMESPACE: "buildcustom-vibesdk-migration-staging",
     STAGING_ALLOWED_ORIGIN: origin,
     STAGING_REGISTRATION_ENABLED: "true",
@@ -616,6 +616,10 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal(projectA.runtimeStatus, "ready");
   assert.equal(projectB.runtimeStatus, "ready");
   assert.notEqual(projectA.agentId, projectB.agentId);
+  const ownPlanning = await a.send(`/api/projects/${projectA.id}/planning`);
+  assert.equal(ownPlanning.status, 200);
+  assert.deepEqual(await ownPlanning.json(), { session: null });
+  assert.equal((await a.send(`/api/projects/${projectB.id}/planning`)).status, 404);
   assert.equal(stock.agents.get(projectA.agentId)?.owner, aMe.id);
   assert.equal(stock.agents.get(projectB.agentId)?.owner, bMe.id);
   assert.equal(sqlite.prepare("SELECT agent_id,runtime_provider FROM runtime_project_links WHERE project_id=?").get(projectA.id)?.agent_id, projectA.agentId);
@@ -907,24 +911,37 @@ test("two runtime users have one verified session each and isolated BuildCustom 
 test("launch profile updates only the customer display name and preserves account identity and role", async () => {
   const { sqlite, db } = database();
   const stock = runtime();
+  const appOrigin = "https://app.buildcustom.ai";
   const env = {
     DB: db,
     ENVIRONMENT: "production",
     CONTROL_PLANE_PROFILE: "launch",
-    CONTROL_PLANE_ALLOWED_ORIGIN: origin,
+    CONTROL_PLANE_ALLOWED_ORIGIN: appOrigin,
+    STAGING_ALLOWED_ORIGIN: appOrigin,
+    CONTROL_PLANE_CANARY_ORIGIN: "https://buildcustom-control-plane-launch.thegoldimport.workers.dev",
     AUTH_RUNTIME: stock.fetcher,
-    AUTH_RUNTIME_URL: "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev",
+    AUTH_RUNTIME_URL: "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+    VIBESDK_RUNTIME: {} as Fetcher,
+    VIBESDK_RUNTIME_URL: "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+    STAGING_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+    CONTROL_PLANE_ROUTE_KV_ID: "248ac5b6821a475794a7fe3d2b0c3718",
+    STAGING_DISPATCH_NAMESPACE: "buildcustom-vibesdk-launch-dispatch",
+    CONTROL_PLANE_DISPATCH_NAMESPACE: "buildcustom-vibesdk-launch-dispatch",
+    STAGING_MANAGED_GATEWAY_URL: "https://buildcustom-apps-gateway-launch.thegoldimport.workers.dev/p",
+    STAGING_GATEWAY: {},
+    STAGING_LOGIN_ENABLED: "true",
     PUBLIC_GENERATED_APPS_ENABLED: "false",
     STAGING_REGISTRATION_ENABLED: "true",
-    RUNTIME_OPERATIONS_ENABLED: "false",
+    RUNTIME_OPERATIONS_ENABLED: "true",
   } as Env;
-  const customer = browser(env);
+  const customer = browser(env, appOrigin);
   try {
-    assert.equal((await customer.auth("/api/auth/register", {
+    const registration = await customer.auth("/api/auth/register", {
       name: "Original Name",
       email: "profile@example.test",
       password: "Str0ng!PasswordP",
-    })).status, 201);
+    });
+    assert.equal(registration.status, 201, await registration.clone().text());
     assert.equal((await customer.auth("/api/auth/verify-email", {
       token: stock.verificationToken("profile@example.test"),
     })).status, 200);
@@ -948,11 +965,9 @@ test("launch profile updates only the customer display name and preserves accoun
 
     const stored = sqlite.prepare("SELECT profile_name,email,role FROM users WHERE email=?")
       .get("profile@example.test") as { profile_name: string; email: string; role: string };
-    assert.deepEqual(stored, {
-      profile_name: "Updated Display Name",
-      email: "profile@example.test",
-      role: "user",
-    });
+    assert.equal(stored.profile_name, "Updated Display Name");
+    assert.equal(stored.email, "profile@example.test");
+    assert.equal(stored.role, "user");
   } finally {
     sqlite.close();
   }

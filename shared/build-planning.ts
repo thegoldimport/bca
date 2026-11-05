@@ -389,4 +389,3 @@ export function isValidPlanningSession(value: unknown): value is PlanningSession
   }
   return true;
 }
-

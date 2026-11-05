@@ -236,6 +236,10 @@ export function BuildActivityTimeline(props: {
   );
   const elapsed = hasStarted ? Math.max(0, now - (props.startedAt as number)) : null;
   const border = dark ? "border-white/10" : "border-[#d9e6e2]";
+  const compactTitle = props.phase === "running" ? "Working" : phaseLabel[props.phase] || "Build activity";
+  const compactMessage = props.phase === "running" && latestEvent
+    ? latestEvent.label
+    : props.message || phaseLabel[props.phase];
 
   return (
     <section className={`overflow-hidden rounded-2xl border ${border} ${dark ? "bg-[#121a1e]" : "bg-[#f8fbfa]"}`}>
@@ -254,9 +258,9 @@ export function BuildActivityTimeline(props: {
           {props.phase === "error" ? <AlertCircle size={16} /> : <Radio size={16} />}
         </span>
         <span className="min-w-0 flex-1">
-          <span className={`block text-sm font-semibold ${dark ? "text-white/90" : "text-[#213a35]"}`}>Build activity</span>
+          <span className={`block text-sm font-semibold ${dark ? "text-white/90" : "text-[#213a35]"}`}>{compactTitle}</span>
           <span className={`mt-0.5 block truncate text-xs ${dark ? "text-white/45" : "text-[#718983]"}`}>
-            {props.message || phaseLabel[props.phase]}
+            {compactMessage}
           </span>
         </span>
         <span className={`hidden shrink-0 items-center gap-1.5 text-[11px] sm:flex ${dark ? "text-white/45" : "text-[#718983]"}`}>

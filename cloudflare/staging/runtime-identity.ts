@@ -418,7 +418,7 @@ export async function handleStagingCustomerAuth(
     return new Response(null, { status: 204, headers });
   }
 
-  if (pathname.startsWith("/api/auth/")) {
+  if (pathname.startsWith("/api/auth/") && pathname !== "/api/auth/profile") {
     return Response.json({ message: "This account setting is not available yet." }, { status: 404 });
   }
   return null;

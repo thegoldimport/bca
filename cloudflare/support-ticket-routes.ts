@@ -164,7 +164,6 @@ export async function handleCustomerSupportTicketRoute(args: {
 
   return json({ message: "Not found" }, 404);
 }
-
 async function adminTicket(env: SupportEnv, ticketId: string) {
   return env.DB.prepare(
     `SELECT t.id,t.customer_user_id,t.category,t.subject,t.status,t.project_id,
@@ -304,4 +303,3 @@ export async function handleAdminSupportTicketRoute(args: {
 
   return json({ message: "Not found" }, 404);
 }
-

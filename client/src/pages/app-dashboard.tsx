@@ -897,22 +897,6 @@ function NativeBuildActivity({
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
-  const isActive = ["starting", "running", "recovering", "stopping"].includes(phase);
-  const statusQuery = useQuery({
-    queryKey: ["runtime-status", projectId, "native-activity"],
-    enabled: !!projectId,
-    refetchInterval: isActive ? 5_000 : false,
-    queryFn: async () => {
-      const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
-        credentials: "same-origin",
-        headers: authHeaders(),
-        cache: "no-store",
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Runtime status unavailable.");
-      return data;
-    },
-  });
 
   const openFile = async (path: string) => {
     setSelectedFile(path);
@@ -937,9 +921,7 @@ function NativeBuildActivity({
     <BuildActivityTimeline
       theme={theme}
       phase={phase}
-      message={message || (statusQuery.isError
-        ? "A runtime status check failed. The latest build state is not confirmed."
-        : phase === "idle" ? "Ready when you are." : "Waiting for runtime activity.")}
+      message={message || (phase === "idle" ? "Ready when you are." : "Waiting for runtime activity.")}
       startedAt={startedAt}
       events={events}
       connectionState={connectionState}
@@ -2484,6 +2466,7 @@ function EditorPage() {
           return false;
         }
         if (customerStatus !== "CONTINUE_AVAILABLE" && customerStatus !== "NEEDS_INPUT" && customerStatus !== "STOPPED") return false;
+        if (customerStatus === "STOPPED") stopConfirmedRef.current = true;
         setRuntimeCapability({ projectId, nativeThink: true, status: runtimeStatus });
         setNativeCompletionPhase(customerStatus === "CONTINUE_AVAILABLE" ? "paused"
           : customerStatus === "NEEDS_INPUT" ? "needs_input" : "error");
@@ -2960,6 +2943,7 @@ function EditorPage() {
         if (streamedTaskLifecycle?.customerStatus === "CONTINUE_AVAILABLE"
           || streamedTaskLifecycle?.customerStatus === "NEEDS_INPUT"
           || customerLifecycleStatus(streamedTaskLifecycle) === "STOPPED") {
+          if (customerLifecycleStatus(streamedTaskLifecycle) === "STOPPED") stopConfirmedRef.current = true;
           if (settleCustomerBoundary({ nativeTaskLifecycle: streamedTaskLifecycle })) return;
         }
         const streamedResourceLimit = nativeResourceLimitError({
@@ -3122,7 +3106,7 @@ function EditorPage() {
                 ? "The AI provider reported a payment or credit limit. The build result is not confirmed."
                 : statusCode === 429
                   ? "The AI provider is rate-limiting this request. Wait before trying again."
-                  : "The runtime reported an error. Check the activity and current project before retrying.";
+                  : "This build stopped before completion. The runtime reported an error; check the activity and project before retrying.";
             recordNativeProgress(message, "error");
             failTurn(message);
             return;
@@ -3485,6 +3469,7 @@ function EditorPage() {
         ? `\n\nApproved implementation plan from Plan mode:\n${pendingPlan}\n\nFollow this approved plan while applying the user's request.`
         : "";
       const conversationUiInstruction = nativeThink
+        && (turns.length === 0 || planningSessionRef.current !== null)
         ? "\n\nBuildCustom chat behavior: If you need another detail, ask the customer directly in this chat and wait for their reply here. Do not refer to a question panel or any external panel. Do not claim completion until the runtime confirms it."
         : "";
       const promptBase = requestOptions.agentPromptOverride || prompt;
@@ -4040,7 +4025,9 @@ function EditorPage() {
                 nativeCompletionPhase === "success"
                   ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
                   : nativeCompletionPhase === "error"
-                    ? "border-red-400/30 bg-red-400/10 text-red-200"
+                    ? /paused before completion/i.test(nativeCompletionMessage)
+                      ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                      : "border-red-400/30 bg-red-400/10 text-red-200"
                     : nativeCompletionPhase === "paused" || nativeCompletionPhase === "needs_input"
                       ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
                       : "border-cyan-400/30 bg-cyan-400/10 text-cyan-200"
@@ -4050,8 +4037,10 @@ function EditorPage() {
                 : nativeCompletionPhase === "paused" ? "Continue available"
                   : nativeCompletionPhase === "needs_input" ? "Needs your input"
                     : nativeCompletionPhase === "error"
-                      ? stopConfirmedRef.current ? "Stopped" : nativeRecoveryUnverified ? "Status unverified" : "Needs attention"
-                      : nativeCompletionPhase === "starting" ? "Connecting…"
+                      ? stopConfirmedRef.current ? "Stopped"
+                        : nativeRecoveryUnverified ? "Status unverified"
+                          : /paused before completion/i.test(nativeCompletionMessage) ? "Paused" : "Needs attention"
+                      : nativeCompletionPhase === "starting" ? "Starting..."
                         : nativeCompletionPhase === "stopping" ? "Stopping…"
                           : nativeCompletionPhase === "recovering" ? "Checking status" : "Working"}
             </span>
@@ -4329,8 +4318,10 @@ function EditorPage() {
                 ? "clarifying"
                 : planningSession?.phase === "awaiting_approval"
                   ? "planning"
-                  : planningSession?.phase === "submitted" && nativeCompletionPhase === "idle"
+                    : planningSession?.phase === "submitted" && nativeCompletionPhase === "idle"
                     ? "recovering"
+                    : nativeCompletionPhase === "error" && /paused before completion/i.test(nativeCompletionMessage)
+                      ? "paused"
                     : nativeCompletionPhase === "idle" && sending ? "starting" : nativeCompletionPhase as BuilderPhase}
               message={planningSession?.phase === "submitted" && !nativeCompletionMessage
                 ? "A build request was sent. Checking the existing runtime state."
@@ -4494,7 +4485,7 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
+              disabled={!currentRuntimeCapability || !planningLoaded || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
               placeholder={!currentRuntimeCapability
                 ? "Checking project runtime…"
                 : planningSession?.phase === "clarifying"
@@ -4551,7 +4542,7 @@ function EditorPage() {
               ) : (
               <button
                 onClick={() => handleSend()}
-                disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
+                disabled={!currentRuntimeCapability || !planningLoaded || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
                 className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
                 data-testid="button-send-chat"
               >
@@ -5297,6 +5288,8 @@ function EditorPage() {
                         ? "planning"
                         : planningSession?.phase === "submitted" && nativeCompletionPhase === "idle"
                           ? "recovering"
+                          : nativeCompletionPhase === "error" && /paused before completion/i.test(nativeCompletionMessage)
+                            ? "paused"
                           : nativeThink
                             ? nativeCompletionPhase === "idle" && sending ? "starting" : nativeCompletionPhase as BuilderPhase
                             : sending ? "running" : "idle"}

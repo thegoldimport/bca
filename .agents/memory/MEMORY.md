@@ -84,3 +84,4 @@
 - [Gateway traffic evidence](gateway-traffic-evidence.md) — aggregate log totals can stay stale while new rows are readable; a count mismatch alone does not prove competing traffic.
 - [Wholesale production capacity](wholesale-production-capacity.md) — published Unified Billing caps do not explain every wholesale rejection; BYOK exemption is not unlimited capacity.
 - [Wouter deep-route wildcards](wouter-deep-route-wildcards.md) — use a standalone `*` segment for catch-alls; `:name*` still matches only one path segment.
+- [Inline builder questions](inline-builder-clarification.md) — keep clarifications and answers in the builder chat, never a separate question panel.

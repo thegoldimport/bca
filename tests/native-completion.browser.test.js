@@ -182,6 +182,9 @@ function installBrowserHarness(initialFixture) {
       return json({ id: "task3-disposable-owner", username: "T3", email: "task3@example.test", plan: "free", role: "user" });
     }
     if (url.pathname === "/api/auth/csrf-token") return json({ token: "browser-test-csrf" });
+    if (url.pathname.endsWith("/planning")) {
+      return json(method === "GET" ? { session: null } : { success: true });
+    }
     if (url.pathname.endsWith("/runtime/status")) {
       if (holdRuntimeStatus || delayNextStatus) {
         delayNextStatus = false;
@@ -1009,7 +1012,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         });
         await page.evaluate(async () => window.__nativeCompletionHarness.fastForward(31_000));
         await waitForState(page, "error");
-        assert.match(await page.$eval('[data-testid="native-completion-state"]', (node) => node.textContent || ""), /Stopped/i);
+        assert.match(await page.$eval('[data-testid="native-completion-state"]', (node) => node.textContent || ""), /Paused/i);
         assert.notEqual(await stateOf(page), "recovering", "the terminal task state ends recovery despite a stale host working flag");
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.disabled), true,
           "the explicit host working flag keeps input unavailable");

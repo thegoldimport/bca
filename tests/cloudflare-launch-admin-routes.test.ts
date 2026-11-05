@@ -66,10 +66,11 @@ function makeDb(options: {
           return null;
         },
         async all() {
-          if (sql.includes("SELECT u.id,COALESCE(u.display_name,u.username) AS name")) {
+          if (sql.includes("SELECT u.id,COALESCE(u.profile_name,u.display_name,u.username) AS name")
+            || sql.includes("SELECT u.id,COALESCE(u.display_name,u.username) AS name")) {
             return { results: options.customers || [] };
           }
-          if (sql.includes("COALESCE(u.display_name,u.username) AS owner_name")) {
+          if (sql.includes("SELECT p.id,p.user_id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at")) {
             return { results: options.adminProjects || [] };
           }
           if (sql.includes("SELECT id,name,type,status,framework,created_at,updated_at")) {

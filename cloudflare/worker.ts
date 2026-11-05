@@ -251,7 +251,7 @@ export default {
         }
         const response = await handleStagingCustomerAuth(env, request, url.pathname, input);
         if (response) return response;
-        if (launchCustomer && url.pathname.startsWith("/api/auth/")) {
+        if (launchCustomer && url.pathname.startsWith("/api/auth/") && url.pathname !== "/api/auth/profile") {
           return json({ message: "This account setting is not available yet." }, { status: 404 });
         }
       }

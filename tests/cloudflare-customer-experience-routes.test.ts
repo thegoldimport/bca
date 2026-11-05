@@ -6,6 +6,7 @@ import { handleLaunchAdminRoute } from "../cloudflare/launch-admin-routes";
 import { startBuildPlanning } from "../shared/build-planning";
 
 const origin = "https://app.buildcustom.ai";
+const launchRuntimeUrl = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
 const ownerTicketId = "00000000-0000-4000-8000-000000000001";
 
 type TestUser = {
@@ -132,6 +133,15 @@ function makeEnv(overrides: {
     async batch(statements: MockStatement[]) {
       for (const statement of statements) {
         state.writes.push(statement.sql);
+        if (statement.sql.includes("UPDATE support_tickets")) {
+          const ticketId = String(statement.params[statement.sql.includes("SET status=?") ? 1 : 0]);
+          const ticket = state.tickets.find((item) => item.id === ticketId);
+          if (ticket) {
+            if (statement.sql.includes("SET status=?")) ticket.status = statement.params[0];
+            else if (statement.sql.includes("SET status='waiting_for_customer'")) ticket.status = "waiting_for_customer";
+            else if (statement.sql.includes("SET status=CASE")) ticket.status = ticket.status === "resolved" ? "open" : ticket.status;
+          }
+        }
         if (statement.sql.includes("INSERT INTO support_tickets")) {
           const [id, customer_user_id, project_id, category, subject] = statement.params;
           state.tickets.unshift({
@@ -153,7 +163,7 @@ function makeEnv(overrides: {
     ENVIRONMENT: "production",
     CONTROL_PLANE_PROFILE: "launch",
     CONTROL_PLANE_ALLOWED_ORIGIN: origin,
-    AUTH_RUNTIME_URL: "https://auth.example.test",
+    AUTH_RUNTIME_URL: launchRuntimeUrl,
     AUTH_RUNTIME: {
       async fetch(request: Request) {
         const hasSession = Boolean(request.headers.get("Cookie")?.includes("accessToken="));
@@ -253,6 +263,36 @@ test("customer tickets and replies are isolated by account and protected by CSRF
   });
   assert.equal(hidden?.status, 404);
 
+  const hiddenReply = await handleCustomerSupportTicketRoute({
+    env,
+    request: makeRequest(`/api/support/tickets/${ownerTicketId}/replies`, {
+      method: "POST",
+      actorId: "customer-2",
+      csrf: true,
+      body: { body: "This reply must remain private." },
+    }),
+    url: new URL(`${origin}/api/support/tickets/${ownerTicketId}/replies`),
+    input: { body: "This reply must remain private." },
+    allowedOrigin: origin,
+  });
+  assert.equal(hiddenReply?.status, 404);
+
+  const customer = makeEnv({ actorId: "customer-1" });
+  const reply = await handleCustomerSupportTicketRoute({
+    env: customer.env,
+    request: makeRequest(`/api/support/tickets/${ownerTicketId}/replies`, {
+      method: "POST",
+      actorId: "customer-1",
+      csrf: true,
+      body: { body: "Here is a little more detail." },
+    }),
+    url: new URL(`${origin}/api/support/tickets/${ownerTicketId}/replies`),
+    input: { body: "Here is a little more detail." },
+    allowedOrigin: origin,
+  });
+  assert.equal(reply?.status, 201);
+  assert.equal(customer.state.audits.length, 1);
+
   const noCsrf = await handleCustomerSupportTicketRoute({
     env,
     request: makeRequest("/api/support/tickets", {
@@ -318,6 +358,51 @@ test("admin ticket APIs require super-admin authorization and never return sourc
   for (const secret of ["password", "session_token", "api_key", "source_code", "source_files"]) {
     assert.equal(serialized.includes(secret), false);
   }
+
+  const detailRequest = makeRequest(`/api/admin/support/tickets/${ownerTicketId}`, { actorId: "admin-1" });
+  const detail = await handleLaunchAdminRoute({
+    request: detailRequest,
+    env: admin.env,
+    url: new URL(detailRequest.url),
+    input: {},
+  });
+  assert.equal(detail?.status, 200);
+  const detailBody = await detail?.json() as { ticket: Record<string, unknown>; messages: unknown[] };
+  assert.equal(detailBody.ticket.projectDiagnosticsAvailable, false);
+  assert.equal(detailBody.messages.length, 1);
+  assert.equal(JSON.stringify(detailBody).includes("PRIVATE_SOURCE_CODE"), false);
+
+  const replyPath = `/api/admin/support/tickets/${ownerTicketId}/replies`;
+  const replyRequest = makeRequest(replyPath, {
+    method: "POST",
+    actorId: "admin-1",
+    csrf: true,
+    body: { body: "BuildCustom Support reply." },
+  });
+  const adminReply = await handleLaunchAdminRoute({
+    request: replyRequest,
+    env: admin.env,
+    url: new URL(replyRequest.url),
+    input: { body: "BuildCustom Support reply." },
+  });
+  assert.equal(adminReply?.status, 201);
+
+  const statusPath = `/api/admin/support/tickets/${ownerTicketId}/status`;
+  const statusRequest = makeRequest(statusPath, {
+    method: "PATCH",
+    actorId: "admin-1",
+    csrf: true,
+    body: { status: "resolved" },
+  });
+  const statusChange = await handleLaunchAdminRoute({
+    request: statusRequest,
+    env: admin.env,
+    url: new URL(statusRequest.url),
+    input: { status: "resolved" },
+  });
+  assert.equal(statusChange?.status, 200);
+  assert.equal(admin.state.tickets[0].status, "resolved");
+  assert.equal(admin.state.audits.length, 2);
 });
 
 test("planning sessions are project-bound, CSRF-protected, and validated", async () => {
