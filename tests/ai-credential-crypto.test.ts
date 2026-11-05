@@ -4,7 +4,7 @@ import {
   decryptAiCredential,
   encryptAiCredential,
   protectAiCredentialForStorage,
-} from "../shared/ai-credential-crypto";
+} from "../vibesdk-candidate/shared/ai-credential-crypto";
 
 const secret = "test-only-encryption-secret-never-used-in-production";
 const fakeKeyForStorageTest = "fake-provider-key-for-think-storage";

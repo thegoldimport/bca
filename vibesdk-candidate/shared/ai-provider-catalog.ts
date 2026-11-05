@@ -1,4 +1,4 @@
-import { AI_MODEL_CONFIG } from "../vibesdk-candidate/worker/agents/inferutils/config.types";
+import { AI_MODEL_CONFIG } from "../worker/agents/inferutils/config.types";
 
 const PROVIDER_LABELS: Record<string, string> = {
   "google-ai-studio": "Google AI Studio",

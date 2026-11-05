@@ -26,7 +26,7 @@ import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { THINK_MODEL_CONFIG } from './model-config';
-import { decryptAiCredential, protectAiCredentialForStorage } from '../../../../shared/ai-credential-crypto';
+import { decryptAiCredential, protectAiCredentialForStorage } from '../../../shared/ai-credential-crypto';
 
 /**
  * Per-instance configuration pushed into a {@link ThinkAgent} by the host

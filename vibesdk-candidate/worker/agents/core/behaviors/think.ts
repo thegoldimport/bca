@@ -32,7 +32,7 @@ import { AI_MODEL_CONFIG, type AIModels } from '../../inferutils/config.types';
 import {
 	readAiCredentialForRuntime,
 	shouldUseStoredProviderKeys,
-} from '../../../../../shared/ai-credential-storage';
+} from '../../../../shared/ai-credential-storage';
 import { getUnifiedBillingThinkModel, isUnifiedBillingEnabled } from '../../think/unified-billing';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';

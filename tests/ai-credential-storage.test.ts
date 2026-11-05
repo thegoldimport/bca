@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { encryptAiCredential } from "../shared/ai-credential-crypto";
+import { encryptAiCredential } from "../vibesdk-candidate/shared/ai-credential-crypto";
 import {
   readAiCredentialForRuntime,
   shouldUseStoredProviderKeys,
-} from "../shared/ai-credential-storage";
+} from "../vibesdk-candidate/shared/ai-credential-storage";
 
 const secret = "test-only-ai-credential-secret-never-use-in-production";
 const providerKey = "fake-provider-key-for-isolation-test";

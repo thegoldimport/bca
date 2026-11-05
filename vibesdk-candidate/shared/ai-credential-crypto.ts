@@ -15,7 +15,11 @@ function toBase64(bytes: Uint8Array): string {
 
 function fromBase64(value: string): Uint8Array {
   const binary = atob(value);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 async function deriveKey(secret: string): Promise<CryptoKey> {
@@ -66,7 +70,7 @@ export async function decryptAiCredential(secret: string, envelope: string): Pro
       await deriveKey(secret),
       fromBase64(encodedCiphertext),
     );
-    return new TextDecoder("utf-8", { fatal: true }).decode(plaintext);
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(plaintext);
   } catch {
     throw new Error("AI credential could not be decrypted.");
   }

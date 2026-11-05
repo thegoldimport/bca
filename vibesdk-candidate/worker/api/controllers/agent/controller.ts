@@ -16,7 +16,7 @@ import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
 import { AppService, ModelConfigService } from '../../../database';
 import { ModelConfig, credentialsToRuntimeOverrides } from '../../../agents/inferutils/config.types';
-import { readAiCredentialForRuntime } from '../../../../../shared/ai-credential-storage';
+import { readAiCredentialForRuntime } from '../../../../shared/ai-credential-storage';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { validateWebSocketOrigin } from '../../../middleware/security/websocket';
 import { createLogger } from '../../../logger';

@@ -1,5 +1,5 @@
-import { encryptAiCredential } from "../shared/ai-credential-crypto";
-import { AI_MODEL_OPTIONS, getSupportedAiModel } from "../shared/ai-provider-catalog";
+import { encryptAiCredential } from "../vibesdk-candidate/shared/ai-credential-crypto";
+import { AI_MODEL_OPTIONS, getSupportedAiModel } from "../vibesdk-candidate/shared/ai-provider-catalog";
 import { hasValidCsrfToken } from "./staging/auth";
 import { stockThinkRequest } from "./staging/think-runtime";
 
