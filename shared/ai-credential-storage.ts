@@ -16,6 +16,10 @@ type AiCredentialDatabase = {
   };
 };
 
+export function shouldUseStoredProviderKeys(hasCustomerKey: boolean, hasGatewayAuthorization: boolean): boolean {
+  return !hasCustomerKey && !hasGatewayAuthorization;
+}
+
 export async function readAiCredentialForRuntime(
   db: AiCredentialDatabase,
   secret: string | undefined,

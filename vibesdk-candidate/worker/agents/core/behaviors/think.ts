@@ -29,7 +29,10 @@ import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
 import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
 import { AI_MODEL_CONFIG, type AIModels } from '../../inferutils/config.types';
-import { readAiCredentialForRuntime } from '../../../../../shared/ai-credential-storage';
+import {
+	readAiCredentialForRuntime,
+	shouldUseStoredProviderKeys,
+} from '../../../../../shared/ai-credential-storage';
 import { getUnifiedBillingThinkModel, isUnifiedBillingEnabled } from '../../think/unified-billing';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
@@ -281,7 +284,10 @@ export class ThinkCodingBehavior
 			CLOUDFLARE_API_TOKEN?: string;
 		};
 		const gatewayToken = tokenEnv.CLOUDFLARE_AI_GATEWAY_TOKEN || tokenEnv.CLOUDFLARE_API_TOKEN;
-		const usesStoredKeys = !conf.defaultHeaders?.['cf-aig-authorization'];
+		const usesStoredKeys = shouldUseStoredProviderKeys(
+			hasBuildCustomByokKey,
+			Boolean(conf.defaultHeaders?.['cf-aig-authorization']),
+		);
 		const headers: Record<string, string> = { ...(conf.defaultHeaders ?? {}) };
 		if (gatewayToken && !headers['cf-aig-authorization']) {
 			headers['cf-aig-authorization'] = `Bearer ${gatewayToken}`;

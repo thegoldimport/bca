@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { encryptAiCredential } from "../shared/ai-credential-crypto";
-import { readAiCredentialForRuntime } from "../shared/ai-credential-storage";
+import {
+  readAiCredentialForRuntime,
+  shouldUseStoredProviderKeys,
+} from "../shared/ai-credential-storage";
 
 const secret = "test-only-ai-credential-secret-never-use-in-production";
 const providerKey = "fake-provider-key-for-isolation-test";
@@ -59,4 +62,11 @@ test("managed tombstones and invalid provider records do not activate a key", as
     encrypted_api_key: "v1.unused",
   });
   await assert.rejects(readAiCredentialForRuntime(mismatched, secret, "owner-a"), /settings are invalid/);
+});
+
+test("customer-owned provider keys are never replaced by the gateway's stored-key mode", () => {
+  assert.equal(shouldUseStoredProviderKeys(true, false), false);
+  assert.equal(shouldUseStoredProviderKeys(true, true), false);
+  assert.equal(shouldUseStoredProviderKeys(false, true), false);
+  assert.equal(shouldUseStoredProviderKeys(false, false), true);
 });
