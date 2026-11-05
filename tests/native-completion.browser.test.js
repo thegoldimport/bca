@@ -69,6 +69,7 @@ function fixture({
   rejectHandshakes = 0,
   closeAcceptedSockets = 0,
   accelerateSocketRetries = false,
+  hangPlanning = false,
 } = {}) {
   return {
     projectId: PROJECT_ID,
@@ -80,6 +81,7 @@ function fixture({
     rejectHandshakes,
     closeAcceptedSockets,
     accelerateSocketRetries,
+    hangPlanning,
     currentRevision: changed ? EDITED : BASELINE,
     shouldBeGenerating: active,
     generationStatus: active ? "running" : "idle",
@@ -183,6 +185,14 @@ function installBrowserHarness(initialFixture) {
     }
     if (url.pathname === "/api/auth/csrf-token") return json({ token: "browser-test-csrf" });
     if (url.pathname.endsWith("/planning")) {
+      if (state.hangPlanning) {
+        await new Promise((resolve, reject) => {
+          const signal = init.signal;
+          const onAbort = () => reject(new DOMException("Planning request aborted", "AbortError"));
+          if (signal?.aborted) onAbort();
+          else signal?.addEventListener("abort", onAbort, { once: true });
+        });
+      }
       return json(method === "GET" ? { session: null } : { success: true });
     }
     if (url.pathname.endsWith("/runtime/status")) {
@@ -654,6 +664,29 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       executablePath: browserExecutablePath,
       headless: true,
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+
+    await t.test("chat stays editable and can send when saved planning restoration stalls", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({ hangPlanning: true }));
+      try {
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .some((entry) => entry.path.endsWith("/planning") && entry.method === "GET"), { timeout: 10_000 });
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.disabled), false);
+        await page.waitForSelector('[data-testid="planning-load-status"]', { timeout: 3_000 });
+        await page.type('[data-testid="input-editor-chat"]', "I want to reach small clinics and book qualified consultations.");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value),
+          "I want to reach small clinics and book qualified consultations.");
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true);
+
+        await page.waitForSelector('[data-testid="planning-load-error"]', { timeout: 8_000 });
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), false);
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value),
+          "I want to reach small clinics and book qualified consultations.");
+        await page.click('[data-testid="button-send-chat"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+      } finally {
+        await page.close();
+      }
     });
 
     await t.test("normal generation_complete reaches success and reconciles current files, preview, and conversation", async () => {

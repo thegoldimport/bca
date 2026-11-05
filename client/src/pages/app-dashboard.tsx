@@ -949,6 +949,7 @@ const NATIVE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
 const NATIVE_STREAM_QUIET_MS = 30_000;
 const NATIVE_REVISION_STABILITY_MS = 5_000;
 const NATIVE_RECOVERY_POLL_MS = 5_000;
+const BUILDER_PLANNING_LOAD_TIMEOUT_MS = 5_000;
 
 function nativeResourceLimitError(runtimeStatus: any, operationStartedAt?: number): string | null {
   const lifecycle = runtimeStatus?.nativeTaskLifecycle as NativeTaskLifecycle | undefined;
@@ -1221,6 +1222,8 @@ function EditorPage() {
   ));
   const [planningSession, setPlanningSession] = useState<PlanningSession | null>(null);
   const [planningLoaded, setPlanningLoaded] = useState(false);
+  const [planningLoadError, setPlanningLoadError] = useState("");
+  const [planningReloadKey, setPlanningReloadKey] = useState(0);
   const [planningSaving, setPlanningSaving] = useState(false);
   const [selectedClarificationOptions, setSelectedClarificationOptions] = useState<string[]>([]);
   const [selectedActivityFile, setSelectedActivityFile] = useState<string | null>(null);
@@ -1898,35 +1901,48 @@ function EditorPage() {
     if (!projectId || currentRuntimeCapability?.projectId !== projectId) return;
     const sequence = ++planningLoadSequenceRef.current;
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), BUILDER_PLANNING_LOAD_TIMEOUT_MS);
     setPlanningLoaded(false);
+    setPlanningLoadError("");
     const loadPlanningSession = async () => {
       try {
         const response = await fetch(`/api/projects/${projectId}/planning`, {
           credentials: "same-origin",
           headers: authHeaders(),
           cache: "no-store",
+          signal: controller.signal,
         });
-        if (response.status === 404) return;
+        if (response.status === 404) {
+          setPlanningLoadError("");
+          return;
+        }
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.message || "Saved planning could not be restored.");
         if (cancelled || sequence !== planningLoadSequenceRef.current) return;
+        setPlanningLoadError("");
         if (data.session !== null && data.session !== undefined) {
           if (!isValidPlanningSession(data.session)) throw new Error("Saved planning data is invalid.");
           updatePlanningSession(data.session);
         } else {
           updatePlanningSession(null);
         }
-      } catch (error) {
+      } catch {
         if (!cancelled && sequence === planningLoadSequenceRef.current) {
-          setRuntimeError(error instanceof Error ? error.message : "Saved planning could not be restored.");
+          setPlanningLoadError("Saved planning could not be restored. You can still reply in this chat.");
         }
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled && sequence === planningLoadSequenceRef.current) setPlanningLoaded(true);
       }
     };
     void loadPlanningSession();
-    return () => { cancelled = true; };
-  }, [projectId, currentRuntimeCapability?.projectId]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [projectId, currentRuntimeCapability?.projectId, planningReloadKey]);
 
   useEffect(() => {
     if (!nativeThink) return;
@@ -4475,6 +4491,34 @@ function EditorPage() {
                 )}
               </div>
             )}
+          {!planningLoaded && currentRuntimeCapability && (
+            <p
+              className={`mb-2 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}
+              role="status"
+              data-testid="planning-load-status"
+            >
+              Restoring saved planning. You can type while it loads.
+            </p>
+          )}
+          {planningLoaded && planningLoadError && (
+            <div
+              className={`mb-2 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[11px] ${
+                theme === "dark" ? "border-amber-400/25 bg-amber-400/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+              role="status"
+              data-testid="planning-load-error"
+            >
+              <span>{planningLoadError}</span>
+              <button
+                type="button"
+                onClick={() => setPlanningReloadKey((value) => value + 1)}
+                className="shrink-0 font-semibold underline underline-offset-2"
+                data-testid="button-retry-planning"
+              >
+                Retry
+              </button>
+            </div>
+          )}
             <textarea
               ref={textareaRef}
               value={chatInput}
@@ -4485,7 +4529,7 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              disabled={!currentRuntimeCapability || !planningLoaded || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
+              disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
               placeholder={!currentRuntimeCapability
                 ? "Checking project runtime…"
                 : planningSession?.phase === "clarifying"
@@ -4543,7 +4587,7 @@ function EditorPage() {
               <button
                 onClick={() => handleSend()}
                 disabled={!currentRuntimeCapability || !planningLoaded || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
-                className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors"
+                className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                 data-testid="button-send-chat"
               >
                 <ChevronRight size={18} />
