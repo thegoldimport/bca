@@ -1,11 +1,13 @@
 import bcrypt from "bcryptjs";
-import { assertOrigin, createSession, expiredSessionCookie, resolveSession, revokeSession, sessionCookie } from "./staging/auth";
+import { assertOrigin, createSession, expiredSessionCookie, hasValidCsrfToken, resolveSession, revokeSession, sessionCookie } from "./staging/auth";
 import { assertControlPlaneEnvironment, assertSafeStagingTarget } from "./staging/boundary";
 import { ProjectOperationDO } from "./staging/project-do";
 import { createVibeSdkAdapter, VibeSdkAdapterError, type VibeSdkImage } from "./staging/vibesdk-adapter";
 import { handleAdminRoute } from "./admin-routes";
 import { handleLaunchAdminRoute } from "./launch-admin-routes";
 import { handleCustomerSupportAccessRoute } from "./support-access-routes";
+import { handleCustomerSupportTicketRoute } from "./support-ticket-routes";
+import { handleBuilderPlanningRoute } from "./planning-routes";
 import { handleContentRoute } from "./content-routes";
 import { handleDomainRoute } from "./domain-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
@@ -221,12 +223,16 @@ export default {
         const adminResponse = await handleAdminRoute({ request, env, url, input });
         if (adminResponse) return adminResponse;
       } else if (url.pathname.startsWith("/api/admin/")) {
-        const adminResponse = await handleLaunchAdminRoute({ request, env, url, input });
+        const adminResponse = await handleLaunchAdminRoute({ request, env, url, input, allowedOrigin: controlOrigin });
         if (adminResponse) return adminResponse;
       }
       if (launchProfile && url.pathname.startsWith("/api/support-access")) {
         const supportResponse = await handleCustomerSupportAccessRoute({ request, env, url, input });
         if (supportResponse) return supportResponse;
+      }
+      if (launchProfile && url.pathname.startsWith("/api/support/tickets")) {
+        const ticketResponse = await handleCustomerSupportTicketRoute({ request, env, url, input, allowedOrigin: controlOrigin });
+        if (ticketResponse) return ticketResponse;
       }
       const contentResponse = await handleContentRoute({ request, env, url, input });
       if (contentResponse) return contentResponse;
@@ -290,7 +296,17 @@ export default {
         return json({ message: "Account access is suspended." }, { status: 403 });
       }
       if (url.pathname === "/api/auth/profile" && request.method === "PUT") {
-        if (launchCustomer) return json({ message: "This account setting is not available yet." }, { status: 404 });
+        if (launchCustomer) {
+          if (!hasValidCsrfToken(request)) return json({ message: "A secure request is required." }, { status: 403 });
+          const name = typeof input.name === "string" ? input.name.trim().slice(0, 120) : "";
+          if (!name) return json({ message: "Enter a name before saving." }, { status: 400 });
+          // The email and role are intentionally not read from the request.
+          await env.DB.prepare("UPDATE users SET profile_name=? WHERE id=?").bind(name, user.id).run();
+          const updated = await env.DB.prepare(
+            "SELECT id,COALESCE(profile_name,display_name,username) AS username,email,plan,role,created_at FROM users WHERE id=?",
+          ).bind(user.id).first();
+          return json(serializeUser(updated));
+        }
         const name = typeof input.name === "string" ? input.name.trim().slice(0, 120) : "";
         const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
         if (!name && !email) return json({ message: "Nothing to update" }, { status: 400 });
@@ -332,6 +348,16 @@ export default {
         return json(serializeProject(created), { status: 201 });
       }
       if (projectId !== null && !project) return json({ message: "Project not found" }, { status: 404 });
+      const planningResponse = await handleBuilderPlanningRoute({
+        env,
+        request,
+        url,
+        input,
+        user,
+        projectId,
+        allowedOrigin: controlOrigin,
+      });
+      if (planningResponse) return planningResponse;
       if (project && request.method === "GET" && projectMatch) {
         if (runtimeCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
           await refreshProjectAgent(env, request, project);

@@ -5,6 +5,7 @@ import {
 } from "./staging/runtime-identity";
 import { handleOwnerBootstrapRoute } from "./owner-bootstrap";
 import { handleAdminSupportAccessRoute } from "./support-access-routes";
+import { handleAdminSupportTicketRoute } from "./support-ticket-routes";
 import { adminDeploymentLinks, type AdminCustomDomain } from "./admin-deployment-url";
 
 const json = (body: unknown, status = 200) => Response.json(body, {
@@ -92,12 +93,12 @@ async function getCustomers(env: LaunchAdminEnv, url: URL) {
   const limit = 100;
   const pattern = `%${search}%`;
   const results = await env.DB.prepare(
-    `SELECT u.id,COALESCE(u.display_name,u.username) AS name,u.email,u.plan,u.role,u.account_status,u.created_at,
+    `SELECT u.id,COALESCE(u.profile_name,u.display_name,u.username) AS name,u.email,u.plan,u.role,u.account_status,u.created_at,
       (SELECT COUNT(*) FROM projects p WHERE p.user_id=u.id) AS project_count,
       (SELECT COUNT(*) FROM operations o WHERE o.user_id=u.id) AS operation_count,
       (SELECT COUNT(*) FROM runtime_builder_turns t JOIN projects tp ON tp.id=t.project_id WHERE tp.user_id=u.id) AS builder_turn_count
      FROM users u
-     WHERE u.role='user' AND (?='' OR u.email LIKE ? COLLATE NOCASE OR COALESCE(u.display_name,u.username) LIKE ? COLLATE NOCASE)
+     WHERE u.role='user' AND (?='' OR u.email LIKE ? COLLATE NOCASE OR COALESCE(u.profile_name,u.display_name,u.username) LIKE ? COLLATE NOCASE)
      ORDER BY u.created_at DESC LIMIT ?`,
   ).bind(search, pattern, pattern, limit).all();
   const customers = (results.results || []).map((row: any) => ({
@@ -172,7 +173,7 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
   const pattern = `%${search}%`;
   const result = await env.DB.prepare(
     `SELECT p.id,p.user_id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at,
-       COALESCE(u.display_name,u.username) AS owner_name,u.email AS owner_email,
+       COALESCE(u.profile_name,u.display_name,u.username) AS owner_name,u.email AS owner_email,
        l.hosting_provider,l.deployment_url,l.subdomain_slug,
        l.custom_domain,l.custom_domain_status,l.custom_domain_ssl_status,
        l.custom_domain_secondary,l.custom_domain_secondary_status,l.custom_domain_secondary_ssl_status,
@@ -187,7 +188,7 @@ async function getProjects(env: LaunchAdminEnv, url: URL) {
      LEFT JOIN runtime_project_links l ON l.project_id=p.id
      WHERE u.role='user'
        AND (?='' OR p.name LIKE ? COLLATE NOCASE
-         OR COALESCE(u.display_name,u.username) LIKE ? COLLATE NOCASE
+         OR COALESCE(u.profile_name,u.display_name,u.username) LIKE ? COLLATE NOCASE
          OR u.email LIKE ? COLLATE NOCASE)
      ORDER BY p.updated_at DESC LIMIT 200`,
   ).bind(search, pattern, pattern, pattern).all();
@@ -325,8 +326,9 @@ export async function handleLaunchAdminRoute(args: {
   env: LaunchAdminEnv;
   url: URL;
   input: Record<string, unknown>;
+  allowedOrigin?: string;
 }): Promise<Response | null> {
-  const { request, env, url, input } = args;
+  const { request, env, url, input, allowedOrigin } = args;
   if (!url.pathname.startsWith("/api/admin/")) return null;
 
   if (url.pathname === "/api/admin/owner-bootstrap") {
@@ -345,8 +347,17 @@ export async function handleLaunchAdminRoute(args: {
     url,
     input,
     admin: auth.user,
+    allowedOrigin,
   });
   if (supportResponse) return supportResponse;
+  const supportTicketResponse = await handleAdminSupportTicketRoute({
+    request,
+    env,
+    url,
+    input,
+    admin: auth.user,
+  });
+  if (supportTicketResponse) return supportTicketResponse;
 
   if (url.pathname === "/api/admin/overview" && request.method === "GET") {
     return json(await getOverview(env));
