@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
 import { csrfToken } from "@/lib/auth";
+import { Link } from "wouter";
 
 type Overview = {
   stats: {
@@ -241,7 +242,12 @@ export function UsersPage() {
               {customers.map((customer) => (
                 <tr key={customer.id} className={theme === "dark" ? "border-b border-white/5" : "border-b border-gray-100"}>
                   <td className="px-4 py-4">
-                    <p className={`text-sm font-medium ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{customer.name}</p>
+                    <Link
+                      href={`/app/admin/customers/${encodeURIComponent(customer.id)}`}
+                      className={`text-sm font-medium hover:text-cyan-400 hover:underline ${theme === "dark" ? "text-white" : "text-gray-900"}`}
+                    >
+                      {customer.name}
+                    </Link>
                     <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{customer.email}</p>
                   </td>
                   <td className={`px-4 py-4 text-sm ${theme === "dark" ? "text-white/70" : "text-gray-700"}`}>{customer.plan || "free"}</td>
@@ -278,10 +284,15 @@ export function UsersPage() {
                           : "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
                       }`}
                       disabled={statusMutation.isPending || customer.role !== "user"}
-                      onClick={() => statusMutation.mutate({
-                        id: customer.id,
-                        accountStatus: customer.accountStatus === "active" ? "suspended" : "active",
-                      })}
+                      onClick={() => {
+                        const nextStatus = customer.accountStatus === "active" ? "suspended" : "active";
+                        const effect = nextStatus === "suspended"
+                          ? "This blocks BuildCustom access but does not delete projects or generated apps."
+                          : "This restores BuildCustom product access.";
+                        if (window.confirm(`${nextStatus === "suspended" ? "Suspend" : "Reactivate"} ${customer.name}? ${effect}`)) {
+                          statusMutation.mutate({ id: customer.id, accountStatus: nextStatus });
+                        }
+                      }}
                     >
                       {customer.accountStatus === "active" ? "Suspend" : "Reactivate"}
                     </button>

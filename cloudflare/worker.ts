@@ -5,6 +5,7 @@ import { ProjectOperationDO } from "./staging/project-do";
 import { createVibeSdkAdapter, VibeSdkAdapterError, type VibeSdkImage } from "./staging/vibesdk-adapter";
 import { handleAdminRoute } from "./admin-routes";
 import { handleLaunchAdminRoute } from "./launch-admin-routes";
+import { handleCustomerSupportAccessRoute } from "./support-access-routes";
 import { handleContentRoute } from "./content-routes";
 import { handleDomainRoute } from "./domain-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
@@ -222,6 +223,10 @@ export default {
       } else if (url.pathname.startsWith("/api/admin/")) {
         const adminResponse = await handleLaunchAdminRoute({ request, env, url, input });
         if (adminResponse) return adminResponse;
+      }
+      if (launchProfile && url.pathname.startsWith("/api/support-access")) {
+        const supportResponse = await handleCustomerSupportAccessRoute({ request, env, url, input });
+        if (supportResponse) return supportResponse;
       }
       const contentResponse = await handleContentRoute({ request, env, url, input });
       if (contentResponse) return contentResponse;

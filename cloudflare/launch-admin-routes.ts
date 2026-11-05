@@ -1,9 +1,10 @@
-import { hasValidCsrfToken, type SessionUser } from "./staging/auth";
+import { assertOrigin, hasValidCsrfToken, type SessionUser } from "./staging/auth";
 import {
   checkRuntimeAvailability,
   resolveRuntimeProductUser,
 } from "./staging/runtime-identity";
 import { handleOwnerBootstrapRoute } from "./owner-bootstrap";
+import { handleAdminSupportAccessRoute } from "./support-access-routes";
 
 const json = (body: unknown, status = 200) => Response.json(body, {
   status,
@@ -203,6 +204,11 @@ async function updateCustomerStatus(
 ): Promise<Response> {
   if (request.method !== "PATCH") return json({ message: "Method not allowed." }, 405);
   if (!hasValidCsrfToken(request)) return json({ message: "A secure request is required." }, 403);
+  try {
+    assertOrigin(request, env.CONTROL_PLANE_ALLOWED_ORIGIN || "https://app.buildcustom.ai");
+  } catch {
+    return json({ message: "A secure request is required." }, 403);
+  }
   const accountStatus = input.accountStatus;
   if (accountStatus !== "active" && accountStatus !== "suspended") {
     return json({ message: "Account status must be active or suspended." }, 400);
@@ -215,14 +221,22 @@ async function updateCustomerStatus(
     return json({ message: "Owner accounts cannot be changed from customer status controls." }, 409);
   }
 
-  await env.DB.prepare("UPDATE users SET account_status=? WHERE id=? AND role='user'")
-    .bind(accountStatus, customerId).run();
-  await env.DB.prepare(
-    "INSERT INTO audit_events(actor_user_id,action,metadata_json) VALUES(?,?,?)",
-  ).bind(admin.id, "admin_account_status_changed", JSON.stringify({
-    targetUserId: customerId,
-    accountStatus,
-  })).run();
+  const result = await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE users SET account_status=? WHERE id=? AND role='user' AND account_status<>?",
+    ).bind(accountStatus, customerId, accountStatus),
+    env.DB.prepare(
+      "INSERT INTO audit_events(actor_user_id,action,metadata_json) SELECT ?,?,? WHERE changes()=1",
+    ).bind(admin.id, "admin_account_status_changed", JSON.stringify({
+      targetUserId: customerId,
+      accountStatus,
+    })),
+  ]);
+  if (Number(result[0]?.meta?.changes || 0) !== 1) {
+    const current = await env.DB.prepare("SELECT id,role FROM users WHERE id=? AND role='user'")
+      .bind(customerId).first();
+    if (!current) return json({ message: "Customer status could not be changed." }, 409);
+  }
   return json({ success: true, accountStatus });
 }
 
@@ -244,6 +258,15 @@ export async function handleLaunchAdminRoute(args: {
 
   const auth = await requireAdmin(env, request);
   if ("response" in auth) return auth.response;
+
+  const supportResponse = await handleAdminSupportAccessRoute({
+    request,
+    env,
+    url,
+    input,
+    admin: auth.user,
+  });
+  if (supportResponse) return supportResponse;
 
   if (url.pathname === "/api/admin/overview" && request.method === "GET") {
     return json(await getOverview(env));

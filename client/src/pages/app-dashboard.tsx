@@ -90,6 +90,8 @@ import {
   DeploymentsPage,
   SystemHealthPage,
 } from "@/pages/app-admin-live-pages";
+import { AdminCustomerDetailPage, AdminSupportWorkspacePage } from "@/pages/admin-customer-detail";
+import CustomerSupportAccessPage from "@/pages/customer-support-access";
 import OwnerBootstrapPage from "@/pages/owner-bootstrap-page";
 import ProjectDetail from "@/pages/project-detail";
 import {
@@ -5159,6 +5161,7 @@ function SettingsPage() {
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "api", label: "API Keys", icon: Key },
     { id: "security", label: "Security", icon: Shield },
+    { id: "support", label: "Support Access", icon: LifeBuoy },
   ];
 
   return (
@@ -5194,6 +5197,7 @@ function SettingsPage() {
           {activeTab === "appearance" && <AppearanceSettings />}
           {activeTab === "api" && <ApiKeySettings />}
           {activeTab === "security" && <SecuritySettings />}
+          {activeTab === "support" && <CustomerSupportAccessPage />}
         </div>
       </div>
     </div>
@@ -5748,6 +5752,8 @@ function AppDashboardContent({ user }: { user: AppUser }) {
             <Route path="/app/templates" component={TemplatesPage} />
             <Route path="/app/editor" component={EditorPage} />
             <Route path="/app/editor/:id" component={EditorPage} />
+            {isAdminUser(user) && <Route path="/app/admin/customers/:customerId" component={AdminCustomerDetailPage} />}
+            {isAdminUser(user) && <Route path="/app/admin/support-sessions/:sessionId" component={AdminSupportWorkspacePage} />}
             {isAdminUser(user) && <Route path="/app/admin/projects" component={AdminProjectsPage} />}
             {isAdminUser(user) && <Route path="/app/users" component={UsersPage} />}
             {isAdminUser(user) && <Route path="/app/analytics" component={AnalyticsPage} />}
