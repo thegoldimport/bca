@@ -26,6 +26,25 @@ test("super admins receive the required admin navigation and no owner activation
   assert.equal(ownerAuthorizationVisible("support@buildcustom.ai", "super_admin"), false);
 });
 
+test("every admin sidebar destination has a matching admin-only route", () => {
+  const dashboard = readFileSync("client/src/pages/app-dashboard.tsx", "utf8");
+  const appRouter = readFileSync("client/src/App.tsx", "utf8");
+
+  assert.match(
+    appRouter,
+    /<Route path="\/app\/:rest\*" component={AppDashboard} \/>/,
+    "deep app URLs must continue to load the dashboard router",
+  );
+
+  for (const { path, label } of adminNavigationForRole("super_admin")) {
+    const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const route = new RegExp(
+      `isAdminUser\\(user\\)\\s*&&\\s*<Route\\s+path="${escapedPath}"\\s+component=`,
+    );
+    assert.match(dashboard, route, `${label} sidebar destination ${path} must have an admin-only route`);
+  }
+});
+
 test("only the designated pre-activation account sees owner authorization", () => {
   assert.equal(ownerAuthorizationVisible(" SUPPORT@BUILDCUSTOM.AI ", "user"), true);
   assert.equal(ownerAuthorizationVisible("customer@example.test", "user"), false);
