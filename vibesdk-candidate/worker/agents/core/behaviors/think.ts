@@ -28,7 +28,7 @@ import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
 import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
-import { AI_MODEL_CONFIG, type AIModels } from '../../inferutils/config.types';
+import { getRuntimeAiModelConfig } from '../../../../shared/ai-provider-catalog';
 import {
 	readAiCredentialForRuntime,
 	shouldUseStoredProviderKeys,
@@ -227,15 +227,15 @@ export class ThinkCodingBehavior
 		const userId = this.state.metadata.userId;
 
 		const buildCustomModelId = inf.runtimeOverrides?.buildCustomModelId;
-		const selectedModelConfig = buildCustomModelId
-			? AI_MODEL_CONFIG[buildCustomModelId as AIModels]
+		const resolvedModelConfig = buildCustomModelId
+			? getRuntimeAiModelConfig(buildCustomModelId)
 			: undefined;
-		const modelName = selectedModelConfig && buildCustomModelId
+		const modelName = resolvedModelConfig && buildCustomModelId
 			? buildCustomModelId.slice(buildCustomModelId.indexOf("/") + 1)
 			: THINK_MODEL_ID;
-		const aiModelConfig = selectedModelConfig || THINK_MODEL_CONFIG;
+		const aiModelConfig = resolvedModelConfig || THINK_MODEL_CONFIG;
 		const hasBuildCustomByokKey = Boolean(
-			selectedModelConfig && inf.runtimeOverrides?.userApiKeys?.[selectedModelConfig.provider],
+			resolvedModelConfig && inf.runtimeOverrides?.userApiKeys?.[resolvedModelConfig.provider],
 		);
 
 		let conf: { baseURL: string; apiKey: string; defaultHeaders?: Record<string, string> };

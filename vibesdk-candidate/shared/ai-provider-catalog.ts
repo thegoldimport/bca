@@ -1,24 +1,18 @@
-import { AI_MODEL_CONFIG } from "../worker/agents/inferutils/config.types";
-
-const PROVIDER_LABELS: Record<string, string> = {
-  "google-ai-studio": "Google AI Studio",
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  grok: "xAI",
-};
+import { AI_MODEL_CONFIG, ModelSize, type AIModelConfig, type AIModels } from "../worker/agents/inferutils/config.types";
+import { AI_PROVIDER_LABELS, isAiProviderId, isValidProviderModelId } from "./ai-model-discovery";
 
 export type AiProviderOption = {
   id: string;
   label: string;
 };
 
-export const AI_PROVIDER_OPTIONS: AiProviderOption[] = Object.keys(PROVIDER_LABELS).map((id) => ({
+export const AI_PROVIDER_OPTIONS: AiProviderOption[] = Object.entries(AI_PROVIDER_LABELS).map(([id, label]) => ({
   id,
-  label: PROVIDER_LABELS[id],
+  label,
 }));
 
 export const AI_MODEL_OPTIONS = Object.entries(AI_MODEL_CONFIG)
-  .filter(([, config]) => Object.hasOwn(PROVIDER_LABELS, config.provider))
+  .filter(([, config]) => isAiProviderId(config.provider))
   .map(([id, config]) => ({
     id,
     label: config.name,
@@ -31,4 +25,22 @@ export const AI_MODEL_OPTIONS = Object.entries(AI_MODEL_CONFIG)
 export function getSupportedAiModel(modelId: unknown): (typeof AI_MODEL_OPTIONS)[number] | null {
   if (typeof modelId !== "string") return null;
   return AI_MODEL_OPTIONS.find((model) => model.id === modelId) ?? null;
+}
+
+export function isValidAiModelId(modelId: unknown): modelId is string {
+  return Boolean(getSupportedAiModel(modelId)) || isValidProviderModelId(modelId);
+}
+
+export function getRuntimeAiModelConfig(modelId: string): AIModelConfig | undefined {
+  const configured = AI_MODEL_CONFIG[modelId as AIModels];
+  if (configured) return configured;
+  if (!isValidProviderModelId(modelId)) return undefined;
+  const separator = modelId.indexOf("/");
+  return {
+    name: modelId,
+    size: ModelSize.REGULAR,
+    provider: modelId.slice(0, separator),
+    creditCost: 0,
+    contextSize: 32_768,
+  };
 }

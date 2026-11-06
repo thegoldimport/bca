@@ -290,14 +290,25 @@ export default {
       }
       const user = runtimeCustomer ? await resolveRuntimeProductUser(env, request) : await resolveSession(env.DB, request);
       if (!user) {
-        if (url.pathname.startsWith("/api/")) return json({ message: "Unauthorized" }, { status: 401 });
+        if (url.pathname.startsWith("/api/")) {
+          const isCredentialRoute = url.pathname === "/api/ai-credentials"
+            || url.pathname.startsWith("/api/ai-credentials/");
+          return json({
+            message: runtimeCustomer && isCredentialRoute
+              ? "Your session could not be verified. Sign in again to manage AI provider settings."
+              : "Unauthorized",
+          }, { status: 401 });
+        }
         const asset = await env.ASSETS.fetch(request);
         return asset.status === 404 ? env.ASSETS.fetch(new Request(new URL("/index.html", request.url))) : asset;
       }
       if (runtimeCustomer && user.account_status === "suspended") {
         return json({ message: "Account access is suspended." }, { status: 403 });
       }
-      if (runtimeCustomer && url.pathname === "/api/ai-credentials") {
+      if (runtimeCustomer && (
+        url.pathname === "/api/ai-credentials"
+        || url.pathname.startsWith("/api/ai-credentials/")
+      )) {
         const aiCredentialResponse = await handleAiCredentialRoute(env, request, url.pathname, input, user);
         if (aiCredentialResponse) return aiCredentialResponse;
       }

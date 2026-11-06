@@ -1,5 +1,11 @@
-import { encryptAiCredential } from "../vibesdk-candidate/shared/ai-credential-crypto";
-import { AI_MODEL_OPTIONS, getSupportedAiModel } from "../vibesdk-candidate/shared/ai-provider-catalog";
+import { decryptAiCredential, encryptAiCredential } from "../vibesdk-candidate/shared/ai-credential-crypto";
+import { AI_PROVIDER_OPTIONS } from "../vibesdk-candidate/shared/ai-provider-catalog";
+import {
+  discoverAiModels,
+  isAiProviderId,
+  type AiProviderId,
+  type DiscoveredAiModel,
+} from "../vibesdk-candidate/shared/ai-model-discovery";
 import { hasValidCsrfToken } from "./staging/auth";
 import { stockThinkRequest } from "./staging/think-runtime";
 
@@ -16,9 +22,9 @@ type CredentialUser = { id: string };
 
 type CredentialRow = {
   mode: "managed" | "byok";
-  provider: string;
-  model_id: string;
-  encrypted_api_key: string;
+  provider: string | null;
+  model_id: string | null;
+  encrypted_api_key: string | null;
   updated_at: string;
 };
 
@@ -34,6 +40,58 @@ function validApiKey(value: unknown): value is string {
     && value.trim().length >= 8
     && value.trim().length <= 4096
     && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function providerResponse(
+  provider: AiProviderId,
+  models: DiscoveredAiModel[],
+  unavailable: Array<{ providerModelId: string; label: string; reason: string }>,
+) {
+  return {
+    provider,
+    providerLabel: AI_PROVIDER_OPTIONS.find((option) => option.id === provider)?.label || provider,
+    models,
+    unavailable,
+    validation: "model-list-access" as const,
+  };
+}
+
+async function loadSavedCredential(
+  env: AiCredentialEnv,
+  userId: string,
+): Promise<{ provider: AiProviderId; modelId: string; apiKey: string } | null> {
+  const row = await env.DB.prepare(
+    "SELECT mode,provider,model_id,encrypted_api_key,updated_at FROM user_ai_credentials WHERE user_id=?",
+  ).bind(userId).first<CredentialRow>();
+  if (!row || row.mode !== "byok") return null;
+  if (!isAiProviderId(row.provider) || !row.model_id || !row.encrypted_api_key) {
+    throw new Error("Saved AI provider settings are invalid.");
+  }
+  const secret = env.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET;
+  if (typeof secret !== "string" || secret.length < 32) {
+    throw new Error("Bring-your-own-key settings are not configured yet.");
+  }
+  const apiKey = await decryptAiCredential(secret, row.encrypted_api_key);
+  return { provider: row.provider, modelId: row.model_id, apiKey };
+}
+
+async function saveByokCredential(
+  env: AiCredentialEnv,
+  userId: string,
+  provider: AiProviderId,
+  model: DiscoveredAiModel,
+  apiKey: string,
+): Promise<void> {
+  const secret = env.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET;
+  if (typeof secret !== "string" || secret.length < 32) {
+    throw new Error("Bring-your-own-key settings are not configured yet.");
+  }
+  const encrypted = await encryptAiCredential(secret, apiKey);
+  await env.DB.prepare(
+    "INSERT INTO user_ai_credentials(user_id,mode,provider,model_id,encrypted_api_key,updated_at) " +
+    "VALUES(?,'byok',?,?,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET " +
+    "mode='byok',provider=excluded.provider,model_id=excluded.model_id,encrypted_api_key=excluded.encrypted_api_key,updated_at=datetime('now')",
+  ).bind(userId, provider, model.id, encrypted).run();
 }
 
 async function syncUserAgents(
@@ -76,10 +134,13 @@ export async function handleAiCredentialRoute(
   pathname: string,
   input: Record<string, unknown>,
   user: CredentialUser,
+  providerFetch: typeof fetch = fetch,
 ): Promise<Response | null> {
-  if (pathname !== "/api/ai-credentials") return null;
+  const basePath = "/api/ai-credentials";
+  if (pathname !== basePath && pathname !== `${basePath}/connect`
+    && pathname !== `${basePath}/models` && pathname !== `${basePath}/model`) return null;
 
-  if (request.method === "GET") {
+  if (pathname === basePath && request.method === "GET") {
     const row = await env.DB.prepare(
       "SELECT mode,provider,model_id,updated_at FROM user_ai_credentials WHERE user_id=?",
     ).bind(user.id).first<Pick<CredentialRow, "mode" | "provider" | "model_id"> & { updated_at: string }>();
@@ -92,31 +153,34 @@ export async function handleAiCredentialRoute(
       updatedAt: row?.updated_at || null,
       byokAvailable: typeof env.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET === "string"
         && env.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET.length >= 32,
-      providers: AI_MODEL_OPTIONS,
+      providers: AI_PROVIDER_OPTIONS,
     });
   }
 
-  if (request.method === "PUT") {
+  if (request.method === "POST" && pathname === `${basePath}/connect`) {
     if (!hasValidCsrfToken(request)) return noStore({ message: "A secure request is required." }, { status: 403 });
     const secret = env.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET;
     if (typeof secret !== "string" || secret.length < 32) {
       return noStore({ message: "Bring-your-own-key settings are not configured yet." }, { status: 503 });
     }
-    const model = getSupportedAiModel(input.modelId);
+    const provider = isAiProviderId(input.provider) ? input.provider : null;
     const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
-    if (!model || !validApiKey(apiKey)) {
-      return noStore({ message: "Choose a supported model and enter a valid provider API key." }, { status: 400 });
+    if (!provider || !validApiKey(apiKey)) {
+      return noStore({ message: "Choose a supported provider and enter its API key." }, { status: 400 });
     }
-    const encrypted = await encryptAiCredential(secret, apiKey);
-    await env.DB.prepare(
-      "INSERT INTO user_ai_credentials(user_id,mode,provider,model_id,encrypted_api_key,updated_at) " +
-      "VALUES(?,'byok',?,?,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET " +
-      "mode='byok',provider=excluded.provider,model_id=excluded.model_id,encrypted_api_key=excluded.encrypted_api_key,updated_at=datetime('now')",
-    ).bind(user.id, model.provider, model.id, encrypted).run();
+    let discovered;
+    try {
+      discovered = await discoverAiModels(provider, apiKey, providerFetch);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The provider key could not be validated.";
+      return noStore({ message }, { status: 422 });
+    }
+    const model = discovered.models[0];
+    await saveByokCredential(env, user.id, provider, model, apiKey);
     const sync = await syncUserAgents(env, request, user.id);
     return noStore({
       mode: "byok",
-      provider: model.provider,
+      ...providerResponse(provider, discovered.models, discovered.unavailable),
       modelId: model.id,
       keySaved: true,
       appliedToExistingProjects: sync.refreshed === sync.total,
@@ -125,7 +189,61 @@ export async function handleAiCredentialRoute(
     });
   }
 
-  if (request.method === "DELETE") {
+  if (request.method === "POST" && pathname === `${basePath}/models`) {
+    if (!hasValidCsrfToken(request)) return noStore({ message: "A secure request is required." }, { status: 403 });
+    const secret = env.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET;
+    if (typeof secret !== "string" || secret.length < 32) {
+      return noStore({ message: "Bring-your-own-key settings are not configured yet." }, { status: 503 });
+    }
+    try {
+      const saved = await loadSavedCredential(env, user.id);
+      if (!saved) return noStore({ message: "Connect a provider key before refreshing its models." }, { status: 409 });
+      const discovered = await discoverAiModels(saved.provider, saved.apiKey, providerFetch);
+      return noStore({
+        ...providerResponse(saved.provider, discovered.models, discovered.unavailable),
+        modelId: saved.modelId,
+        keySaved: true,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Saved provider models could not be refreshed.";
+      return noStore({ message }, { status: 422 });
+    }
+  }
+
+  if (request.method === "PUT" && pathname === `${basePath}/model`) {
+    if (!hasValidCsrfToken(request)) return noStore({ message: "A secure request is required." }, { status: 403 });
+    const requestedModelId = typeof input.modelId === "string" ? input.modelId : "";
+    try {
+      const saved = await loadSavedCredential(env, user.id);
+      if (!saved) return noStore({ message: "Connect a provider key before choosing a model." }, { status: 409 });
+      const discovered = await discoverAiModels(saved.provider, saved.apiKey, providerFetch);
+      const model = discovered.models.find((candidate) => candidate.id === requestedModelId);
+      if (!model) {
+        return noStore({
+          message: "That model is not currently available as a compatible model for this provider key.",
+          unavailable: discovered.unavailable,
+        }, { status: 400 });
+      }
+      await env.DB.prepare(
+        "UPDATE user_ai_credentials SET model_id=?,updated_at=datetime('now') WHERE user_id=? AND mode='byok'",
+      ).bind(model.id, user.id).run();
+      const sync = await syncUserAgents(env, request, user.id);
+      return noStore({
+        mode: "byok",
+        provider: saved.provider,
+        modelId: model.id,
+        keySaved: true,
+        appliedToExistingProjects: sync.refreshed === sync.total,
+        projectsRefreshed: sync.refreshed,
+        projectsPending: sync.total - sync.refreshed,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The selected model could not be saved.";
+      return noStore({ message }, { status: 422 });
+    }
+  }
+
+  if (request.method === "DELETE" && pathname === basePath) {
     if (!hasValidCsrfToken(request)) return noStore({ message: "A secure request is required." }, { status: 403 });
     await env.DB.prepare(
       "INSERT INTO user_ai_credentials(user_id,mode,provider,model_id,encrypted_api_key,updated_at) " +
@@ -142,6 +260,6 @@ export async function handleAiCredentialRoute(
     });
   }
 
-  return noStore({ message: "Method not allowed." }, { status: 405, headers: { Allow: "GET, PUT, DELETE" } });
+  return noStore({ message: "Method not allowed." }, { status: 405, headers: { Allow: "GET, POST, PUT, DELETE" } });
 }
 
