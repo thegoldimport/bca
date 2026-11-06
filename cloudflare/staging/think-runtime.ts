@@ -72,6 +72,18 @@ function ownerCookies(request: Request, includeCloudflareOAuth = false): string 
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 
+function ownerCsrfToken(request: Request): string | null {
+  const fromHeader = request.headers.get("X-CSRF-Token");
+  if (fromHeader && fromHeader.length <= 512 && !/[\r\n]/.test(fromHeader)) return fromHeader;
+  for (const part of (request.headers.get("Cookie") || "").split(";")) {
+    const index = part.indexOf("=");
+    if (index < 1 || part.slice(0, index).trim() !== "csrf-token") continue;
+    const value = part.slice(index + 1).trim();
+    return value && value.length <= 512 && !/[\r\n;]/.test(value) ? value : null;
+  }
+  return null;
+}
+
 function ownerAccessCookie(request: Request): string {
   for (const part of (request.headers.get("Cookie") || "").split(";")) {
     const index = part.indexOf("=");
@@ -86,6 +98,7 @@ function ownerAccessCookie(request: Request): string {
 function allowedStockPath(path: string, method: "GET" | "POST"): boolean {
   const pathname = path.split("?", 1)[0];
   if (pathname === "/api/ws-ticket") return method === "POST" && path === pathname;
+  if (/^\/api\/agent\/[a-zA-Z0-9_-]{1,120}\/buildcustom-ai-config\/refresh$/.test(pathname)) return method === "POST";
   if (/^\/api\/agent\/[a-zA-Z0-9_-]{1,120}\/(?:connect|branches|preview)$/.test(pathname)) return method === "GET";
   return false;
 }
@@ -99,9 +112,11 @@ export async function stockThinkRequest(
   const method = options.method || "GET";
   if (!allowedStockPath(path, method)) throw new RuntimeIdentityError("Unsupported owner-scoped runtime request.", 400);
   const headers = new Headers({ Accept: "application/json", Cookie: ownerCookies(request) });
+  const origin = request.headers.get("Origin");
+  if (origin && origin === controlOriginForRequest(env, request)) headers.set("Origin", origin);
   if (method === "POST") {
     headers.set("Content-Type", "application/json");
-    const csrf = request.headers.get("X-CSRF-Token");
+    const csrf = ownerCsrfToken(request);
     if (csrf) headers.set("X-CSRF-Token", csrf);
   }
   try {
@@ -690,6 +705,20 @@ async function bridgeWebSocket(env: Env, request: Request, project: Project, ori
   const agentId = link?.agent_id;
   if (!agentId || !AGENT_ID.test(agentId) || link.initialization_status !== "ready") {
     return Response.json({ message: "This project is not ready for editing." }, { status: 409 });
+  }
+  const aiSettings = await env.DB.prepare(
+    "SELECT mode FROM user_ai_credentials WHERE user_id=?",
+  ).bind(project.user_id).first<{ mode: string }>();
+  if (aiSettings) {
+    const configResponse = await stockThinkRequest(
+      env,
+      request,
+      `/api/agent/${agentId}/buildcustom-ai-config/refresh`,
+      { method: "POST", body: {} },
+    );
+    if (!configResponse.ok) {
+      throw new RuntimeIdentityError("The project's AI settings could not be applied.", configResponse.status === 401 || configResponse.status === 403 ? configResponse.status : 503);
+    }
   }
   const upstream = await openStockAgentWebSocket(env, request, agentId);
   const pair = new WebSocketPair() as SocketPair;

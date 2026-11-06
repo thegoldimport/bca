@@ -45,7 +45,8 @@ function makeDb(options: {
           return statement;
         },
         async first() {
-          if (sql.includes("SELECT id,display_name AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")) {
+          if (sql.includes("SELECT id,COALESCE(profile_name,display_name,username) AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")
+            || sql.includes("SELECT id,display_name AS username,email,role,plan,created_at,account_status FROM users WHERE id=?")) {
             const user = state.users.find((row) => row.id === values[0]);
             return user ? { ...user, display_name: user.username } : null;
           }
@@ -65,10 +66,11 @@ function makeDb(options: {
           return null;
         },
         async all() {
-          if (sql.includes("SELECT u.id,COALESCE(u.display_name,u.username) AS name")) {
+          if (sql.includes("SELECT u.id,COALESCE(u.profile_name,u.display_name,u.username) AS name")
+            || sql.includes("SELECT u.id,COALESCE(u.display_name,u.username) AS name")) {
             return { results: options.customers || [] };
           }
-          if (sql.includes("COALESCE(u.display_name,u.username) AS owner_name")) {
+          if (sql.includes("SELECT p.id,p.user_id,p.name,p.type,p.status,p.framework,p.created_at,p.updated_at")) {
             return { results: options.adminProjects || [] };
           }
           if (sql.includes("SELECT id,name,type,status,framework,created_at,updated_at")) {

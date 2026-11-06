@@ -16,6 +16,7 @@ import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
 import { AppService, ModelConfigService } from '../../../database';
 import { ModelConfig, credentialsToRuntimeOverrides } from '../../../agents/inferutils/config.types';
+import { readAiCredentialForRuntime } from '../../../../shared/ai-credential-storage';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { validateWebSocketOrigin } from '../../../middleware/security/websocket';
 import { createLogger } from '../../../logger';
@@ -126,12 +127,50 @@ export class CodingAgentController extends BaseController {
                 }
             }
 
-            const runtimeOverrides = credentialsToRuntimeOverrides(body.credentials);
+            const runtimeOverrides = credentialsToRuntimeOverrides(body.credentials) ?? {};
+            const buildCustomEnv = env as unknown as {
+                BUILDCUSTOM_PRODUCT_DB?: D1Database;
+                BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string;
+            };
+            const buildCustomCredential = buildCustomEnv.BUILDCUSTOM_PRODUCT_DB
+                ? await readAiCredentialForRuntime(
+                    buildCustomEnv.BUILDCUSTOM_PRODUCT_DB,
+                    buildCustomEnv.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET,
+                    user.id,
+                )
+                : null;
+            if (buildCustomCredential) {
+                runtimeOverrides.buildCustomModelId = buildCustomCredential.modelId;
+                runtimeOverrides.userApiKeys = {
+                    ...(runtimeOverrides.userApiKeys ?? {}),
+                    [buildCustomCredential.provider]: buildCustomCredential.apiKey,
+                };
+            }
             // Check usage limits BEFORE making AI calls.
             // The encrypted blob lives in an HttpOnly cookie; read it once here so we
             // can pass it down to the inference pipeline for BYOK decryption.
-            const userToken = readTokenCookie(request, env);
-            const limitResult = await checkUsageAndBalance(env, user.id, request, userToken);
+            // BuildCustom provider keys are the customer's own provider billing
+            // path. Keep app-creation limits above, but don't block or debit the
+            // customer's BuildCustom AI credits for inference they pay their
+            // provider to run.
+            const userToken = buildCustomCredential ? null : readTokenCookie(request, env);
+            const limitResult = buildCustomCredential
+                ? {
+                    allowed: true,
+                    shouldUseByok: false,
+                    withinLimits: true,
+                    remaining: Infinity,
+                    limit: Infinity,
+                    balance: null,
+                    hasUserToken: false,
+                    refreshedBlob: undefined,
+                    refreshedCookie: undefined,
+                    periodSeconds: undefined,
+                    windowKind: undefined,
+                    resetAt: undefined,
+                    dailyLimit: undefined,
+                }
+                : await checkUsageAndBalance(env, user.id, request, userToken);
 
             if (!limitResult.allowed) {
                 this.logger.warn('Request blocked by usage check', {
@@ -408,6 +447,28 @@ export class CodingAgentController extends BaseController {
         } catch (error) {
             this.logger.error('Error connecting to existing agent', error);
             return CodingAgentController.handleError(error, 'connect to existing agent') as ControllerResponse<ApiResponse<AgentConnectionData>>;
+        }
+    }
+
+    static async refreshBuildCustomAIConfig(
+        _request: Request,
+        env: Env,
+        _: ExecutionContext,
+        context: RouteContext
+    ) {
+        const agentId = context.pathParams.agentId;
+        if (!agentId) {
+            return CodingAgentController.createErrorResponse('Missing agent ID parameter', 400);
+        }
+        try {
+            const agentInstance = await getAgentStub(env, agentId);
+            if (!agentInstance || !(await agentInstance.isInitialized())) {
+                return CodingAgentController.createErrorResponse('Agent instance not found or not initialized', 404);
+            }
+            await agentInstance.refreshBuildCustomAIConfig();
+            return CodingAgentController.createSuccessResponse({ refreshed: true });
+        } catch {
+            return CodingAgentController.createErrorResponse('Could not refresh the project AI settings.', 503);
         }
     }
 

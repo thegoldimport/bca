@@ -1,6 +1,8 @@
 declare namespace Cloudflare {
 	interface Env {
 EMAIL: SendEmail;
+		BUILDCUSTOM_PRODUCT_DB?: D1Database;
+		BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string;
 		// Dashboard-managed settings are intentionally omitted from wrangler vars.
 		ALLOWED_EMAIL?: string;
 		ALLOCATION_STRATEGY?: string;

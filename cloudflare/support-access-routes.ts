@@ -141,7 +141,7 @@ async function getCustomerSupportAccess(env: SupportEnv, user: SessionUser) {
     ).bind(user.id).all(),
     env.DB.prepare(
       `SELECT s.id,s.grant_id,s.project_id,s.started_at_ms,s.last_access_at_ms,s.closed_at_ms,
-        COALESCE(a.display_name,a.username) AS operator_name,a.email AS operator_email,
+        COALESCE(a.profile_name,a.display_name,a.username) AS operator_name,a.email AS operator_email,
         g.expires_at_ms,g.revoked_at_ms
        FROM support_access_sessions s
        JOIN support_access_grants g ON g.id=s.grant_id
@@ -325,7 +325,7 @@ async function getAdminCustomerDetail(
   projectOffset: number,
 ): Promise<Response> {
   const customer = await env.DB.prepare(
-    `SELECT id,COALESCE(display_name,username) AS name,email,plan,role,account_status,created_at
+    `SELECT id,COALESCE(profile_name,display_name,username) AS name,email,plan,role,account_status,created_at
      FROM users WHERE id=? AND role='user'`,
   ).bind(customerId).first<any>();
   if (!customer) return json({ message: "Customer not found." }, 404);
@@ -404,7 +404,7 @@ async function getAdminCustomerDetail(
     ).bind(customerId).all(),
     env.DB.prepare(
       `SELECT s.id,s.grant_id,s.project_id,s.started_at_ms,s.last_access_at_ms,s.closed_at_ms,
-        COALESCE(a.display_name,a.username) AS operator_name,a.email AS operator_email,
+        COALESCE(a.profile_name,a.display_name,a.username) AS operator_name,a.email AS operator_email,
         g.expires_at_ms,g.revoked_at_ms
        FROM support_access_sessions s
        JOIN support_access_grants g ON g.id=s.grant_id
@@ -413,7 +413,7 @@ async function getAdminCustomerDetail(
     ).bind(customerId).all(),
     env.DB.prepare(
       `SELECT a.action,a.project_id,a.created_at,
-        COALESCE(actor.display_name,actor.username) AS actor_name,actor.email AS actor_email,
+        COALESCE(actor.profile_name,actor.display_name,actor.username) AS actor_name,actor.email AS actor_email,
         p.name AS project_name
        FROM audit_events a
        JOIN projects p ON p.id=a.project_id AND p.user_id=?
@@ -698,7 +698,7 @@ async function getSupportWorkspace(
 ): Promise<Response> {
   const context = await env.DB.prepare(
     `SELECT s.id,s.grant_id,s.project_id,s.customer_user_id,s.started_at_ms,
-      g.expires_at_ms,g.permission,COALESCE(c.display_name,c.username) AS customer_name,c.email AS customer_email
+      g.expires_at_ms,g.permission,COALESCE(c.profile_name,c.display_name,c.username) AS customer_name,c.email AS customer_email
      FROM support_access_sessions s
      JOIN support_access_grants g ON g.id=s.grant_id AND g.project_id=s.project_id AND g.customer_user_id=s.customer_user_id
      JOIN users c ON c.id=g.customer_user_id
@@ -721,7 +721,7 @@ async function getSupportWorkspace(
   const result = await env.DB.batch([
     env.DB.prepare(
       `SELECT s.id,s.grant_id,s.project_id,s.started_at_ms,g.expires_at_ms,g.permission,
-        COALESCE(c.display_name,c.username) AS customer_name,c.email AS customer_email
+        COALESCE(c.profile_name,c.display_name,c.username) AS customer_name,c.email AS customer_email
        FROM support_access_sessions s
        JOIN support_access_grants g ON g.id=s.grant_id AND g.project_id=s.project_id AND g.customer_user_id=s.customer_user_id
        JOIN users c ON c.id=g.customer_user_id

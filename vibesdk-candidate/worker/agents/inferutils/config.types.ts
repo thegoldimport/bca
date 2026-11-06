@@ -426,6 +426,8 @@ export type InferenceMetadata = {
 export type InferenceRuntimeOverrides = {
 	/** Provider API keys (BYOK) keyed by provider id, e.g. "openai" -> key. */
 	userApiKeys?: Record<string, string>;
+	/** BuildCustom-selected model id, validated against the runtime model catalog. */
+	buildCustomModelId?: string;
 	/** Optional AI gateway override (baseUrl + token). */
 	aiGatewayOverride?: { baseUrl: string; token: string };
 };

@@ -144,7 +144,7 @@ async function productUser(env: RuntimeAuthEnv, identity: RuntimeIdentity): Prom
   const accountStatusColumn = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
     ? ",account_status" : "";
   const user = await env.DB.prepare(
-    `SELECT id,display_name AS username,email,role,plan,created_at${accountStatusColumn} FROM users WHERE id=?`,
+    `SELECT id,COALESCE(profile_name,display_name,username) AS username,email,role,plan,created_at${accountStatusColumn} FROM users WHERE id=?`,
   ).bind(identity.id).first<SessionUser>();
   if (!user) throw new RuntimeIdentityError("Could not load your BuildCustom account.");
   user.account_status ||= "active";
@@ -418,7 +418,7 @@ export async function handleStagingCustomerAuth(
     return new Response(null, { status: 204, headers });
   }
 
-  if (pathname.startsWith("/api/auth/")) {
+  if (pathname.startsWith("/api/auth/") && pathname !== "/api/auth/profile") {
     return Response.json({ message: "This account setting is not available yet." }, { status: 404 });
   }
   return null;

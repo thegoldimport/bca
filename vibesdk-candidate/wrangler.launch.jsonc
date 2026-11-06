@@ -102,6 +102,11 @@
       "database_name": "buildcustom-vibesdk-launch-db",
       "database_id": "716c6600-8c60-408a-9446-3779979d5316",
       "migrations_dir": "migrations"
+    },
+    {
+      "binding": "BUILDCUSTOM_PRODUCT_DB",
+      "database_name": "buildcustom-product-launch-db",
+      "database_id": "ca820baf-6973-4318-ac52-529d56293bb6"
     }
   ],
   "durable_objects": {

@@ -9,6 +9,12 @@ When an isolated VibeSDK checkout borrows `node_modules` from another checkout, 
 
 **How to apply:** For future isolated canaries using shared dependencies, inspect package symlink targets and the built Worker bundle before consuming a model run. A deployment succeeding or showing a new Worker version does not prove the intended source was bundled.
 
+A stale `node_modules` symlink can also make the candidate appear to lack locked dependencies or use incompatible TypeScript types. Restore the candidate's dependencies locally from its existing Bun lockfile with frozen-lockfile mode; verify the lockfile hash is unchanged before trusting typecheck/build results.
+
+**Why:** The candidate linked to an older baseline dependency directory missing required packages. A local Bun install from the unchanged lockfile restored the packages and made the runtime typecheck pass.
+
+**How to apply:** When errors name missing packages but the manifest and lockfile already contain them, inspect whether `node_modules` is a symlink before changing dependencies. Replace the stale link with a physical local install from the locked manifest; do not upgrade versions to mask the environment problem.
+
 For byte-exact bundle provenance, a symlinked dependency directory can change esbuild's embedded module identifiers even when the dependency bytes are identical. Reconstruct with physically located dependencies before treating a byte mismatch as source drift.
 
 **Why:** An untouched control-plane reconstruction differed from its accepted production bundle only because module identifiers included the shared dependency directory's external path. A physical dependency copy reproduced the accepted bundle exactly.
