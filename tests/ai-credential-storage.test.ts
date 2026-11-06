@@ -44,6 +44,22 @@ test("runtime credential lookup decrypts only the matching account's provider ke
   assert.equal(await readAiCredentialForRuntime(db, secret, "owner-b"), null);
 });
 
+test("runtime accepts a provider-listed model outside the legacy static catalog", async () => {
+  const encrypted = await encryptAiCredential(secret, providerKey);
+  const db = database({
+    user_id: "owner-a",
+    mode: "byok",
+    provider: "anthropic",
+    model_id: "anthropic/claude-sonnet-4-7",
+    encrypted_api_key: encrypted,
+  });
+  assert.deepEqual(await readAiCredentialForRuntime(db, secret, "owner-a"), {
+    provider: "anthropic",
+    modelId: "anthropic/claude-sonnet-4-7",
+    apiKey: providerKey,
+  });
+});
+
 test("managed tombstones and invalid provider records do not activate a key", async () => {
   const managed = database({
     user_id: "owner-a",

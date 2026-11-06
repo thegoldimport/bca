@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NativeAutoContinueControl } from "@/components/native-auto-continue-control";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { csrfToken, getAppUser, setAppUser, authHeaders, isAdminUser, signOut, type AppUser } from "@/lib/auth";
+import { csrfToken, getAppUser, setAppUser, authHeaders, isAdminUser, signOut, clearAppUser, type AppUser } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutGrid,
@@ -6086,10 +6086,27 @@ function ApiKeySettings() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
+  const [providerId, setProviderId] = useState("anthropic");
   const [modelId, setModelId] = useState("");
+  const [modelSearch, setModelSearch] = useState("");
+  const [models, setModels] = useState<Array<{ id: string; label: string; providerModelId: string }>>([]);
+  const [unavailableModels, setUnavailableModels] = useState<Array<{ providerModelId: string; label: string; reason: string }>>([]);
   const [useOwnKey, setUseOwnKey] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const sessionExpiredMessage = "Your session could not be verified. Sign in again to continue.";
+
+  async function readResponse(response: Response, fallback: string) {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 401) {
+        clearAppUser();
+        throw new Error(sessionExpiredMessage);
+      }
+      throw new Error(data.message || fallback);
+    }
+    return data;
+  }
 
   const settings = useQuery({
     queryKey: ["ai-credentials"],
@@ -6098,15 +6115,14 @@ function ApiKeySettings() {
         credentials: "same-origin",
         headers: authHeaders(),
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "AI provider settings could not be loaded.");
+      const data = await readResponse(response, "AI provider settings could not be loaded.");
       return data as {
         mode: "managed" | "byok";
         provider: string | null;
         modelId: string | null;
         keySaved: boolean;
         byokAvailable: boolean;
-        providers: Array<{ id: string; label: string; provider: string }>;
+        providers: Array<{ id: string; label: string }>;
       };
     },
   });
@@ -6114,30 +6130,81 @@ function ApiKeySettings() {
   useEffect(() => {
     if (!settings.data) return;
     setUseOwnKey(settings.data.mode === "byok");
+    if (settings.data.provider) setProviderId(settings.data.provider);
     if (settings.data.modelId) setModelId(settings.data.modelId);
-    else if (!modelId) setModelId("google-ai-studio/gemini-2.5-flash-lite");
-  }, [settings.data, modelId]);
+  }, [settings.data]);
 
-  const save = useMutation({
+  const connect = useMutation({
     mutationFn: async () => {
       const token = await csrfToken();
-      const response = await fetch("/api/ai-credentials", {
-        method: "PUT",
+      const response = await fetch("/api/ai-credentials/connect", {
+        method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
-        body: JSON.stringify({ modelId, apiKey }),
+        body: JSON.stringify({ provider: providerId, apiKey }),
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Your provider key could not be saved.");
-      return data;
+      return readResponse(response, "The provider could not be connected.");
     },
     onSuccess: async (data) => {
       setApiKey("");
       setError("");
       setUseOwnKey(true);
+      setModels(data.models || []);
+      setUnavailableModels(data.unavailable || []);
+      setModelId(data.modelId || "");
       setMessage(data.projectsPending
-        ? `Saved securely. ${data.projectsPending} existing project(s) will update when they reconnect.`
-        : "Provider key saved securely and applied to your projects.");
+        ? `Provider model list verified and key saved securely. ${data.projectsPending} existing project(s) will update when they reconnect.`
+        : "Provider model list verified and key saved securely. Choose a compatible model below.");
+      await queryClient.invalidateQueries({ queryKey: ["ai-credentials"] });
+    },
+    onError: (err: Error) => {
+      setMessage("");
+      setError(err.message);
+    },
+  });
+
+  const refreshModels = useMutation({
+    mutationFn: async () => {
+      const token = await csrfToken();
+      const response = await fetch("/api/ai-credentials/models", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": token, ...authHeaders() },
+      });
+      return readResponse(response, "Available models could not be refreshed.");
+    },
+    onSuccess: (data) => {
+      setModels(data.models || []);
+      setUnavailableModels(data.unavailable || []);
+      setModelId((current) => data.models?.find((model: { id: string }) => model.id === current)?.id
+        || data.models?.find((model: { id: string }) => model.id === data.modelId)?.id
+        || data.models?.[0]?.id
+        || "");
+      setError("");
+      setMessage("Model list refreshed. Provider model listing does not guarantee generation access or available billing.");
+    },
+    onError: (err: Error) => {
+      setMessage("");
+      setError(err.message);
+    },
+  });
+
+  const useModel = useMutation({
+    mutationFn: async () => {
+      const token = await csrfToken();
+      const response = await fetch("/api/ai-credentials/model", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token, ...authHeaders() },
+        body: JSON.stringify({ modelId }),
+      });
+      return readResponse(response, "The selected model could not be saved.");
+    },
+    onSuccess: async (data) => {
+      setError("");
+      setMessage(data.projectsPending
+        ? `Model saved. ${data.projectsPending} existing project(s) will update when they reconnect.`
+        : "Model saved and applied to your eligible projects.");
       await queryClient.invalidateQueries({ queryKey: ["ai-credentials"] });
     },
     onError: (err: Error) => {
@@ -6154,12 +6221,12 @@ function ApiKeySettings() {
         credentials: "same-origin",
         headers: { "X-CSRF-Token": token, ...authHeaders() },
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "BuildCustom AI could not be selected.");
-      return data;
+      return readResponse(response, "BuildCustom AI could not be selected.");
     },
     onSuccess: async (data) => {
       setApiKey("");
+      setModels([]);
+      setUnavailableModels([]);
       setError("");
       setUseOwnKey(false);
       setMessage(data.projectsPending
@@ -6185,12 +6252,19 @@ function ApiKeySettings() {
 
   if (settings.isError) {
     return <SettingsCard title="AI Provider" description="Choose how your Builder requests use AI.">
-      <p className="text-sm text-red-400">{(settings.error as Error).message}</p>
+      <p className="text-sm text-red-400">{(settings.error as Error).message}
+        {(settings.error as Error).message === sessionExpiredMessage && <> <a href="/login" className="underline">Sign in again</a>.</>}
+      </p>
     </SettingsCard>;
   }
 
-  const models = settings.data?.providers || [];
   const savedKey = settings.data?.keySaved === true;
+  const connectedForSelectedProvider = savedKey && settings.data?.provider === providerId;
+  const visibleModels = models.filter((model) => {
+    const term = modelSearch.trim().toLowerCase();
+    return !term || `${model.label} ${model.providerModelId}`.toLowerCase().includes(term);
+  });
+  const sessionExpired = error === sessionExpiredMessage;
 
   return (
     <>
@@ -6245,17 +6319,24 @@ function ApiKeySettings() {
         {useOwnKey && (
           <div className="space-y-4">
             <div>
-              <label htmlFor="ai-provider-model" className="block text-sm font-medium mb-2">Provider model</label>
+              <label htmlFor="ai-provider" className="block text-sm font-medium mb-2">AI provider</label>
               <select
-                id="ai-provider-model"
-                value={modelId}
-                onChange={(event) => setModelId(event.target.value)}
+                id="ai-provider"
+                value={providerId}
+                onChange={(event) => {
+                  setProviderId(event.target.value);
+                  setModels([]);
+                  setUnavailableModels([]);
+                  setModelSearch("");
+                  setMessage("");
+                  setError("");
+                }}
                 className={fieldClass}
-                data-testid="select-ai-provider-model"
+                data-testid="select-ai-provider"
               >
-                {models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label} · {model.provider}
+                {(settings.data?.providers || []).map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.label}
                   </option>
                 ))}
               </select>
@@ -6269,27 +6350,106 @@ function ApiKeySettings() {
                 spellCheck={false}
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
-                placeholder={savedKey ? "Enter a new key to replace the saved key" : "Paste your provider API key"}
+                placeholder={connectedForSelectedProvider ? "Enter a new key to replace the saved key" : "Paste your provider API key"}
                 className={fieldClass}
                 data-testid="input-ai-provider-key"
               />
               <p className={`text-xs mt-2 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
-                The key is encrypted before storage and is never shown again. Your provider’s usage charges apply; BuildCustom AI credits are not used for these requests.
+                The key is checked with the provider’s model-list API, encrypted before storage, and never shown again. Provider charges apply; BuildCustom AI credits are not used for these requests.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => { setError(""); setMessage(""); save.mutate(); }}
-              disabled={!settings.data?.byokAvailable || !modelId || !apiKey.trim() || save.isPending}
+              onClick={() => { setError(""); setMessage(""); connect.mutate(); }}
+              disabled={!settings.data?.byokAvailable || !apiKey.trim() || connect.isPending}
               className="px-5 py-2.5 rounded-xl bg-cyan-400 text-black font-semibold text-sm disabled:opacity-50"
-              data-testid="button-save-ai-provider"
+              data-testid="button-connect-ai-provider"
             >
-              {save.isPending ? "Saving securely…" : savedKey ? "Replace saved key" : "Save provider key"}
+              {connect.isPending ? "Checking provider…" : connectedForSelectedProvider ? "Replace provider key" : "Connect provider"}
             </button>
+
+            {connectedForSelectedProvider && (
+              <div className="space-y-3 rounded-xl border border-white/10 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Saved key for {settings.data?.providers.find((provider) => provider.id === providerId)?.label || providerId}
+                    </p>
+                    <p className={`text-xs mt-1 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+                      Model listing confirms this key can list models, not generation access or billing.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => refreshModels.mutate()}
+                    disabled={refreshModels.isPending}
+                    className={`px-3 py-2 rounded-lg border text-sm disabled:opacity-50 ${theme === "dark" ? "border-white/15" : "border-gray-200"}`}
+                    data-testid="button-refresh-ai-models"
+                  >
+                    {refreshModels.isPending ? "Refreshing…" : "Refresh models"}
+                  </button>
+                </div>
+                {models.length > 0 && (
+                  <>
+                    <label htmlFor="ai-model-search" className="block text-sm font-medium">Search compatible models</label>
+                    <input
+                      id="ai-model-search"
+                      value={modelSearch}
+                      onChange={(event) => setModelSearch(event.target.value)}
+                      placeholder="Search by name or exact model ID"
+                      className={fieldClass}
+                      data-testid="input-ai-model-search"
+                    />
+                    <label htmlFor="ai-provider-model" className="block text-sm font-medium">Provider model</label>
+                    <select
+                      id="ai-provider-model"
+                      value={modelId}
+                      onChange={(event) => setModelId(event.target.value)}
+                      className={fieldClass}
+                      data-testid="select-ai-provider-model"
+                    >
+                      {visibleModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.label} · {model.providerModelId}
+                        </option>
+                      ))}
+                    </select>
+                    {modelId !== settings.data?.modelId && (
+                      <button
+                        type="button"
+                        onClick={() => useModel.mutate()}
+                        disabled={!modelId || useModel.isPending}
+                        className="px-5 py-2.5 rounded-xl bg-cyan-400 text-black font-semibold text-sm disabled:opacity-50"
+                        data-testid="button-use-ai-model"
+                      >
+                        {useModel.isPending ? "Saving model…" : "Use this model"}
+                      </button>
+                    )}
+                  </>
+                )}
+                {unavailableModels.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer">
+                      {unavailableModels.length} model(s) unavailable for the coding agent
+                    </summary>
+                    <ul className="mt-2 space-y-1">
+                      {unavailableModels.map((model) => (
+                        <li key={model.providerModelId}>
+                          <span className="font-medium">{model.label}</span> ({model.providerModelId}): {model.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {error && <p role="alert" className="mt-4 text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="mt-4 text-sm text-red-400">
+          {error}
+          {sessionExpired && <> <a href="/login" className="underline">Sign in again</a>.</>}
+        </p>}
         {message && <p role="status" className="mt-4 text-sm text-emerald-400">{message}</p>}
         {savedKey && (
           <p className={`mt-4 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>

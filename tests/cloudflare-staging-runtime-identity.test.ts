@@ -592,6 +592,13 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await anonymous.send("/api/projects/1")).status, 401);
   assert.equal((await anonymous.send("/api/projects", "POST", { name: "Unauthorized" })).status, 401);
   assert.equal((await anonymous.send("/api/projects/1/runtime/files")).status, 401);
+  const anonymousCredentials = await anonymous.send("/api/ai-credentials");
+  assert.equal(anonymousCredentials.status, 401);
+  assert.match((await anonymousCredentials.json() as any).message, /sign in again/i);
+  assert.equal((await anonymous.send("/api/ai-credentials/connect", "POST", {
+    provider: "openai",
+    apiKey: "fake-provider-key-for-tests",
+  })).status, 401);
 
   const aSignup = await a.auth("/api/auth/register", { name: "User A", email: "a@example.test", password: "Str0ng!PasswordA" });
   assert.equal(aSignup.status, 201);
@@ -609,6 +616,14 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await a.auth("/api/auth/verify-email", { token: verificationToken })).status, 200);
   assert.equal((await a.auth("/api/auth/verify-email", { token: verificationToken })).status, 400);
   assert.equal((await a.auth("/api/auth/login", { email: "a@example.test", password: "Str0ng!PasswordA" })).status, 200);
+  const credentialStatus = await a.send("/api/ai-credentials");
+  assert.equal(credentialStatus.status, 200);
+  assert.equal((await credentialStatus.json() as any).mode, "managed");
+  const credentialWithoutCsrf = await a.send("/api/ai-credentials/connect", "POST", {
+    provider: "openai",
+    apiKey: "fake-provider-key-for-tests",
+  });
+  assert.equal(credentialWithoutCsrf.status, 403);
   assert.equal((await b.auth("/api/auth/register", { name: "User B", email: "b@example.test", password: "Str0ng!PasswordB" })).status, 201);
   assert.equal((await b.auth("/api/auth/verify-email", { token: stock.verificationToken("b@example.test") })).status, 200);
   assert.equal((await b.auth("/api/auth/login", { email: "b@example.test", password: "Str0ng!PasswordB" })).status, 200);
