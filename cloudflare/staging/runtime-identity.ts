@@ -25,7 +25,7 @@ type RuntimeIdentity = {
 };
 
 export class RuntimeIdentityError extends Error {
-  constructor(message: string, readonly status = 502) {
+  constructor(message: string, readonly status = 502, readonly code?: string) {
     super(message);
   }
 }

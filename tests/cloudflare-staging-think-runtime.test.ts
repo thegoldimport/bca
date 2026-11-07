@@ -4,6 +4,7 @@ import {
   allowedNativeClientFrame,
   createNativeTicketRequest,
   filterNativeServerFrame,
+  ownerCsrfToken,
   openStockAgentWebSocket,
   previewUrlAllowed,
   safeThinkFilePath,
@@ -152,6 +153,29 @@ test("stock requests use only allowlisted owner cookies and never browser bearer
   }, request, "/api/agent/attacker/preview", { method: "POST" }), /Unsupported owner-scoped runtime request/);
 });
 
+test("owner CSRF forwarding extracts a fresh token from the encoded runtime cookie", () => {
+  const token = "runtime-csrf-token";
+  const cookieValue = encodeURIComponent(JSON.stringify({ token, timestamp: Date.now() }));
+  const request = new Request("https://app.buildcustom.ai/api/projects/1/runtime/ws", {
+    headers: { Cookie: `accessToken=stock-session; csrf-token=${cookieValue}` },
+  });
+  assert.equal(ownerCsrfToken(request), token);
+  assert.equal(ownerCsrfToken(new Request("https://app.buildcustom.ai/api/projects/1/runtime/ws", {
+    headers: { "X-CSRF-Token": "explicit-header-token", Cookie: `csrf-token=${cookieValue}` },
+  })), "explicit-header-token");
+});
+
+test("owner CSRF forwarding rejects malformed, expired, and future-dated JSON cookies", () => {
+  const expired = encodeURIComponent(JSON.stringify({ token: "expired-token", timestamp: Date.now() - 2 * 60 * 60 * 1000 - 1 }));
+  const future = encodeURIComponent(JSON.stringify({ token: "future-token", timestamp: Date.now() + 1000 }));
+  for (const value of [encodeURIComponent("{invalid"), expired, future, "%E0%A4%A"]) {
+    const request = new Request("https://app.buildcustom.ai/api/projects/1/runtime/ws", {
+      headers: { Cookie: `csrf-token=${value}` },
+    });
+    assert.equal(ownerCsrfToken(request), null);
+  }
+});
+
 test("BuildCustom AI refresh is an owner-scoped POST with the CSRF cookie forwarded", async () => {
   let forwarded: Request | null = null;
   const runtime = {
@@ -163,7 +187,10 @@ test("BuildCustom AI refresh is an owner-scoped POST with the CSRF cookie forwar
   const request = new Request("https://buildcustom-control-plane-staging.thegoldimport.workers.dev/api/projects/1/runtime/ws", {
     headers: {
       Origin: "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
-      Cookie: "accessToken=stock-session; csrf-token=csrf-cookie; unrelated=do-not-forward",
+      Cookie: `accessToken=stock-session; csrf-token=${encodeURIComponent(JSON.stringify({
+        token: "csrf-cookie-token",
+        timestamp: Date.now(),
+      }))}; unrelated=do-not-forward`,
     },
   });
   const response = await stockThinkRequest({
@@ -177,7 +204,7 @@ test("BuildCustom AI refresh is an owner-scoped POST with the CSRF cookie forwar
   assert.ok(forwarded);
   assert.equal(forwarded!.method, "POST");
   assert.equal(forwarded!.headers.get("Origin"), "https://buildcustom-control-plane-staging.thegoldimport.workers.dev");
-  assert.equal(forwarded!.headers.get("X-CSRF-Token"), "csrf-cookie");
+  assert.equal(forwarded!.headers.get("X-CSRF-Token"), "csrf-cookie-token");
   assert.equal(forwarded!.headers.get("Authorization"), null);
 });
 
@@ -226,7 +253,7 @@ test("ticket bootstrap couples the fresh stock CSRF cookie/header and keeps owne
   assert.equal(upstream, socket);
   assert.equal(calls.length, 3);
   assert.equal(calls[2].url.includes("tk_"), true);
-  await assert.rejects(() => openStockAgentWebSocket({
+  await assert.rejects(async () => openStockAgentWebSocket({
     ...env,
     AUTH_RUNTIME: {
       async fetch(request: Request) {
@@ -238,7 +265,13 @@ test("ticket bootstrap couples the fresh stock CSRF cookie/header and keeps owne
         return Response.json({ success: false }, { status: 403 });
       },
     } as unknown as Fetcher,
-  }, request, "foreign-agent"), /not available/);
+  }, request, "foreign-agent"), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /could not issue a project connection ticket/i);
+    assert.equal((error as RuntimeIdentityError).status, 502);
+    assert.equal((error as RuntimeIdentityError).code, "NATIVE_WS_TICKET_REJECTED");
+    return true;
+  });
 });
 
 test("preview capabilities stay HTTPS, owner-path-scoped, signed, and on the stock staging origin", () => {

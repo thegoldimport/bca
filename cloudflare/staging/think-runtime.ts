@@ -72,14 +72,34 @@ function ownerCookies(request: Request, includeCloudflareOAuth = false): string 
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 
-function ownerCsrfToken(request: Request): string | null {
+export function ownerCsrfToken(request: Request): string | null {
   const fromHeader = request.headers.get("X-CSRF-Token");
   if (fromHeader && fromHeader.length <= 512 && !/[\r\n]/.test(fromHeader)) return fromHeader;
   for (const part of (request.headers.get("Cookie") || "").split(";")) {
     const index = part.indexOf("=");
     if (index < 1 || part.slice(0, index).trim() !== "csrf-token") continue;
-    const value = part.slice(index + 1).trim();
-    return value && value.length <= 512 && !/[\r\n;]/.test(value) ? value : null;
+    const rawValue = part.slice(index + 1).trim();
+    if (!rawValue || rawValue.length > 8192 || /[\r\n;]/.test(rawValue)) return null;
+    let value: string;
+    try {
+      value = decodeURIComponent(rawValue);
+    } catch {
+      return null;
+    }
+    try {
+      const data = JSON.parse(value);
+      if (!data || typeof data !== "object" || Array.isArray(data)
+        || typeof data.token !== "string" || !data.token || data.token.length > 4096 || /[\r\n]/.test(data.token)
+        || !Number.isFinite(data.timestamp)) return null;
+      const age = Date.now() - data.timestamp;
+      if (age < 0 || age > 2 * 60 * 60 * 1000) return null;
+      return data.token;
+    } catch {
+      // Match the runtime's legacy plain-string CSRF cookie support, but do
+      // not forward malformed JSON-looking values as header tokens.
+      if (/^\s*[\[{"]/.test(value) || value.length > 4096 || /[\r\n]/.test(value)) return null;
+      return value;
+    }
   }
   return null;
 }
@@ -464,9 +484,15 @@ async function issueTicket(env: Env, request: Request, agentId: string): Promise
       signal: AbortSignal.timeout(15_000),
     }));
   } catch {
-    throw new RuntimeIdentityError("The owner-authorized runtime is temporarily unavailable.", 502);
+    throw new RuntimeIdentityError("The owner-authorized runtime is temporarily unavailable.", 502, "NATIVE_CSRF_BOOTSTRAP_FAILED");
   }
-  const csrfData = await responseJson(csrfResponse);
+  let csrfData: any;
+  try {
+    csrfData = await responseJson(csrfResponse);
+  } catch (error) {
+    const status = error instanceof RuntimeIdentityError ? error.status : 502;
+    throw new RuntimeIdentityError("The runtime could not authorize a secure connection.", status, "NATIVE_CSRF_BOOTSTRAP_REJECTED");
+  }
   const csrfToken = csrfData?.token;
   const setCookies = (csrfResponse.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() || [];
   const csrfSetCookie = setCookies.find((value) => /^csrf-token=/i.test(value));
@@ -474,7 +500,7 @@ async function issueTicket(env: Env, request: Request, agentId: string): Promise
   if (typeof csrfToken !== "string" || !csrfToken || csrfToken.length > 4096 || /[\r\n]/.test(csrfToken)
     || !csrfCookieValue || csrfCookieValue.length > 4096 || /[;\r\n]/.test(csrfCookieValue)
     || /(?:^|;)\s*Domain=/i.test(csrfSetCookie || "")) {
-    throw new RuntimeIdentityError("The runtime did not provide a valid secure request token.", 502);
+    throw new RuntimeIdentityError("The runtime did not provide a valid secure request token.", 502, "NATIVE_CSRF_BOOTSTRAP_INVALID");
   }
   let response: Response;
   try {
@@ -492,11 +518,20 @@ async function issueTicket(env: Env, request: Request, agentId: string): Promise
       signal: AbortSignal.timeout(15_000),
     }));
   } catch {
-    throw new RuntimeIdentityError("The owner-authorized runtime is temporarily unavailable.", 502);
+    throw new RuntimeIdentityError("The owner-authorized runtime is temporarily unavailable.", 502, "NATIVE_WS_TICKET_REQUEST_FAILED");
   }
-  const data = await responseJson(response);
+  let data: any;
+  try {
+    data = await responseJson(response);
+  } catch (error) {
+    throw new RuntimeIdentityError(
+      "The runtime could not issue a project connection ticket.",
+      502,
+      "NATIVE_WS_TICKET_REJECTED",
+    );
+  }
   if (typeof data?.ticket !== "string" || !/^tk_[a-f0-9]{32,}$/i.test(data.ticket)) {
-    throw new RuntimeIdentityError("The runtime did not provide a valid connection ticket.", 502);
+    throw new RuntimeIdentityError("The runtime did not provide a valid connection ticket.", 502, "NATIVE_WS_TICKET_INVALID");
   }
   return data.ticket;
 }
@@ -514,10 +549,10 @@ export async function openStockAgentWebSocket(env: Env, request: Request, agentI
       { headers, signal: AbortSignal.timeout(15_000) },
     )) as StockResponse;
   } catch {
-    throw new RuntimeIdentityError("The owner-authorized project connection failed.", 502);
+    throw new RuntimeIdentityError("The owner-authorized project connection failed.", 502, "NATIVE_AGENT_WS_REQUEST_FAILED");
   }
   if (response.status !== 101 || !response.webSocket) {
-    throw new RuntimeIdentityError("The owner-authorized project connection failed.", 502);
+    throw new RuntimeIdentityError("The owner-authorized project connection was rejected.", 502, "NATIVE_AGENT_WS_REJECTED");
   }
   return response.webSocket;
 }
@@ -699,12 +734,22 @@ function relay(server: WebSocket, upstream: WebSocket): void {
 
 async function bridgeWebSocket(env: Env, request: Request, project: Project, origin: string): Promise<Response> {
   if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("WebSocket upgrade required.", { status: 426 });
-  if (request.headers.get("Origin") !== origin) return Response.json({ message: "Project connection origin rejected." }, { status: 403 });
+  if (request.headers.get("Origin") !== origin) {
+    console.warn("native_connection_diagnostic", { code: "NATIVE_CONTROL_ORIGIN_REJECTED", status: 403 });
+    return Response.json({ message: "Project connection origin rejected.", code: "NATIVE_CONTROL_ORIGIN_REJECTED" }, { status: 403 });
+  }
   if ([...new URL(request.url).searchParams.keys()].length) return Response.json({ message: "Project connection parameters are not accepted." }, { status: 400 });
-  const link = await refreshProjectAgent(env, request, project);
+  let link;
+  try {
+    link = await refreshProjectAgent(env, request, project);
+  } catch (error) {
+    const status = error instanceof RuntimeIdentityError ? error.status : 502;
+    const code = status === 403 ? "NATIVE_RUNTIME_OWNER_REJECTED" : "NATIVE_PROJECT_LINK_CHECK_FAILED";
+    throw new RuntimeIdentityError("Project ownership could not be verified.", status, code);
+  }
   const agentId = link?.agent_id;
   if (!agentId || !AGENT_ID.test(agentId) || link.initialization_status !== "ready") {
-    return Response.json({ message: "This project is not ready for editing." }, { status: 409 });
+    return Response.json({ message: "This project is not ready for editing.", code: "NATIVE_PROJECT_LINK_NOT_READY" }, { status: 409 });
   }
   const aiSettings = await env.DB.prepare(
     "SELECT mode FROM user_ai_credentials WHERE user_id=?",
@@ -717,7 +762,13 @@ async function bridgeWebSocket(env: Env, request: Request, project: Project, ori
       { method: "POST", body: {} },
     );
     if (!configResponse.ok) {
-      throw new RuntimeIdentityError("The project's AI settings could not be applied.", configResponse.status === 401 || configResponse.status === 403 ? configResponse.status : 503);
+      const status = configResponse.status === 401 || configResponse.status === 403 ? configResponse.status : 503;
+      throw new RuntimeIdentityError(
+        "The project's AI settings could not be applied.",
+        status,
+        configResponse.status === 401 || configResponse.status === 403
+          ? "NATIVE_AI_CONFIG_REFRESH_REJECTED" : "NATIVE_AI_CONFIG_REFRESH_FAILED",
+      );
     }
   }
   const upstream = await openStockAgentWebSocket(env, request, agentId);
