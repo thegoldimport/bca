@@ -70,6 +70,7 @@ function fixture({
   closeAcceptedSockets = 0,
   accelerateSocketRetries = false,
   hangPlanning = false,
+  planningSession = null,
 } = {}) {
   return {
     projectId: PROJECT_ID,
@@ -82,6 +83,7 @@ function fixture({
     closeAcceptedSockets,
     accelerateSocketRetries,
     hangPlanning,
+    planningSession,
     currentRevision: changed ? EDITED : BASELINE,
     shouldBeGenerating: active,
     generationStatus: active ? "running" : "idle",
@@ -110,6 +112,8 @@ function fixture({
       previewPosts: 0,
       publishRequests: 0,
       agentCreationRequests: 0,
+      planningWrites: 0,
+      planningDeletes: 0,
       api: [],
     },
   };
@@ -193,7 +197,20 @@ function installBrowserHarness(initialFixture) {
           else signal?.addEventListener("abort", onAbort, { once: true });
         });
       }
-      return json(method === "GET" ? { session: null } : { success: true });
+      if (method === "GET") return json({ session: state.planningSession });
+      if (method === "PUT") {
+        state.planningSession = JSON.parse(String(init.body || "{}")).session || null;
+        state.stats.planningWrites += 1;
+        persist();
+        return json({ success: true });
+      }
+      if (method === "DELETE") {
+        state.planningSession = null;
+        state.stats.planningDeletes += 1;
+        persist();
+        return json({ success: true });
+      }
+      return json({ success: true });
     }
     if (url.pathname.endsWith("/runtime/status")) {
       if (holdRuntimeStatus || delayNextStatus) {
@@ -448,6 +465,10 @@ function installBrowserHarness(initialFixture) {
       state.nativeTaskLifecycle = nativeTaskLifecycle;
       persist();
     },
+    rejectNextHandshakes(count = 1) {
+      state.rejectHandshakes = count;
+      persist();
+    },
     delayNextRevision() {
       delayNextRevision = true;
     },
@@ -468,6 +489,7 @@ function installBrowserHarness(initialFixture) {
         shouldBeGenerating: state.shouldBeGenerating,
         generationStatus: state.generationStatus,
         persistedTurns: state.persistedTurns,
+        planningSession: state.planningSession,
         stats: state.stats,
       }));
     },
@@ -664,6 +686,54 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       executablePath: browserExecutablePath,
       headless: true,
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+
+    await t.test("failed pre-prompt connection preserves an approved plan and retries without a duplicate prompt", async () => {
+      const now = Date.now();
+      const savedPlan = {
+        version: 1,
+        mode: "plan",
+        phase: "awaiting_approval",
+        originalPrompt: "Plan a lead generation platform before building",
+        audience: "B2B companies",
+        outcomes: ["Find potential customers", "Manage leads in a CRM"],
+        skipped: [],
+        questionsAsked: 2,
+        messages: [
+          { id: "plan-user", role: "user", content: "Plan a lead generation platform before building", createdAt: now - 2 },
+          { id: "plan-assistant", role: "assistant", content: "Here's a first-pass plan for a B2B lead generation platform.", createdAt: now - 1 },
+        ],
+        currentQuestion: null,
+        planSummary: "A B2B lead generation workspace for finding and managing prospects.",
+      };
+      const page = await startEditor(serverUrl, browser, fixture({ planningSession: savedPlan }));
+      try {
+        await page.waitForSelector('[data-testid="approved-plan-card"]', { timeout: 10_000 });
+        await page.evaluate(() => window.__nativeCompletionHarness.rejectNextHandshakes());
+        await page.click('[data-testid="approved-plan-card"] button');
+        await page.waitForSelector('[data-testid="button-retry-native-connection"]', { timeout: 10_000 });
+        await waitForState(page, "error");
+        const failed = await page.evaluate(() => window.__nativeCompletionHarness.snapshot());
+        assert.equal(failed.stats.userSuggestions, 0, "a rejected handshake must not send a build prompt");
+        assert.equal(failed.stats.planningDeletes, 0, "the approved planning conversation must remain saved");
+        assert.equal(failed.planningSession.originalPrompt, savedPlan.originalPrompt);
+        assert.equal(failed.planningSession.phase, "awaiting_approval");
+        assert.match(await page.$eval('[data-testid="native-connection-failed"]', (node) => node.innerText),
+          /no build prompt was sent/i);
+        assert.equal(await page.$eval('[data-testid="native-completion-state"]', (node) => node.dataset.state), "error");
+
+        await page.click('[data-testid="button-retry-native-connection"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
+        await waitForState(page, "running");
+        const retried = await page.evaluate(() => window.__nativeCompletionHarness.snapshot());
+        assert.equal(retried.stats.userSuggestions, 1, "the original approved instruction is sent exactly once after connection");
+        assert.equal(retried.stats.planningDeletes, 0, "the saved plan remains until the runtime confirms completion");
+        assert.equal(retried.planningSession.phase, "submitted");
+        assert.match(retried.stats.api.filter((entry) => entry.path.endsWith("/planning")).map((entry) => entry.method).join(","),
+          /PUT/);
+      } finally {
+        await page.close();
+      }
     });
 
     await t.test("chat stays editable and can send when saved planning restoration stalls", async () => {

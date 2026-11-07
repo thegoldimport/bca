@@ -172,7 +172,10 @@ export function projectIdFromPath(pathname: string): number | null {
 }
 function runtimeError(error: unknown): Response {
   if (error instanceof VibeSdkAdapterError) return json({ message: error.message, code: error.code }, { status: error.status });
-  if (error instanceof RuntimeIdentityError) return json({ message: error.message }, { status: error.status });
+  if (error instanceof RuntimeIdentityError) {
+    if (error.code) console.warn("native_connection_diagnostic", { code: error.code, status: error.status });
+    return json({ message: error.message, ...(error.code ? { code: error.code } : {}) }, { status: error.status });
+  }
   return json({ message: error instanceof Error ? error.message : "Request failed" }, { status: 400 });
 }
 

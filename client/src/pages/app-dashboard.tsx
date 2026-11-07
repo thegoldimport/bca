@@ -753,6 +753,14 @@ type ComposerImage = {
   base64Data: string;
   size: number;
 };
+type NativeConnectionRetry = {
+  projectId: number;
+  agentPrompt: string;
+  images: ComposerImage[];
+  lifecycle: number;
+  continuationApproval?: { taskId: string; operationId: string; updatedAt: number };
+  assistantMessageId?: string;
+};
 type SelectedElement = Record<string, unknown>;
 
 function BuildActivity({
@@ -1214,6 +1222,7 @@ function EditorPage() {
   const [autoContinueSaving, setAutoContinueSaving] = useState(false);
   const [nativeCompletionMessage, setNativeCompletionMessage] = useState("");
   const [nativeRecoveryUnverified, setNativeRecoveryUnverified] = useState(false);
+  const [nativeConnectionRetry, setNativeConnectionRetry] = useState<NativeConnectionRetry | null>(null);
   const [nativeProgress, setNativeProgress] = useState<BuildActivityEvent[]>(() => (
     typeof window === "undefined" || !projectId ? [] : readNativeActivitySnapshot(projectId).events
   ));
@@ -2312,6 +2321,7 @@ function EditorPage() {
     continuationApproval?: { taskId: string; operationId: string; updatedAt: number },
     assistantMessageId?: string,
   ) => {
+    setNativeConnectionRetry(null);
     nativeIdleStopRef.current();
     const operationController = new AbortController();
     nativeOperationControllerRef.current = operationController;
@@ -2509,6 +2519,31 @@ function EditorPage() {
         }
         if (!recoverable) clearNativeOperationBaseline(projectId);
         closeAndFinish(error);
+      };
+
+      const failBeforePrompt = () => {
+        if (promptAttempted || suggestionSent) {
+          failTurn("Connection failed. The build request may already be running; refresh the project status before retrying.");
+          return;
+        }
+        setNativeConnectionRetry({
+          projectId,
+          agentPrompt,
+          images: images.map((image) => ({ ...image })),
+          lifecycle,
+          ...(continuationApproval ? { continuationApproval } : {}),
+          ...(assistantMessageId ? { assistantMessageId } : {}),
+        });
+        const failedEvents = nativeProgressRef.current.map((event) =>
+          event.status === "active" ? { ...event, status: "error" as const } : event);
+        nativeProgressRef.current = failedEvents;
+        setNativeProgress(failedEvents);
+        writeNativeActivitySnapshot(projectId, {
+          events: failedEvents,
+          startedAt: nativeOperationStartedAtRef.current,
+        });
+        recordNativeProgress("Connection failed before the build request was sent", "error");
+        failTurn("Connection failed. Your approved plan and conversation are saved. No build prompt was sent.");
       };
 
       const fetchJson = async (path: string, init?: RequestInit) => {
@@ -2995,6 +3030,7 @@ function EditorPage() {
               return;
             }
             promptAttempted = true;
+            setNativeConnectionRetry(null);
             writeNativeOperationBaseline(projectId, { ...operationBaseline, promptAttempted: true });
             try {
               setNativeCompletionPhase(continuationApproval ? "starting" : "running");
@@ -3146,7 +3182,7 @@ function EditorPage() {
           return;
         }
         if (!beginRecovery()) {
-          failTurn("The native Agent connection failed before the prompt was sent. Your request was not automatically retried.");
+          failBeforePrompt();
         }
       };
 
@@ -3161,7 +3197,7 @@ function EditorPage() {
         }
         if (!finished) {
           if (!beginRecovery()) {
-            failTurn("The native Agent connection closed before the prompt was sent. Your request was not automatically retried.");
+            failBeforePrompt();
           }
         }
       };
@@ -3308,6 +3344,47 @@ function EditorPage() {
     }
   };
 
+  const handleRetryNativeConnection = async () => {
+    const retry = nativeConnectionRetry;
+    if (!retry || retry.projectId !== projectId || sending || sendAttemptRef.current
+      || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified) return;
+    sendAttemptRef.current = true;
+    setNativeConnectionRetry(null);
+    setSending(true);
+    setNativeCompletionPhase("starting");
+    setNativeCompletionMessage("Retrying the connection. The build prompt will only be sent after the Agent confirms it is ready.");
+    setRuntimeError("");
+    recordNativeProgress("Retrying the Agent connection", "active");
+    try {
+      await streamNativeTurn(
+        retry.agentPrompt,
+        retry.images,
+        retry.lifecycle,
+        retry.continuationApproval,
+        retry.assistantMessageId,
+      );
+      if (activeProjectIdRef.current !== retry.projectId) return;
+      setPendingPlan("");
+      setAttachments([]);
+      setTextContext([]);
+      setSelectedElement(null);
+    } catch (error: any) {
+      if (activeProjectIdRef.current !== retry.projectId) return;
+      const message = error?.message || "The Agent could not reconnect.";
+      setRuntimeError(message);
+      setNativeCompletionPhase("error");
+      setNativeCompletionMessage(message);
+      if (retry.assistantMessageId) {
+        setMessages((previous) => previous.map((item) => item.id === retry.assistantMessageId
+          ? { ...item, content: message }
+          : item));
+      }
+    } finally {
+      if (activeProjectIdRef.current === retry.projectId) setSending(false);
+      sendAttemptRef.current = false;
+    }
+  };
+
   const handleSend = async (
     promptOverride?: string,
     planOverride?: boolean,
@@ -3335,7 +3412,7 @@ function EditorPage() {
       return;
     }
     if (sendAttemptRef.current) return;
-    if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified)) {
+    if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeConnectionRetry)) {
       if (!sending && nativeRuntimeAlreadyWorking) {
         const message = "This Agent is already working. The existing operation was not restarted; refresh to check its latest state.";
         setNativeCompletionPhase("recovering");
@@ -4304,7 +4381,7 @@ function EditorPage() {
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void handleSend("", false, { approvePlan: true })}
-                  disabled={planningSaving || sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified}
+                  disabled={planningSaving || sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeConnectionRetry !== null}
                   className="min-h-10 rounded-xl bg-cyan-400 px-4 text-sm font-semibold text-gray-950 disabled:cursor-not-allowed disabled:opacity-50">
                   {planningSaving ? "Saving plan…" : "Approve and build"}
                 </button>
@@ -4323,14 +4400,40 @@ function EditorPage() {
             <p className={`rounded-xl border px-3 py-2.5 text-xs leading-5 ${
               theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"
             }`}>
-              The build request was sent. The editor will check the existing runtime state and will not submit it again.
+              {nativeConnectionRetry
+                ? "The approved plan and conversation are saved. The Agent connection failed before any build prompt was sent."
+                : "The build request was sent. The editor will check the existing runtime state and will not submit it again."}
             </p>
+          )}
+          {nativeConnectionRetry && (
+            <section
+              className={`rounded-xl border px-3 py-3 ${
+                theme === "dark" ? "border-amber-400/25 bg-amber-400/10" : "border-amber-200 bg-amber-50"
+              }`}
+              role="status"
+              data-testid="native-connection-failed"
+            >
+              <p className={`text-xs leading-5 ${theme === "dark" ? "text-amber-100" : "text-amber-900"}`}>
+                Connection failed. Your conversation and approved plan are saved. No build prompt was sent.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleRetryNativeConnection()}
+                disabled={sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified}
+                className="mt-2 min-h-9 rounded-lg bg-cyan-400 px-3 text-xs font-semibold text-gray-950 disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="button-retry-native-connection"
+              >
+                Retry connection
+              </button>
+            </section>
           )}
           {nativeThink ? (
             <NativeBuildActivity
               projectId={projectId}
               theme={theme}
-              phase={planningSession?.phase === "clarifying"
+              phase={nativeConnectionRetry
+                ? "error"
+                : planningSession?.phase === "clarifying"
                 ? "clarifying"
                 : planningSession?.phase === "awaiting_approval"
                   ? "planning"
@@ -4529,7 +4632,7 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified))}
+              disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeConnectionRetry !== null))}
               placeholder={!currentRuntimeCapability
                 ? "Checking project runtime…"
                 : planningSession?.phase === "clarifying"
