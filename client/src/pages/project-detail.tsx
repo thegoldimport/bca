@@ -1,19 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
 import { useRoute, Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, Globe, Smartphone, Gamepad2, ShoppingBag, ExternalLink,
+  Activity, ArrowLeft, Globe, Smartphone, Gamepad2, ShoppingBag, ExternalLink,
   Settings, FolderTree, Terminal, History, BarChart3, FileText, Rss, Bot,
   Search, MapPin, Plus, Pencil, Trash2, Eye, Calendar, Clock, CheckCircle2,
   AlertCircle, XCircle, RefreshCw, Download, Share2, Copy, Zap, TrendingUp,
   TrendingDown, MoreHorizontal, Save, Layers, Code2, Shield, Check, X,
   BookOpen, Newspaper, Wand2, Target, Hash, ArrowUpRight, ChevronRight,
-  ChevronDown, Upload,
+  ChevronDown, Upload, Circle,
 } from "lucide-react";
 import { useTheme } from "@/contexts/theme-context";
 import { authHeaders, csrfToken } from "@/lib/auth";
 import { publicGeneratedAppUrl, usePublicCapabilities } from "@/hooks/use-public-capabilities";
+import { readNativeActivitySnapshot, type BuildActivityEvent } from "@/lib/native-activity";
+import { projectCollectionFromResponse } from "@/lib/project-collections";
 import { getDomain } from "tldts";
 import { actionableDomainDnsRecords, dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
@@ -26,9 +28,10 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
   website: Globe, app: Smartphone, game: Gamepad2, saas: ShoppingBag,
 };
 
-type TabId = "overview" | "files" | "console" | "history" | "settings" | "pages" | "blog" | "autoblogger" | "seo" | "analytics" | "domain";
+type TabId = "overview" | "activity" | "files" | "console" | "history" | "settings" | "pages" | "blog" | "autoblogger" | "seo" | "analytics" | "domain";
 const UNIVERSAL_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "overview", label: "Overview", icon: Layers },
+  { id: "activity", label: "Activity", icon: Activity },
   { id: "files", label: "Files", icon: FolderTree },
   { id: "console", label: "Console", icon: Terminal },
   { id: "history", label: "Version History", icon: History },
@@ -49,6 +52,135 @@ function GlassCard({ children, className = "" }: { children: React.ReactNode; cl
     <div className={`rounded-2xl border p-6 ${theme === "dark" ? "bg-white/[0.03] border-white/10" : "bg-white border-gray-200"} ${className}`}>
       {children}
     </div>
+  );
+}
+
+class ProjectTabErrorBoundary extends Component<{
+  children: React.ReactNode;
+  theme: string;
+  onReturnOverview: () => void;
+}, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    const dark = this.props.theme === "dark";
+    return (
+      <section
+        role="alert"
+        data-testid="project-tab-error"
+        className={`mx-auto max-w-xl rounded-2xl border p-6 text-center ${dark ? "border-rose-400/20 bg-rose-400/5 text-white" : "border-rose-200 bg-rose-50 text-gray-900"}`}
+      >
+        <AlertCircle className="mx-auto mb-3 text-rose-400" size={24} />
+        <h2 className="font-semibold">This project section couldn’t load</h2>
+        <p className={`mt-2 text-sm ${dark ? "text-white/60" : "text-gray-600"}`}>
+          Try the section again, or return to the project overview. Your project data has not been changed.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" onClick={() => this.setState({ hasError: false })} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-black">Try again</button>
+          <button type="button" onClick={this.props.onReturnOverview} className={`rounded-lg border px-4 py-2 text-sm font-semibold ${dark ? "border-white/15 text-white/80" : "border-gray-300 text-gray-700"}`}>Return to Overview</button>
+        </div>
+      </section>
+    );
+  }
+}
+
+function ProjectQueryError({ title, message, onRetry }: { title: string; message: string; onRetry: () => void }) {
+  const { theme } = useTheme();
+  return (
+    <GlassCard>
+      <div role="alert" className="flex flex-wrap items-center justify-between gap-4" data-testid="project-query-error">
+        <div>
+          <h2 className="font-semibold text-rose-400">{title}</h2>
+          <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>{message}</p>
+        </div>
+        <button type="button" onClick={onRetry} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-black">Try again</button>
+      </div>
+    </GlassCard>
+  );
+}
+
+function ProjectActivityTab({ projectId }: { projectId: number }) {
+  const { theme } = useTheme();
+  const [snapshot, setSnapshot] = useState(() => readNativeActivitySnapshot(projectId));
+  const events = [...snapshot.events].sort((a, b) => a.observedAt - b.observedAt);
+  const statusIcon = (event: BuildActivityEvent) => {
+    if (event.status === "error") return <AlertCircle size={15} className="text-rose-400" aria-hidden="true" />;
+    if (event.status === "complete") return <CheckCircle2 size={15} className="text-emerald-400" aria-hidden="true" />;
+    if (event.status === "active") return <RefreshCw size={14} className="animate-spin text-amber-300 motion-reduce:animate-none" aria-hidden="true" />;
+    return <Circle size={12} className={theme === "dark" ? "text-white/35" : "text-gray-400"} aria-hidden="true" />;
+  };
+
+  useEffect(() => {
+    setSnapshot(readNativeActivitySnapshot(projectId));
+  }, [projectId]);
+
+  return (
+    <section className="space-y-5" data-testid="project-activity-page">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Project activity</h2>
+          <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+            Build events captured in this browser session. This view does not show prompts or project source.
+          </p>
+        </div>
+        <Link href={`/app/editor/${projectId}`}>
+          <button type="button" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-semibold text-gray-950 hover:bg-cyan-300" data-testid="button-activity-open-builder">
+            <Code2 size={15} /> Open Builder
+          </button>
+        </Link>
+      </div>
+
+      <GlassCard>
+        <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-4 ${
+          theme === "dark" ? "border-white/10" : "border-gray-200"
+        }`}>
+          <div className="flex items-center gap-2">
+            <Activity size={17} className="text-cyan-400" aria-hidden="true" />
+            <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Observed build events</h3>
+          </div>
+          <span className={`text-xs tabular-nums ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+            {events.length} {events.length === 1 ? "event" : "events"}
+          </span>
+        </div>
+
+        {snapshot.startedAt && (
+          <p className={`pt-4 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
+            Latest build activity started {new Date(snapshot.startedAt).toLocaleString()}
+          </p>
+        )}
+
+        {events.length > 0 ? (
+          <ol className="mt-4 space-y-2" aria-label="Project build activity">
+            {events.map((event) => (
+              <li key={event.id} className={`grid grid-cols-[18px_minmax(0,1fr)] gap-x-3 rounded-xl border p-3 sm:grid-cols-[18px_minmax(0,1fr)_auto] ${
+                theme === "dark" ? "border-white/[0.07] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
+              }`}>
+                <span className="mt-0.5">{statusIcon(event)}</span>
+                <div className="min-w-0">
+                  <p className={`text-sm leading-5 ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{event.label}</p>
+                  {event.path && <code className={`mt-1 block break-all text-[11px] ${theme === "dark" ? "text-cyan-200/60" : "text-cyan-800/75"}`}>{event.path}</code>}
+                </div>
+                <time className={`col-start-2 mt-1 text-[11px] sm:col-start-auto sm:mt-0 ${theme === "dark" ? "text-white/35" : "text-gray-500"}`}
+                  dateTime={new Date(event.observedAt).toISOString()}>
+                  {new Date(event.observedAt).toLocaleString()}
+                </time>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className={`mt-4 rounded-xl border border-dashed px-4 py-8 text-center ${
+            theme === "dark" ? "border-white/10 text-white/45" : "border-gray-200 text-gray-500"
+          }`} data-testid="project-activity-empty">
+            No build activity has been captured in this browser session yet. Open Builder to start or resume work on this project.
+          </div>
+        )}
+      </GlassCard>
+    </section>
   );
 }
 
@@ -82,8 +214,22 @@ function fmtDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+async function fetchProjectCollection(
+  projectId: number,
+  endpoint: string,
+  keys: readonly string[],
+  failureMessage: string,
+): Promise<any[]> {
+  const response = await fetch(`/api/projects/${projectId}/${endpoint}`, { headers: authHeaders() });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(typeof body?.message === "string" ? body.message : failureMessage);
+  }
+  return projectCollectionFromResponse(body, keys) as any[];
+}
+
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
-function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project: any; blogCount: number; projectId: number; runtimeStatus: any }) {
+function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project: any; blogCount: number | null; projectId: number; runtimeStatus: any }) {
   const { theme } = useTheme();
   const { publicGeneratedAppsEnabled } = usePublicCapabilities();
   const queryClient = useQueryClient();
@@ -158,7 +304,7 @@ function OverviewTab({ project, blogCount, projectId, runtimeStatus }: { project
           trend={publiclyAvailable ? "up" : "neutral"}
         />
         {isWebsite && <StatCard label="Monthly Visitors" value="—" sub="Analytics not connected" trend="neutral" />}
-        {isWebsite && <StatCard label="Blog Posts" value={String(blogCount)} sub="total posts" trend="neutral" />}
+        {isWebsite && <StatCard label="Blog Posts" value={blogCount === null ? "—" : String(blogCount)} sub={blogCount === null ? "Unavailable" : "total posts"} trend="neutral" />}
         {isWebsite && <StatCard label="SEO Score" value="—" sub="Configure SEO tab" trend="neutral" />}
         <StatCard label="Last Updated" value={timeAgo(project.updatedAt)} sub={`Created ${fmtDate(project.createdAt)}`} trend="neutral" />
         <StatCard label="Framework" value={project.framework} sub="Production build" trend="neutral" />
@@ -559,7 +705,7 @@ export function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId
   const [form, setForm] = useState({ subdomainSlug: "", hostingProvider: "buildcustom", customDomain: "", customOrigin: "" });
   const [customDomainEnabled, setCustomDomainEnabled] = useState(false);
   const [message, setMessage] = useState("");
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading, error, refetch } = useQuery({
     queryKey: ["publishing-settings", projectId],
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/runtime/publishing-settings`, { headers: authHeaders() });
@@ -612,6 +758,12 @@ export function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId
         {deploymentUrl && <a href={deploymentUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-semibold text-emerald-400"><ExternalLink size={13} /> View live</a>}
       </div>
       <div className="space-y-4">
+        {error && (
+          <div role="alert" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${theme === "dark" ? "border-rose-400/20 bg-rose-400/5 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+            <span>Publishing settings could not be loaded: {(error as Error).message}</span>
+            <button type="button" onClick={() => void refetch()} className="font-semibold underline">Try again</button>
+          </div>
+        )}
         <div>
           <label className={`mb-1.5 block text-xs font-medium ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Included project address</label>
           <div className="flex">
@@ -659,7 +811,7 @@ export function PublishingSettingsCard({ projectId, deploymentUrl }: { projectId
           </div>
         )}
         {message && <p className={`text-xs ${message.includes("saved") ? "text-emerald-400" : "text-red-400"}`}>{message}</p>}
-        <button onClick={() => { setMessage(""); save.mutate(); }} disabled={save.isPending} className="flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-black disabled:opacity-50">
+        <button onClick={() => { setMessage(""); save.mutate(); }} disabled={save.isPending || Boolean(error) || !settings} className="flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-black disabled:opacity-50">
           <Save size={15} /> {save.isPending ? "Saving…" : "Save publishing settings"}
         </button>
       </div>
@@ -671,7 +823,11 @@ function ProjectSettingsTab({ project, projectId, runtimeStatus, publicDeploymen
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
-  const [form, setForm] = useState({ name: project.name, description: project.description, framework: project.framework });
+  const [form, setForm] = useState({
+    name: String(project.name || ""),
+    description: String(project.description || ""),
+    framework: String(project.framework || ""),
+  });
   const [saved, setSaved] = useState(false);
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -715,7 +871,7 @@ function ProjectSettingsTab({ project, projectId, runtimeStatus, publicDeploymen
           <div>
             <label className={`block text-xs font-medium mb-1.5 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Status</label>
             <select
-              value={form.name !== project.name || form.description !== project.description ? form.framework : project.status}
+              value={project.status || "draft"}
               onChange={() => {}}
               className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors ${theme === "dark" ? "bg-white/5 border-white/10 text-white focus:border-cyan-400/50" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-cyan-400"}`}
               data-testid="input-status"
@@ -838,9 +994,9 @@ function PagesTab({ projectId }: { projectId: number }) {
   const [state, setState] = useState("");
   const [genLoading, setGenLoading] = useState(false);
 
-  const { data: pages = [], isLoading } = useQuery({
+  const { data: pages = [], isLoading, error, refetch } = useQuery({
     queryKey: ["pages", projectId],
-    queryFn: async () => { const res = await fetch(`/api/projects/${projectId}/pages`, { headers: authHeaders() }); return res.json(); },
+    queryFn: () => fetchProjectCollection(projectId, "pages", ["pages", "items"], "Unable to load project pages."),
   });
 
   const deleteMutation = useMutation({
@@ -864,8 +1020,9 @@ function PagesTab({ projectId }: { projectId: number }) {
     setService(""); setCity(""); setState(""); setShowGenerator(false);
   };
 
-  const standardPages = pages.filter((p: any) => p.pageType !== "service");
-  const servicePages = pages.filter((p: any) => p.pageType === "service");
+  const pageRows = Array.isArray(pages) ? pages : [];
+  const standardPages = pageRows.filter((p: any) => p.pageType !== "service");
+  const servicePages = pageRows.filter((p: any) => p.pageType === "service");
 
   return (
     <div className="space-y-6">
@@ -875,7 +1032,7 @@ function PagesTab({ projectId }: { projectId: number }) {
         <div>
           <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Pages</h2>
           <p className={`text-sm mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-            {pages.length} pages · {pages.filter((p: any) => p.status === "published").length} published
+            {error ? "—" : pageRows.length} pages · {pageRows.filter((p: any) => p.status === "published").length} published
           </p>
         </div>
         <div className="flex gap-2">
@@ -888,6 +1045,15 @@ function PagesTab({ projectId }: { projectId: number }) {
             data-testid="button-new-page"><Plus size={15} /> New Page</button>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+          theme === "dark" ? "border-rose-400/20 bg-rose-400/5 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-800"
+        }`}>
+          <span>Pages could not be loaded: {(error as Error).message}</span>
+          <button type="button" onClick={() => void refetch()} className="font-semibold underline">Try again</button>
+        </div>
+      )}
 
       <AnimatePresence>
         {showGenerator && (
@@ -1063,9 +1229,9 @@ function BlogTab({ projectId }: { projectId: number }) {
   const [filter, setFilter] = useState<"all" | "published" | "scheduled" | "draft">("all");
   const [showNew, setShowNew] = useState(false);
 
-  const { data: posts = [], isLoading } = useQuery({
+  const { data: posts = [], isLoading, error, refetch } = useQuery({
     queryKey: ["blog-posts", projectId],
-    queryFn: async () => { const res = await fetch(`/api/projects/${projectId}/blog-posts`, { headers: authHeaders() }); return res.json(); },
+    queryFn: () => fetchProjectCollection(projectId, "blog-posts", ["posts", "items"], "Unable to load blog posts."),
   });
 
   const deleteMutation = useMutation({
@@ -1075,7 +1241,8 @@ function BlogTab({ projectId }: { projectId: number }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["blog-posts", projectId] }),
   });
 
-  const filtered = filter === "all" ? posts : posts.filter((p: any) => p.status === filter);
+  const postRows = Array.isArray(posts) ? posts : [];
+  const filtered = filter === "all" ? postRows : postRows.filter((p: any) => p.status === filter);
 
   return (
     <div className="space-y-6">
@@ -1085,13 +1252,22 @@ function BlogTab({ projectId }: { projectId: number }) {
         <div>
           <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Blog</h2>
           <p className={`text-sm mt-0.5 ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-            {posts.length} posts · {posts.filter((p: any) => p.status === "published").length} live
+            {error ? "—" : postRows.length} posts · {postRows.filter((p: any) => p.status === "published").length} live
           </p>
         </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white hover:opacity-90 transition-all"
           style={{ background: "linear-gradient(90deg, #00c9b7, #6366f1)" }}
           data-testid="button-new-post"><Plus size={15} /> New Post</button>
       </div>
+
+      {error && (
+        <div role="alert" className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+          theme === "dark" ? "border-rose-400/20 bg-rose-400/5 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-800"
+        }`}>
+          <span>Blog posts could not be loaded: {(error as Error).message}</span>
+          <button type="button" onClick={() => void refetch()} className="font-semibold underline">Try again</button>
+        </div>
+      )}
 
       <div className="flex gap-2">
         {(["all", "published", "scheduled", "draft"] as const).map(f => (
@@ -1104,6 +1280,8 @@ function BlogTab({ projectId }: { projectId: number }) {
       <GlassCard>
         {isLoading ? (
           <div className="space-y-3">{[1,2,3].map(i => <div key={i} className={`h-14 rounded-xl animate-pulse ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />)}</div>
+        ) : error ? (
+          <p className={`text-sm text-center py-8 ${theme === "dark" ? "text-white/50" : "text-gray-500"}`}>Blog posts are unavailable until the project service responds.</p>
         ) : filtered.length === 0 ? (
           <p className={`text-sm text-center py-8 ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>
             {filter === "all" ? "No blog posts yet. Click \"New Post\" to create your first one." : `No ${filter} posts.`}
@@ -1116,7 +1294,7 @@ function BlogTab({ projectId }: { projectId: number }) {
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-medium truncate ${theme === "dark" ? "text-white" : "text-gray-900"}`}>{post.title}</p>
                   <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>
-                    {post.wordCount.toLocaleString()} words{post.keyword ? ` · ${post.keyword}` : ""} · {fmtDate(post.createdAt)}
+                      {Number(post.wordCount ?? post.word_count ?? 0).toLocaleString()} words{post.keyword ? ` · ${post.keyword}` : ""} · {fmtDate(post.createdAt || post.created_at)}
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${post.status === "published" ? "bg-emerald-500/15 text-emerald-400" : post.status === "scheduled" ? "bg-amber-500/15 text-amber-400" : theme === "dark" ? "bg-white/10 text-white/40" : "bg-gray-100 text-gray-500"}`}>{post.status}</span>
@@ -1136,14 +1314,33 @@ function AutoBloggerTab({ projectId }: { projectId: number }) {
   const qc = useQueryClient();
   const [saved, setSaved] = useState(false);
 
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading, error, refetch } = useQuery({
     queryKey: ["autoblogger", projectId],
-    queryFn: async () => { const res = await fetch(`/api/projects/${projectId}/autoblogger`, { headers: authHeaders() }); return res.json(); },
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/autoblogger`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load Auto-Blogger settings.");
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Auto-Blogger settings were returned in an unexpected format.");
+      return {
+        enabled: false,
+        postsPerDay: 3,
+        writingStyle: "neil-patel",
+        minWordCount: 2000,
+        ...body,
+        keywords: typeof body.keywords === "string" ? body.keywords : "",
+      };
+    },
   });
 
   const [form, setForm] = useState<any>(null);
   if (settings && !form) setForm(settings);
-  const s = form || settings || { enabled: false, postsPerDay: 3, writingStyle: "neil-patel", minWordCount: 2000, keywords: "" };
+  const defaults = { enabled: false, postsPerDay: 3, writingStyle: "neil-patel", minWordCount: 2000, keywords: "" };
+  const source = form || settings || {};
+  const s = {
+    ...defaults,
+    ...source,
+    keywords: typeof source.keywords === "string" ? source.keywords : "",
+  };
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...(f || s), [k]: v }));
 
@@ -1160,6 +1357,7 @@ function AutoBloggerTab({ projectId }: { projectId: number }) {
   });
 
   if (isLoading) return <div className={`h-64 rounded-2xl animate-pulse ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />;
+  if (error) return <ProjectQueryError title="Auto-Blogger settings are unavailable" message={(error as Error).message} onRetry={() => void refetch()} />;
 
   return (
     <div className="space-y-6">
@@ -1310,9 +1508,15 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
   const [faviconError, setFaviconError] = useState("");
   const [socialImageError, setSocialImageError] = useState("");
 
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading, error, refetch } = useQuery({
     queryKey: ["seo", projectId],
-    queryFn: async () => { const res = await fetch(`/api/projects/${projectId}/seo`, { headers: authHeaders() }); return res.json(); },
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/seo`, { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Unable to load SEO settings.");
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("SEO settings were returned in an unexpected format.");
+      return body;
+    },
   });
   const suggestionQuery = useQuery({
     queryKey: ["seo-suggestions", projectId],
@@ -1353,9 +1557,9 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
   const schema = schemaForm ?? "{}";
   const projectName = String(project?.name || "My Project").trim();
   const canonicalSuggestion = deploymentUrl || `https://${projectName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.apps.buildcustom.ai`;
-  const titleSuggestions = suggestionQuery.data?.metaTitle || [];
-  const descriptionSuggestions = suggestionQuery.data?.metaDescription || [];
-  const keywordSuggestions = suggestionQuery.data?.focusKeyword || [];
+  const titleSuggestions = Array.isArray(suggestionQuery.data?.metaTitle) ? suggestionQuery.data.metaTitle.filter((value: unknown): value is string => typeof value === "string") : [];
+  const descriptionSuggestions = Array.isArray(suggestionQuery.data?.metaDescription) ? suggestionQuery.data.metaDescription.filter((value: unknown): value is string => typeof value === "string") : [];
+  const keywordSuggestions = Array.isArray(suggestionQuery.data?.focusKeyword) ? suggestionQuery.data.focusKeyword.filter((value: unknown): value is string => typeof value === "string") : [];
 
   useEffect(() => {
     const suggestions = suggestionQuery.data;
@@ -1366,8 +1570,8 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
         metaTitle: current.metaTitle || suggestions.metaTitle?.[0] || "",
         metaDescription: current.metaDescription || suggestions.metaDescription?.[0] || "",
         focusKeyword: current.focusKeyword || suggestions.focusKeyword?.[0] || "",
-        seoKeywords: current.seoKeywords || suggestions.keywords?.join("\n") || "",
-        longTailKeywords: current.longTailKeywords || suggestions.longTailKeywords?.join("\n") || "",
+        seoKeywords: current.seoKeywords || (Array.isArray(suggestions.keywords) ? suggestions.keywords.join("\n") : ""),
+        longTailKeywords: current.longTailKeywords || (Array.isArray(suggestions.longTailKeywords) ? suggestions.longTailKeywords.join("\n") : ""),
         canonicalUrl: current.canonicalUrl || canonicalSuggestion,
         ogTitle: current.ogTitle || suggestions.ogTitle?.[0] || suggestions.metaTitle?.[0] || "",
         ogDescription: current.ogDescription || suggestions.ogDescription?.[0] || suggestions.metaDescription?.[0] || "",
@@ -1469,6 +1673,7 @@ export function SEOTab({ projectId, project, deploymentUrl }: { projectId: numbe
   const score = Math.round((passing / SEO_SCORE_ITEMS.length) * 100);
 
   if (isLoading) return <div className={`h-64 rounded-2xl animate-pulse ${theme === "dark" ? "bg-white/5" : "bg-gray-100"}`} />;
+  if (error) return <ProjectQueryError title="SEO settings are unavailable" message={(error as Error).message} onRetry={() => void refetch()} />;
 
   return (
     <div className="space-y-6">
@@ -2644,9 +2849,21 @@ export default function ProjectDetail() {
   const { theme } = useTheme();
   const qc = useQueryClient();
   const [, params] = useRoute("/app/project/:id");
+  const [, navigate] = useLocation();
   const projectId = parseInt(params?.id ?? "0");
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<TabId>(() => (
+    new URLSearchParams(window.location.search).get("tab") === "activity" ? "activity" : "overview"
+  ));
   const [setupError, setSetupError] = useState("");
+
+  const selectTab = (tab: TabId) => {
+    setActiveTab(tab);
+    if (tab === "activity") {
+      navigate(`/app/project/${projectId}?tab=activity`, { replace: true });
+    } else if (new URLSearchParams(window.location.search).get("tab") === "activity") {
+      navigate(`/app/project/${projectId}`, { replace: true });
+    }
+  };
 
   const initializeProject = useMutation({
     mutationFn: async () => {
@@ -2677,9 +2894,9 @@ export default function ProjectDetail() {
     refetchInterval: (query) => ["initializing", "reconcile"].includes(query.state.data?.runtimeStatus) ? 3000 : false,
   });
 
-  const { data: blogPosts = [] } = useQuery({
+  const { data: blogPosts = [], error: blogPostsError } = useQuery({
     queryKey: ["blog-posts", projectId],
-    queryFn: async () => { const res = await fetch(`/api/projects/${projectId}/blog-posts`, { headers: authHeaders() }); return res.json(); },
+    queryFn: () => fetchProjectCollection(projectId, "blog-posts", ["posts", "items"], "Unable to load blog posts."),
     enabled: !!projectId,
   });
 
@@ -2794,7 +3011,7 @@ export default function ProjectDetail() {
 
         <div className="flex gap-1 overflow-x-auto">
           {UNIVERSAL_TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            <button key={tab.id} onClick={() => selectTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-all -mb-px ${activeTab === tab.id ? "border-cyan-400 text-cyan-400" : theme === "dark" ? "border-transparent text-white/40 hover:text-white/70" : "border-transparent text-gray-500 hover:text-gray-700"}`}
               data-testid={`tab-${tab.id}`}><tab.icon size={15} /> {tab.label}</button>
           ))}
@@ -2802,7 +3019,7 @@ export default function ProjectDetail() {
             <>
               <div className={`w-px mx-2 self-stretch my-2 ${theme === "dark" ? "bg-white/10" : "bg-gray-200"}`} />
               {WEBSITE_TABS.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                <button key={tab.id} onClick={() => selectTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-all -mb-px ${activeTab === tab.id ? "border-purple-400 text-purple-400" : theme === "dark" ? "border-transparent text-white/40 hover:text-white/70" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                   data-testid={`tab-${tab.id}`}><tab.icon size={15} /> {tab.label}</button>
               ))}
@@ -2841,7 +3058,9 @@ export default function ProjectDetail() {
         )}
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15 }}>
-            {activeTab === "overview" && <OverviewTab project={project} blogCount={blogPosts.length} projectId={projectId} runtimeStatus={runtimeStatus} />}
+            <ProjectTabErrorBoundary key={activeTab} theme={theme} onReturnOverview={() => selectTab("overview")}>
+            {activeTab === "overview" && <OverviewTab project={project} blogCount={blogPostsError || !Array.isArray(blogPosts) ? null : blogPosts.length} projectId={projectId} runtimeStatus={runtimeStatus} />}
+            {activeTab === "activity" && <ProjectActivityTab projectId={projectId} />}
             {activeTab === "files" && <FilesTab />}
             {activeTab === "console" && <ConsoleTab />}
             {activeTab === "history" && <HistoryTab projectId={projectId} runtimeStatus={runtimeStatus} />}
@@ -2872,6 +3091,7 @@ export default function ProjectDetail() {
                 )}
               </GlassCard>
             ) : <DomainTab projectId={projectId} runtimeStatus={runtimeStatus} />)}
+            </ProjectTabErrorBoundary>
           </motion.div>
         </AnimatePresence>
       </div>

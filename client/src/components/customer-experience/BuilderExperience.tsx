@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { BuildActivityEvent } from "@/lib/native-activity";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -15,14 +16,6 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
-
-export type BuildActivityEvent = {
-  id: string;
-  label: string;
-  observedAt: number;
-  status: "active" | "complete" | "error" | "info";
-  path?: string;
-};
 
 export type BuilderPhase =
   | "idle"
@@ -571,7 +564,7 @@ export function BuildPreviewPlaceholder(props: {
           className={`inline-flex min-h-9 items-center gap-1.5 self-start text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/70 sm:self-auto ${
             dark ? "text-teal-200 hover:text-white" : "text-teal-800 hover:text-[#14342e]"
           }`}>
-          View activity <ArrowUpRight size={13} aria-hidden="true" />
+          View full activity <ArrowUpRight size={13} aria-hidden="true" />
         </button>
       </div>
       <style>{`
