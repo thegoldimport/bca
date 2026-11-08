@@ -243,8 +243,10 @@ export async function handleStagingCustomerAuth(
       }
       const status = [400, 401, 403, 409, 429, 503].includes(response.status) ? response.status : 502;
       const message = status === 429 ? "Too many attempts. Please wait and try again."
-        : pathname.endsWith("register") && status === 503
-          ? "Your account could not be verified because email delivery is unavailable. Please try again."
+        : status >= 500
+          ? pathname.endsWith("register")
+            ? "Your account could not be verified because email delivery is unavailable. Please try again."
+            : "Sign-in is temporarily unavailable. Please try again."
           : pathname.endsWith("register") ? "Could not create your account. Check your details."
             : "Invalid email or password.";
       return Response.json({ message }, { status });
