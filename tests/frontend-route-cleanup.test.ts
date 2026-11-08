@@ -14,7 +14,12 @@ const bundle = (await readFile(`dist/public${asset}`, "utf8"))
 const user = { id: "test", username: "Tester", email: "tester@example.test", plan: "launch", role: "user" };
 const tick = () => new Promise(resolve => setTimeout(resolve, 25));
 
-async function visit(path: string, authenticated = false, hostname = "app.buildcustom.ai") {
+async function visit(
+  path: string,
+  authenticated = false,
+  hostname = "app.buildcustom.ai",
+  apiResponses: Record<string, unknown> = {},
+) {
   const errors: string[] = [];
   const console = new VirtualConsole();
   console.on("jsdomError", error => errors.push(String(error)));
@@ -32,7 +37,8 @@ async function visit(path: string, authenticated = false, hostname = "app.buildc
   window.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
     calls.push(url);
-    const body = url === "/api/auth/me" ? (authenticated ? user : null)
+    const body = url in apiResponses ? apiResponses[url]
+      : url === "/api/auth/me" ? (authenticated ? user : null)
       : url === "/api/public/capabilities" ? { registrationEnabled: true, publicGeneratedAppsEnabled: true }
       : url === "/api/projects" ? []
       : url === "/api/projects/17" ? {
@@ -127,6 +133,116 @@ test("dashboard protection and existing project/editor paths remain under /app",
     const page = await visit(path, true);
     await page.until(() => page.window.document.body.textContent!.includes("Projects"));
     assert.equal(page.window.location.pathname, path);
+    page.close();
+  }
+});
+
+test("project Settings, Pages, Blog, Auto-Blogger, and SEO tabs load real-shaped responses", async () => {
+  const pageData = {
+    "/api/projects/17": {
+      id: 17,
+      name: "Test project",
+      type: "website",
+      status: "draft",
+      description: "Project details for the tab route test",
+      framework: "React + TailwindCSS",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      runtimeStatus: "ready",
+    },
+    "/api/projects/17/runtime/status": { nativeThink: false, configured: true },
+    "/api/projects/17/runtime/publishing-settings": {
+      subdomainSlug: "test-project",
+      hostingProvider: "buildcustom",
+      customDomain: "",
+      customOrigin: "",
+    },
+    "/api/projects/17/blog-posts": [{
+      id: 41,
+      title: "A real-shaped blog post",
+      slug: "a-real-shaped-blog-post",
+      status: "draft",
+      wordCount: 125,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }],
+    "/api/projects/17/pages": [{
+      id: 31,
+      title: "A real-shaped project page",
+      slug: "/about",
+      pageType: "standard",
+      status: "draft",
+    }],
+    "/api/projects/17/autoblogger": {
+      projectId: 17,
+      enabled: false,
+      postsPerDay: 3,
+      writingStyle: "neil-patel",
+      minWordCount: 2000,
+      keywords: "customer onboarding",
+    },
+    "/api/projects/17/seo": {
+      projectId: 17,
+      metaTitle: "Test project | Search title",
+      metaDescription: "A test project description for search results.",
+      focusKeyword: "project tabs",
+      seoKeywords: "project, tabs",
+      longTailKeywords: "",
+      schemaJson: "{}",
+      faviconData: "",
+      canonicalUrl: "",
+      ogTitle: "",
+      ogDescription: "",
+      ogImageUrl: "",
+      hasSocialImage: false,
+      allowIndexing: true,
+    },
+    "/api/projects/17/seo/suggestions": {
+      metaTitle: ["Suggested project title"],
+      metaDescription: ["A suggested project description."],
+      focusKeyword: ["project tabs"],
+      keywords: ["project", "tabs"],
+      longTailKeywords: [],
+      schemaJson: "{}",
+    },
+  };
+  const page = await visit("/app/project/17", true, "app.buildcustom.ai", pageData);
+  try {
+    await page.until(() => page.window.document.body.textContent!.includes("Test project"));
+
+    page.window.document.querySelector<HTMLButtonElement>('[data-testid="tab-settings"]')!.click();
+    await page.until(() => page.window.document.querySelector('[data-testid="input-name"]') !== null);
+    assert.equal((page.window.document.querySelector('[data-testid="input-name"]') as HTMLInputElement).value, "Test project");
+
+    page.window.document.querySelector<HTMLButtonElement>('[data-testid="tab-pages"]')!.click();
+    await page.until(() => page.window.document.querySelector('[data-testid="page-row-31"]') !== null);
+    assert.ok(page.window.document.body.textContent!.includes("A real-shaped project page"));
+
+    page.window.document.querySelector<HTMLButtonElement>('[data-testid="tab-blog"]')!.click();
+    await page.until(() => page.window.document.querySelector('[data-testid="post-row-41"]') !== null);
+    assert.ok(page.window.document.body.textContent!.includes("A real-shaped blog post"));
+
+    page.window.document.querySelector<HTMLButtonElement>('[data-testid="tab-autoblogger"]')!.click();
+    await page.until(() => page.window.document.querySelector('[data-testid="toggle-autoblogger"]') !== null);
+    assert.ok(page.window.document.body.textContent!.includes("Auto-Blogger"));
+
+    page.window.document.querySelector<HTMLButtonElement>('[data-testid="tab-seo"]')!.click();
+    await page.until(() => page.window.document.querySelector('[data-testid="input-meta-title"]') !== null);
+    assert.equal(
+      (page.window.document.querySelector('[data-testid="input-meta-title"]') as HTMLInputElement).value,
+      "Test project | Search title",
+    );
+
+    for (const endpoint of [
+      "/api/projects/17/runtime/publishing-settings",
+      "/api/projects/17/pages",
+      "/api/projects/17/blog-posts",
+      "/api/projects/17/autoblogger",
+      "/api/projects/17/seo",
+      "/api/projects/17/seo/suggestions",
+    ]) {
+      assert.ok(page.calls.includes(endpoint), `expected project tab to request ${endpoint}`);
+    }
+  } finally {
     page.close();
   }
 });
