@@ -118,4 +118,22 @@ describe('AuthService.requestPasswordReset', () => {
             log.mockRestore();
         }
     });
+
+    it('preserves the reset error if the diagnostic sink throws', async () => {
+        const internalError = new Error('database failure');
+        const test = makeService(undefined, vi.fn(), internalError);
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {
+            throw new Error('log sink failure');
+        });
+
+        try {
+            await expect(test.service.requestPasswordReset(
+                'person@example.com',
+                new Request('https://app.example/'),
+                test.context
+            )).rejects.toBe(internalError);
+        } finally {
+            log.mockRestore();
+        }
+    });
 });

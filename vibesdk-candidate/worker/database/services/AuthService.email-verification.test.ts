@@ -254,4 +254,21 @@ describe('AuthService email verification', () => {
             log.mockRestore();
         }
     });
+
+    it('does not let a failed diagnostic sink replace the login error', async () => {
+        const test = makeService(unverifiedUser, 0, new Error('database failure'));
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {
+            throw new Error('log sink failure');
+        });
+
+        try {
+            await expect(test.service.login({
+                email: unverifiedUser.email,
+                password: 'StrongPassword123!',
+            }, new Request('https://app.buildcustom.ai/api/auth/login')))
+                .rejects.toThrow('Login failed');
+        } finally {
+            log.mockRestore();
+        }
+    });
 });

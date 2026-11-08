@@ -51,6 +51,18 @@ const PASSWORD_RESET_DIAGNOSTIC_MESSAGES = {
     background_failure: 'AUTH_DIAG_PASSWORD_RESET_BACKGROUND_FAILURE',
 } as const;
 
+type AuthDiagnosticMessage =
+    | (typeof LOGIN_DIAGNOSTIC_MESSAGES)[keyof typeof LOGIN_DIAGNOSTIC_MESSAGES]
+    | (typeof PASSWORD_RESET_DIAGNOSTIC_MESSAGES)[keyof typeof PASSWORD_RESET_DIAGNOSTIC_MESSAGES];
+
+function logAuthDiagnostic(message: AuthDiagnosticMessage): void {
+    try {
+        logger.error(message);
+    } catch {
+        // Diagnostics are best-effort and must not alter authentication results.
+    }
+}
+
 export function authAttemptWindowCondition(windowStart: Date) {
     const attemptedAt = schema.authAttempts.attemptedAt;
     const windowStartSeconds = Math.floor(windowStart.getTime() / 1000);
@@ -345,14 +357,14 @@ export class AuthService extends BaseService {
         } catch (error) {
             if (error instanceof SecurityError) {
                 if (error.statusCode >= 500) {
-                    logger.error(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
+                    logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
                 }
                 throw error;
             }
 
             // Keep production diagnostics useful without logging credentials,
             // user identifiers, request data, or exception text.
-            logger.error(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
+            logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
                 'Login failed',
@@ -411,7 +423,7 @@ export class AuthService extends BaseService {
             const processing = this.issuePasswordResetEmail(normalizedEmail, now);
             if (context) {
                 context.waitUntil(processing.catch(() => {
-                    logger.error(PASSWORD_RESET_DIAGNOSTIC_MESSAGES.background_failure);
+                    logAuthDiagnostic(PASSWORD_RESET_DIAGNOSTIC_MESSAGES.background_failure);
                 }));
                 return;
             }
@@ -424,7 +436,7 @@ export class AuthService extends BaseService {
             }
 
             // This allowlisted stage code carries no account or exception data.
-            logger.error(PASSWORD_RESET_DIAGNOSTIC_MESSAGES[diagnosticStage]);
+            logAuthDiagnostic(PASSWORD_RESET_DIAGNOSTIC_MESSAGES[diagnosticStage]);
             throw error;
         }
     }
