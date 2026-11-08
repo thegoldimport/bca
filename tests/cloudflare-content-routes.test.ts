@@ -61,6 +61,73 @@ test("authenticated blog routes enforce project ownership before querying posts"
   assert.deepEqual(await response?.json(), { message: "Project not found" });
 });
 
+test("customer content GET routes return the data shapes used by project tabs", async () => {
+  const cases = [
+    {
+      path: "/api/projects/7/pages",
+      responses: [
+        { first: { id: "user-1", username: "owner", email: "owner@example.com", role: "user" } },
+        { first: { id: 7, user_id: "user-1" } },
+        { results: [{ id: 31, project_id: 7, title: "About", slug: "/about", status: "draft", page_type: "standard", content: "", created_at: "2026-01-01" }] },
+      ],
+      expected: [{ id: 31, projectId: 7, title: "About", slug: "/about", status: "draft", pageType: "standard", content: "", createdAt: "2026-01-01" }],
+    },
+    {
+      path: "/api/projects/7/blog-posts",
+      responses: [
+        { first: { id: "user-1", username: "owner", email: "owner@example.com", role: "user" } },
+        { first: { id: 7, user_id: "user-1" } },
+        { results: [{ id: 41, project_id: 7, title: "Welcome", slug: "welcome", content: "Hello", status: "draft", keyword: "launch", word_count: 1, scheduled_at: null, published_at: null, created_at: "2026-01-01" }] },
+      ],
+      expected: [{ id: 41, projectId: 7, title: "Welcome", slug: "welcome", content: "Hello", status: "draft", keyword: "launch", wordCount: 1, scheduledAt: null, publishedAt: null, createdAt: "2026-01-01" }],
+    },
+    {
+      path: "/api/projects/7/autoblogger",
+      responses: [
+        { first: { id: "user-1", username: "owner", email: "owner@example.com", role: "user" } },
+        { first: { id: 7, user_id: "user-1" } },
+        { first: { project_id: 7, enabled: 1, posts_per_day: 2, writing_style: "clear", min_word_count: 800, keywords: "launch", updated_at: "2026-01-01" } },
+      ],
+      expected: { project_id: 7, enabled: true, posts_per_day: 2, writing_style: "clear", min_word_count: 800, keywords: "launch", updated_at: "2026-01-01", projectId: 7, postsPerDay: 2, writingStyle: "clear", minWordCount: 800, updatedAt: "2026-01-01" },
+    },
+    {
+      path: "/api/projects/7/seo",
+      responses: [
+        { first: { id: "user-1", username: "owner", email: "owner@example.com", role: "user" } },
+        { first: { id: 7, user_id: "user-1" } },
+        { first: { project_id: 7, meta_title: "Search title", meta_description: "Search description", focus_keyword: "launch", seo_keywords: "launch, product", long_tail_keywords: "", schema_json: "{}", favicon_data: "", canonical_url: "", og_title: "", og_description: "", og_image_url: "", allow_indexing: 1, social_image_data: "", preview_image_data: "" } },
+      ],
+      expected: {
+        projectId: 7,
+        metaTitle: "Search title",
+        metaDescription: "Search description",
+        focusKeyword: "launch",
+        seoKeywords: "launch, product",
+        longTailKeywords: "",
+        schemaJson: "{}",
+        faviconData: "",
+        canonicalUrl: "",
+        ogTitle: "",
+        ogDescription: "",
+        ogImageUrl: "",
+        allowIndexing: true,
+        hasSocialImage: false,
+      },
+    },
+  ] as const;
+
+  for (const item of cases) {
+    const response = await handleContentRoute({
+      request: request(`https://staging.example${item.path}`, "GET", undefined, "__Host-bc_session=opaque"),
+      env: env([...item.responses]),
+      url: new URL(`https://staging.example${item.path}`),
+      input: {},
+    });
+    assert.equal(response?.status, 200, item.path);
+    assert.deepEqual(await response?.json(), item.expected, item.path);
+  }
+});
+
 test("SEO JSON does not expose stored image payloads", async () => {
   const response = await handleContentRoute({
     request: request("https://staging.example/api/projects/7/seo", "GET", undefined, "__Host-bc_session=opaque"),

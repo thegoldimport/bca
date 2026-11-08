@@ -114,9 +114,14 @@ import {
   BuildActivityTimeline,
   BuildPreviewPlaceholder,
   ClarificationOptions,
-  type BuildActivityEvent,
   type BuilderPhase,
 } from "@/components/customer-experience/BuilderExperience";
+import {
+  MAX_NATIVE_ACTIVITY_EVENTS,
+  readNativeActivitySnapshot,
+  writeNativeActivitySnapshot,
+  type BuildActivityEvent,
+} from "@/lib/native-activity";
 import {
   canContinueNativeTask,
   customerLifecycleStatus,
@@ -1108,47 +1113,6 @@ function clearNativeOperationBaseline(projectId: number): void {
   }
 }
 
-type NativeActivitySnapshot = { events: BuildActivityEvent[]; startedAt: number | null };
-
-function nativeActivityStorageKey(projectId: number): string {
-  return `buildcustom:native-activity:${projectId}`;
-}
-
-function readNativeActivitySnapshot(projectId: number): NativeActivitySnapshot {
-  try {
-    const raw = window.sessionStorage.getItem(nativeActivityStorageKey(projectId));
-    if (!raw) return { events: [], startedAt: null };
-    const parsed = JSON.parse(raw);
-    const events = Array.isArray(parsed?.events)
-      ? parsed.events.filter((event: any) => event
-        && typeof event.id === "string"
-        && typeof event.label === "string"
-        && event.label.length <= 300
-        && Number.isFinite(event.observedAt)
-        && ["active", "complete", "error", "info"].includes(event.status)
-        && (event.path === undefined || (typeof event.path === "string" && event.path.length <= 500)))
-        .slice(-60) as BuildActivityEvent[]
-      : [];
-    return {
-      events,
-      startedAt: Number.isFinite(parsed?.startedAt) && parsed.startedAt > 0 ? parsed.startedAt : null,
-    };
-  } catch {
-    return { events: [], startedAt: null };
-  }
-}
-
-function writeNativeActivitySnapshot(projectId: number, snapshot: NativeActivitySnapshot): void {
-  try {
-    window.sessionStorage.setItem(nativeActivityStorageKey(projectId), JSON.stringify({
-      events: snapshot.events.slice(-60),
-      startedAt: snapshot.startedAt,
-    }));
-  } catch {
-    // Activity history is a convenience; the runtime remains authoritative.
-  }
-}
-
 function normalizeBuilderAssistantText(value: string): string {
   return value
     .replace(/using the question panel above/gi, "by replying in this chat")
@@ -1160,6 +1124,7 @@ function normalizeBuilderAssistantText(value: string): string {
 function EditorPage() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const { publicGeneratedAppsEnabled } = usePublicCapabilities();
   const planEntitlement = getPlanEntitlement(getAppUser()?.plan);
   const [, routeParams] = useRoute("/app/editor/:id");
@@ -2305,7 +2270,7 @@ function EditorPage() {
       status,
       ...(path ? { path: path.slice(0, 500) } : {}),
     };
-    const next = [...current, event].slice(-60);
+    const next = [...current, event].slice(-MAX_NATIVE_ACTIVITY_EVENTS);
     nativeProgressRef.current = next;
     setNativeProgress(next);
     writeNativeActivitySnapshot(projectId, {
@@ -5445,10 +5410,16 @@ function EditorPage() {
                       : nativeCompletionMessage || (projectId ? "" : "A project is required for a live preview.")}
                     startedAt={nativeOperationStartedAt}
                     onOpenActivity={() => {
-                      const toggle = document.getElementById("build-activity-timeline-toggle");
-                      if (toggle?.getAttribute("aria-expanded") !== "true") toggle?.click();
-                      toggle?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
+                      if (projectId <= 0) return;
+                      const activityHref = `/app/project/${projectId}?tab=activity`;
+                      const activityWindow = window.open(activityHref, "_blank");
+                      if (activityWindow) {
+                        // Keep the sessionStorage activity snapshot cloned into the new same-origin tab,
+                        // then sever its opener relationship.
+                        activityWindow.opener = null;
+                      } else {
+                        navigate(activityHref);
+                      }
                     }}
                   />
                 </div>
