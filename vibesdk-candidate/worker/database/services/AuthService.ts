@@ -33,6 +33,36 @@ import { BaseService } from './BaseService';
 
 const logger = createLogger('AuthService');
 
+const LOGIN_DIAGNOSTIC_MESSAGES = {
+    rate_limit_read: 'AUTH_DIAG_LOGIN_RATE_LIMIT_READ',
+    allowlist: 'AUTH_DIAG_LOGIN_ALLOWLIST',
+    account_lookup: 'AUTH_DIAG_LOGIN_ACCOUNT_LOOKUP',
+    password_verification: 'AUTH_DIAG_LOGIN_PASSWORD_VERIFICATION',
+    session_creation: 'AUTH_DIAG_LOGIN_SESSION_CREATION',
+} as const;
+
+const PASSWORD_RESET_DIAGNOSTIC_MESSAGES = {
+    request_metadata: 'AUTH_DIAG_PASSWORD_RESET_REQUEST_METADATA',
+    rate_limit_read: 'AUTH_DIAG_PASSWORD_RESET_RATE_LIMIT_READ',
+    attempt_audit: 'AUTH_DIAG_PASSWORD_RESET_ATTEMPT_AUDIT',
+    email_binding: 'AUTH_DIAG_PASSWORD_RESET_EMAIL_BINDING',
+    delivery_schedule: 'AUTH_DIAG_PASSWORD_RESET_DELIVERY_SCHEDULE',
+    delivery_processing: 'AUTH_DIAG_PASSWORD_RESET_DELIVERY_PROCESSING',
+    background_failure: 'AUTH_DIAG_PASSWORD_RESET_BACKGROUND_FAILURE',
+} as const;
+
+type AuthDiagnosticMessage =
+    | (typeof LOGIN_DIAGNOSTIC_MESSAGES)[keyof typeof LOGIN_DIAGNOSTIC_MESSAGES]
+    | (typeof PASSWORD_RESET_DIAGNOSTIC_MESSAGES)[keyof typeof PASSWORD_RESET_DIAGNOSTIC_MESSAGES];
+
+function logAuthDiagnostic(message: AuthDiagnosticMessage): void {
+    try {
+        logger.error(message);
+    } catch {
+        // Diagnostics are best-effort and must not alter authentication results.
+    }
+}
+
 export function authAttemptWindowCondition(windowStart: Date) {
     const attemptedAt = schema.authAttempts.attemptedAt;
     const windowStartSeconds = Math.floor(windowStart.getTime() / 1000);
@@ -228,13 +258,17 @@ export class AuthService extends BaseService {
      */
     async login(credentials: LoginCredentials, request: Request): Promise<AuthResult> {
         const normalizedEmail = credentials.email.trim().toLowerCase();
+        let diagnosticStage: keyof typeof LOGIN_DIAGNOSTIC_MESSAGES = 'rate_limit_read';
         try {
+            diagnosticStage = 'rate_limit_read';
             await this.enforceAuthAttemptLimit('login', normalizedEmail, request, 10, 120);
 
             // Deployment-level admission gate (ALLOWED_EMAIL)
+            diagnosticStage = 'allowlist';
             enforceAllowedEmail(this.env, normalizedEmail, 'login');
 
             // Find user
+            diagnosticStage = 'account_lookup';
             const user = await this.database
                 .select()
                 .from(schema.users)
@@ -268,6 +302,7 @@ export class AuthService extends BaseService {
             }
             
             // Verify password
+            diagnosticStage = 'password_verification';
             const passwordValid = await this.passwordService.verify(
                 credentials.password,
                 user.passwordHash
@@ -302,6 +337,7 @@ export class AuthService extends BaseService {
             }
             
             // Create session
+            diagnosticStage = 'session_creation';
             const { accessToken, session } = await this.sessionService.createSession(
                 user.id,
                 request
@@ -320,10 +356,15 @@ export class AuthService extends BaseService {
             };
         } catch (error) {
             if (error instanceof SecurityError) {
+                if (error.statusCode >= 500) {
+                    logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
+                }
                 throw error;
             }
-            
-            logger.error('Login error', error);
+
+            // Keep production diagnostics useful without logging credentials,
+            // user identifiers, request data, or exception text.
+            logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
                 'Login failed',
@@ -343,43 +384,61 @@ export class AuthService extends BaseService {
         context?: ExecutionContext
     ): Promise<void> {
         const normalizedEmail = email.trim().toLowerCase();
-        const metadata = extractRequestMetadata(request);
-        const now = new Date();
-        const windowStart = new Date(now.getTime() - 15 * 60 * 1000);
+        let diagnosticStage: keyof typeof PASSWORD_RESET_DIAGNOSTIC_MESSAGES = 'request_metadata';
+        try {
+            const metadata = extractRequestMetadata(request);
+            const now = new Date();
+            const windowStart = new Date(now.getTime() - 15 * 60 * 1000);
 
-        const [emailAttempts, ipAttempts] = await Promise.all([
-            this.database.select({ total: count() }).from(schema.authAttempts).where(and(
-                eq(schema.authAttempts.attemptType, 'reset_password'),
-                eq(schema.authAttempts.identifier, normalizedEmail),
-                authAttemptWindowCondition(windowStart)
-            )).get(),
-            metadata.ipAddress !== 'unknown'
-                ? this.database.select({ total: count() }).from(schema.authAttempts).where(and(
+            diagnosticStage = 'rate_limit_read';
+            const [emailAttempts, ipAttempts] = await Promise.all([
+                this.database.select({ total: count() }).from(schema.authAttempts).where(and(
                     eq(schema.authAttempts.attemptType, 'reset_password'),
-                    eq(schema.authAttempts.ipAddress, metadata.ipAddress),
+                    eq(schema.authAttempts.identifier, normalizedEmail),
                     authAttemptWindowCondition(windowStart)
-                )).get()
-                : Promise.resolve({ total: 0 })
-        ]);
+                )).get(),
+                metadata.ipAddress !== 'unknown'
+                    ? this.database.select({ total: count() }).from(schema.authAttempts).where(and(
+                        eq(schema.authAttempts.attemptType, 'reset_password'),
+                        eq(schema.authAttempts.ipAddress, metadata.ipAddress),
+                        authAttemptWindowCondition(windowStart)
+                    )).get()
+                    : Promise.resolve({ total: 0 })
+            ]);
 
-        if ((emailAttempts?.total ?? 0) >= 3 || (ipAttempts?.total ?? 0) >= 15) {
+            if ((emailAttempts?.total ?? 0) >= 3 || (ipAttempts?.total ?? 0) >= 15) {
+                diagnosticStage = 'attempt_audit';
+                await this.logAuthAttempt(normalizedEmail, 'reset_password', false, request);
+                throw new SecurityError(SecurityErrorType.RATE_LIMITED, 'Too many password reset requests. Please try again later.', 429);
+            }
+
+            diagnosticStage = 'attempt_audit';
             await this.logAuthAttempt(normalizedEmail, 'reset_password', false, request);
-            throw new SecurityError(SecurityErrorType.RATE_LIMITED, 'Too many password reset requests. Please try again later.', 429);
-        }
+            diagnosticStage = 'email_binding';
+            if (!this.env.EMAIL) {
+                throw new SecurityError(SecurityErrorType.INVALID_INPUT, 'Password reset email service is unavailable.', 503);
+            }
 
-        await this.logAuthAttempt(normalizedEmail, 'reset_password', false, request);
-        if (!this.env.EMAIL) {
-            throw new SecurityError(SecurityErrorType.INVALID_INPUT, 'Password reset email service is unavailable.', 503);
-        }
+            diagnosticStage = 'delivery_schedule';
+            const processing = this.issuePasswordResetEmail(normalizedEmail, now);
+            if (context) {
+                context.waitUntil(processing.catch(() => {
+                    logAuthDiagnostic(PASSWORD_RESET_DIAGNOSTIC_MESSAGES.background_failure);
+                }));
+                return;
+            }
 
-        const processing = this.issuePasswordResetEmail(normalizedEmail, now);
-        if (context) {
-            context.waitUntil(processing.catch(() => {
-                logger.error('Password reset processing failed');
-            }));
-            return;
+            diagnosticStage = 'delivery_processing';
+            await processing;
+        } catch (error) {
+            if (error instanceof SecurityError && error.statusCode < 500) {
+                throw error;
+            }
+
+            // This allowlisted stage code carries no account or exception data.
+            logAuthDiagnostic(PASSWORD_RESET_DIAGNOSTIC_MESSAGES[diagnosticStage]);
+            throw error;
         }
-        await processing;
     }
 
     private async enforceAuthAttemptLimit(

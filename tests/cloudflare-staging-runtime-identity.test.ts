@@ -65,6 +65,46 @@ test("launch auth bridge forwards only Cloudflare's client IP to the runtime", a
   });
 });
 
+test("login runtime failures are reported as unavailable, not invalid credentials", async () => {
+  const launchUrl = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
+  const authRequest = () => new Request("https://control.launch.test/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": "csrf-token=csrf-value",
+      "X-CSRF-Token": "csrf-value",
+    },
+    body: JSON.stringify({ email: "customer@example.test", password: "test-only-password" }),
+  });
+  const env = (status: number) => ({
+    DB: {} as D1Database,
+    ENVIRONMENT: "production",
+    CONTROL_PLANE_PROFILE: "launch",
+    AUTH_RUNTIME_URL: launchUrl,
+    AUTH_RUNTIME: {
+      async fetch() {
+        return Response.json({ message: "internal test detail" }, { status });
+      },
+    } as Fetcher,
+  });
+
+  const unavailable = await handleStagingCustomerAuth(
+    env(500), authRequest(), "/api/auth/login",
+    { email: "customer@example.test", password: "test-only-password" },
+  );
+  assert.equal(unavailable?.status, 502);
+  const unavailableBody = await unavailable?.json() as { message: string };
+  assert.equal(unavailableBody.message, "Sign-in is temporarily unavailable. Please try again.");
+  assert.equal(JSON.stringify(unavailableBody).includes("internal test detail"), false);
+
+  const invalidCredentials = await handleStagingCustomerAuth(
+    env(401), authRequest(), "/api/auth/login",
+    { email: "customer@example.test", password: "test-only-password" },
+  );
+  assert.equal(invalidCredentials?.status, 401);
+  assert.equal((await invalidCredentials?.json() as { message: string }).message, "Invalid email or password.");
+});
+
 function database() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(readFileSync("migrations/d1/0001_control_plane.sql", "utf8"));

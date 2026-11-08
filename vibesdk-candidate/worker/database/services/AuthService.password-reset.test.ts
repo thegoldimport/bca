@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import * as schema from '../schema';
 import { AuthService } from './AuthService';
 
-function makeService(user: schema.User | undefined, send: ReturnType<typeof vi.fn>) {
+function makeService(
+    user: schema.User | undefined,
+    send: ReturnType<typeof vi.fn>,
+    authAttemptReadError?: Error
+) {
     const deliveries: Promise<unknown>[] = [];
     let insertedToken: Record<string, unknown> | undefined;
     let tokenInvalidated = false;
@@ -11,7 +15,10 @@ function makeService(user: schema.User | undefined, send: ReturnType<typeof vi.f
         select: vi.fn(() => ({
             from: (table: unknown) => ({
                 where: () => ({
-                    get: async () => table === schema.authAttempts ? { total: 0 } : user
+                    get: async () => {
+                        if (table === schema.authAttempts && authAttemptReadError) throw authAttemptReadError;
+                        return table === schema.authAttempts ? { total: 0 } : user;
+                    }
                 })
             })
         })),
@@ -87,5 +94,46 @@ describe('AuthService.requestPasswordReset', () => {
         await expect(test.deliveries[0]).resolves.toBeUndefined();
         expect(send).not.toHaveBeenCalled();
         expect(test.insertedToken).toBeUndefined();
+    });
+
+    it('logs only a fixed diagnostic code when the reset rate-limit read fails', async () => {
+        const internalError = new Error('sensitive database detail');
+        const email = 'person@example.com';
+        const test = makeService(undefined, vi.fn(), internalError);
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            await expect(test.service.requestPasswordReset(
+                email,
+                new Request('https://app.example/'),
+                test.context
+            )).rejects.toBe(internalError);
+
+            const output = JSON.stringify(log.mock.calls);
+            expect(output).toContain('AUTH_DIAG_PASSWORD_RESET_RATE_LIMIT_READ');
+            expect(output).not.toContain(email);
+            expect(output).not.toContain('sensitive database detail');
+            expect(test.context.waitUntil).not.toHaveBeenCalled();
+        } finally {
+            log.mockRestore();
+        }
+    });
+
+    it('preserves the reset error if the diagnostic sink throws', async () => {
+        const internalError = new Error('database failure');
+        const test = makeService(undefined, vi.fn(), internalError);
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {
+            throw new Error('log sink failure');
+        });
+
+        try {
+            await expect(test.service.requestPasswordReset(
+                'person@example.com',
+                new Request('https://app.example/'),
+                test.context
+            )).rejects.toBe(internalError);
+        } finally {
+            log.mockRestore();
+        }
     });
 });

@@ -9,7 +9,11 @@ type BoundStatement = {
     bindings: unknown[];
 };
 
-function makeService(user: schema.User | undefined, attempts: number | number[] = 0) {
+function makeService(
+    user: schema.User | undefined,
+    attempts: number | number[] = 0,
+    authAttemptReadError?: Error
+) {
     let tokenRow: { id: string; userId: string; hash: string; email: string; expiresAt: number } | undefined;
     let tokenUsed = false;
     let authAttemptReads = 0;
@@ -20,6 +24,7 @@ function makeService(user: schema.User | undefined, attempts: number | number[] 
                 where: () => ({
                     get: async () => {
                         if (table !== schema.authAttempts) return user;
+                        if (authAttemptReadError) throw authAttemptReadError;
                         const total = Array.isArray(attempts) ? attempts[authAttemptReads] ?? 0 : attempts;
                         authAttemptReads += 1;
                         return { total };
@@ -226,5 +231,44 @@ describe('AuthService email verification', () => {
 
         expect(test.authAttemptReads).toBe(1);
         expect(verify).not.toHaveBeenCalled();
+    });
+
+    it('logs only a fixed diagnostic code when the login rate-limit read fails', async () => {
+        const internalError = new Error('sensitive database detail');
+        const test = makeService(unverifiedUser, 0, internalError);
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            await expect(test.service.login({
+                email: unverifiedUser.email,
+                password: 'StrongPassword123!',
+            }, new Request('https://app.buildcustom.ai/api/auth/login')))
+                .rejects.toThrow('Login failed');
+
+            const output = JSON.stringify(log.mock.calls);
+            expect(output).toContain('AUTH_DIAG_LOGIN_RATE_LIMIT_READ');
+            expect(output).not.toContain(unverifiedUser.email);
+            expect(output).not.toContain('StrongPassword123!');
+            expect(output).not.toContain('sensitive database detail');
+        } finally {
+            log.mockRestore();
+        }
+    });
+
+    it('does not let a failed diagnostic sink replace the login error', async () => {
+        const test = makeService(unverifiedUser, 0, new Error('database failure'));
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {
+            throw new Error('log sink failure');
+        });
+
+        try {
+            await expect(test.service.login({
+                email: unverifiedUser.email,
+                password: 'StrongPassword123!',
+            }, new Request('https://app.buildcustom.ai/api/auth/login')))
+                .rejects.toThrow('Login failed');
+        } finally {
+            log.mockRestore();
+        }
     });
 });
