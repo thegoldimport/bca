@@ -396,7 +396,7 @@ function phasePresentation(phase: BuilderPhase) {
   if (phase === "stopping") return { icon: Pause, title: "Bringing this step to a pause", detail: "Waiting for the runtime to report what happens next." };
   if (phase === "paused") return { icon: Pause, title: "Paused for now", detail: "Nothing is moving until you choose what comes next." };
   if (phase === "needs_input") return { icon: MessageCircle, title: "Your teammate needs your input", detail: "Share a little direction to keep things moving." };
-  if (phase === "error") return { icon: AlertCircle, title: "That didn’t go as planned", detail: "The runtime reported an issue. Check the activity details for what happened." };
+  if (phase === "error") return { icon: AlertCircle, title: "That didn’t go as planned", detail: "The conversation is preserved. Review the observed stages before deciding what to try next." };
   return { icon: Check, title: "Live preview is taking over", detail: "The project preview is shown in its live view." };
 }
 
@@ -411,7 +411,12 @@ export function BuildPreviewPlaceholder(props: {
   phase: BuilderPhase;
   message: string;
   startedAt: number | null;
-  onOpenActivity(): void;
+  failureCode?: string | null;
+  lastSuccessfulStage?: string | null;
+  attemptId?: string | null;
+  diagnosticsAvailable?: boolean;
+  onOpenActivity(attemptId?: string): void;
+  onContinue?(): void;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -551,6 +556,48 @@ export function BuildPreviewPlaceholder(props: {
               {formatElapsed(elapsedMs)} elapsed
             </p>
           )}
+          {props.phase === "error" && (
+            <div className={`mt-5 w-full max-w-xl rounded-xl border p-4 text-left ${
+              dark ? "border-rose-200/15 bg-rose-300/[0.05]" : "border-rose-200 bg-white/80"
+            }`} role="alert" data-testid="builder-build-failure-details">
+              {props.failureCode && <p className="font-mono text-xs font-semibold text-rose-300">{props.failureCode}</p>}
+              <p className={`mt-2 text-xs ${dark ? "text-white/65" : "text-[#586d67]"}`}>
+                Last completed stage: {props.lastSuccessfulStage ? props.lastSuccessfulStage.replaceAll("_", " ") : "Not recorded"}
+              </p>
+              <p className={`mt-2 text-xs ${dark ? "text-white/55" : "text-[#718983]"}`}>
+                {props.diagnosticsAvailable
+                  ? "This attempt's observed stages are saved in Project Activity."
+                  : "Detailed runtime diagnostics were not saved for this attempt."}
+              </p>
+              <p className={`mt-2 text-xs ${dark ? "text-white/45" : "text-[#718983]"}`}>
+                Your conversation is preserved. Review this attempt before sending another request; a new message starts a separate attempt.
+              </p>
+              {props.attemptId && (
+                <button
+                  type="button"
+                  onClick={() => props.onOpenActivity(props.attemptId || undefined)}
+                  className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                    dark ? "border-rose-100/20 text-rose-100 hover:bg-white/[0.04]" : "border-rose-300 text-rose-800 hover:bg-rose-50"
+                  }`}
+                  data-testid="button-review-failed-attempt"
+                >
+                  Review this attempt
+                </button>
+              )}
+              {props.onContinue && (
+                <button
+                  type="button"
+                  onClick={props.onContinue}
+                  className={`ml-2 mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                    dark ? "border-white/15 text-white/70 hover:bg-white/[0.04]" : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                  }`}
+                  data-testid="button-continue-after-build-failure"
+                >
+                  Continue in chat
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -560,11 +607,11 @@ export function BuildPreviewPlaceholder(props: {
         <p className={`text-[11px] leading-4 ${dark ? "text-white/35" : "text-[#82968f]"}`}>
           No mock screen here. This space reflects live project status.
         </p>
-        <button type="button" onClick={props.onOpenActivity}
+        <button type="button" onClick={() => props.onOpenActivity(props.attemptId || undefined)}
           className={`inline-flex min-h-9 items-center gap-1.5 self-start text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/70 sm:self-auto ${
             dark ? "text-teal-200 hover:text-white" : "text-teal-800 hover:text-[#14342e]"
           }`}>
-          View full activity <ArrowUpRight size={13} aria-hidden="true" />
+          {props.phase === "error" && props.attemptId ? "View this attempt" : "View full activity"} <ArrowUpRight size={13} aria-hidden="true" />
         </button>
       </div>
       <style>{`

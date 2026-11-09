@@ -13,6 +13,24 @@ export type NativeActivitySnapshot = {
   startedAt: number | null;
 };
 
+const SAFE_BUILD_ERROR_MESSAGES: Record<string, string> = {
+  PROVIDER_AUTH_FAILED: "The AI provider rejected the configured credentials. Check your provider settings.",
+  PROVIDER_BILLING_FAILED: "The AI provider rejected the request because of account or billing limits. Check your provider account.",
+  PROVIDER_RATE_LIMITED: "The AI provider temporarily limited requests. Wait a moment, then retry.",
+  PROVIDER_REQUEST_REJECTED: "The AI provider rejected the request. Check the selected model and provider settings.",
+  PROVIDER_UNAVAILABLE: "The AI provider is temporarily unavailable. Try again later.",
+  PROVIDER_NETWORK_ERROR: "The runtime could not reach the AI provider. Try again later.",
+  PROVIDER_CONFIG_FAILED: "The saved AI provider settings could not be applied. No other provider was used.",
+  AGENT_TOOL_FAILED: "The coding agent could not complete a workspace action.",
+  PREVIEW_BUILD_FAILED: "Project validation or preview generation failed.",
+  PREVIEW_UNAVAILABLE: "Your project may be saved, but its live preview could not be opened.",
+  BUILD_RUNTIME_FAILED: "The coding agent stopped before completing the request. Review this attempt before retrying.",
+};
+
+export function safeBuildErrorMessage(code: unknown): string | null {
+  return typeof code === "string" ? SAFE_BUILD_ERROR_MESSAGES[code] || null : null;
+}
+
 export function nativeActivityStorageKey(projectId: number): string {
   return `buildcustom:native-activity:${projectId}`;
 }

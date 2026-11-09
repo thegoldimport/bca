@@ -77,9 +77,10 @@ test("project collections accept arrays and named envelopes but reject error obj
 });
 
 test("builder activity opens the full project activity tab in a separate window", async () => {
-  const [builder, projectDetail] = await Promise.all([
+  const [builder, projectDetail, builderExperience] = await Promise.all([
     readFile(path.join(root, "client/src/pages/app-dashboard.tsx"), "utf8"),
     readFile(path.join(root, "client/src/pages/project-detail.tsx"), "utf8"),
+    readFile(path.join(root, "client/src/components/customer-experience/BuilderExperience.tsx"), "utf8"),
   ]);
 
   assert.match(builder, /window\.open\(activityHref, "_blank"\)/);
@@ -89,6 +90,11 @@ test("builder activity opens the full project activity tab in a separate window"
   assert.match(projectDetail, /\{ id: "activity", label: "Activity", icon: Activity \}/);
   assert.match(projectDetail, /new URLSearchParams\(window\.location\.search\)\.get\("tab"\) === "activity"/);
   assert.match(projectDetail, /data-testid="project-activity-page"/);
+  assert.match(projectDetail, /\/api\/projects\/\$\{projectId\}\/build-activity/);
+  assert.match(projectDetail, /Persistent build attempts/);
+  assert.match(projectDetail, /prompts, source files, and credentials are not included/i);
+  assert.match(projectDetail, /lastSuccessfulStage/);
+  assert.match(builder, /activityParams\.set\("attempt"/);
   assert.match(projectDetail, /Pages could not be loaded:[\s\S]*Try again/);
   assert.match(projectDetail, /Blog posts could not be loaded:[\s\S]*Try again/);
   assert.match(projectDetail, /class ProjectTabErrorBoundary/);
@@ -97,4 +103,10 @@ test("builder activity opens the full project activity tab in a separate window"
   assert.match(projectDetail, /Unable to load SEO settings\./);
   assert.match(projectDetail, /value=\{project\.status \|\| "draft"\}/);
   assert.doesNotMatch(projectDetail, /form\.name !== project\.name \|\| form\.description !== project\.description \? form\.framework/);
+  assert.match(builder, /safeBuildErrorMessage\(errorCode\)/);
+  assert.match(builder, /attemptId/);
+  assert.match(builderExperience, /data-testid="builder-build-failure-details"/);
+  assert.match(builderExperience, /Detailed runtime diagnostics were not saved/);
+  assert.match(builderExperience, /data-testid="button-continue-after-build-failure"/);
+  assert.match(builderExperience, /Continue in chat/);
 });

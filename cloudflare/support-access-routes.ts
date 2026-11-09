@@ -780,6 +780,26 @@ async function getSupportWorkspace(
        SELECT ?, 'admin_support_resource_accessed', ?, ?
        WHERE ${activeSessionSql}`,
     ).bind(admin.id, projectId, metadata, ...guardParams),
+    env.DB.prepare(
+      `SELECT a.attempt_id,a.started_at_ms,a.finished_at_ms,a.status,a.last_stage,
+        a.last_successful_stage,a.failure_stage,a.error_code,a.customer_message,
+        a.provider,a.model_id,a.correlation_id
+       FROM native_build_attempts a
+       WHERE a.project_id=?
+         AND a.user_id=(SELECT customer_user_id FROM support_access_sessions WHERE id=? AND admin_user_id=?)
+         AND ${activeSessionSql}
+       ORDER BY a.started_at_ms DESC LIMIT 50`,
+    ).bind(projectId, sessionId, admin.id, ...guardParams),
+    env.DB.prepare(
+      `SELECT e.attempt_id,e.occurred_at_ms,e.event_type,e.stage,e.status,e.error_code,
+        e.customer_message,e.provider_status,e.correlation_id
+       FROM native_build_events e
+       JOIN native_build_attempts a ON a.attempt_id=e.attempt_id
+       WHERE a.project_id=?
+         AND a.user_id=(SELECT customer_user_id FROM support_access_sessions WHERE id=? AND admin_user_id=?)
+         AND ${activeSessionSql}
+       ORDER BY e.occurred_at_ms DESC LIMIT 1000`,
+    ).bind(projectId, sessionId, admin.id, ...guardParams),
   ]);
   const activeSession = rows(result[0])[0];
   const project = rows(result[1])[0];
@@ -830,6 +850,31 @@ async function getSupportWorkspace(
       })),
       buildActivityTotal: Number(rows(result[5])[0]?.total || 0),
       lastBuildActivityAt: rows(result[5])[0]?.last_activity ?? null,
+      buildAttempts: rows(result[8]).map((attempt) => ({
+        attemptId: String(attempt.attempt_id),
+        startedAt: Number(attempt.started_at_ms),
+        finishedAt: attempt.finished_at_ms == null ? null : Number(attempt.finished_at_ms),
+        status: String(attempt.status),
+        lastStage: String(attempt.last_stage || ""),
+        lastSuccessfulStage: attempt.last_successful_stage ? String(attempt.last_successful_stage) : null,
+        failureStage: attempt.failure_stage ? String(attempt.failure_stage) : null,
+        errorCode: attempt.error_code ? String(attempt.error_code) : null,
+        customerMessage: attempt.customer_message ? String(attempt.customer_message) : null,
+        provider: attempt.provider ? String(attempt.provider) : null,
+        modelId: attempt.model_id ? String(attempt.model_id) : null,
+        correlationId: attempt.correlation_id ? String(attempt.correlation_id) : null,
+      })),
+      buildEvents: rows(result[9]).map((event) => ({
+        attemptId: String(event.attempt_id),
+        occurredAt: Number(event.occurred_at_ms),
+        eventType: String(event.event_type),
+        stage: String(event.stage),
+        status: String(event.status),
+        errorCode: event.error_code ? String(event.error_code) : null,
+        message: event.customer_message ? String(event.customer_message) : null,
+        providerStatus: event.provider_status == null ? null : Number(event.provider_status),
+        correlationId: event.correlation_id ? String(event.correlation_id) : null,
+      })),
     },
     restrictions: {
       readOnly: true,

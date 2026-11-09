@@ -29,6 +29,8 @@ type State = {
   operations: Record<string, any>[];
   turns: Record<string, any>[];
   releases: Record<string, any>[];
+  buildAttempts: Record<string, any>[];
+  buildEvents: Record<string, any>[];
   auditEvents: Record<string, any>[];
   auditActions: string[];
   writes: number;
@@ -98,6 +100,38 @@ function makeState(): State {
       subdomain_slug: "customer-site",
       created_at: "2026-02-02 00:00:00",
       commit_hash: "PRIVATE_COMMIT_HASH",
+    }],
+    buildAttempts: [{
+      attempt_id: "attempt-1",
+      project_id: 101,
+      user_id: customer.id,
+      started_at_ms: 1_800_000_000_000,
+      finished_at_ms: 1_800_000_000_500,
+      status: "failed",
+      last_stage: "provider_response",
+      last_successful_stage: "provider_configuration",
+      failure_stage: "provider_response",
+      error_code: "PROVIDER_AUTH_FAILED",
+      customer_message: "The AI provider rejected the configured credentials.",
+      provider: "anthropic",
+      model_id: "anthropic/claude-haiku-5-5",
+      correlation_id: "attempt-1",
+      encrypted_api_key: "PRIVATE_ENCRYPTED_KEY",
+      raw_error: "PRIVATE_RAW_PROVIDER_BODY",
+      prompt: "PRIVATE_PROMPT",
+    }],
+    buildEvents: [{
+      attempt_id: "attempt-1",
+      occurred_at_ms: 1_800_000_000_100,
+      event_type: "provider_response_received",
+      stage: "provider_response",
+      status: "error",
+      error_code: "PROVIDER_AUTH_FAILED",
+      customer_message: "The AI provider rejected the configured credentials.",
+      provider_status: 401,
+      correlation_id: "attempt-1",
+      raw_error: "PRIVATE_RAW_PROVIDER_BODY",
+      api_key: "PRIVATE_API_KEY",
     }],
     auditEvents: [{
       action: "customer_support_access_granted",
@@ -235,6 +269,25 @@ function createDb(state: State) {
     }
     if (sql.includes("FROM runtime_builder_turns t")) {
       return state.turns;
+    }
+    if (sql.includes("FROM native_build_attempts a")) {
+      const projectId = Number(values[0]);
+      const session = state.sessions.get(String(values[1]));
+      const grant = session ? state.grants.get(String(session.grant_id)) : undefined;
+      if (!session || session.admin_user_id !== values[2] || session.closed_at_ms != null
+        || !isGrantActive(grant) || Number(session.project_id) !== projectId) return [];
+      return state.buildAttempts.filter((attempt) => attempt.project_id === projectId && attempt.user_id === session.customer_user_id);
+    }
+    if (sql.includes("FROM native_build_events e")) {
+      const projectId = Number(values[0]);
+      const session = state.sessions.get(String(values[1]));
+      const grant = session ? state.grants.get(String(session.grant_id)) : undefined;
+      if (!session || session.admin_user_id !== values[2] || session.closed_at_ms != null
+        || !isGrantActive(grant) || Number(session.project_id) !== projectId) return [];
+      return state.buildEvents.filter((event) =>
+        state.buildAttempts.some((attempt) => attempt.attempt_id === event.attempt_id
+          && attempt.project_id === projectId && attempt.user_id === session.customer_user_id),
+      );
     }
     if (sql.includes("FROM runtime_releases r")) {
       return state.releases;
@@ -798,12 +851,17 @@ test("support workspace is project-scoped, read-only, audited, and rechecks revo
   assert.equal(workspace.project.id, 101);
   assert.equal(workspace.restrictions.readOnly, true);
   assert.equal(workspace.project.deploymentUrl, "https://customer.example.test");
+  assert.equal(workspace.diagnostics.buildAttempts[0]?.provider, "anthropic");
+  assert.equal(workspace.diagnostics.buildAttempts[0]?.errorCode, "PROVIDER_AUTH_FAILED");
+  assert.equal(workspace.diagnostics.buildEvents[0]?.providerStatus, 401);
   const serialized = JSON.stringify(workspace);
   for (const secret of [
     "PRIVATE_PROJECT_DESCRIPTION",
     "PRIVATE_SOURCE_CODE",
     "PRIVATE_API_KEY",
     "PRIVATE_RAW_ERROR",
+    "PRIVATE_RAW_PROVIDER_BODY",
+    "PRIVATE_ENCRYPTED_KEY",
     "PRIVATE_PROMPT",
     "PRIVATE_RESPONSE",
     "PRIVATE_FILES",
