@@ -11,6 +11,7 @@ import { handleBuilderPlanningRoute } from "./planning-routes";
 import { handleAiCredentialRoute } from "./ai-credential-routes";
 import { handleContentRoute } from "./content-routes";
 import { handleDomainRoute } from "./domain-routes";
+import { handleProjectBuildActivityRoute } from "./build-activity-routes";
 import { deleteProjectWithRoutes, deploymentScriptName, routeMetadata, writePublishedRoute } from "./published-routes";
 import { capturePreviewImage, imageDataUri, previewImageKey, verifyPublicHostnameRoute, type BrowserRunBinding } from "./staging/preview-image";
 import { StagingPublishNotReadyError, waitForStagingAppReady } from "./staging/published-readiness";
@@ -348,6 +349,8 @@ export default {
       const stagingLinkFields = runtimeCustomer ? ",l.initialization_status,l.initialization_error,l.runtime_provider" : "";
       const projectSql = `SELECT p.*,l.agent_id,l.agent_is_imported,l.preview_url,l.deployment_url,l.hosting_provider,l.subdomain_slug,l.custom_domain,l.custom_origin,l.deployment_origin_url,l.deployment_script_name${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.id=? AND p.user_id=?`;
       const project = projectId === null ? null : await env.DB.prepare(projectSql).bind(projectId, user.id).first<any>();
+      const buildActivityResponse = await handleProjectBuildActivityRoute(env, request, user.id);
+      if (buildActivityResponse) return buildActivityResponse;
       const projectList = async () => (await env.DB.prepare(`SELECT p.*,l.agent_id,l.preview_url,l.deployment_url,l.subdomain_slug${stagingLinkFields},CASE WHEN length(s.preview_image_data)>0 THEN 1 ELSE 0 END has_preview_image,s.updated_at seo_updated_at FROM projects p LEFT JOIN runtime_project_links l ON l.project_id=p.id LEFT JOIN seo_settings s ON s.project_id=p.id WHERE p.user_id=? ORDER BY p.updated_at DESC`).bind(user.id).all()).results.map((row) => serializeProject(row, launchCustomer ? env : undefined));
       if (url.pathname === "/api/projects" && request.method === "GET") return json(await projectList());
       if (url.pathname === "/api/projects" && request.method === "POST") {

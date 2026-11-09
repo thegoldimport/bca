@@ -104,28 +104,71 @@ function ProjectQueryError({ title, message, onRetry }: { title: string; message
   );
 }
 
+type PersistentBuildEvent = {
+  id: string;
+  occurredAt: number;
+  eventType: string;
+  stage: string;
+  status: "active" | "complete" | "error" | "info";
+  errorCode: string | null;
+  message: string | null;
+};
+
+type PersistentBuildAttempt = {
+  attemptId: string;
+  startedAt: number;
+  finishedAt: number | null;
+  durationMs: number;
+  status: "running" | "completed" | "failed";
+  lastStage: string;
+  lastSuccessfulStage: string | null;
+  failureStage: string | null;
+  errorCode: string | null;
+  customerMessage: string | null;
+  events: PersistentBuildEvent[];
+};
+
 function ProjectActivityTab({ projectId }: { projectId: number }) {
   const { theme } = useTheme();
-  const [snapshot, setSnapshot] = useState(() => readNativeActivitySnapshot(projectId));
-  const events = [...snapshot.events].sort((a, b) => a.observedAt - b.observedAt);
-  const statusIcon = (event: BuildActivityEvent) => {
-    if (event.status === "error") return <AlertCircle size={15} className="text-rose-400" aria-hidden="true" />;
-    if (event.status === "complete") return <CheckCircle2 size={15} className="text-emerald-400" aria-hidden="true" />;
-    if (event.status === "active") return <RefreshCw size={14} className="animate-spin text-amber-300 motion-reduce:animate-none" aria-hidden="true" />;
+  const legacySnapshot = readNativeActivitySnapshot(projectId);
+  const query = useQuery<{ attempts: PersistentBuildAttempt[]; retainedEventCount: number }, Error>({
+    queryKey: ["project-build-activity", projectId],
+    queryFn: async () => {
+      const response = await fetch(`/api/projects/${projectId}/build-activity`, {
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error(response.status === 401 ? "Sign in to view project activity." : "Persistent build activity could not be loaded.");
+      }
+      return await response.json();
+    },
+    refetchInterval: (current) => current.state.data?.attempts?.some((attempt) => attempt.status === "running") ? 3_000 : false,
+    staleTime: 0,
+  });
+  const attempts = query.data?.attempts || [];
+  const selectedAttempt = new URLSearchParams(window.location.search).get("attempt");
+  const darkText = theme === "dark" ? "text-white" : "text-gray-900";
+  const mutedText = theme === "dark" ? "text-white/45" : "text-gray-500";
+  const statusIcon = (status: string) => {
+    if (status === "error" || status === "failed") return <AlertCircle size={15} className="text-rose-400" aria-hidden="true" />;
+    if (status === "complete" || status === "completed") return <CheckCircle2 size={15} className="text-emerald-400" aria-hidden="true" />;
+    if (status === "active" || status === "running") return <RefreshCw size={14} className="animate-spin text-amber-300 motion-reduce:animate-none" aria-hidden="true" />;
     return <Circle size={12} className={theme === "dark" ? "text-white/35" : "text-gray-400"} aria-hidden="true" />;
   };
-
-  useEffect(() => {
-    setSnapshot(readNativeActivitySnapshot(projectId));
-  }, [projectId]);
+  const stageLabel = (stage: string | null | undefined) => stage ? stage.replaceAll("_", " ") : "Not recorded";
+  const elapsedLabel = (durationMs: number) => {
+    const seconds = Math.floor(Math.max(0, durationMs) / 1000);
+    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  };
 
   return (
     <section className="space-y-5" data-testid="project-activity-page">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className={`text-xl font-bold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Project activity</h2>
-          <p className={`mt-1 text-sm ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
-            Build events captured in this browser session. This view does not show prompts or project source.
+          <h2 className={`text-xl font-bold ${darkText}`}>Project activity</h2>
+          <p className={`mt-1 text-sm ${mutedText}`}>
+            Persistent build attempts and observed stages. Prompts, source files, and credentials are not included.
           </p>
         </div>
         <Link href={`/app/editor/${projectId}`}>
@@ -141,42 +184,97 @@ function ProjectActivityTab({ projectId }: { projectId: number }) {
         }`}>
           <div className="flex items-center gap-2">
             <Activity size={17} className="text-cyan-400" aria-hidden="true" />
-            <h3 className={`font-semibold ${theme === "dark" ? "text-white" : "text-gray-900"}`}>Observed build events</h3>
+            <h3 className={`font-semibold ${darkText}`}>Build attempts</h3>
           </div>
-          <span className={`text-xs tabular-nums ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-            {events.length} {events.length === 1 ? "event" : "events"}
+          <span className={`text-xs tabular-nums ${mutedText}`}>
+            {attempts.length} {attempts.length === 1 ? "attempt" : "attempts"}
           </span>
         </div>
 
-        {snapshot.startedAt && (
-          <p className={`pt-4 text-xs ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}>
-            Latest build activity started {new Date(snapshot.startedAt).toLocaleString()}
-          </p>
+        {query.isLoading && <p className={`pt-4 text-sm ${mutedText}`}>Loading saved build activity…</p>}
+        {query.isError && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/20 bg-rose-400/5 p-4" role="alert" data-testid="project-activity-load-error">
+            <span className="text-sm text-rose-300">{query.error.message}</span>
+            <button type="button" onClick={() => void query.refetch()} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold">Try again</button>
+          </div>
         )}
 
-        {events.length > 0 ? (
-          <ol className="mt-4 space-y-2" aria-label="Project build activity">
-            {events.map((event) => (
-              <li key={event.id} className={`grid grid-cols-[18px_minmax(0,1fr)] gap-x-3 rounded-xl border p-3 sm:grid-cols-[18px_minmax(0,1fr)_auto] ${
-                theme === "dark" ? "border-white/[0.07] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
-              }`}>
-                <span className="mt-0.5">{statusIcon(event)}</span>
-                <div className="min-w-0">
-                  <p className={`text-sm leading-5 ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{event.label}</p>
-                  {event.path && <code className={`mt-1 block break-all text-[11px] ${theme === "dark" ? "text-cyan-200/60" : "text-cyan-800/75"}`}>{event.path}</code>}
+        {attempts.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {attempts.map((attempt, index) => (
+              <details
+                key={attempt.attemptId}
+                open={attempt.attemptId === selectedAttempt || (index === 0 && !selectedAttempt)}
+                className={`rounded-xl border ${theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-gray-50"}`}
+                data-testid="project-build-attempt"
+              >
+                <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 p-4">
+                  {statusIcon(attempt.status)}
+                  <span className={`min-w-0 flex-1 text-sm font-semibold ${darkText}`}>
+                    Build attempt · {new Date(attempt.startedAt).toLocaleString()}
+                  </span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                    attempt.status === "failed" ? "bg-rose-400/10 text-rose-300"
+                      : attempt.status === "completed" ? "bg-emerald-400/10 text-emerald-300"
+                        : "bg-amber-300/10 text-amber-200"
+                  }`}>{attempt.status}</span>
+                  <span className={`text-xs tabular-nums ${mutedText}`}>{elapsedLabel(attempt.durationMs)}</span>
+                </summary>
+                <div className={`border-t px-4 pb-4 pt-3 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
+                  <div className={`grid gap-2 text-xs sm:grid-cols-2 ${mutedText}`}>
+                    <p>Last successful stage: <span className={darkText}>{stageLabel(attempt.lastSuccessfulStage)}</span></p>
+                    <p>Last observed stage: <span className={darkText}>{stageLabel(attempt.lastStage)}</span></p>
+                    {attempt.failureStage && <p>Failure stage: <span className="text-rose-300">{stageLabel(attempt.failureStage)}</span></p>}
+                    {attempt.errorCode && <p>Error code: <code className="text-rose-300">{attempt.errorCode}</code></p>}
+                  </div>
+                  {attempt.customerMessage && (
+                    <p className={`mt-3 rounded-lg border border-rose-400/15 bg-rose-400/5 p-3 text-sm ${theme === "dark" ? "text-rose-100/85" : "text-rose-800"}`}>
+                      {attempt.customerMessage}
+                    </p>
+                  )}
+                  <ol className="mt-4 space-y-2" aria-label="Attempt stages">
+                    {attempt.events.map((event) => (
+                      <li key={event.id} className={`grid grid-cols-[18px_minmax(0,1fr)] gap-x-3 rounded-lg border p-3 sm:grid-cols-[18px_minmax(0,1fr)_auto] ${
+                        theme === "dark" ? "border-white/[0.07] bg-white/[0.02]" : "border-gray-100 bg-white"
+                      }`}>
+                        <span className="mt-0.5">{statusIcon(event.status)}</span>
+                        <div className="min-w-0">
+                          <p className={`text-sm leading-5 ${theme === "dark" ? "text-white/80" : "text-gray-800"}`}>{event.message || stageLabel(event.stage)}</p>
+                          {event.errorCode && <code className="mt-1 block text-[11px] text-rose-300">{event.errorCode}</code>}
+                        </div>
+                        <time className={`col-start-2 mt-1 text-[11px] sm:col-start-auto sm:mt-0 ${mutedText}`} dateTime={new Date(event.occurredAt).toISOString()}>
+                          {new Date(event.occurredAt).toLocaleString()}
+                        </time>
+                      </li>
+                    ))}
+                  </ol>
                 </div>
-                <time className={`col-start-2 mt-1 text-[11px] sm:col-start-auto sm:mt-0 ${theme === "dark" ? "text-white/35" : "text-gray-500"}`}
-                  dateTime={new Date(event.observedAt).toISOString()}>
-                  {new Date(event.observedAt).toLocaleString()}
-                </time>
-              </li>
+              </details>
             ))}
-          </ol>
-        ) : (
+          </div>
+        )}
+
+        {!query.isLoading && !query.isError && attempts.length === 0 && legacySnapshot.events.length > 0 && (
+          <div className={`mt-4 rounded-xl border p-4 ${theme === "dark" ? "border-amber-300/20 bg-amber-300/5" : "border-amber-200 bg-amber-50"}`} data-testid="project-activity-legacy">
+            <p className={`text-sm font-semibold ${darkText}`}>Older browser-session activity</p>
+            <p className={`mt-1 text-xs ${mutedText}`}>These older events were not stored as persistent runtime diagnostics, so their exact failure stage is unavailable.</p>
+            <ol className="mt-3 space-y-2">
+              {[...legacySnapshot.events].sort((a, b) => a.observedAt - b.observedAt).map((event: BuildActivityEvent) => (
+                <li key={event.id} className={`flex items-start gap-3 rounded-lg p-3 ${theme === "dark" ? "bg-white/[0.03]" : "bg-white"}`}>
+                  {statusIcon(event.status)}
+                  <span className={`min-w-0 flex-1 text-sm ${darkText}`}>{event.label}</span>
+                  <time className={`text-xs ${mutedText}`} dateTime={new Date(event.observedAt).toISOString()}>{new Date(event.observedAt).toLocaleString()}</time>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {!query.isLoading && !query.isError && attempts.length === 0 && legacySnapshot.events.length === 0 && (
           <div className={`mt-4 rounded-xl border border-dashed px-4 py-8 text-center ${
             theme === "dark" ? "border-white/10 text-white/45" : "border-gray-200 text-gray-500"
           }`} data-testid="project-activity-empty">
-            No build activity has been captured in this browser session yet. Open Builder to start or resume work on this project.
+            No persistent build attempts are recorded yet. A customer-started build will appear here after it begins.
           </div>
         )}
       </GlassCard>

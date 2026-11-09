@@ -26,7 +26,11 @@ import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { THINK_MODEL_CONFIG } from './model-config';
-import { decryptAiCredential, protectAiCredentialForStorage } from '../../../shared/ai-credential-crypto';
+import { protectAiCredentialForStorage } from '../../../shared/ai-credential-crypto';
+import {
+	type BuildDiagnosticContext,
+} from './build-diagnostics';
+import { createBuildProviderFetch } from './build-provider-fetch';
 
 /**
  * Per-instance configuration pushed into a {@link ThinkAgent} by the host
@@ -63,7 +67,10 @@ encryptedApiKey?: string;
 		useStoredKeys?: boolean;
 /** Customer-supplied provider keys are billed by that provider, not platform credits. */
 usesCustomerKey?: boolean;
+		providerId?: string;
+		modelId?: string;
 	};
+	buildDiagnostics?: BuildDiagnosticContext;
 	/** Builder system prompt (assembled host-side; falls back to a default). */
 	systemPrompt?: string;
 	/**
@@ -230,37 +237,19 @@ export class ThinkAgent extends Think<Env> {
 	}
 
 	override getModel(): LanguageModel {
-		const { model } = this.requireConfig();
-		// Wrap fetch to (1) strip the provider `Authorization` header in BYOK /
-		// stored-keys mode (the gateway injects the stored key; a forwarded
-		// header would override it) while preserving `cf-aig-authorization`;
-		// (2) patch the response SSE stream so Google's compat tool-call deltas
-		// (which omit `index`) satisfy the OpenAI provider's chunk schema; and
-		// (3) round-trip Gemini `thought_signature`s — harvest them from the
-		// response and re-inject them into outgoing request history (the AI SDK
-		// drops them, which Gemini 3 rejects with `400 INVALID_ARGUMENT`).
-		const gatewayFetch: typeof fetch = async (input, init) => {
-			const headers = new Headers(init?.headers);
-if (model.encryptedApiKey) {
-const secret = (this.env as unknown as { BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string }).BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET;
-if (!secret) throw new Error('The saved AI provider key is unavailable.');
-const apiKey = await decryptAiCredential(secret, model.encryptedApiKey);
-headers.set('authorization', `Bearer ${apiKey}`);
-}
-			if (model.useStoredKeys) headers.delete('authorization');
-			let body = init?.body;
-			if (typeof body === 'string') body = this.injectThoughtSignatures(body);
-			const res = await fetch(input as RequestInfo, { ...(init ?? {}), headers, body });
-			if (!res.body) return res;
-			const outHeaders = new Headers(res.headers);
-			// Body length/encoding change after transforming the stream.
-			outHeaders.delete('content-length');
-			outHeaders.delete('content-encoding');
-			return new Response(
-				fixToolCallStream(res.body, (id, sig) => this.thoughtSignatures.set(id, sig)),
-				{ status: res.status, statusText: res.statusText, headers: outHeaders },
-			);
-		};
+		const { model, buildDiagnostics } = this.requireConfig();
+		// Keep the gateway boundary independently testable: tests can use
+		// mocked provider responses and assert that no credential or body is
+		// persisted in diagnostics.
+		const gatewayFetch = createBuildProviderFetch({
+			model,
+			db: (this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database } | undefined)?.BUILDCUSTOM_PRODUCT_DB,
+			buildDiagnostics: buildDiagnostics ?? null,
+			encryptionSecret: (this.env as unknown as { BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string } | undefined)
+				?.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET,
+			transformRequestBody: (body) => typeof body === 'string' ? this.injectThoughtSignatures(body) : body,
+			transformResponseBody: (body) => fixToolCallStream(body, (id, sig) => this.thoughtSignatures.set(id, sig)),
+		});
 		const provider = createOpenAI({
 			baseURL: model.baseURL,
 			apiKey: model.apiKey,

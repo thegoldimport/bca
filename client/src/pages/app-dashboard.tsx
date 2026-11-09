@@ -119,6 +119,7 @@ import {
 import {
   MAX_NATIVE_ACTIVITY_EVENTS,
   readNativeActivitySnapshot,
+  safeBuildErrorMessage,
   writeNativeActivitySnapshot,
   type BuildActivityEvent,
 } from "@/lib/native-activity";
@@ -1186,6 +1187,12 @@ function EditorPage() {
   const [nativeCompletionPhase, setNativeCompletionPhase] = useState<NativeCompletionPhase>("idle");
   const [autoContinueSaving, setAutoContinueSaving] = useState(false);
   const [nativeCompletionMessage, setNativeCompletionMessage] = useState("");
+  const [nativeBuildFailure, setNativeBuildFailure] = useState<{
+    errorCode: string | null;
+    attemptId: string | null;
+    lastSuccessfulStage: string | null;
+    diagnosticsAvailable: boolean;
+  } | null>(null);
   const [nativeRecoveryUnverified, setNativeRecoveryUnverified] = useState(false);
   const [nativeConnectionRetry, setNativeConnectionRetry] = useState<NativeConnectionRetry | null>(null);
   const [nativeProgress, setNativeProgress] = useState<BuildActivityEvent[]>(() => (
@@ -3052,6 +3059,7 @@ function EditorPage() {
           }
           case "generation_started":
             activeWork.add("generation");
+            setNativeBuildFailure(null);
             setNativeActivityStart(nativeOperationStartedAtRef.current || Date.now());
             recordNativeProgress("Agent started the build", "active");
             break;
@@ -3117,13 +3125,53 @@ function EditorPage() {
             break;
           case "error": {
             const statusCode = Number(frame.status ?? frame.statusCode ?? frame.error?.status);
+            const errorCode = typeof frame.errorCode === "string" ? frame.errorCode : null;
+            const attemptId = typeof frame.attemptId === "string" && /^[0-9a-f-]{36}$/i.test(frame.attemptId)
+              ? frame.attemptId : null;
             const message = statusCode === 401
               ? "The runtime could not authorize a status or build request. The result is not confirmed; refresh the editor and check your account access."
               : statusCode === 402
                 ? "The AI provider reported a payment or credit limit. The build result is not confirmed."
                 : statusCode === 429
                   ? "The AI provider is rate-limiting this request. Wait before trying again."
-                  : "This build stopped before completion. The runtime reported an error; check the activity and project before retrying.";
+                  : safeBuildErrorMessage(errorCode)
+                    || "This build stopped before completion. The conversation is preserved, but the runtime did not provide a safe diagnostic category.";
+            setNativeBuildFailure({
+              errorCode,
+              attemptId,
+              lastSuccessfulStage: null,
+              diagnosticsAvailable: frame.diagnosticsAvailable === true && Boolean(attemptId),
+            });
+            if (attemptId && projectId > 0) {
+              const failedProjectId = projectId;
+              void fetch(`/api/projects/${failedProjectId}/build-activity`, {
+                credentials: "same-origin",
+                headers: authHeaders(),
+                cache: "no-store",
+              }).then(async (response) => {
+                if (!response.ok) {
+                  setNativeBuildFailure((current) => {
+                    if (!current || current.attemptId !== attemptId) return current;
+                    return { ...current, diagnosticsAvailable: false };
+                  });
+                  return null;
+                }
+                return await response.json().catch(() => null) as {
+                  attempts?: Array<{ attemptId: string; lastSuccessfulStage: string | null }>;
+                } | null;
+              }).then((result) => {
+                if (activeProjectIdRef.current !== failedProjectId || !result?.attempts) return;
+                const attempt = result.attempts.find((entry) => entry.attemptId === attemptId);
+                if (attempt) setNativeBuildFailure((current) => {
+                  if (!current || current.attemptId !== attemptId) return current;
+                  return { ...current, lastSuccessfulStage: attempt.lastSuccessfulStage, diagnosticsAvailable: true };
+                });
+                else setNativeBuildFailure((current) => {
+                  if (!current || current.attemptId !== attemptId) return current;
+                  return { ...current, diagnosticsAvailable: false };
+                });
+              }).catch(() => undefined);
+            }
             recordNativeProgress(message, "error");
             failTurn(message);
             return;
@@ -5409,9 +5457,19 @@ function EditorPage() {
                       ? "A build request was sent. Checking the existing runtime state."
                       : nativeCompletionMessage || (projectId ? "" : "A project is required for a live preview.")}
                     startedAt={nativeOperationStartedAt}
-                    onOpenActivity={() => {
+                    failureCode={nativeBuildFailure?.errorCode}
+                    lastSuccessfulStage={nativeBuildFailure?.lastSuccessfulStage}
+                    attemptId={nativeBuildFailure?.attemptId}
+                    diagnosticsAvailable={nativeBuildFailure?.diagnosticsAvailable}
+                    onContinue={() => {
+                      textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      textareaRef.current?.focus();
+                    }}
+                    onOpenActivity={(attemptId) => {
                       if (projectId <= 0) return;
-                      const activityHref = `/app/project/${projectId}?tab=activity`;
+                      const activityParams = new URLSearchParams({ tab: "activity" });
+                      if (attemptId) activityParams.set("attempt", attemptId);
+                      const activityHref = `/app/project/${projectId}?${activityParams.toString()}`;
                       const activityWindow = window.open(activityHref, "_blank");
                       if (activityWindow) {
                         // Keep the sessionStorage activity snapshot cloned into the new same-origin tab,

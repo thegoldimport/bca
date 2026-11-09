@@ -28,6 +28,13 @@ import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
 import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
+import {
+	latestBuildErrorCode,
+	recordBuildEvent,
+	safeBuildError,
+	startBuildAttempt,
+	type BuildDiagnosticContext,
+} from '../../think/build-diagnostics';
 import { getRuntimeAiModelConfig } from '../../../../shared/ai-provider-catalog';
 import {
 	readAiCredentialForRuntime,
@@ -90,17 +97,20 @@ type ThinkChunk =
 class ThinkStreamForwarder extends RpcTarget {
 	constructor(
 		private readonly onChunkJson: (json: string) => void | Promise<void>,
-		private readonly onErrorCb: (message: string) => void,
+		private readonly onErrorCb: () => void,
+		private readonly onStartCb: (event: { requestId: string }) => void | Promise<void>,
 	) {
 		super();
 	}
-	onStart(_event: { requestId: string }): void {}
+	async onStart(event: { requestId: string }): Promise<void> {
+		await this.onStartCb(event);
+	}
 	async onEvent(json: string): Promise<void> {
 		await this.onChunkJson(json);
 	}
 	onDone(): void {}
-	onError(error: string): void {
-		this.onErrorCb(error);
+	onError(_error: string): void {
+		this.onErrorCb();
 	}
 	onInterrupted(): void {}
 }
@@ -120,6 +130,8 @@ export class ThinkCodingBehavior
 	extends BaseCodingBehavior<ThinkState>
 	implements ICodingAgent {
 	protected static readonly PROJECT_NAME_PREFIX_MAX_LENGTH = 20;
+	private activeBuildDiagnostics: BuildDiagnosticContext | null = null;
+private activePreviewFailureCode: 'PREVIEW_BUILD_FAILED' | 'PREVIEW_UNAVAILABLE' | null = null;
 
 	override getBehavior(): 'think' { return 'think'; }
 
@@ -222,7 +234,7 @@ export class ThinkCodingBehavior
 	 * Resolve the AI Gateway model coordinates from VibeSDK's model config and
 	 * push them (plus space name + system prompt) into the ThinkAgent DO.
 	 */
-	private async configureThinkAgent(): Promise<void> {
+	private async configureThinkAgent(buildDiagnostics?: BuildDiagnosticContext | null): Promise<void> {
 		const inf = this.getInferenceContext();
 		const userId = this.state.metadata.userId;
 
@@ -250,6 +262,7 @@ export class ThinkCodingBehavior
 					CLOUDFLARE_API_TOKEN?: string;
 					CLOUDFLARE_AI_GATEWAY?: string;
 				}),
+				buildDiagnostics: buildDiagnostics || undefined,
 				systemPrompt: this.buildSystemPrompt('gemini-3.6-flash', 'google'),
 				previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
 			};
@@ -268,9 +281,8 @@ export class ThinkCodingBehavior
 				inf.userApiToken,
 				null,
 			);
-		} catch (e) {
-			this.logger.warn('Failed to resolve model gateway config for ThinkAgent', e);
-			return;
+		} catch {
+			throw new Error(safeBuildError('PROVIDER_CONFIG_FAILED').message);
 		}
 
 		// `getConfigurationForModel` only emits `cf-aig-authorization` when a
@@ -317,7 +329,10 @@ export class ThinkCodingBehavior
 				useStoredKeys: usesStoredKeys,
 				encryptApiKey: hasBuildCustomByokKey,
 				usesCustomerKey: hasBuildCustomByokKey,
+				providerId: aiModelConfig.provider,
+				modelId: buildCustomModelId || `${aiModelConfig.provider}/${modelName}`,
 			},
+			buildDiagnostics: buildDiagnostics || undefined,
 			systemPrompt: this.buildSystemPrompt(modelName, aiModelConfig.provider),
 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
 		};
@@ -325,11 +340,8 @@ export class ThinkCodingBehavior
 		try {
 			const stub = await this.getThinkStub();
 			await stub.configureVibe(config);
-		} catch (e) {
-			if (hasBuildCustomByokKey) {
-				throw new Error("Could not securely apply the saved AI provider key.");
-			}
-			this.logger.warn('ThinkAgent.configureVibe failed (continuing)', e);
+		} catch {
+			throw new Error(safeBuildError('PROVIDER_CONFIG_FAILED').message);
 		}
 	}
 
@@ -339,14 +351,14 @@ export class ThinkCodingBehavior
 			BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET?: string;
 		};
 		const userId = this.state.metadata.userId;
-		let credential: Awaited<ReturnType<typeof readAiCredentialForRuntime>> = null;
-		if (runtimeEnv.BUILDCUSTOM_PRODUCT_DB) {
-			credential = await readAiCredentialForRuntime(
-				runtimeEnv.BUILDCUSTOM_PRODUCT_DB,
-				runtimeEnv.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET,
-				userId,
-			);
+		if (!runtimeEnv.BUILDCUSTOM_PRODUCT_DB) {
+			throw new Error(safeBuildError('PROVIDER_CONFIG_FAILED').message);
 		}
+		const credential = await readAiCredentialForRuntime(
+			runtimeEnv.BUILDCUSTOM_PRODUCT_DB,
+			runtimeEnv.BUILDCUSTOM_AI_CREDENTIALS_ENCRYPTION_SECRET,
+			userId,
+		);
 		this.setRuntimeOverrides(credential ? {
 			buildCustomModelId: credential.modelId,
 			userApiKeys: { [credential.provider]: credential.apiKey },
@@ -532,6 +544,50 @@ export class ThinkCodingBehavior
 			this.setState({ ...this.state, pendingUserInputs: [this.state.query] });
 		}
 
+		if (this.state.pendingUserInputs.length === 0) return;
+		const diagnosticDb = (this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database }).BUILDCUSTOM_PRODUCT_DB;
+		const diagnostics = await startBuildAttempt(diagnosticDb, {
+			userId: this.state.metadata.userId,
+			agentId: this.getAgentId(),
+		});
+		this.activeBuildDiagnostics = diagnostics;
+this.activePreviewFailureCode = null;
+		let failed = false;
+		try {
+			try {
+				await this.configureThinkAgent(diagnostics);
+				const selectedModelId = this.getInferenceContext().runtimeOverrides?.buildCustomModelId;
+				const provider = selectedModelId?.split('/')[0];
+				await recordBuildEvent(diagnosticDb, diagnostics, {
+					eventType: 'provider_configuration_resolved',
+					stage: 'provider_configuration',
+					status: 'complete',
+					provider,
+					modelId: selectedModelId,
+				});
+			} catch {
+				const error = safeBuildError('PROVIDER_CONFIG_FAILED');
+				await recordBuildEvent(diagnosticDb, diagnostics, {
+					eventType: 'provider_configuration_failed',
+					stage: 'provider_configuration',
+					status: 'error',
+					errorCode: error.code,
+				});
+				await recordBuildEvent(diagnosticDb, diagnostics, {
+					eventType: 'build_failed',
+					stage: 'provider_configuration',
+					status: 'error',
+					errorCode: error.code,
+				});
+				this.broadcast(WebSocketMessageResponses.ERROR, {
+					error: error.message,
+					errorCode: error.code,
+					attemptId: diagnostics?.attemptId || null,
+					diagnosticsAvailable: Boolean(diagnostics),
+				});
+				return;
+			}
+
 		while (this.state.pendingUserInputs.length > 0) {
 			const pending = this.state.pendingUserInputs.slice();
 			this.setState({ ...this.state, pendingUserInputs: [] });
@@ -539,11 +595,27 @@ export class ThinkCodingBehavior
 			const compiled = pending.join('\n');
 			try {
 				await this.runPrompt(compiled);
-			} catch (e) {
-				this.logger.error('Think prompt failed', e);
-				this.broadcast(WebSocketMessageResponses.ERROR, {
-					error: e instanceof Error ? e.message : String(e),
+if (this.activePreviewFailureCode) throw new Error(this.activePreviewFailureCode);
+				const latestError = await latestBuildErrorCode(diagnosticDb, diagnostics);
+				if (latestError) throw new Error(latestError);
+			} catch {
+const code = await latestBuildErrorCode(diagnosticDb, diagnostics)
+|| this.activePreviewFailureCode
+|| 'BUILD_RUNTIME_FAILED';
+				const error = safeBuildError(code);
+				await recordBuildEvent(diagnosticDb, diagnostics, {
+					eventType: 'build_failed',
+stage: code === 'PREVIEW_BUILD_FAILED' ? 'validation' : code === 'PREVIEW_UNAVAILABLE' ? 'preview' : 'agent_generation',
+					status: 'error',
+					errorCode: code,
 				});
+				this.broadcast(WebSocketMessageResponses.ERROR, {
+					error: error.message,
+					errorCode: error.code,
+					attemptId: diagnostics?.attemptId || null,
+					diagnosticsAvailable: Boolean(diagnostics),
+				});
+				failed = true;
 				break;
 			}
 
@@ -554,6 +626,24 @@ export class ThinkCodingBehavior
 			// Commits (and deploys) are driven entirely by the model: it calls the
 			// `commit` tool to snapshot a restore point when it decides, and
 			// `deploy_space` to build/preview. The harness does neither on its own.
+		}
+			if (!failed) {
+				await recordBuildEvent(diagnosticDb, diagnostics, {
+					eventType: 'build_completed',
+					stage: 'build',
+					status: 'complete',
+				});
+			}
+		} finally {
+			if (diagnostics) {
+				try {
+					await this.configureThinkAgent();
+				} catch {
+					// Clearing the per-attempt context must not alter the build result.
+				}
+			}
+			this.activeBuildDiagnostics = null;
+this.activePreviewFailureCode = null;
 		}
 	}
 
@@ -570,6 +660,7 @@ export class ThinkCodingBehavior
 		});
 
 		const accumulated = { text: '' };
+		const streamState = { failed: false };
 		const seenWrittenFiles = new Set<string>();
 		const toolNames = new Map<string, string>();
 		const toolInputs = new Map<string, Record<string, unknown>>();
@@ -584,12 +675,25 @@ export class ThinkCodingBehavior
 				}
 				return this.translateChunk(chunk, conversationId, accumulated, seenWrittenFiles, toolNames, toolInputs);
 			},
-			(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err }),
+			() => {
+				streamState.failed = true;
+			},
+			(event) => recordBuildEvent(
+				(this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database }).BUILDCUSTOM_PRODUCT_DB,
+				this.activeBuildDiagnostics,
+				{
+					eventType: 'agent_generation_started',
+					stage: 'agent_generation',
+					status: 'active',
+					correlationId: event.requestId,
+				},
+			),
 		);
 
 		const stub = await this.getThinkStub();
 		try {
 			await stub.chat(text, forwarder);
+			if (streamState.failed) throw new Error('The coding agent stream stopped.');
 		} finally {
 			this.broadcast(WebSocketMessageResponses.USAGE_UPDATED, {
 				message: 'Usage data updated',
@@ -657,6 +761,21 @@ export class ThinkCodingBehavior
 			case 'tool-input-start': {
 				const { toolCallId, toolName } = chunk as { toolCallId: string; toolName: string };
 				toolNames.set(toolCallId, toolName);
+				const diagnosticDb = (this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database }).BUILDCUSTOM_PRODUCT_DB;
+await recordBuildEvent(diagnosticDb, this.activeBuildDiagnostics, {
+					eventType: 'tool_execution_started',
+					stage: 'tool_execution',
+					status: 'active',
+					correlationId: toolCallId,
+				});
+				if (toolName === 'deploy_space') {
+await recordBuildEvent(diagnosticDb, this.activeBuildDiagnostics, {
+						eventType: 'validation_started',
+						stage: 'validation',
+						status: 'active',
+						correlationId: toolCallId,
+					});
+				}
 				this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
 					message: '',
 					conversationId,
@@ -689,6 +808,15 @@ export class ThinkCodingBehavior
 				const { toolCallId, output } = chunk as { toolCallId: string; output: unknown };
 				const toolName = toolNames.get(toolCallId) || 'tool';
 				const args = toolInputs.get(toolCallId) || {};
+				const diagnosticDb = (this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database }).BUILDCUSTOM_PRODUCT_DB;
+				if (isFileWriteTool(toolName)) {
+await recordBuildEvent(diagnosticDb, this.activeBuildDiagnostics, {
+						eventType: 'file_changed',
+						stage: 'file_write',
+						status: 'complete',
+						correlationId: toolCallId,
+					});
+				}
 				this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
 					message: '',
 					conversationId,
@@ -706,15 +834,25 @@ export class ThinkCodingBehavior
 				}
 				return;
 			}
-			case 'tool-output-error': {
-				const { toolCallId, errorText } = chunk as { toolCallId: string; errorText: string };
+case 'tool-output-error': {
+const { toolCallId } = chunk as { toolCallId: string; errorText: string };
 				const toolName = toolNames.get(toolCallId) || 'tool';
-				const args = toolInputs.get(toolCallId) || {};
+await recordBuildEvent(
+					(this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database }).BUILDCUSTOM_PRODUCT_DB,
+					this.activeBuildDiagnostics,
+					{
+						eventType: 'tool_execution_failed',
+						stage: 'tool_execution',
+						status: 'error',
+						errorCode: 'AGENT_TOOL_FAILED',
+						correlationId: toolCallId,
+					},
+				);
 				this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
 					message: '',
 					conversationId,
 					isStreaming: false,
-					tool: this.buildToolBroadcastPayload(toolName, { input: args, error: errorText }, 'error', toolCallId),
+					tool: this.buildToolBroadcastPayload(toolName, { error: 'Workspace action failed.' }, 'error', toolCallId),
 				});
 				return;
 			}
@@ -823,7 +961,22 @@ export class ThinkCodingBehavior
 		}
 
 		if (parsed && typeof parsed.error === 'string') {
-			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, { error: parsed.error });
+this.activePreviewFailureCode = 'PREVIEW_BUILD_FAILED';
+await recordBuildEvent(
+				(this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database }).BUILDCUSTOM_PRODUCT_DB,
+				this.activeBuildDiagnostics,
+				{
+					eventType: 'validation_completed',
+					stage: 'validation',
+					status: 'error',
+					errorCode: 'PREVIEW_BUILD_FAILED',
+				},
+			);
+			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {
+				error: safeBuildError('PREVIEW_BUILD_FAILED').message,
+				errorCode: 'PREVIEW_BUILD_FAILED',
+				attemptId: this.activeBuildDiagnostics?.attemptId || null,
+			});
 			return false;
 		}
 
@@ -831,13 +984,36 @@ export class ThinkCodingBehavior
 		if (commitHash) {
 			this.setState({ ...this.state, lastDeployedCommit: commitHash });
 		}
+const diagnosticDb = (this.env as unknown as { BUILDCUSTOM_PRODUCT_DB?: D1Database } | undefined)?.BUILDCUSTOM_PRODUCT_DB;
 		try {
 			const url = await this.getBrowserPreviewURL();
+this.activePreviewFailureCode = null;
+			await recordBuildEvent(diagnosticDb, this.activeBuildDiagnostics, {
+				eventType: 'validation_completed',
+				stage: 'validation',
+				status: 'complete',
+			});
+			await recordBuildEvent(diagnosticDb, this.activeBuildDiagnostics, {
+				eventType: 'preview_generated',
+				stage: 'preview',
+				status: 'complete',
+			});
 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, { previewURL: url });
 			return true;
-		} catch (e) {
-			this.logger.warn('Failed to surface preview after deploy_space', e);
-			return true;
+} catch {
+this.activePreviewFailureCode = 'PREVIEW_UNAVAILABLE';
+await recordBuildEvent(diagnosticDb, this.activeBuildDiagnostics, {
+eventType: 'preview_generated',
+stage: 'preview',
+status: 'error',
+errorCode: 'PREVIEW_UNAVAILABLE',
+});
+this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {
+error: safeBuildError('PREVIEW_UNAVAILABLE').message,
+errorCode: 'PREVIEW_UNAVAILABLE',
+attemptId: this.activeBuildDiagnostics?.attemptId || null,
+});
+return false;
 		}
 	}
 

@@ -182,6 +182,31 @@ type SupportWorkspace = {
     buildActivity: Array<{ mode: string; createdAt: string | null }>;
     buildActivityTotal: number;
     lastBuildActivityAt: string | null;
+    buildAttempts: Array<{
+      attemptId: string;
+      startedAt: number;
+      finishedAt: number | null;
+      status: string;
+      lastStage: string;
+      lastSuccessfulStage: string | null;
+      failureStage: string | null;
+      errorCode: string | null;
+      customerMessage: string | null;
+      provider: string | null;
+      modelId: string | null;
+      correlationId: string | null;
+    }>;
+    buildEvents: Array<{
+      attemptId: string;
+      occurredAt: number;
+      eventType: string;
+      stage: string;
+      status: string;
+      errorCode: string | null;
+      message: string | null;
+      gatewayStatus: number | null;
+      correlationId: string | null;
+    }>;
   };
   restrictions: {
     readOnly: true;
@@ -771,6 +796,43 @@ export function AdminSupportWorkspacePage() {
                 <CalendarDays size={13} /> {build.mode} · {dateLabel(build.createdAt)}
               </div>
             ))}
+          </div>
+        )}
+        {data.diagnostics.buildAttempts.length > 0 && (
+          <div className="mt-5 border-t border-white/5 pt-4">
+            <h4 className={`mb-3 text-sm font-semibold ${panelClass}`}>Native runtime attempts</h4>
+            <div className="space-y-2">
+              {data.diagnostics.buildAttempts.map((attempt) => (
+                <details key={attempt.attemptId} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                  <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-xs">
+                    <StatusPill status={attempt.status} />
+                    <span className={panelClass}>{dateLabel(new Date(attempt.startedAt).toISOString())}</span>
+                    {attempt.errorCode && <code className="text-rose-300">{attempt.errorCode}</code>}
+                  </summary>
+                  <div className={`mt-3 grid gap-2 border-t border-white/5 pt-3 text-xs sm:grid-cols-2 ${panelClass}`}>
+                    <span>Provider: {attempt.provider || "Not resolved"}</span>
+                    <span>Model: {attempt.modelId || "Not resolved"}</span>
+                    <span>Last stage: {attempt.lastStage || "Not recorded"}</span>
+                    <span>Last successful stage: {attempt.lastSuccessfulStage || "Not recorded"}</span>
+                    {attempt.failureStage && <span>Failure stage: {attempt.failureStage}</span>}
+                    {attempt.correlationId && <span>Correlation ID: <code>{attempt.correlationId}</code></span>}
+                  </div>
+                  {attempt.customerMessage && <p className="mt-3 text-xs text-rose-300">{attempt.customerMessage}</p>}
+                  <ol className="mt-3 space-y-2">
+                    {data.diagnostics.buildEvents.filter((event) => event.attemptId === attempt.attemptId).map((event, index) => (
+                      <li key={`${event.occurredAt}-${index}`} className={`flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2 text-xs ${theme === "dark" ? "bg-white/[0.03]" : "bg-gray-50"}`}>
+                        <span className={panelClass}>{event.message || event.stage.replaceAll("_", " ")}</span>
+                        <span className="flex items-center gap-2">
+                          {event.errorCode && <code className="text-rose-300">{event.errorCode}</code>}
+                          {event.gatewayStatus !== null && <code>Gateway HTTP {event.gatewayStatus}</code>}
+                          <time className="text-xs text-slate-500">{dateLabel(new Date(event.occurredAt).toISOString())}</time>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              ))}
+            </div>
           </div>
         )}
       </Panel>
