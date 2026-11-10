@@ -25,8 +25,31 @@ type RuntimeIdentity = {
 };
 
 export class RuntimeIdentityError extends Error {
-  constructor(message: string, readonly status = 502, readonly code?: string) {
+  constructor(message: string, readonly status = 502, readonly code?: string, readonly requestId?: string) {
     super(message);
+  }
+}
+
+function authOperation(path: string): "login" | "register" | null {
+  if (path === "/api/auth/login") return "login";
+  if (path === "/api/auth/register") return "register";
+  return null;
+}
+
+const AUTH_REQUEST_ID_HEADER = "X-BuildCustom-Request-ID";
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{1,80}$/;
+
+function safeRuntimeErrorCode(value: unknown): string {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value)
+    ? value
+    : "UNCLASSIFIED";
+}
+
+function logAuthDiagnostic(event: string, fields: Record<string, string | number>): void {
+  try {
+    console.error(event, fields);
+  } catch {
+    // Authentication must not depend on the diagnostic sink.
   }
 }
 
@@ -60,6 +83,7 @@ async function runtimeRequest(env: RuntimeAuthEnv, request: Request, path: strin
   body?: Record<string, unknown>;
   cookie?: string;
   sessionId?: string;
+  correlationId?: string;
   timeoutMs?: number;
 } = {}): Promise<Response> {
   const headers = new Headers({ Accept: "application/json" });
@@ -70,16 +94,47 @@ async function runtimeRequest(env: RuntimeAuthEnv, request: Request, path: strin
   if (clientIp) headers.set("X-Forwarded-For", clientIp);
   const csrf = request.headers.get("X-CSRF-Token");
   if (csrf) headers.set("X-CSRF-Token", csrf);
+  if (options.correlationId) headers.set(AUTH_REQUEST_ID_HEADER, options.correlationId);
   if (options.body) headers.set("Content-Type", "application/json");
+  const operation = authOperation(path);
+  let runtime: Fetcher;
   try {
-    return await authRuntime(env).fetch(new Request(`${env.AUTH_RUNTIME_URL}${path}`, {
+    runtime = authRuntime(env);
+  } catch {
+    if (operation) {
+      logAuthDiagnostic("customer_auth_runtime_configuration_failure", {
+        operation,
+        requestId: options.correlationId || "UNAVAILABLE",
+      });
+    }
+    throw new RuntimeIdentityError(
+      "BuildCustom sign-in is temporarily unavailable.",
+      503,
+      undefined,
+      options.correlationId,
+    );
+  }
+  try {
+    return await runtime.fetch(new Request(`${env.AUTH_RUNTIME_URL}${path}`, {
       method: options.method || "GET",
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
     }));
   } catch {
-    throw new RuntimeIdentityError("BuildCustom sign-in is temporarily unavailable.");
+    if (operation) {
+      // Never log request bodies, cookies, IP addresses, or raw exception text.
+      logAuthDiagnostic("customer_auth_runtime_transport_failure", {
+        operation,
+        requestId: options.correlationId || "UNAVAILABLE",
+      });
+    }
+    throw new RuntimeIdentityError(
+      "BuildCustom sign-in is temporarily unavailable.",
+      502,
+      undefined,
+      options.correlationId,
+    );
   }
 }
 
@@ -216,6 +271,8 @@ export async function handleStagingCustomerAuth(
   }
 
   if ((pathname === "/api/auth/register" || pathname === "/api/auth/login") && request.method === "POST") {
+    const operation = pathname.endsWith("register") ? "register" : "login";
+    const correlationId = crypto.randomUUID();
     const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
     const password = typeof input.password === "string" ? input.password : "";
     const name = typeof input.name === "string" ? input.name.trim() : "";
@@ -225,10 +282,20 @@ export async function handleStagingCustomerAuth(
     const response = await runtimeRequest(env, request, pathname, {
       method: "POST",
       body: pathname.endsWith("register") ? { email, password, name } : { email, password },
+      correlationId,
     });
     if (!response.ok) {
       const runtimeResult = await response.json().catch(() => null) as any;
       const code = runtimeResult?.code ?? runtimeResult?.error?.type;
+      if (response.status >= 500) {
+        // Keep diagnostics useful while excluding untrusted provider text and customer data.
+        logAuthDiagnostic("customer_auth_runtime_response_failure", {
+          operation,
+          requestId: correlationId,
+          upstreamStatus: response.status,
+          upstreamCode: safeRuntimeErrorCode(code),
+        });
+      }
       if (code === "EMAIL_VERIFICATION_REQUIRED") {
         return Response.json({
           code,
@@ -249,7 +316,11 @@ export async function handleStagingCustomerAuth(
             : "Sign-in is temporarily unavailable. Please try again."
           : pathname.endsWith("register") ? "Could not create your account. Check your details."
             : "Invalid email or password.";
-      return Response.json({ message }, { status });
+      const headers = new Headers({ "Cache-Control": "no-store" });
+      if (response.status >= 500 && REQUEST_ID_PATTERN.test(correlationId)) {
+        headers.set(AUTH_REQUEST_ID_HEADER, correlationId);
+      }
+      return Response.json({ message }, { status, headers });
     }
 
     if (pathname.endsWith("register")) {
