@@ -124,6 +124,9 @@ function installBrowserHarness(initialFixture) {
   const realWebSocket = window.WebSocket;
   const saved = sessionStorage.getItem("__native_completion_fixture");
   const state = saved ? JSON.parse(saved) : initialFixture;
+  // Real browser navigation closes the old document's sockets. Fake sockets
+  // have no browser-managed lifetime, so reset their live count on reload.
+  state.stats.openSockets = 0;
   let clockOffset = 0;
   let turnsResponseSkip = null;
   let releaseDelayedTurnsResponse = null;
@@ -149,6 +152,7 @@ function installBrowserHarness(initialFixture) {
   }
   Date.now = () => nativeDateNow() + clockOffset;
   localStorage.removeItem("bc_new_user");
+  if (initialFixture.theme) localStorage.setItem("app-theme", initialFixture.theme);
 
   const persist = () => {
     const { activeSocket: _activeSocket, ...serializable } = state;
@@ -991,6 +995,117 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal((await statsOf(page)).userSuggestions, 0);
       } finally { await page.close(); }
     });
+
+    await t.test("recovery keeps a no-prompt Agent connection without unlocking active work", async () => {
+      const page = await startEditor(serverUrl, browser, fixture({ active: true, savedOperation: true }));
+      try {
+        await waitForState(page, "recovering");
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.openSockets === 1);
+        await page.type('[data-testid="input-editor-chat"]', "Offline draft, not a concurrent request");
+        await page.keyboard.press("Enter");
+        const stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 0);
+        assert.equal(stats.maxOpenSockets, 1);
+        assert.ok(stats.conversationStateRequests > 0);
+        assert.notEqual(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
+      } finally { await page.close(); }
+    });
+
+    await t.test("legacy saved build becomes follow-up ready after stable correlated evidence, including after Stop", async () => {
+      const initial = fixture({ savedOperation: true, changed: true });
+      initial.persistedTurns = [...BASE_TURNS, FINAL_TURN];
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await waitForState(page, "recovering");
+        await page.waitForFunction(() => document.querySelector('[data-testid="build-activity-card"]')?.textContent.includes("stable")
+          || document.querySelector('[data-testid="builder-chat-scroll"]')?.textContent.includes("stable"));
+        await page.click('[data-testid="button-stop-build"]');
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+        await page.evaluate(() => window.__nativeCompletionHarness.fastForward(35_000));
+        await waitForState(page, "needs_input", 15_000);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        assert.equal(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
+        assert.equal((await statsOf(page)).previewPosts, 0);
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForSelector('[data-testid="input-editor-chat"]:not(:disabled)');
+        assert.notEqual(await stateOf(page), "recovering");
+        await sendOnePrompt(page);
+        assert.equal((await statsOf(page)).userSuggestions, 1, "only the customer's explicit offline follow-up is sent");
+      } finally { await page.close(); }
+    });
+
+    for (const guard of ["wrong revision", "controller active", "approved continuation", "empty approval marker"]) {
+      await t.test(`legacy follow-up settlement refuses ${guard}`, async () => {
+        const initial = fixture({ savedOperation: true, changed: true });
+        initial.persistedTurns = [...BASE_TURNS, { ...FINAL_TURN, ...(guard === "wrong revision" ? { commitHash: BASELINE } : {}) }];
+        if (guard === "controller active") initial.nativeTaskLifecycle = {
+          status: "RUNNING", customerStatus: "WORKING",
+          taskId: "offline-task", operationId: "offline-operation", updatedAt: Date.now(),
+        };
+        if (guard === "approved continuation") Object.assign(initial.operationBaseline, {
+          approvedTaskId: "offline-task", approvedOperationId: "offline-operation", lifecycleUpdatedAt: Date.now() - 60_000,
+        });
+        if (guard === "empty approval marker") initial.operationBaseline.approvedTaskId = "";
+        const page = await startEditor(serverUrl, browser, initial);
+        try {
+          await page.waitForSelector('[data-testid="native-completion-state"]');
+          await page.evaluate(() => window.__nativeCompletionHarness.fastForward(35_000));
+          await new Promise(resolve => setTimeout(resolve, 5500));
+          assert.notEqual(await stateOf(page), "needs_input");
+          assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+          await page.type('[data-testid="input-editor-chat"]', "Offline blocked follow-up");
+          await page.keyboard.press("Enter");
+          assert.equal((await statsOf(page)).userSuggestions, 0);
+          const baseline = await page.evaluate(() => JSON.parse(sessionStorage.getItem("buildcustom:native-operation:10")));
+          assert.ok(baseline);
+          if (guard === "approved continuation") assert.equal(baseline.approvedTaskId, "offline-task");
+        } finally { await page.close(); }
+      });
+    }
+
+    for (const theme of ["light", "dark"]) {
+      await t.test(`saved-build notice is readable in ${theme} mode`, async () => {
+        const initial = fixture({ active: true, savedOperation: true });
+        initial.theme = theme;
+        initial.savedBuildActivity = { attempts: [{
+          startedAt: Date.now(), status: "completed",
+          events: [{ eventType: "file_changed", status: "complete" }],
+        }] };
+        const page = await startEditor(serverUrl, browser, initial);
+        try {
+          await page.waitForSelector('[data-testid="saved-build-evidence"]');
+          const contrast = await page.$eval('[data-testid="saved-build-evidence"]', node => {
+            // Tailwind emits OKLCH as well as RGB. Let Chromium convert its
+            // actual computed colors to sRGB instead of parsing OKLCH as RGB.
+            const canvas = document.createElement("canvas");
+            canvas.width = canvas.height = 1;
+            const context = canvas.getContext("2d", { willReadFrequently: true });
+            const rgb = value => {
+              context.clearRect(0, 0, 1, 1);
+              context.fillStyle = value;
+              context.fillRect(0, 0, 1, 1);
+              const pixel = Array.from(context.getImageData(0, 0, 1, 1).data);
+              return [...pixel.slice(0, 3), pixel[3] / 255];
+            };
+            const style = getComputedStyle(node);
+            const fg = rgb(style.color), bg = [255, 255, 255];
+            const layers = [];
+            for (let layer = node; layer; layer = layer.parentElement) layers.push(layer);
+            for (const layer of layers.reverse()) {
+              const color = rgb(getComputedStyle(layer).backgroundColor);
+              for (let i = 0; i < 3; i++) bg[i] = color[i] * color[3] + bg[i] * (1 - color[3]);
+            }
+            const luminance = color => color.slice(0, 3).map(n => n / 255).map(n => n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4)
+              .reduce((sum, n, i) => sum + n * [0.2126, 0.7152, 0.0722][i], 0);
+            const a = luminance(fg), b = luminance(bg);
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          });
+          assert.ok(contrast >= 4.5, `notice contrast ${contrast} must meet normal-text accessibility requirements`);
+          await page.screenshot({ path: path.join(os.tmpdir(), `buildcustom-saved-build-${theme}.png`) });
+        } finally { await page.close(); }
+      });
+    }
 
     await t.test("submitted project context survives follow-up instructions and is readable in Project Activity", async () => {
       const savedPlan = {
