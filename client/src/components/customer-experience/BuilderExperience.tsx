@@ -28,6 +28,7 @@ export type BuilderPhase =
   | "success"
   | "paused"
   | "needs_input"
+  | "unverified"
   | "error";
 
 export type ClarificationQuestion = {
@@ -51,6 +52,7 @@ const phaseLabel: Record<BuilderPhase, string> = {
   success: "Ready to review",
   paused: "Paused",
   needs_input: "Your call",
+  unverified: "Status unverified",
   error: "Needs a hand",
 };
 
@@ -396,6 +398,7 @@ function phasePresentation(phase: BuilderPhase) {
   if (phase === "stopping") return { icon: Pause, title: "Bringing this step to a pause", detail: "Waiting for the runtime to report what happens next." };
   if (phase === "paused") return { icon: Pause, title: "Paused for now", detail: "Nothing is moving until you choose what comes next." };
   if (phase === "needs_input") return { icon: MessageCircle, title: "Your teammate needs your input", detail: "Share a little direction to keep things moving." };
+  if (phase === "unverified") return { icon: AlertCircle, title: "Completion not confirmed", detail: "Saved replies and recorded build stages remain available. Final application completion has not been verified." };
   if (phase === "error") return { icon: AlertCircle, title: "That didn’t go as planned", detail: "The conversation is preserved. Review the observed stages before deciding what to try next." };
   return { icon: Check, title: "Live preview is taking over", detail: "The project preview is shown in its live view." };
 }
