@@ -3,7 +3,7 @@ import test from "node:test";
 import { handleProjectBuildActivityRoute } from "../cloudflare/build-activity-routes";
 
 function makeEnv(ownerId = "owner-1") {
-  const reads = { attempts: 0, events: 0 };
+  const reads = { attempts: 0, events: 0, connections: 0 };
   const env = {
     DB: {
       prepare(sql: string) {
@@ -59,6 +59,25 @@ function makeEnv(ownerId = "owner-1") {
                 }],
               };
             }
+            if (sql.includes("FROM native_connection_attempts")) {
+              reads.connections += 1;
+              return {
+                results: [{
+                  attempt_id: "connection-attempt-1",
+                  started_at_ms: 1_800_000_000_000,
+                  finished_at_ms: 1_800_000_000_100,
+                  status: "failed",
+                  stage: "ai_settings_refresh",
+                  http_status: 403,
+                  error_code: "NATIVE_AI_CONFIG_REFRESH_REJECTED",
+                  correlation_id: "ray-reference-1",
+                  timeout_reason: null,
+                  last_completed_stage: "project_link_check",
+                  cookie: "PRIVATE_COOKIE",
+                  csrf: "PRIVATE_CSRF",
+                }],
+              };
+            }
             return { results: [] };
           },
         };
@@ -78,7 +97,7 @@ test("build activity returns not-found for a different customer and does not rea
   );
 
   assert.equal(response?.status, 404);
-  assert.deepEqual(reads, { attempts: 0, events: 0 });
+  assert.deepEqual(reads, { attempts: 0, events: 0, connections: 0 });
 });
 
 test("build activity returns persistent customer-safe events without provider secrets or source", async () => {
@@ -97,7 +116,12 @@ test("build activity returns persistent customer-safe events without provider se
   assert.equal(body.attempts[0].provider, undefined);
   assert.equal(body.attempts[0].modelId, undefined);
   assert.equal(body.attempts[0].events[0].providerStatus, undefined);
-  assert.deepEqual(reads, { attempts: 1, events: 1 });
+  assert.equal(body.connections[0].stage, "ai_settings_refresh");
+  assert.equal(body.connections[0].httpStatus, 403);
+  assert.equal(body.connections[0].lastCompletedStage, "project_link_check");
+  assert.equal(body.connections[0].cookie, undefined);
+  assert.equal(body.connections[0].csrf, undefined);
+  assert.deepEqual(reads, { attempts: 1, events: 1, connections: 1 });
   const serialized = JSON.stringify(body);
   for (const privateValue of [
     "PRIVATE_ENCRYPTED_KEY",
@@ -105,6 +129,8 @@ test("build activity returns persistent customer-safe events without provider se
     "PRIVATE_PROMPT",
     "PRIVATE_API_KEY",
     "anthropic/claude-haiku-5-5",
+    "PRIVATE_COOKIE",
+    "PRIVATE_CSRF",
   ]) assert.equal(serialized.includes(privateValue), false, `customer response must omit ${privateValue}`);
 });
 

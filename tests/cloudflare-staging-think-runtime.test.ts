@@ -11,6 +11,13 @@ import {
   shapeThinkHistory,
   stockThinkRequest,
 } from "../cloudflare/staging/think-runtime";
+import {
+  closeNativeConnectionAttempt,
+  completeNativeConnectionHandshake,
+  failNativeConnectionAttempt,
+  setNativeConnectionStage,
+  startNativeConnectionAttempt,
+} from "../cloudflare/staging/native-connection-diagnostics";
 
 const env = {
   DB: {} as D1Database,
@@ -178,8 +185,15 @@ test("owner CSRF forwarding rejects malformed, expired, and future-dated JSON co
 
 test("BuildCustom AI refresh is an owner-scoped POST with the CSRF cookie forwarded", async () => {
   let forwarded: Request | null = null;
+  const calls: Request[] = [];
   const runtime = {
     async fetch(request: Request) {
+      calls.push(request);
+      if (request.url.endsWith("/api/auth/csrf-token")) {
+        return Response.json({ success: true, data: { token: "server-csrf-token" } }, {
+          headers: { "Set-Cookie": "csrf-token=server-csrf-cookie; Path=/; Secure; HttpOnly; SameSite=Strict" },
+        });
+      }
       forwarded = request;
       return Response.json({ success: true, data: { refreshed: true } });
     },
@@ -187,10 +201,7 @@ test("BuildCustom AI refresh is an owner-scoped POST with the CSRF cookie forwar
   const request = new Request("https://buildcustom-control-plane-staging.thegoldimport.workers.dev/api/projects/1/runtime/ws", {
     headers: {
       Origin: "https://buildcustom-control-plane-staging.thegoldimport.workers.dev",
-      Cookie: `accessToken=stock-session; csrf-token=${encodeURIComponent(JSON.stringify({
-        token: "csrf-cookie-token",
-        timestamp: Date.now(),
-      }))}; unrelated=do-not-forward`,
+      Cookie: "accessToken=stock-session; unrelated=do-not-forward",
     },
   });
   const response = await stockThinkRequest({
@@ -204,8 +215,74 @@ test("BuildCustom AI refresh is an owner-scoped POST with the CSRF cookie forwar
   assert.ok(forwarded);
   assert.equal(forwarded!.method, "POST");
   assert.equal(forwarded!.headers.get("Origin"), "https://buildcustom-control-plane-staging.thegoldimport.workers.dev");
-  assert.equal(forwarded!.headers.get("X-CSRF-Token"), "csrf-cookie-token");
+  assert.equal(forwarded!.headers.get("X-CSRF-Token"), "server-csrf-token");
+  assert.equal(forwarded!.headers.get("Cookie"), "accessToken=stock-session; csrf-token=server-csrf-cookie");
   assert.equal(forwarded!.headers.get("Authorization"), null);
+  assert.equal(calls.length, 2, "the authenticated runtime CSRF bootstrap must complete before the settings POST");
+  assert.equal(calls[0].url, `${env.AUTH_RUNTIME_URL}/api/auth/csrf-token`);
+  assert.equal(calls[0].headers.get("Cookie"), "accessToken=stock-session");
+  assert.equal(calls[0].redirect, "manual");
+});
+
+test("owner-scoped POST refuses to proceed if fresh runtime CSRF bootstrap is rejected", async () => {
+  const calls: Request[] = [];
+  const runtime = {
+    async fetch(request: Request) {
+      calls.push(request);
+      return Response.json({ message: "unauthorized" }, { status: 401 });
+    },
+  };
+  const request = new Request("https://app.buildcustom.ai/api/projects/1/runtime/ws", {
+    headers: { Cookie: "accessToken=stock-session" },
+  });
+  await assert.rejects(() => stockThinkRequest({
+    ...env,
+    AUTH_RUNTIME: runtime as unknown as Fetcher,
+  }, request, "/api/agent/owner-linked-agent/buildcustom-ai-config/refresh", { method: "POST", body: {} }),
+  (error: unknown) => {
+    assert.equal((error as RuntimeIdentityError).status, 401);
+    assert.equal((error as RuntimeIdentityError).code, "NATIVE_CSRF_BOOTSTRAP_REJECTED");
+    return true;
+  });
+  assert.equal(calls.length, 1, "no state-changing request is sent after CSRF bootstrap fails");
+  assert.equal(calls[0].url, `${env.AUTH_RUNTIME_URL}/api/auth/csrf-token`);
+});
+
+test("native connection diagnostics persist bounded stages, failures, handshake, and safe disconnect states", async () => {
+  const writes: Array<{ sql: string; values: unknown[] }> = [];
+  const db = {
+    prepare(sql: string) {
+      let values: unknown[] = [];
+      const statement = {
+        bind(...args: unknown[]) { values = args; return statement; },
+        async run() { writes.push({ sql, values }); return { success: true }; },
+      };
+      return statement;
+    },
+  } as unknown as D1Database;
+  const request = new Request("https://app.buildcustom.ai/api/projects/10/runtime/ws", {
+    headers: { "cf-ray": "abc123-SJC", Cookie: "accessToken=PRIVATE_SESSION; csrf-token=PRIVATE_CSRF" },
+  });
+  const failed = await startNativeConnectionAttempt(db, request, 10, "owner-1");
+  assert.equal(failed.correlationId, "abc123-SJC");
+  await setNativeConnectionStage(db, failed.attemptId, "ai_settings_refresh", true);
+  await failNativeConnectionAttempt(db, failed.attemptId, {
+    stage: "ai_settings_refresh",
+    status: 403,
+    errorCode: "NATIVE_AI_CONFIG_REFRESH_REJECTED",
+  });
+  const connected = await startNativeConnectionAttempt(db, request, 10, "owner-1");
+  await setNativeConnectionStage(db, connected.attemptId, "runtime_websocket");
+  await completeNativeConnectionHandshake(db, connected.attemptId);
+  await closeNativeConnectionAttempt(db, connected.attemptId, false);
+
+  assert.match(writes[1].sql, /INSERT INTO native_connection_attempts/);
+  assert.deepEqual(writes[1].values.slice(1, 3), [10, "owner-1"]);
+  assert.deepEqual(writes[2].values.slice(0, 3), ["ai_settings_refresh", 1, "ai_settings_refresh"]);
+  assert.ok(writes.some(({ sql, values }) => /status='failed'/.test(sql) && values.includes("NATIVE_AI_CONFIG_REFRESH_REJECTED")));
+  assert.ok(writes.some(({ sql, values }) => /http_status=101/.test(sql) && values.includes(connected.attemptId)));
+  assert.ok(writes.some(({ sql, values }) => /status='disconnected'/.test(sql) && values.includes("remote_close")));
+  assert.doesNotMatch(JSON.stringify(writes), /PRIVATE_SESSION|PRIVATE_CSRF/);
 });
 
 test("ticket bootstrap couples the fresh stock CSRF cookie/header and keeps owner-bound ticket server-side", async () => {
@@ -268,8 +345,36 @@ test("ticket bootstrap couples the fresh stock CSRF cookie/header and keeps owne
   }, request, "foreign-agent"), (error: unknown) => {
     assert.ok(error instanceof Error);
     assert.match(error.message, /could not issue a project connection ticket/i);
-    assert.equal((error as RuntimeIdentityError).status, 502);
+    assert.equal((error as RuntimeIdentityError).status, 403);
     assert.equal((error as RuntimeIdentityError).code, "NATIVE_WS_TICKET_REJECTED");
+    return true;
+  });
+});
+
+test("upstream WebSocket timeouts are classified without exposing transport details", async () => {
+  const runtime = {
+    async fetch(request: Request) {
+      if (request.url.endsWith("/api/auth/csrf-token")) {
+        return Response.json({ success: true, data: { token: "csrf-header" } }, {
+          headers: { "Set-Cookie": "csrf-token=csrf-cookie; Path=/; Secure" },
+        });
+      }
+      if (request.url.endsWith("/api/ws-ticket")) {
+        return Response.json({ success: true, data: { ticket: `tk_${"b".repeat(40)}` } });
+      }
+      throw new DOMException("internal transport details", "TimeoutError");
+    },
+  };
+  const request = new Request("https://app.buildcustom.ai/api/projects/10/runtime/ws", {
+    headers: { Cookie: "accessToken=stock-session" },
+  });
+  await assert.rejects(() => openStockAgentWebSocket({
+    ...env,
+    AUTH_RUNTIME: runtime as unknown as Fetcher,
+  }, request, "linked-agent"), (error: unknown) => {
+    assert.equal((error as RuntimeIdentityError).status, 502);
+    assert.equal((error as RuntimeIdentityError).code, "NATIVE_AGENT_WS_TIMEOUT");
+    assert.doesNotMatch((error as Error).message, /internal transport details/i);
     return true;
   });
 });
