@@ -154,6 +154,9 @@ function installBrowserHarness(initialFixture) {
   if (!saved && initialFixture.operationBaseline) {
     sessionStorage.setItem("buildcustom:native-operation:10", JSON.stringify(initialFixture.operationBaseline));
   }
+  if (!saved && initialFixture.activitySnapshot) {
+    sessionStorage.setItem("buildcustom:native-activity:10", JSON.stringify(initialFixture.activitySnapshot));
+  }
   const previewUrl = () => `${location.origin}/__native_completion_preview/?revision=${state.currentRevision}`;
   const status = () => {
     const availablePreviewUrl = state.runtimeStatus === "ready" ? previewUrl() : "";
@@ -188,6 +191,13 @@ function installBrowserHarness(initialFixture) {
       return json({ id: "task3-disposable-owner", username: "T3", email: "task3@example.test", plan: "free", role: "user" });
     }
     if (url.pathname === "/api/auth/csrf-token") return json({ token: "browser-test-csrf" });
+    if (url.pathname === `/api/projects/${state.projectId}`) return json({
+      id: state.projectId, name: "Offline browser-test project", description: "Isolated test fixture",
+      type: "saas", status: "draft", runtimeStatus: state.runtimeStatus,
+      runtimeProvider: state.runtimeProvider, config: {}, createdAt: "2026-09-25T21:00:00Z",
+    });
+    if (url.pathname.endsWith("/build-activity")) return json({ attempts: [], connections: [], retainedEventCount: 0 });
+    if (url.pathname.endsWith("/blog-posts")) return json([]);
     if (url.pathname.endsWith("/planning")) {
       if (state.hangPlanning) {
         await new Promise((resolve, reject) => {
@@ -688,6 +698,177 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
     });
 
+    await t.test("expanded activity preserves reading position and confines scrolling to the editor", async () => {
+      const initial = fixture({ active: true, savedOperation: true });
+      initial.persistedTurns = Array.from({ length: 30 }, (_, i) => ({
+        ...BASE_TURNS[0], id: i + 1,
+        prompt: `Offline scrolling fixture request ${i + 1}`,
+        response: `Offline scrolling fixture response ${i + 1}. Prior project instructions remain readable.`,
+      }));
+      initial.activitySnapshot = {
+        startedAt: Date.now() - 60_000,
+        events: Array.from({ length: 25 }, (_, i) => ({
+          id: `scroll-fixture-${i}`, label: `Offline activity event ${i + 1}`,
+          observedAt: Date.now() - 30_000 + i, status: "info",
+        })),
+      };
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await page.setViewport({ width: 1024, height: 640 });
+        await waitForState(page, "recovering");
+        await page.click("#build-activity-timeline-toggle");
+        await page.evaluate(() => {
+          const chat = document.querySelector('[data-testid="builder-chat-scroll"]');
+          chat.scrollTop = chat.scrollHeight;
+        });
+        const chatBox = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => {
+          const r = node.getBoundingClientRect();
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        });
+        await page.mouse.move(chatBox.x, chatBox.y);
+        await page.mouse.wheel({ deltaY: -40 });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const readingTop = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.scrollTop);
+        // Observe real one-second activity-clock ticks. Advancing Date.now alone
+        // would not reproduce the DOM mutation that used to force scrolling.
+        await new Promise((resolve) => setTimeout(resolve, 3200));
+        const afterTicks = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.scrollTop);
+        assert.ok(Math.abs(afterTicks - readingTop) <= 2, "activity clocks must not override even a small upward scroll");
+        await page.mouse.wheel({ deltaY: -500 });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const olderTop = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.scrollTop);
+        await page.evaluate(() => {
+          const update = document.createElement("div");
+          update.style.height = "240px";
+          update.textContent = "Offline content-resize fixture";
+          document.querySelector('[data-testid="builder-chat-content"]').append(update);
+        });
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        assert.ok(Math.abs(await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.scrollTop) - olderTop) <= 2,
+          "new activity must preserve the reader's older position");
+        await page.click('[data-testid="button-jump-to-latest-chat"]');
+        await page.waitForFunction(() => {
+          const chat = document.querySelector('[data-testid="builder-chat-scroll"]');
+          return chat.scrollHeight - chat.clientHeight - chat.scrollTop <= 2;
+        });
+        await page.evaluate(() => {
+          const update = document.createElement("div");
+          update.style.height = "240px";
+          document.querySelector('[data-testid="builder-chat-content"]').append(update);
+        });
+        await page.waitForFunction(() => {
+          const chat = document.querySelector('[data-testid="builder-chat-scroll"]');
+          return chat.scrollHeight - chat.clientHeight - chat.scrollTop <= 2;
+        });
+        await page.type('[data-testid="input-editor-chat"]', "Offline draft while recovery runs");
+        await page.keyboard.press("Enter");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value),
+          "Offline draft while recovery runs");
+        assert.equal((await statsOf(page)).userSuggestions, 0, "drafting must not start a concurrent operation");
+        await page.mouse.move(900, 500);
+        await page.mouse.wheel({ deltaY: 1800 });
+        const viewport = await page.evaluate(() => ({
+          top: window.scrollY, height: window.innerHeight,
+          documentHeight: document.documentElement.scrollHeight,
+          workspaceTop: document.querySelector('[data-testid="app-workspace"]').getBoundingClientRect().top,
+          composerBottom: document.querySelector('[data-testid="input-editor-chat"]').getBoundingClientRect().bottom,
+        }));
+        assert.equal(viewport.top, 0);
+        assert.equal(viewport.workspaceTop, 0);
+        assert.ok(viewport.documentHeight <= viewport.height + 1, "the document must not scroll behind the fixed editor");
+        assert.ok(viewport.composerBottom <= viewport.height, "composer stays inside the viewport");
+        await page.screenshot({ path: path.join(os.tmpdir(), "buildcustom-scroll-regression.png") });
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("a saved reply without a new revision ends recovery without claiming a completed build", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(({ baseline, turns }) => {
+          const harness = window.__nativeCompletionHarness;
+          harness.setRuntime({ active: false, revision: baseline, persistedTurns: turns });
+          harness.emit({ type: "generation_complete" });
+          harness.advanceClock(31_000);
+        }, { baseline: BASELINE, turns: [...BASE_TURNS, { ...FINAL_TURN, commitHash: BASELINE, changedFiles: [] }] });
+        await waitForState(page, "needs_input", 15_000);
+        assert.match(await page.$eval('[data-testid="native-completion-state"]', (node) => node.textContent),
+          /Needs your input/);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.disabled), false);
+        const stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 1);
+        assert.equal(stats.previewPosts, 0, "a reply-only turn must not generate a preview");
+        assert.equal(stats.publishRequests, 0);
+      } finally { await page.close(); }
+    });
+
+    await t.test("reopening a reply-only operation restores its conversation without resending or endless recovery", async () => {
+      const initial = fixture({ savedOperation: true });
+      initial.persistedTurns = [...BASE_TURNS, { ...FINAL_TURN, commitHash: BASELINE, changedFiles: [] }];
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await waitForState(page, "needs_input");
+        assert.ok(await page.$eval('[data-testid="builder-chat-scroll"]', (node, response) => node.innerText.includes(response), ASSISTANT));
+        assert.equal(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+        assert.equal((await statsOf(page)).previewPosts, 0);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForSelector('[data-testid="input-editor-chat"]:not(:disabled)');
+        assert.notEqual(await stateOf(page), "recovering");
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+      } finally { await page.close(); }
+    });
+
+    await t.test("submitted project context survives follow-up instructions and is readable in Project Activity", async () => {
+      const savedPlan = {
+        version: 1, mode: "build", phase: "submitted",
+        originalPrompt: "Offline saved lead-generation project brief",
+        audience: "B2B companies", outcomes: ["Manage leads"],
+        skipped: [], questionsAsked: 2, currentQuestion: null,
+        planSummary: "Offline confirmed CRM plan",
+        messages: [{ id: "saved-user", role: "user", content: "Offline original direction", createdAt: Date.now() }],
+      };
+      const page = await startEditor(serverUrl, browser, fixture({ planningSession: savedPlan }));
+      try {
+        assert.notEqual(await stateOf(page), "recovering", "a submitted brief is history, not proof of active work");
+        await sendOnePrompt(page);
+        const state = await page.evaluate(() => window.__nativeCompletionHarness.snapshot());
+        assert.equal(state.stats.planningDeletes, 0);
+        assert.deepEqual(state.planningSession, savedPlan);
+        const outgoing = JSON.stringify(state.stats.lastUserSuggestion);
+        assert.ok(outgoing.includes(savedPlan.originalPrompt));
+        assert.ok(outgoing.includes(PROMPT));
+        assert.ok(outgoing.includes("not a request to restart the build"));
+        await navigateWithinApp(page, `/app/project/${PROJECT_ID}?tab=activity`);
+        await page.waitForSelector('[data-testid="project-saved-context"]');
+        await page.click('[data-testid="project-saved-context"] summary');
+        await page.waitForFunction((brief) => document.querySelector('[data-testid="project-saved-brief"]')?.textContent.includes(brief),
+          {}, savedPlan.originalPrompt);
+        await page.waitForFunction(() => document.querySelector('[data-testid="project-saved-conversation"]')?.textContent.includes("Initial Task 3 revision"));
+        assert.equal((await statsOf(page)).planningDeletes, 0);
+        assert.equal((await statsOf(page)).userSuggestions, 1, "viewing context never sends another prompt");
+        await page.screenshot({ path: path.join(os.tmpdir(), "buildcustom-project-context-regression.png") });
+      } finally { await page.close(); }
+    });
+
+    await t.test("missing operation correlation fails closed promptly but leaves the reply draft editable", async () => {
+      const initial = fixture({ active: true, savedOperation: true });
+      delete initial.operationBaseline.promptDigest;
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await waitForState(page, "error");
+        await page.type('[data-testid="input-editor-chat"]', "Offline draft retained");
+        await page.keyboard.press("Enter");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value), "Offline draft retained");
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+        assert.notEqual(await stateOf(page), "recovering");
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
+      } finally { await page.close(); }
+    });
+
     await t.test("failed pre-prompt connection preserves an approved plan and retries without a duplicate prompt", async () => {
       const now = Date.now();
       const savedPlan = {
@@ -1099,7 +1280,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
     });
 
-    await t.test("authoritative resource limit overrides a stale working label but keeps input disabled until host status is idle", async () => {
+    await t.test("authoritative resource limit overrides a stale working label while preserving an editable draft", async () => {
       const page = await startEditor(serverUrl, browser);
       try {
         await sendOnePrompt(page);
@@ -1117,8 +1298,12 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await waitForState(page, "error");
         assert.match(await page.$eval('[data-testid="native-completion-state"]', (node) => node.textContent || ""), /Paused/i);
         assert.notEqual(await stateOf(page), "recovering", "the terminal task state ends recovery despite a stale host working flag");
-        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.disabled), true,
-          "the explicit host working flag keeps input unavailable");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.disabled), false,
+          "the explicit host working flag must not prevent drafting a reply");
+        await page.type('[data-testid="input-editor-chat"]', "Offline draft for later");
+        await page.keyboard.press("Enter");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value), "Offline draft for later");
+        assert.equal((await statsOf(page)).userSuggestions, 1, "Enter must not start a concurrent operation");
 
         await page.evaluate(() => window.__nativeCompletionHarness.setRuntime({ active: false }));
         await page.waitForFunction(() => {

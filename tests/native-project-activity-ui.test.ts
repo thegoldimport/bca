@@ -94,7 +94,8 @@ test("builder activity opens the full project activity tab in a separate window"
   assert.match(projectDetail, /Persistent connection and build stages/);
   assert.match(projectDetail, /Native agent connections/);
   assert.match(projectDetail, /project-connection-attempt/);
-  assert.match(projectDetail, /prompts, source files, and credentials are not included/i);
+  assert.match(projectDetail, /Open saved context below to read your project brief and conversation/);
+  assert.match(projectDetail, /<ProjectSavedContext projectId=\{projectId\}/);
   assert.match(projectDetail, /lastSuccessfulStage/);
   assert.match(builder, /activityParams\.set\("attempt"/);
   assert.match(projectDetail, /Pages could not be loaded:[\s\S]*Try again/);
@@ -111,4 +112,15 @@ test("builder activity opens the full project activity tab in a separate window"
   assert.match(builderExperience, /Detailed runtime diagnostics were not saved/);
   assert.match(builderExperience, /data-testid="button-continue-after-build-failure"/);
   assert.match(builderExperience, /Continue in chat/);
+});
+
+test("saved project context uses owner-scoped read routes and renders text without raw HTML or credential fields", async () => {
+  const source = await readFile(path.join(root, "client/src/components/customer-experience/ProjectSavedContext.tsx"), "utf8");
+  assert.match(source, /\["project-saved-brief", ownerId, projectId\]/);
+  assert.match(source, /\["project-saved-conversation", ownerId, projectId\]/);
+  assert.match(source, /credentials: "same-origin", cache: "no-store"/);
+  assert.match(source, /ownerProjectRead\(projectId, "planning"\)/);
+  assert.match(source, /ownerProjectRead\(projectId, "runtime\/turns"\)/);
+  assert.match(source, /enabled: open && Boolean\(ownerId\)/);
+  assert.doesNotMatch(source, /dangerouslySetInnerHTML|console\.|method: "(POST|PUT|DELETE)"/);
 });
