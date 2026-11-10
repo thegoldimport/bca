@@ -1013,6 +1013,18 @@ test("two runtime users have one verified session each and isolated BuildCustom 
     assert.equal(expiredReplay.status, 403);
   });
   assert.deepEqual(await (await a.send(`/api/projects/${projectA.id}/runtime/turns`, "GET", undefined, { "X-CSRF-Token": "csrf-value" })).json(), { turns: [] });
+  assert.equal(
+    (await worker.fetch(new Request(`${origin}/api/projects/${projectA.id}/runtime/turns`, {
+      headers: { Origin: origin },
+    }), env)).status,
+    401,
+    "anonymous clients cannot read the saved transcript used by idle-agent recovery",
+  );
+  assert.equal(
+    (await b.send(`/api/projects/${projectA.id}/runtime/turns`)).status,
+    404,
+    "a different project owner cannot read the transcript used by idle-agent recovery",
+  );
   const nativeReleases = await a.send(`/api/projects/${projectA.id}/runtime/releases`);
   assert.equal(nativeReleases.status, 200);
   assert.deepEqual(await nativeReleases.json(), { releases: [] });
