@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NativeAutoContinueControl } from "@/components/native-auto-continue-control";
+import { readSavedAgentTurns, useSavedNativeConversation } from "@/hooks/use-saved-native-conversation";
+import { SavedBuildEvidence } from "@/components/customer-experience/SavedBuildEvidence";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { csrfToken, getAppUser, setAppUser, authHeaders, isAdminUser, signOut, clearAppUser, type AppUser } from "@/lib/auth";
@@ -996,8 +998,7 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 function runtimeTurnsFromResponse(data: any): any[] | null {
-  if (Array.isArray(data)) return data;
-  return Array.isArray(data?.turns) ? data.turns : null;
+  try { return readSavedAgentTurns(data); } catch { return null; }
 }
 
 function hasNativeOperationCorrelation(baseline: NativeOperationBaseline | null): baseline is NativeOperationBaseline & {
@@ -1154,6 +1155,7 @@ function EditorPage() {
   const planEntitlement = getPlanEntitlement(getAppUser()?.plan);
   const [, routeParams] = useRoute("/app/editor/:id");
   const projectId = Number(routeParams?.id || 0);
+  const conversationOwnerId = getAppUser()?.id;
   const [runtimeCapability, setRuntimeCapability] = useState<{ projectId: number; nativeThink: boolean; status: any } | null>(null);
   const [runtimeCapabilityError, setRuntimeCapabilityError] = useState("");
   const currentRuntimeCapability = runtimeCapability?.projectId === projectId ? runtimeCapability : null;
@@ -1174,7 +1176,7 @@ function EditorPage() {
   const canManageProduction = Boolean(currentRuntimeCapability && !nativeThink);
   const [chatInput, setChatInput] = useState("");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [messages, setMessages] = useState<{ id?: string; role: "user" | "assistant"; content: string }[]>([]);
+  const [messages, setMessages] = useState<{ id?: string; role: "user" | "assistant"; content: string; nativeRequestId?: string }[]>([]);
   const [turns, setTurns] = useState<RuntimeBuilderTurn[]>([]);
   const [restoringTurnId, setRestoringTurnId] = useState<number | null>(null);
   const [openTurnFile, setOpenTurnFile] = useState<string | null>(null);
@@ -1273,6 +1275,8 @@ function EditorPage() {
   const nativeLifecycleRef = useRef(0);
   const nativeMountedRef = useRef(false);
   const turnLoadSequenceRef = useRef(0);
+  const pendingTranscriptRef = useRef(new Map<string, { projectId: number; baseline: NativeOperationBaseline }>());
+  const savedReplyIdsRef = useRef(new Set<string>());
   const activeProjectIdRef = useRef(projectId);
   activeProjectIdRef.current = projectId;
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
@@ -1921,9 +1925,37 @@ function EditorPage() {
     if (sequence === turnLoadSequenceRef.current) setTurns(Array.isArray(data) ? data : data.turns || []);
   };
 
+  const savedConversation = useSavedNativeConversation({
+    projectId,
+    ownerId: conversationOwnerId,
+    enabled: nativeRuntimeReady,
+    connected: nativeConnected,
+    readVersion: () => turnLoadSequenceRef.current,
+    onSnapshot: async (snapshot, isCurrent, acceptanceSequence) => {
+      const resolved: string[] = [];
+      for (const [requestId, pending] of Array.from(pendingTranscriptRef.current.entries())) {
+        if (pending.projectId === projectId && await hasCorrelatedNativeTurn(snapshot, pending.baseline)) resolved.push(requestId);
+      }
+      if (!isCurrent() || activeProjectIdRef.current !== projectId
+        || getAppUser()?.id !== conversationOwnerId
+        || acceptanceSequence !== turnLoadSequenceRef.current) return;
+      for (const id of resolved) {
+        savedReplyIdsRef.current.add(id);
+        pendingTranscriptRef.current.delete(id);
+      }
+      setTurns((current) => JSON.stringify(current) === JSON.stringify(snapshot) ? current : snapshot);
+      if (resolved.length) setMessages((current) => current.filter((message) =>
+        !message.nativeRequestId || !savedReplyIdsRef.current.has(message.nativeRequestId)));
+      // No lifecycle changes, send unlocks, preview creation, or prompt submission here.
+    },
+  });
+
   useEffect(() => {
     requestController.current?.abort();
     requestController.current = null;
+    nativeOperationControllerRef.current?.abort();
+    nativeCancelRef.current();
+    nativeOperationControllerRef.current = null;
     setSending(false);
     sendAttemptRef.current = false;
     setNativeCompletionPhase("idle");
@@ -1931,6 +1963,8 @@ function EditorPage() {
     setNativeRecoveryUnverified(false);
     setTurns([]);
     setMessages([]);
+    pendingTranscriptRef.current.clear();
+    savedReplyIdsRef.current.clear();
     setChatInput("");
     setRuntimeError("");
     restoreNativeActivity(projectId);
@@ -1940,8 +1974,7 @@ function EditorPage() {
     setAttachments([]);
     setTextContext([]);
     setSelectedElement(null);
-    loadTurns().catch(() => undefined);
-  }, [projectId]);
+  }, [projectId, conversationOwnerId]);
 
   useEffect(() => {
     if (!projectId || currentRuntimeCapability?.projectId !== projectId) return;
@@ -1991,9 +2024,9 @@ function EditorPage() {
   }, [projectId, currentRuntimeCapability?.projectId, planningReloadKey]);
 
   useEffect(() => {
-    if (!nativeThink) return;
+    if (!currentRuntimeCapability || nativeThink) return;
     loadTurns().catch((error: any) => setRuntimeError(error.message || "Conversation history is unavailable."));
-  }, [projectId, nativeThink]);
+  }, [projectId, nativeThink, currentRuntimeCapability?.projectId]);
 
   useEffect(() => {
     if (!projectId || !nativeThink || !currentRuntimeCapability) return;
@@ -2473,6 +2506,7 @@ function EditorPage() {
       } : {}),
     };
     writeNativeOperationBaseline(projectId, operationBaseline);
+    if (assistantMessageId) pendingTranscriptRef.current.set(assistantMessageId, { projectId, baseline: operationBaseline });
 
     const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const socketUrl = `${websocketProtocol}//${window.location.host}/api/projects/${projectId}/runtime/ws`;
@@ -2516,6 +2550,7 @@ function EditorPage() {
       nativeCancelRef.current = cancelForLifecycle;
 
       const replaceAssistantMessage = (content: string) => {
+        if (assistantMessageId && savedReplyIdsRef.current.has(assistantMessageId)) return;
         setMessages((current) => {
           const index = assistantMessageId
             ? current.findIndex((message) => message.id === assistantMessageId)
@@ -3132,7 +3167,8 @@ function EditorPage() {
             break;
           }
           case "conversation_response": {
-            if (typeof frame.message === "string" && frame.message) {
+            if (typeof frame.message === "string" && frame.message
+              && !(assistantMessageId && savedReplyIdsRef.current.has(assistantMessageId))) {
               const safeMessage = normalizeBuilderAssistantText(frame.message);
               setMessages((current) => {
                 const index = assistantMessageId
@@ -3403,8 +3439,8 @@ function EditorPage() {
     setNativeActivityStart(Date.now());
     setMessages((current) => [
       ...current,
-      { role: "user", content: "Continue" },
-      { id: assistantMessageId, role: "assistant", content: "" },
+      { role: "user", content: "Continue", nativeRequestId: assistantMessageId },
+      { id: assistantMessageId, role: "assistant", content: "", nativeRequestId: assistantMessageId },
     ]);
     try {
       const response = await fetch(`/api/projects/${projectId}/runtime/status`, {
@@ -3653,9 +3689,9 @@ function EditorPage() {
       const visiblePrompt = prompt;
       setMessages((previous) => [
         ...previous,
-        ...(appendUserMessage ? [{ role: "user" as const, content: visiblePrompt }] : []),
-        ...(appendAcknowledgement ? [{ role: "assistant" as const, content: acknowledgement }] : []),
-        { id: assistantMessageId, role: "assistant" as const, content: "" },
+        ...(appendUserMessage ? [{ role: "user" as const, content: visiblePrompt, ...(nativeThink ? { nativeRequestId: assistantMessageId } : {}) }] : []),
+        ...(appendAcknowledgement ? [{ role: "assistant" as const, content: acknowledgement, ...(nativeThink ? { nativeRequestId: assistantMessageId } : {}) }] : []),
+        { id: assistantMessageId, role: "assistant" as const, content: "", ...(nativeThink ? { nativeRequestId: assistantMessageId } : {}) },
       ]);
       setNativeCompletionPhase(nativeThink ? "starting" : "idle");
       setNativeCompletionMessage(nativeThink ? "Connecting to the project runtime. No build request is sent until the connection is confirmed." : "");
@@ -4353,6 +4389,13 @@ function EditorPage() {
               </div>
             </div>
           )}
+          {nativeThink && savedConversation.error && <div role="status" data-testid="saved-conversation-error" className="rounded-xl border border-amber-400/25 p-3 text-sm">
+            <p>{savedConversation.error}</p>
+            <button type="button" onClick={savedConversation.retry} className="mt-2 underline">Retry saved replies</button>
+          </div>}
+          {nativeThink && turns.some((turn) => turn.response.trim()) && <p data-testid="saved-agent-reply-available" className="text-xs text-cyan-500">
+            Agent reply available. Build verification is tracked separately.
+          </p>}
           {turns.map((turn) => (
             <div key={turn.id} className="space-y-3" data-testid={`builder-turn-${turn.id}`}>
               <div className="flex justify-end">
@@ -4372,11 +4415,15 @@ function EditorPage() {
                   theme === "dark" ? "border-white/10 bg-white/[0.025]" : "border-gray-200 bg-gray-50"
                 }`} data-testid={`builder-turn-checkpoint-${turn.id}`}>
                   <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-400/15 text-emerald-400"><Check size={13} /></div>
+                    <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${nativeThink ? "bg-cyan-400/15 text-cyan-500" : "bg-emerald-400/15 text-emerald-400"}`}>
+                      {nativeThink ? <MessageSquare size={13} /> : <Check size={13} />}
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>Completed checkpoint</div>
+                      <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>{nativeThink ? "Saved agent turn" : "Completed checkpoint"}</div>
                       <div className={`text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-                        {(turn.activity?.length || 0)} {(turn.activity?.length || 0) === 1 ? "action" : "actions"} · {turn.changedFiles.length} changed {turn.changedFiles.length === 1 ? "file" : "files"}
+                        {nativeThink && !turn.changedFiles.length ? "Reply saved · workspace stages in Activity" : <>
+                          {(turn.activity?.length || 0)} {(turn.activity?.length || 0) === 1 ? "action" : "actions"} · {turn.changedFiles.length} changed {turn.changedFiles.length === 1 ? "file" : "files"}
+                        </>}
                       </div>
                     </div>
                     <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
@@ -4424,7 +4471,7 @@ function EditorPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>No file content changed in this turn.</p>
+                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{nativeThink ? "No file-change list is attached to this saved reply. Check Project Activity for recorded workspace stages." : "No file content changed in this turn."}</p>
                     )}
                     {turn.commitHash && canManageProduction && (
                       <div className="mt-3 flex items-center justify-between gap-2">
@@ -4447,7 +4494,7 @@ function EditorPage() {
                 <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
                   theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
                 }`} data-testid={`builder-turn-build-response-${turn.id}`}>
-                  {normalizeBuilderAssistantText(turn.response)}
+                  {nativeThink ? turn.response : normalizeBuilderAssistantText(turn.response)}
                 </div>
               </div>}
             </div>
@@ -4549,12 +4596,16 @@ function EditorPage() {
               </button>
             </section>
           )}
+          {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
+            <SavedBuildEvidence projectId={projectId} observing={nativeCompletionPhase === "recovering"} />
+          )}
           {nativeThink ? (
             <NativeBuildActivity
               projectId={projectId}
               theme={theme}
               phase={nativeConnectionRetry
                 ? "error"
+                : nativeRecoveryUnverified ? "unverified"
                 : planningSession?.phase === "clarifying"
                 ? "clarifying"
                 : planningSession?.phase === "awaiting_approval"
@@ -5572,7 +5623,7 @@ function EditorPage() {
                 <div className="h-full w-full">
                   <BuildPreviewPlaceholder
                     theme={theme}
-                    phase={planningSession?.phase === "clarifying"
+                    phase={nativeThink && nativeRecoveryUnverified ? "unverified" : planningSession?.phase === "clarifying"
                       ? "clarifying"
                       : planningSession?.phase === "awaiting_approval"
                         ? "planning"

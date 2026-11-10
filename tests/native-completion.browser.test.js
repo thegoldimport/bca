@@ -128,6 +128,9 @@ function installBrowserHarness(initialFixture) {
   let turnsResponseSkip = null;
   let releaseDelayedTurnsResponse = null;
   let delayedTurnsResponsePending = false;
+  let delaySavedHistory = false;
+  let savedHistoryPending = false;
+  let releaseSavedHistory = null;
   let holdRuntimeStatus = Boolean(initialFixture.holdRuntimeStatus);
   let releaseRuntimeStatus = null;
   let delayNextStatus = false;
@@ -152,14 +155,14 @@ function installBrowserHarness(initialFixture) {
     sessionStorage.setItem("__native_completion_fixture", JSON.stringify(serializable));
   };
   if (!saved && initialFixture.operationBaseline) {
-    sessionStorage.setItem("buildcustom:native-operation:10", JSON.stringify(initialFixture.operationBaseline));
+    sessionStorage.setItem(`buildcustom:native-operation:${state.projectId}`, JSON.stringify(initialFixture.operationBaseline));
   }
   if (!saved && initialFixture.activitySnapshot) {
-    sessionStorage.setItem("buildcustom:native-activity:10", JSON.stringify(initialFixture.activitySnapshot));
+    sessionStorage.setItem(`buildcustom:native-activity:${state.projectId}`, JSON.stringify(initialFixture.activitySnapshot));
   }
   const previewUrl = () => `${location.origin}/__native_completion_preview/?revision=${state.currentRevision}`;
   const status = () => {
-    const availablePreviewUrl = state.runtimeStatus === "ready" ? previewUrl() : "";
+    const availablePreviewUrl = state.runtimeStatus === "ready" && state.previewAvailable !== false ? previewUrl() : "";
     return {
       nativeThink: true,
       connected: true,
@@ -196,7 +199,7 @@ function installBrowserHarness(initialFixture) {
       type: "saas", status: "draft", runtimeStatus: state.runtimeStatus,
       runtimeProvider: state.runtimeProvider, config: {}, createdAt: "2026-09-25T21:00:00Z",
     });
-    if (url.pathname.endsWith("/build-activity")) return json({ attempts: [], connections: [], retainedEventCount: 0 });
+    if (url.pathname.endsWith("/build-activity")) return json(state.savedBuildActivity || { attempts: [], connections: [], retainedEventCount: 0 });
     if (url.pathname.endsWith("/blog-posts")) return json([]);
     if (url.pathname.endsWith("/planning")) {
       if (state.hangPlanning) {
@@ -259,7 +262,23 @@ function installBrowserHarness(initialFixture) {
       return json({ files: state.filePaths.map((filePath) => ({ path: filePath })) });
     }
     if (url.pathname.endsWith("/runtime/turns")) {
-      if (turnsResponseSkip !== null) {
+      const savedConversationRead = init.cache === "no-store";
+      if (savedConversationRead) {
+        state.stats.savedHistoryRequests ||= [];
+        state.stats.savedHistoryRequests.push({ path: url.pathname, method, credentials: init.credentials, cache: init.cache });
+        persist();
+        if (state.savedHistoryStatus && state.savedHistoryStatus !== 200) return json({}, state.savedHistoryStatus);
+        if (delaySavedHistory) {
+          delaySavedHistory = false;
+          const snapshot = JSON.parse(JSON.stringify(state.persistedTurns));
+          savedHistoryPending = true;
+          await new Promise(resolve => { releaseSavedHistory = resolve; });
+          savedHistoryPending = false;
+          releaseSavedHistory = null;
+          return json({ turns: snapshot });
+        }
+      }
+      if (!savedConversationRead && turnsResponseSkip !== null) {
         if (turnsResponseSkip > 0) {
           turnsResponseSkip -= 1;
         } else {
@@ -422,7 +441,7 @@ function installBrowserHarness(initialFixture) {
     },
     setRuntime({ active, revision, deployedRevision, persistedTurns, delayContinuationStart, nativeTaskLifecycle }) {
       if (typeof delayContinuationStart === "boolean") state.delayContinuationStart = delayContinuationStart;
-      if (nativeTaskLifecycle) state.nativeTaskLifecycle = structuredClone(nativeTaskLifecycle);
+      if (nativeTaskLifecycle !== undefined) state.nativeTaskLifecycle = structuredClone(nativeTaskLifecycle);
       if (typeof active === "boolean") {
         state.shouldBeGenerating = active;
         state.generationStatus = active ? "running" : "idle";
@@ -430,7 +449,7 @@ function installBrowserHarness(initialFixture) {
       if (typeof revision === "string") state.currentRevision = revision;
       if (typeof deployedRevision === "string") state.deployedRevision = deployedRevision;
       if (Array.isArray(persistedTurns)) state.persistedTurns = persistedTurns;
-      if (active === false && state.currentRevision !== state.baseRevision && state.persistedTurns.length > state.baseTurnCount) {
+      if (nativeTaskLifecycle === undefined && active === false && state.currentRevision !== state.baseRevision && state.persistedTurns.length > state.baseTurnCount) {
         state.nativeTaskLifecycle = {
           status: "COMPLETE",
           customerStatus: "BUILD_COMPLETE",
@@ -443,6 +462,16 @@ function installBrowserHarness(initialFixture) {
     },
     delayTurnsRequest(skip = 0) {
       turnsResponseSkip = skip;
+    },
+    setSavedHistoryStatus(status) {
+      state.savedHistoryStatus = status;
+      persist();
+    },
+    delaySavedHistoryRead() { delaySavedHistory = true; },
+    savedHistoryReadPending() { return savedHistoryPending; },
+    releaseSavedHistoryRead() {
+      if (!releaseSavedHistory) throw new Error("No delayed saved-history response");
+      releaseSavedHistory();
     },
     turnsRequestDelayed() {
       return delayedTurnsResponsePending;
@@ -545,7 +574,7 @@ async function statsOf(page) {
 async function startEditor(serverUrl, browser, initialFixture = fixture()) {
   const page = await browser.newPage();
   await page.evaluateOnNewDocument(installBrowserHarness, initialFixture);
-  await page.goto(`${serverUrl}/app/editor/${PROJECT_ID}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${serverUrl}/app/editor/${initialFixture.projectId || PROJECT_ID}`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector('[data-testid="input-editor-chat"]', { timeout: 20_000 });
   await page.waitForFunction(() => document.querySelector('[data-testid="builder-chat-scroll"]')?.textContent, { timeout: 20_000 });
   return page;
@@ -696,6 +725,147 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       executablePath: browserExecutablePath,
       headless: true,
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+
+    await t.test("Project 11 saved replies and questions survive unverified completion, timeout, and refresh", async () => {
+      const reply = "**Offline saved reply.**\nWhich CRM columns should we include?\nPlease reply in this chat.";
+      const initial = fixture({ changed: true, savedOperation: true });
+      initial.projectId = 11;
+      initial.previewAvailable = false;
+      initial.persistedTurns = [...BASE_TURNS, { ...FINAL_TURN, response: reply }];
+      initial.savedBuildActivity = { attempts: [{
+        id: "offline-attempt", startedAt: Date.now() - 30_000, status: "completed",
+        events: [
+          { eventType: "file_changed", status: "complete" },
+          { eventType: "file_changed", status: "complete" },
+          { eventType: "validation_completed", status: "complete" },
+          { eventType: "preview_generated", status: "complete" },
+        ],
+      }], connections: [], retainedEventCount: 4 };
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await waitForState(page, "recovering");
+        await page.waitForSelector('[data-testid="builder-turn-build-response-2"]');
+        assert.equal(await page.$eval('[data-testid="builder-turn-build-response-2"]', node => node.textContent.trim()), reply);
+        assert.equal(await page.$$eval('[data-testid="builder-turn-build-response-2"]', nodes => nodes.length), 1);
+        await page.waitForSelector('[data-testid="saved-build-evidence"]');
+        const facts = await page.$eval('[data-testid="saved-build-evidence"]', node => node.textContent);
+        assert.ok(facts.includes("2 file-change events recorded"));
+        assert.ok(facts.includes("Build validation completed"));
+        assert.ok(facts.includes("Preview generation recorded"));
+        assert.ok(facts.includes("Agent turn ended"));
+        assert.ok(facts.includes("do not establish"));
+        await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(11 * 60_000));
+        await waitForState(page, "error");
+        assert.ok(await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent.includes("Which CRM columns")));
+        assert.equal(await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent.includes("Completed checkpoint")), false);
+        await page.waitForFunction(() => document.querySelector('[aria-label="Project preview status"]')?.textContent.includes("Completion not confirmed"));
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForSelector('[data-testid="builder-turn-build-response-2"]');
+        assert.equal(await page.$eval('[data-testid="builder-turn-build-response-2"]', node => node.textContent.trim()), reply);
+        assert.notEqual(await stateOf(page), "success");
+        const stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 0);
+        assert.equal(stats.publishRequests, 0);
+        assert.equal(stats.agentCreationRequests, 0);
+        assert.ok(stats.savedHistoryRequests.every(request =>
+          request.path === "/api/projects/11/runtime/turns" && request.method === "GET"
+          && request.credentials === "same-origin" && request.cache === "no-store"));
+      } finally { await page.close(); }
+    });
+
+    await t.test("saved replies reconcile optimistic and replayed stream messages without ending an active operation", async () => {
+      const reply = "Offline canonical question: which lead fields do you need?";
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(({ turn, reply, revision }) => {
+          const harness = window.__nativeCompletionHarness;
+          const snapshot = harness.snapshot();
+          const persisted = { ...turn, response: reply, prompt: snapshot.stats.lastUserSuggestion.message };
+          harness.emit({ type: "conversation_response", message: reply, isDelta: false, isStreaming: false });
+          harness.setRuntime({
+            active: true, revision, persistedTurns: [...snapshot.persistedTurns, persisted, persisted],
+            nativeTaskLifecycle: { status: "WORKING", customerStatus: "BUILDING", taskId: "offline-task", operationId: "offline-operation", updatedAt: Date.now() },
+          });
+          window.dispatchEvent(new Event("focus"));
+        }, { turn: FINAL_TURN, reply, revision: EDITED });
+        await page.waitForSelector('[data-testid="builder-turn-build-response-2"]');
+        const occurrences = () => page.$eval('[data-testid="builder-chat-scroll"]', (node, text) => node.textContent.split(text).length - 1, reply);
+        assert.equal(await occurrences(), 1);
+        await page.evaluate((reply) => window.__nativeCompletionHarness.deliverLate({
+          type: "conversation_response", message: reply, isDelta: false, isStreaming: false,
+        }), reply);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        assert.equal(await occurrences(), 1);
+        assert.notEqual(await stateOf(page), "success");
+        await page.type('[data-testid="input-editor-chat"]', "Offline draft while the agent remains active");
+        await page.keyboard.press("Enter");
+        assert.equal((await statsOf(page)).userSuggestions, 1);
+        await page.evaluate(() => window.__nativeCompletionHarness.emit({
+          type: "error", message: "Offline fixture failure after a saved reply.", errorCode: "BUILD_RUNTIME_FAILED",
+        }));
+        await waitForState(page, "error");
+        assert.equal(await occurrences(), 1, "a failed operation cannot hide the real saved assistant reply");
+      } finally { await page.close(); }
+    });
+
+    await t.test("a failed owner-authorized history read preserves existing replies and can recover without a prompt", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await page.waitForSelector('[data-testid="saved-agent-reply-available"]');
+        const before = await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent);
+        await page.evaluate(() => {
+          window.__nativeCompletionHarness.setSavedHistoryStatus(401);
+          window.dispatchEvent(new Event("focus"));
+        });
+        await page.waitForSelector('[data-testid="saved-conversation-error"]');
+        assert.ok(await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent.includes("Initial Task 3 revision")));
+        assert.ok(before.includes("Initial Task 3 revision"));
+        await page.evaluate(({ turn }) => {
+          const harness = window.__nativeCompletionHarness;
+          harness.setSavedHistoryStatus(200);
+          harness.setRuntime({ persistedTurns: [...harness.snapshot().persistedTurns, { ...turn, response: "Offline recovered question?" }] });
+          window.dispatchEvent(new Event("focus"));
+        }, { turn: FINAL_TURN });
+        await page.waitForFunction(() => document.querySelector('[data-testid="builder-turn-build-response-2"]')?.textContent.includes("Offline recovered question?"));
+        await page.waitForFunction(() => !document.querySelector('[data-testid="saved-conversation-error"]'));
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+        assert.equal((await statsOf(page)).previewPosts, 0);
+      } finally { await page.close(); }
+    });
+
+    await t.test("denied initial native history never displays a protected saved reply", async () => {
+      const initial = fixture();
+      initial.savedHistoryStatus = 403;
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await page.waitForSelector('[data-testid="saved-conversation-error"]');
+        assert.equal(await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent.includes("Initial Task 3 revision")), false);
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+      } finally { await page.close(); }
+    });
+
+    await t.test("a stale independent history response cannot erase a newer accepted reply", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(() => {
+          window.__nativeCompletionHarness.delaySavedHistoryRead();
+          window.dispatchEvent(new Event("focus"));
+        });
+        await page.waitForFunction(() => window.__nativeCompletionHarness.savedHistoryReadPending());
+        await persistSuccessfulTurn(page);
+        await page.evaluate(() => window.__nativeCompletionHarness.emit({ type: "generation_complete" }));
+        await waitForState(page, "success", 20_000);
+        await page.waitForSelector('[data-testid="builder-turn-build-response-2"]');
+        await page.evaluate(() => window.__nativeCompletionHarness.releaseSavedHistoryRead());
+        await new Promise(resolve => setTimeout(resolve, 200));
+        assert.equal(await page.$$eval('[data-testid="builder-turn-build-response-2"]', nodes => nodes.length), 1);
+        assert.equal(await page.$eval('[data-testid="builder-turn-build-response-2"]', node => node.textContent.trim()), ASSISTANT);
+        assert.equal((await statsOf(page)).userSuggestions, 1);
+      } finally { await page.close(); }
     });
 
     await t.test("expanded activity preserves reading position and confines scrolling to the editor", async () => {
