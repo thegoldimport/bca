@@ -237,22 +237,123 @@ describe('AuthService email verification', () => {
         const internalError = new Error('sensitive database detail');
         const test = makeService(unverifiedUser, 0, internalError);
         const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const requestId = 'trace-login-rate-limit-1';
 
         try {
             await expect(test.service.login({
                 email: unverifiedUser.email,
                 password: 'StrongPassword123!',
-            }, new Request('https://app.buildcustom.ai/api/auth/login')))
+            }, new Request('https://app.buildcustom.ai/api/auth/login', {
+                headers: { 'X-BuildCustom-Request-ID': requestId },
+            })))
                 .rejects.toThrow('Login failed');
 
             const output = JSON.stringify(log.mock.calls);
             expect(output).toContain('AUTH_DIAG_LOGIN_RATE_LIMIT_READ');
+            expect(output).toContain(requestId);
             expect(output).not.toContain(unverifiedUser.email);
             expect(output).not.toContain('StrongPassword123!');
             expect(output).not.toContain('sensitive database detail');
         } finally {
             log.mockRestore();
         }
+    });
+
+    it('creates a session for valid credentials and never creates one for invalid credentials', async () => {
+        const verifiedUser = {
+            ...unverifiedUser,
+            emailVerified: true,
+            emailVerifiedAt: '2026-11-10T14:00:00.000Z',
+        } as schema.User;
+        const expiresAt = new Date('2026-11-13T14:00:00.000Z');
+        const valid = makeService(verifiedUser);
+        const validSession = vi.fn().mockResolvedValue({
+            accessToken: 'test-access-token',
+            session: { sessionId: 'test-session-id', expiresAt },
+        });
+        const validPassword = vi.fn().mockResolvedValue(true);
+        Object.assign(valid.service, {
+            passwordService: { verify: validPassword },
+            sessionService: { createSession: validSession },
+        });
+
+        const infoLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+            const result = await valid.service.login({
+                email: verifiedUser.email,
+                password: 'StrongPassword123!',
+            }, new Request('https://app.buildcustom.ai/api/auth/login', {
+                headers: { 'X-BuildCustom-Request-ID': 'trace-valid-login-1' },
+            }));
+
+            expect(result.accessToken).toBe('test-access-token');
+            expect(result.sessionId).toBe('test-session-id');
+            expect(validPassword).toHaveBeenCalledOnce();
+            expect(validSession).toHaveBeenCalledOnce();
+            const output = JSON.stringify(infoLog.mock.calls);
+            expect(output).toContain('trace-valid-login-1');
+            expect(output).not.toContain(verifiedUser.email);
+            expect(output).not.toContain(verifiedUser.id);
+            expect(output).not.toContain('StrongPassword123!');
+        } finally {
+            infoLog.mockRestore();
+        }
+
+        const invalid = makeService(verifiedUser);
+        const invalidSession = vi.fn();
+        Object.assign(invalid.service, {
+            passwordService: { verify: vi.fn().mockResolvedValue(false) },
+            sessionService: { createSession: invalidSession },
+        });
+        await expect(invalid.service.login({
+            email: verifiedUser.email,
+            password: 'WrongPassword123!',
+        }, new Request('https://app.buildcustom.ai/api/auth/login')))
+            .rejects.toThrow('Invalid email or password');
+        expect(invalidSession).not.toHaveBeenCalled();
+    });
+
+    it('handles concurrent valid logins without sharing session results', async () => {
+        const verifiedUser = {
+            ...unverifiedUser,
+            emailVerified: true,
+            emailVerifiedAt: '2026-11-10T14:00:00.000Z',
+        } as schema.User;
+        const test = makeService(verifiedUser);
+        let sessionNumber = 0;
+        const createSession = vi.fn(async () => {
+            sessionNumber += 1;
+            return {
+                accessToken: `test-access-token-${sessionNumber}`,
+                session: {
+                    sessionId: `test-session-${sessionNumber}`,
+                    expiresAt: new Date('2026-11-13T14:00:00.000Z'),
+                },
+            };
+        });
+        Object.assign(test.service, {
+            passwordService: { verify: vi.fn().mockResolvedValue(true) },
+            sessionService: { createSession },
+        });
+
+        const results = await Promise.all([
+            test.service.login({
+                email: verifiedUser.email,
+                password: 'StrongPassword123!',
+            }, new Request('https://app.buildcustom.ai/api/auth/login', {
+                headers: { 'X-BuildCustom-Request-ID': 'trace-concurrent-login-a' },
+            })),
+            test.service.login({
+                email: verifiedUser.email,
+                password: 'StrongPassword123!',
+            }, new Request('https://app.buildcustom.ai/api/auth/login', {
+                headers: { 'X-BuildCustom-Request-ID': 'trace-concurrent-login-b' },
+            })),
+        ]);
+
+        expect(createSession).toHaveBeenCalledTimes(2);
+        expect(new Set(results.map((result) => result.sessionId)).size).toBe(2);
+        expect(new Set(results.map((result) => result.accessToken)).size).toBe(2);
     });
 
     it('does not let a failed diagnostic sink replace the login error', async () => {

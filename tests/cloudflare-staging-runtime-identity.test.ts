@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import git from "isomorphic-git";
 import { createFsFromVolume, Volume } from "memfs";
-import worker, { type Env } from "../cloudflare/worker";
-import { handleStagingCustomerAuth } from "../cloudflare/staging/runtime-identity";
+import worker, { runtimeError, type Env } from "../cloudflare/worker";
+import { handleStagingCustomerAuth, RuntimeIdentityError } from "../cloudflare/staging/runtime-identity";
 
 const origin = "https://buildcustom-control-plane-staging.thegoldimport.workers.dev";
 
@@ -67,6 +67,10 @@ test("launch auth bridge forwards only Cloudflare's client IP to the runtime", a
 
 test("login runtime failures are reported as unavailable, not invalid credentials", async () => {
   const launchUrl = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
+  let forwardedRequestId = "";
+  const diagnostics: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => { diagnostics.push(args); };
   const authRequest = () => new Request("https://control.launch.test/api/auth/login", {
     method: "POST",
     headers: {
@@ -76,33 +80,179 @@ test("login runtime failures are reported as unavailable, not invalid credential
     },
     body: JSON.stringify({ email: "customer@example.test", password: "test-only-password" }),
   });
-  const env = (status: number) => ({
+  const env = (status: number, body: Record<string, unknown> = { message: "internal test detail" }) => ({
     DB: {} as D1Database,
     ENVIRONMENT: "production",
     CONTROL_PLANE_PROFILE: "launch",
     AUTH_RUNTIME_URL: launchUrl,
     AUTH_RUNTIME: {
-      async fetch() {
-        return Response.json({ message: "internal test detail" }, { status });
+      async fetch(request: Request) {
+        forwardedRequestId = request.headers.get("X-BuildCustom-Request-ID") || "";
+        return Response.json(body, { status });
       },
     } as Fetcher,
   });
 
-  const unavailable = await handleStagingCustomerAuth(
-    env(500), authRequest(), "/api/auth/login",
-    { email: "customer@example.test", password: "test-only-password" },
-  );
-  assert.equal(unavailable?.status, 502);
-  const unavailableBody = await unavailable?.json() as { message: string };
-  assert.equal(unavailableBody.message, "Sign-in is temporarily unavailable. Please try again.");
-  assert.equal(JSON.stringify(unavailableBody).includes("internal test detail"), false);
+  try {
+    const unavailable = await handleStagingCustomerAuth(
+      env(500, {
+        message: "sensitive internal detail",
+        code: "customer@example.test",
+        password: "never-log-this",
+      }), authRequest(), "/api/auth/login",
+      { email: "customer@example.test", password: "test-only-password" },
+    );
+    assert.equal(unavailable?.status, 502);
+    const unavailableBody = await unavailable?.json() as { message: string };
+    assert.equal(unavailableBody.message, "Sign-in is temporarily unavailable. Please try again.");
+    assert.equal(JSON.stringify(unavailableBody).includes("sensitive internal detail"), false);
 
-  const invalidCredentials = await handleStagingCustomerAuth(
-    env(401), authRequest(), "/api/auth/login",
-    { email: "customer@example.test", password: "test-only-password" },
-  );
-  assert.equal(invalidCredentials?.status, 401);
-  assert.equal((await invalidCredentials?.json() as { message: string }).message, "Invalid email or password.");
+    const requestId = unavailable?.headers.get("X-BuildCustom-Request-ID");
+    assert.ok(requestId && /^[A-Za-z0-9-]{1,80}$/.test(requestId));
+    assert.equal(forwardedRequestId, requestId);
+
+    const invalidCredentials = await handleStagingCustomerAuth(
+      env(401), authRequest(), "/api/auth/login",
+      { email: "customer@example.test", password: "test-only-password" },
+    );
+    assert.equal(invalidCredentials?.status, 401);
+    assert.equal((await invalidCredentials?.json() as { message: string }).message, "Invalid email or password.");
+
+    assert.equal(diagnostics.length, 1);
+    const [event, fields] = diagnostics[0] as [string, Record<string, unknown>];
+    assert.equal(event, "customer_auth_runtime_response_failure");
+    assert.deepEqual(fields, {
+      operation: "login",
+      requestId,
+      upstreamStatus: 500,
+      upstreamCode: "UNCLASSIFIED",
+    });
+    const diagnosticText = JSON.stringify(diagnostics);
+    for (const sensitive of ["customer@example.test", "test-only-password", "never-log-this", "sensitive internal detail"]) {
+      assert.equal(diagnosticText.includes(sensitive), false);
+    }
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
+test("a failing auth diagnostic sink does not replace the server response", async () => {
+  const originalConsoleError = console.error;
+  console.error = () => { throw new Error("diagnostic sink failure"); };
+  try {
+    const response = await handleStagingCustomerAuth({
+      DB: {} as D1Database,
+      ENVIRONMENT: "production",
+      CONTROL_PLANE_PROFILE: "launch",
+      AUTH_RUNTIME_URL: "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+      AUTH_RUNTIME: {
+        async fetch() {
+          return Response.json({ code: "INTERNAL_ERROR" }, { status: 500 });
+        },
+      } as Fetcher,
+    }, new Request("https://control.launch.test/api/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": "csrf-token=csrf-value",
+        "X-CSRF-Token": "csrf-value",
+      },
+      body: JSON.stringify({ email: "customer@example.test", password: "test-only-password" }),
+    }), "/api/auth/login", { email: "customer@example.test", password: "test-only-password" });
+
+    assert.equal(response?.status, 502);
+    assert.equal((await response?.json() as { message: string }).message,
+      "Sign-in is temporarily unavailable. Please try again.");
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
+test("auth transport failures carry a safe correlation id without logging exception text", async () => {
+  const diagnostics: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => { diagnostics.push(args); };
+  let caught: unknown;
+  try {
+    await handleStagingCustomerAuth({
+      DB: {} as D1Database,
+      ENVIRONMENT: "production",
+      CONTROL_PLANE_PROFILE: "launch",
+      AUTH_RUNTIME_URL: "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev",
+      AUTH_RUNTIME: {
+        async fetch() {
+          throw new Error("private auth backend details");
+        },
+      } as Fetcher,
+    }, new Request("https://control.launch.test/api/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": "csrf-token=csrf-value",
+        "X-CSRF-Token": "csrf-value",
+      },
+      body: JSON.stringify({ email: "customer@example.test", password: "test-only-password" }),
+    }), "/api/auth/login", { email: "customer@example.test", password: "test-only-password" });
+  } catch (error) {
+    caught = error;
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.ok(caught instanceof RuntimeIdentityError);
+  assert.match(caught.requestId || "", /^[A-Za-z0-9-]{1,80}$/);
+  assert.equal(caught.status, 502);
+  const response = runtimeError(caught);
+  assert.equal(response.status, 502);
+  assert.equal(response.headers.get("X-BuildCustom-Request-ID"), caught.requestId);
+
+  assert.equal(diagnostics.length, 1);
+  const [event, fields] = diagnostics[0] as [string, Record<string, unknown>];
+  assert.equal(event, "customer_auth_runtime_transport_failure");
+  assert.deepEqual(fields, { operation: "login", requestId: caught.requestId });
+  assert.equal(JSON.stringify(diagnostics).includes("private auth backend details"), false);
+});
+
+test("auth runtime configuration failures are distinguished from transport failures", async () => {
+  const diagnostics: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => { diagnostics.push(args); };
+  let caught: unknown;
+  try {
+    await handleStagingCustomerAuth({
+      DB: {} as D1Database,
+      ENVIRONMENT: "production",
+      CONTROL_PLANE_PROFILE: "launch",
+      AUTH_RUNTIME_URL: "https://unexpected-runtime.example",
+      AUTH_RUNTIME: {
+        async fetch() {
+          throw new Error("must not be called");
+        },
+      } as Fetcher,
+    }, new Request("https://control.launch.test/api/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": "csrf-token=csrf-value",
+        "X-CSRF-Token": "csrf-value",
+      },
+      body: JSON.stringify({ email: "customer@example.test", password: "test-only-password" }),
+    }), "/api/auth/login", { email: "customer@example.test", password: "test-only-password" });
+  } catch (error) {
+    caught = error;
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.ok(caught instanceof RuntimeIdentityError);
+  assert.equal(caught.status, 503);
+  const response = runtimeError(caught);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("X-BuildCustom-Request-ID"), caught.requestId);
+  assert.equal(diagnostics.length, 1);
+  const [event, fields] = diagnostics[0] as [string, Record<string, unknown>];
+  assert.equal(event, "customer_auth_runtime_configuration_failure");
+  assert.deepEqual(fields, { operation: "login", requestId: caught.requestId });
 });
 
 function database() {

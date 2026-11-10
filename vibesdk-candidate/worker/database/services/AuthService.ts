@@ -55,9 +55,15 @@ type AuthDiagnosticMessage =
     | (typeof LOGIN_DIAGNOSTIC_MESSAGES)[keyof typeof LOGIN_DIAGNOSTIC_MESSAGES]
     | (typeof PASSWORD_RESET_DIAGNOSTIC_MESSAGES)[keyof typeof PASSWORD_RESET_DIAGNOSTIC_MESSAGES];
 
-function logAuthDiagnostic(message: AuthDiagnosticMessage): void {
+function safeAuthRequestId(request?: Request): string | undefined {
+    const requestId = request?.headers.get('X-BuildCustom-Request-ID');
+    return requestId && /^[A-Za-z0-9-]{1,80}$/.test(requestId) ? requestId : undefined;
+}
+
+function logAuthDiagnostic(message: AuthDiagnosticMessage, request?: Request): void {
     try {
-        logger.error(message);
+        const requestId = safeAuthRequestId(request);
+        logger.error(message, requestId ? { requestId } : undefined);
     } catch {
         // Diagnostics are best-effort and must not alter authentication results.
     }
@@ -346,7 +352,10 @@ export class AuthService extends BaseService {
             // Log successful attempt
             await this.logAuthAttempt(normalizedEmail, 'login', true, request);
             
-            logger.info('User logged in', { userId: user.id, email: user.email });
+            // Use only the request correlation ID; authentication logs should
+            // not contain account identifiers or email addresses.
+            const requestId = safeAuthRequestId(request);
+            logger.info('User logged in', requestId ? { requestId } : undefined);
             
             return {
                 user: mapUserResponse(user),
@@ -357,14 +366,14 @@ export class AuthService extends BaseService {
         } catch (error) {
             if (error instanceof SecurityError) {
                 if (error.statusCode >= 500) {
-                    logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
+                    logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage], request);
                 }
                 throw error;
             }
 
             // Keep production diagnostics useful without logging credentials,
             // user identifiers, request data, or exception text.
-            logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage]);
+            logAuthDiagnostic(LOGIN_DIAGNOSTIC_MESSAGES[diagnosticStage], request);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
                 'Login failed',

@@ -10,6 +10,16 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1';
 
 import type { HealthStatusResult } from './types';
 
+const instrumentedDatabases = new WeakSet<object>();
+
+function instrumentD1Once(db: D1Database): D1Database {
+    if (!instrumentedDatabases.has(db)) {
+        Sentry.instrumentD1WithSentry(db);
+        instrumentedDatabases.add(db);
+    }
+    return db;
+}
+
 // ========================================
 // TYPE DEFINITIONS AND INTERFACES
 // ========================================
@@ -36,7 +46,7 @@ export class DatabaseService {
     private readonly enableReplicas: boolean;
 
     constructor(env: Env) {
-        const instrumented = Sentry.instrumentD1WithSentry(env.DB);
+        const instrumented = instrumentD1Once(env.DB);
         this.d1 = instrumented;
         this.db = drizzle(instrumented, { schema });
         this.enableReplicas = env.ENABLE_READ_REPLICAS === 'true';

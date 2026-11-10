@@ -171,11 +171,19 @@ export function projectIdFromPath(pathname: string): number | null {
   const match = pathname.match(/^\/api\/projects\/(\d+)(?:\/|$)/);
   return match ? Number(match[1]) : null;
 }
-function runtimeError(error: unknown): Response {
+export function runtimeError(error: unknown): Response {
   if (error instanceof VibeSdkAdapterError) return json({ message: error.message, code: error.code }, { status: error.status });
   if (error instanceof RuntimeIdentityError) {
     if (error.code) console.warn("native_connection_diagnostic", { code: error.code, status: error.status });
-    return json({ message: error.message, ...(error.code ? { code: error.code } : {}) }, { status: error.status });
+    const headers = new Headers();
+    if (error.requestId && /^[A-Za-z0-9-]{1,80}$/.test(error.requestId)) {
+      headers.set("X-BuildCustom-Request-ID", error.requestId);
+      headers.set("Cache-Control", "no-store");
+    }
+    return json({ message: error.message, ...(error.code ? { code: error.code } : {}) }, {
+      status: error.status,
+      headers,
+    });
   }
   return json({ message: error instanceof Error ? error.message : "Request failed" }, { status: 400 });
 }
