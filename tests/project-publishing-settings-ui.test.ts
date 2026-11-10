@@ -113,8 +113,12 @@ test("project SEO form validates uploads and metadata before saving", async () =
     const faviconInput = view.container.querySelector('input[type="file"]') as HTMLInputElement;
     const validFavicon = new dom.window.File(["favicon"], "favicon.png", { type: "image/png" });
     fireEvent.change(faviconInput, { target: { files: [validFavicon] } });
-    const preview = await screen.findByAltText("Custom favicon preview") as HTMLImageElement;
-    assert.match(preview.src, /^data:image\/png;base64,/);
+    // FileReader and React's image update are asynchronous. The alt text alone
+    // is not the upload-ready boundary; require the actual source before saving.
+    await waitFor(() => assert.match(
+      (screen.getByAltText("Custom favicon preview") as HTMLImageElement).src,
+      /^data:image\/png;base64,/,
+    ));
 
     fireEvent.click(screen.getByTestId("button-save-meta"));
     await waitFor(() => assert.equal(requests.length, 2));
