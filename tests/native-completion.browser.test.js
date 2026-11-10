@@ -66,6 +66,11 @@ function fixture({
   savedOperation = false,
   runtimeStatus = "ready",
   nativeTaskLifecycle = null,
+  websocketTaskLifecycle = undefined,
+  websocketShouldBeGenerating = undefined,
+  conversationStateFrame = null,
+  conversationStateRecovery = null,
+  savedHistoryStatus = 200,
   rejectHandshakes = 0,
   closeAcceptedSockets = 0,
   accelerateSocketRetries = false,
@@ -77,6 +82,11 @@ function fixture({
     runtimeProvider: "stock-think",
     runtimeStatus,
     nativeTaskLifecycle,
+    websocketTaskLifecycle,
+    websocketShouldBeGenerating,
+    conversationStateFrame,
+    conversationStateRecovery,
+    savedHistoryStatus,
     baseRevision: BASELINE,
     baseTurnCount: BASE_TURNS.length,
     rejectHandshakes,
@@ -114,6 +124,7 @@ function fixture({
       agentCreationRequests: 0,
       planningWrites: 0,
       planningDeletes: 0,
+      savedHistoryStatuses: [],
       api: [],
     },
   };
@@ -269,9 +280,15 @@ function installBrowserHarness(initialFixture) {
       const savedConversationRead = init.cache === "no-store";
       if (savedConversationRead) {
         state.stats.savedHistoryRequests ||= [];
+        state.stats.savedHistoryStatuses ||= [];
         state.stats.savedHistoryRequests.push({ path: url.pathname, method, credentials: init.credentials, cache: init.cache });
         persist();
-        if (state.savedHistoryStatus && state.savedHistoryStatus !== 200) return json({}, state.savedHistoryStatus);
+        if (state.savedHistoryStatus && state.savedHistoryStatus !== 200) {
+          state.stats.savedHistoryStatuses.push(state.savedHistoryStatus);
+          persist();
+          return json({}, state.savedHistoryStatus);
+        }
+        state.stats.savedHistoryStatuses.push(200);
         if (delaySavedHistory) {
           delaySavedHistory = false;
           const snapshot = JSON.parse(JSON.stringify(state.persistedTurns));
@@ -355,8 +372,18 @@ function installBrowserHarness(initialFixture) {
         this.onopen?.({ target: this });
         // Production reopens with the previous terminal lifecycle attached.
         // Omitting this field hid the real pre-send continuation regression.
-        this.emit({ type: "agent_connected", state: { shouldBeGenerating: false },
-          ...(state.nativeTaskLifecycle ? { nativeTaskLifecycle: state.nativeTaskLifecycle } : {}) });
+        const websocketLifecycle = state.websocketTaskLifecycle === undefined
+          ? state.nativeTaskLifecycle
+          : state.websocketTaskLifecycle;
+        this.emit({
+          type: "agent_connected",
+          state: {
+            shouldBeGenerating: state.websocketShouldBeGenerating === undefined
+              ? state.shouldBeGenerating
+              : state.websocketShouldBeGenerating,
+          },
+          ...(websocketLifecycle ? { nativeTaskLifecycle: websocketLifecycle } : {}),
+        });
         if (closeAfterOpen) setTimeout(() => this.close(1011, "Immediate socket flap"), 0);
       }, 0);
     }
@@ -390,7 +417,22 @@ function installBrowserHarness(initialFixture) {
         };
         this.emit({ type: "auto_continue_updated", preference: state.nativeTaskLifecycle.autoContinue });
       }
-      if (frame.type === "get_conversation_state") state.stats.conversationStateRequests += 1;
+      if (frame.type === "get_conversation_state") {
+        state.stats.conversationStateRequests += 1;
+        if (state.conversationStateFrame) {
+          const recovery = state.conversationStateRecovery;
+          if (recovery) {
+            if (typeof recovery.savedHistoryStatus === "number") state.savedHistoryStatus = recovery.savedHistoryStatus;
+            if (Array.isArray(recovery.persistedTurns)) state.persistedTurns = recovery.persistedTurns;
+          }
+          state.stats.conversationStateResponses ||= 0;
+          state.stats.conversationStateResponses += 1;
+          const responseFrame = structuredClone(state.conversationStateFrame);
+          setTimeout(() => {
+            if (this.readyState === FakeWebSocket.OPEN) this.emit(responseFrame);
+          }, 0);
+        }
+      }
       if (!["user_suggestion", "get_conversation_state", "set_auto_continue"].includes(frame.type)) state.stats.unexpectedSocketFrames += 1;
       persist();
     }
@@ -462,6 +504,11 @@ function installBrowserHarness(initialFixture) {
           updatedAt: Date.now(),
         };
       }
+      persist();
+    },
+    setWebsocketState({ active, nativeTaskLifecycle }) {
+      if (typeof active === "boolean") state.websocketShouldBeGenerating = active;
+      if (nativeTaskLifecycle !== undefined) state.websocketTaskLifecycle = structuredClone(nativeTaskLifecycle);
       persist();
     },
     delayTurnsRequest(skip = 0) {
@@ -652,9 +699,10 @@ async function assertSinglePersistedTurn(page, expectedPrompt = PROMPT) {
   assert.equal(text.split(ASSISTANT).length - 1, 1, "the assistant response must be rendered exactly once");
   const composer = await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled);
   assert.equal(composer, true, "composer must be usable after verified completion");
-  const completion = await page.$('[data-testid="native-build-complete"]');
-  assert.ok(completion, "green completion requires an authoritative COMPLETE customer lifecycle");
-  assert.match(await page.evaluate((node) => node.textContent || "", completion), /Build complete.*Your changes are ready to review/);
+  const review = await page.$('[data-testid="native-build-review-needed"]');
+  assert.ok(review, "an Agent completion claim must prompt the customer to verify files and preview");
+  assert.match(await page.evaluate((node) => node.textContent || "", review), /Agent finished its turn.*generated files and live preview/);
+  assert.equal(await page.$('[data-testid="native-build-complete"]'), null, "Agent lifecycle completion alone must not claim the app is complete");
   const stats = await statsOf(page);
   assert.equal(stats.userSuggestions, 1, "recovery must not resend the prompt");
   assert.equal(stats.agentCreationRequests, 0, "recovery must not create an agent");
@@ -669,7 +717,7 @@ async function finishQuietCandidate(page) {
   await page.waitForFunction(() => {
     const state = document.querySelector('[data-testid="native-completion-state"]')
       ?.getAttribute("data-state");
-    return state === "success";
+    return state === "needs_input";
   }, { timeout: 12_000 });
 }
 
@@ -862,7 +910,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await page.waitForFunction(() => window.__nativeCompletionHarness.savedHistoryReadPending());
         await persistSuccessfulTurn(page);
         await page.evaluate(() => window.__nativeCompletionHarness.emit({ type: "generation_complete" }));
-        await waitForState(page, "success", 20_000);
+        await waitForState(page, "needs_input", 20_000);
         await page.waitForSelector('[data-testid="builder-turn-build-response-2"]');
         await page.evaluate(() => window.__nativeCompletionHarness.releaseSavedHistoryRead());
         await new Promise(resolve => setTimeout(resolve, 200));
@@ -1007,6 +1055,154 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(stats.userSuggestions, 0);
         assert.equal(stats.maxOpenSockets, 1);
         assert.ok(stats.conversationStateRequests > 0);
+        assert.notEqual(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
+      } finally { await page.close(); }
+    });
+
+    await t.test("idle Agent history frames trigger an owner-authorized saved-turn refresh, not raw history rendering", async () => {
+      const recoveredTurn = { ...FINAL_TURN, response: "Reply recovered from the saved turns endpoint." };
+      const initial = fixture({
+        savedHistoryStatus: 401,
+        conversationStateFrame: {
+          type: "conversation_state",
+          state: { fullHistory: [{ role: "assistant", content: "RAW_INTERNAL_HISTORY_MUST_NOT_RENDER" }] },
+        },
+        conversationStateRecovery: {
+          savedHistoryStatus: 200,
+          persistedTurns: [...BASE_TURNS, recoveredTurn],
+        },
+      });
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await page.waitForFunction(() => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          return stats.savedHistoryStatuses?.includes(401)
+            && stats.savedHistoryStatuses?.includes(200)
+            && stats.conversationStateResponses > 0;
+        }, { timeout: 5_000 });
+        await page.waitForSelector('[data-testid="builder-turn-build-response-2"]', { timeout: 2_000 });
+        const transcript = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
+        assert.match(transcript, /Reply recovered from the saved turns endpoint/);
+        assert.doesNotMatch(transcript, /RAW_INTERNAL_HISTORY_MUST_NOT_RENDER/);
+        const stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 0, "recovering the saved reply must not send a prompt");
+        assert.ok(stats.savedHistoryRequests.some((request) => request.method === "GET"
+          && request.credentials === "same-origin" && request.cache === "no-store"));
+        assert.equal(stats.agentCreationRequests, 0);
+      } finally { await page.close(); }
+    });
+
+    await t.test("a reconnect settles only fresh idle status, preserves the draft, and never resends the old prompt", async () => {
+      const working = {
+        status: "RUNNING",
+        customerStatus: "WORKING",
+        taskId: "fixture-task",
+        operationId: "fixture-operation-running",
+        updatedAt: Date.now() - 10_000,
+      };
+      const initial = fixture({ active: true, savedOperation: true, nativeTaskLifecycle: working });
+      initial.websocketTaskLifecycle = working;
+      initial.websocketShouldBeGenerating = true;
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await page.waitForSelector('[data-testid="button-stop-build"]', { timeout: 10_000 });
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.openSockets === 1);
+        await page.click('[data-testid="button-stop-build"]');
+        await page.waitForSelector('[data-testid="native-agent-reconnect"]', { timeout: 5_000 });
+        await page.type('[data-testid="input-editor-chat"]', "Keep this follow-up draft after reconnect.");
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
+          "Send stays blocked while the previous operation is unverified");
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+
+        await page.evaluate(() => {
+          const harness = window.__nativeCompletionHarness;
+          harness.setRuntime({ active: false, nativeTaskLifecycle: null });
+          harness.setWebsocketState({ active: false, nativeTaskLifecycle: null });
+        });
+        await page.click('[data-testid="button-reconnect-native-agent"]');
+        await page.waitForFunction(() => {
+          const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
+          return button && !button.disabled && button.textContent.includes("Check Agent");
+        }, { timeout: 5_000 });
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
+          "an idle signal without a fresh terminal lifecycle cannot resolve a pending operation");
+
+        const stopped = {
+          status: "STOPPED",
+          customerStatus: "STOPPED",
+          taskId: "fixture-task",
+          operationId: "fixture-operation-stopped",
+          updatedAt: Date.now(),
+        };
+        await page.evaluate((lifecycle) => {
+          const harness = window.__nativeCompletionHarness;
+          harness.setRuntime({ active: false, nativeTaskLifecycle: lifecycle });
+          harness.setWebsocketState({ active: false, nativeTaskLifecycle: lifecycle });
+        }, stopped);
+        await page.click('[data-testid="button-reconnect-native-agent"]');
+        await page.waitForFunction(() => {
+          const send = document.querySelector('[data-testid="button-send-chat"]');
+          return send && !send.disabled && !document.querySelector('[data-testid="button-reconnect-native-agent"]');
+        }, { timeout: 5_000 });
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value),
+          "Keep this follow-up draft after reconnect.");
+        let stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 0, "reconnect must not resend the saved prompt");
+        assert.equal(stats.maxOpenSockets, 1, "reconnect must replace rather than overlap idle sockets");
+        assert.ok(stats.conversationStateRequests >= 2);
+
+        await page.click('[data-testid="button-send-chat"]');
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 5_000 });
+        stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 1, "only the customer's explicit follow-up sends a prompt");
+        assert.equal(stats.agentCreationRequests, 0);
+        assert.equal(stats.publishRequests, 0);
+      } finally { await page.close(); }
+    });
+
+    await t.test("an idle WebSocket cannot unlock Send while the authenticated runtime still reports active work", async () => {
+      const working = {
+        status: "RUNNING",
+        customerStatus: "WORKING",
+        taskId: "fixture-task",
+        operationId: "fixture-operation-running",
+        updatedAt: Date.now() - 10_000,
+      };
+      const misleadingSocketState = {
+        status: "STOPPED",
+        customerStatus: "STOPPED",
+        taskId: "fixture-task",
+        operationId: "fixture-operation-stale-stop",
+        updatedAt: Date.now(),
+      };
+      const initial = fixture({ active: true, savedOperation: true, nativeTaskLifecycle: working });
+      initial.websocketTaskLifecycle = misleadingSocketState;
+      initial.websocketShouldBeGenerating = false;
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await page.waitForSelector('[data-testid="button-stop-build"]', { timeout: 10_000 });
+        await page.waitForFunction(() => {
+          const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
+          return button && !button.disabled;
+        }, { timeout: 5_000 });
+        const statusReads = await page.evaluate(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length);
+        await page.click('[data-testid="button-reconnect-native-agent"]');
+        await page.waitForFunction((before) => {
+          const stats = window.__nativeCompletionHarness.snapshot().stats;
+          const reads = stats.api.filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length;
+          const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
+          return reads > before && button && !button.disabled;
+        }, { timeout: 5_000 }, statusReads);
+        assert.equal(await page.$('[data-testid="button-send-chat"]'), null,
+          "Send is not offered while the existing operation is active");
+        assert.equal((await statsOf(page)).userSuggestions, 0);
+        await page.click('[data-testid="button-stop-build"]');
+        await page.waitForSelector('[data-testid="native-agent-reconnect"]', { timeout: 5_000 });
+        await page.waitForSelector('[data-testid="button-send-chat"]', { timeout: 5_000 });
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
+          "the live authenticated status, not an isolated WebSocket frame, controls Send");
+        assert.equal((await statsOf(page)).userSuggestions, 0);
         assert.notEqual(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
       } finally { await page.close(); }
     });
@@ -1225,7 +1421,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
     });
 
-    await t.test("normal generation_complete reaches success and reconciles current files, preview, and conversation", async () => {
+    await t.test("normal generation_complete reconciles changes but still asks the customer to review the app", async () => {
       const page = await startEditor(serverUrl, browser);
       try {
         await sendOnePrompt(page);
@@ -1722,7 +1918,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         }, { revision: EDITED, turn: FINAL_TURN });
         await waitForVerificationRevision(page, priorRevisionChecks + 1);
         await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(31_000));
-        await waitForState(page, "success", 25_000);
+        await waitForState(page, "needs_input", 25_000);
         await assertSinglePersistedTurn(page);
         assert.equal(await page.evaluate((key) => sessionStorage.getItem(key), baselineKey), null);
       } finally {
@@ -1730,7 +1926,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
     });
 
-    await t.test("foreign changed revision with an unmatched persisted turn never succeeds", async () => {
+    await t.test("a foreign persisted turn never claims application completion or resends the prompt", async () => {
       const page = await startEditor(serverUrl, browser);
       try {
         await sendOnePrompt(page);
@@ -1751,9 +1947,13 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.notEqual(await stateOf(page), "success", "a different persisted turn cannot verify this prompt");
 
         await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(10 * 60_000 + 1));
-        await waitForState(page, "error", 10_000);
+        await waitForState(page, "needs_input", 10_000);
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null,
+          "an unrelated persisted turn must never create a green application-complete state");
+        assert.ok(await page.$('[data-testid="native-build-review-needed"]'),
+          "the runtime can be idle for follow-up without claiming the generated app is complete");
         const text = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
-        assert.match(text, /could not verify|persisted|matching|latest state/i);
+        assert.match(text, /review the generated files and live preview before treating this app as complete/i);
         const stats = await statsOf(page);
         assert.equal(stats.userSuggestions, 1);
         assert.equal(stats.agentCreationRequests, 0);
@@ -1779,7 +1979,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         }, { revision: EDITED, staleDeployment: BASELINE, turn: FINAL_TURN });
         await waitForVerificationRevision(page);
         await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(6_000));
-        await waitForState(page, "success");
+        await waitForState(page, "needs_input");
         await assertSinglePersistedTurn(page);
 
         const stats = await statsOf(page);
@@ -1831,7 +2031,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
 
         await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(6_000));
         await waitForVerificationRevision(page, revisionsBeforeRace + 3);
-        await waitForState(page, "success", 15_000);
+        await waitForState(page, "needs_input", 15_000);
         await assertSinglePersistedTurn(page);
         const stats = await statsOf(page);
         assert.equal(stats.userSuggestions, 1);
@@ -1911,7 +2111,8 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
     await t.test("reopen after runtime completion shows persisted turns over a no-inference idle socket", async () => {
       const page = await startEditor(serverUrl, browser, fixture({ active: true, savedOperation: true }));
       try {
-        await waitForState(page, "recovering");
+        await page.waitForSelector('[data-testid="button-stop-build"]', { timeout: 10_000 });
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.openSockets >= 1);
         const beforeRefresh = await statsOf(page);
         assert.equal(beforeRefresh.userSuggestions, 0);
         assert.ok(beforeRefresh.sockets >= 1);
@@ -1929,11 +2130,13 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         }, { revision: EDITED, turns: [...BASE_TURNS, FINAL_TURN] });
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.waitForSelector('[data-testid="builder-chat-scroll"]', { timeout: 20_000 });
-        await waitForState(page, "recovering");
+        await page.waitForFunction(() => ["recovering", "needs_input"].includes(
+          document.querySelector('[data-testid="native-completion-state"]')?.getAttribute("data-state") || "",
+        ), { timeout: 10_000, polling: 50 });
         await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(36_000));
         await waitForVerificationRevision(page, beforeRefresh.api.filter((entry) => entry.path.endsWith("/runtime/revision")).length + 1);
         await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(31_000));
-        await waitForState(page, "success", 20_000);
+        await waitForState(page, "needs_input", 20_000);
 
         const text = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
         assert.match(text, /Task 3 initial turn \(offline browser-test fixture\)/);
@@ -1977,7 +2180,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           const node = document.querySelector('[data-testid="native-completion-state"]');
           const state = node?.getAttribute("data-state") || node?.getAttribute("data-phase");
           const stats = window.__nativeCompletionHarness.snapshot().stats;
-          return state === "success" && stats.userSuggestions === 0 && stats.sockets >= 1;
+          return state === "needs_input" && stats.userSuggestions === 0 && stats.sockets >= 1;
         }, { timeout: 25_000 });
         const text = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
         assert.match(text, new RegExp(PROMPT));
