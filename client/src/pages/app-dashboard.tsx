@@ -1016,7 +1016,7 @@ function hasNativeOperationCorrelation(baseline: NativeOperationBaseline | null)
   );
 }
 
-async function hasCorrelatedNativeTurn(turns: any[], baseline: NativeOperationBaseline): Promise<boolean> {
+async function hasCorrelatedNativeTurn(turns: any[], baseline: NativeOperationBaseline, requiredCommit?: string): Promise<boolean> {
   if (!hasNativeOperationCorrelation(baseline) || turns.length <= baseline.startingTurnCount) return false;
   const appended = turns.slice(baseline.startingTurnCount);
   const matches: any[] = [];
@@ -1045,7 +1045,7 @@ async function hasCorrelatedNativeTurn(turns: any[], baseline: NativeOperationBa
     }
     matches.push(turn);
   }
-  return matches.length === 1;
+  return matches.length === 1 && (requiredCommit === undefined || matches[0].commitHash === requiredCommit);
 }
 
 async function hasNativeOperationEvidence(
@@ -1053,7 +1053,9 @@ async function hasNativeOperationEvidence(
   baseline: NativeOperationBaseline,
   runtimeStatus: any,
 ): Promise<boolean> {
-  if (baseline.approvedTaskId && baseline.approvedOperationId && typeof baseline.lifecycleUpdatedAt === "number") {
+  if (hasNativeApprovalMarkers(baseline)) {
+    if (!baseline.approvedTaskId || !baseline.approvedOperationId
+      || typeof baseline.lifecycleUpdatedAt !== "number" || !Number.isFinite(baseline.lifecycleUpdatedAt)) return false;
     return hasFreshApprovedOperation(runtimeStatus?.nativeTaskLifecycle, {
       taskId: baseline.approvedTaskId,
       operationId: baseline.approvedOperationId,
@@ -1063,10 +1065,15 @@ async function hasNativeOperationEvidence(
   return hasCorrelatedNativeTurn(turns, baseline);
 }
 
-// A saved reply can settle a turn without proving an application was built.
-// Never use this outcome for an uncorrelated turn, an active runtime, or a
-// controller continuation that still needs its authoritative lifecycle gate.
-async function verifiedReplyWithoutNewCommit(
+function hasNativeApprovalMarkers(baseline: NativeOperationBaseline): boolean {
+  return baseline.approvedTaskId !== undefined || baseline.approvedOperationId !== undefined
+    || baseline.lifecycleUpdatedAt !== undefined;
+}
+
+// Ordinary legacy turns can become ready for follow-up without establishing
+// application completion. A changed revision additionally needs its matching
+// persisted turn. Controlled operations still require their native lifecycle.
+async function verifiedSettledNativeReply(
   fetchRuntime: (path: string) => Promise<any>,
   baseline: NativeOperationBaseline,
   status: any,
@@ -1075,14 +1082,18 @@ async function verifiedReplyWithoutNewCommit(
 ): Promise<{ turns: RuntimeBuilderTurn[]; status: any } | null> {
   const eligible = (value: any) => isIdle(value)
     && !nativeResourceLimitError(value, baseline.startedAt)
-    && !["WORKING", "STOPPED", "CONTINUE_AVAILABLE"].includes(customerLifecycleStatus(value?.nativeTaskLifecycle) || "")
-    && String(value?.nativeTaskLifecycle?.status || "").toUpperCase() !== "BLOCKED";
-  if (!hasNativeOperationCorrelation(baseline) || baseline.approvedTaskId || baseline.approvedOperationId
-    || typeof revision !== "string" || revision !== baseline.revision || !eligible(status)) return null;
+    && (value?.nativeTaskLifecycle === undefined
+      || ["NEEDS_INPUT", "BUILD_COMPLETE"].includes(customerLifecycleStatus(value.nativeTaskLifecycle) || ""));
+  if (!hasNativeOperationCorrelation(baseline) || hasNativeApprovalMarkers(baseline)
+    || typeof revision !== "string" || !revision || !eligible(status)) return null;
+  const changedRevision = revision !== baseline.revision;
+  // Never substitute legacy admission evidence for a supplied controller.
+  if (changedRevision && status?.nativeTaskLifecycle !== undefined) return null;
   const turns = runtimeTurnsFromResponse(await fetchRuntime("turns"));
-  if (!turns || !await hasCorrelatedNativeTurn(turns, baseline)) return null;
+  if (!turns || !await hasCorrelatedNativeTurn(turns, baseline, changedRevision ? revision : undefined)) return null;
   const [finalStatus, finalRevision] = await Promise.all([fetchRuntime("status"), fetchRuntime("revision")]);
-  if (!eligible(finalStatus) || finalRevision.commitHash !== revision) return null;
+  if (!eligible(finalStatus) || finalRevision.commitHash !== revision
+    || (changedRevision && finalStatus?.nativeTaskLifecycle !== undefined)) return null;
   return { turns, status: finalStatus };
 }
 
@@ -1117,6 +1128,11 @@ function readNativeOperationBaseline(projectId: number): NativeOperationBaseline
       ...(Number.isInteger(parsed.startingTurnCount) ? { startingTurnCount: parsed.startingTurnCount } : {}),
       ...(typeof parsed.promptDigest === "string" ? { promptDigest: parsed.promptDigest } : {}),
       ...(typeof parsed.imageDigest === "string" || parsed.imageDigest === null ? { imageDigest: parsed.imageDigest } : {}),
+      // Preserve controller markers across refresh. Invalid markers also fail
+      // closed rather than silently turning an approved operation into legacy.
+      ...("approvedTaskId" in parsed ? { approvedTaskId: typeof parsed.approvedTaskId === "string" ? parsed.approvedTaskId : "__invalid__" } : {}),
+      ...("approvedOperationId" in parsed ? { approvedOperationId: typeof parsed.approvedOperationId === "string" ? parsed.approvedOperationId : "__invalid__" } : {}),
+      ...("lifecycleUpdatedAt" in parsed ? { lifecycleUpdatedAt: Number.isFinite(parsed.lifecycleUpdatedAt) ? parsed.lifecycleUpdatedAt : Number.MAX_SAFE_INTEGER } : {}),
     };
   } catch {
     return null;
@@ -1706,7 +1722,9 @@ function EditorPage() {
   }, [projectId]);
 
   useEffect(() => {
-    if (!projectId || !nativeRuntimeReady || sending) return;
+    // Recovery observes an earlier operation; it does not own a generation
+    // socket. Keep the no-prompt connection available during that observation.
+    if (!projectId || !nativeRuntimeReady || (sending && nativeOperationControllerRef.current)) return;
     const idleProjectId = projectId;
     let active = true;
     let retryCount = 0;
@@ -2221,7 +2239,7 @@ function EditorPage() {
               candidateRevision = null;
               candidateSince = 0;
               lastError = "The Agent is idle, but there is no new committed revision for the saved operation.";
-              const reply = await verifiedReplyWithoutNewCommit(fetchRuntime, savedBaseline, runtimeStatus, revision, isIdle);
+              const reply = await verifiedSettledNativeReply(fetchRuntime, savedBaseline, runtimeStatus, revision, isIdle);
               if (cancelled || activeProjectIdRef.current !== projectId) return;
               if (reply) {
                 setTurns(reply.turns);
@@ -2240,6 +2258,20 @@ function EditorPage() {
               candidateSince = Date.now();
               setNativeCompletionMessage("The Agent is idle · confirming its committed revision is stable…");
             } else if (Date.now() - candidateSince >= NATIVE_STREAM_QUIET_MS) {
+              const reply = await verifiedSettledNativeReply(fetchRuntime, savedBaseline, runtimeStatus, revision, isIdle);
+              if (cancelled || activeProjectIdRef.current !== projectId) return;
+              if (reply) {
+                setTurns(reply.turns);
+                setRuntimeCapability({ projectId, nativeThink: true, status: reply.status });
+                clearNativeOperationBaseline(projectId);
+                setNativeCompletionPhase("needs_input");
+                setNativeCompletionMessage("Agent reply saved. You can request changes. Build completion has not been confirmed.");
+                setNativeRecoveryUnverified(false);
+                setRuntimeError("");
+                recordNativeProgress("Agent reply and stable revision verified; follow-up chat available");
+                setSending(false);
+                return;
+              }
               const [filesData, finalStatus, finalRevision] = await Promise.all([
                 fetchRuntime("files"),
                 fetchRuntime("status"),
@@ -2781,7 +2813,7 @@ function EditorPage() {
           if (!currentCommitHash || currentCommitHash === baselineCommitHash) {
             revisionCandidate = null;
             settlementWaitReason = "The Agent did not produce a new authoritative project revision.";
-            const reply = await verifiedReplyWithoutNewCommit(fetchJson, operationBaseline, status, currentCommitHash, isRuntimeIdle);
+            const reply = await verifiedSettledNativeReply(fetchJson, operationBaseline, status, currentCommitHash, isRuntimeIdle);
             if (!isOperationActive() || frameSequence !== checkFrameSequence) {
               scheduleSettle(NATIVE_RECOVERY_POLL_MS);
               return;
@@ -2816,6 +2848,25 @@ function EditorPage() {
           }
           if (Date.now() - revisionCandidate.checkedAt < 5000) {
             scheduleSettle(NATIVE_REVISION_STABILITY_MS);
+            return;
+          }
+
+          const settledReply = await verifiedSettledNativeReply(fetchJson, operationBaseline, status, currentCommitHash, isRuntimeIdle);
+          if (!isOperationActive() || frameSequence !== checkFrameSequence) {
+            scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+            return;
+          }
+          if (settledReply) {
+            setTurns(settledReply.turns);
+            setRuntimeCapability({ projectId, nativeThink: true, status: settledReply.status });
+            clearNativeOperationBaseline(projectId);
+            setNativeCompletionPhase("needs_input");
+            setNativeCompletionMessage("Agent reply saved. You can request changes. Build completion has not been confirmed.");
+            setNativeRecoveryUnverified(false);
+            setRuntimeError("");
+            recordNativeProgress("Agent reply and stable revision verified; follow-up chat available");
+            setSending(false);
+            closeAndFinish();
             return;
           }
 
@@ -4597,7 +4648,7 @@ function EditorPage() {
             </section>
           )}
           {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
-            <SavedBuildEvidence projectId={projectId} observing={nativeCompletionPhase === "recovering"} />
+            <SavedBuildEvidence projectId={projectId} theme={theme} observing={nativeCompletionPhase === "recovering"} />
           )}
           {nativeThink ? (
             <NativeBuildActivity
