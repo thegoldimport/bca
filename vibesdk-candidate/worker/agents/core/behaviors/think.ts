@@ -27,7 +27,7 @@ import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
-import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
+import { getThinkTransportModelName, THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
 import {
 	latestBuildErrorCode,
 	recordBuildEvent,
@@ -245,6 +245,9 @@ private activePreviewFailureCode: 'PREVIEW_BUILD_FAILED' | 'PREVIEW_UNAVAILABLE'
 		const modelName = resolvedModelConfig && buildCustomModelId
 			? buildCustomModelId.slice(buildCustomModelId.indexOf("/") + 1)
 			: THINK_MODEL_ID;
+const transportModelId = resolvedModelConfig && buildCustomModelId
+? buildCustomModelId
+: THINK_MODEL_ID;
 		const aiModelConfig = resolvedModelConfig || THINK_MODEL_CONFIG;
 		const hasBuildCustomByokKey = Boolean(
 			resolvedModelConfig && inf.runtimeOverrides?.userApiKeys?.[resolvedModelConfig.provider],
@@ -323,7 +326,7 @@ private activePreviewFailureCode: 'PREVIEW_BUILD_FAILED' | 'PREVIEW_UNAVAILABLE'
 			model: {
 				baseURL,
 				apiKey: conf.apiKey,
-				modelName,
+modelName: getThinkTransportModelName(transportModelId, baseURL),
 				contextSize: aiModelConfig.contextSize,
 				headers: Object.keys(headers).length > 0 ? headers : undefined,
 				useStoredKeys: usesStoredKeys,

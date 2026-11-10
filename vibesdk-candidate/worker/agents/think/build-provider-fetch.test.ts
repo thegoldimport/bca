@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { protectAiCredentialForStorage } from "../../../shared/ai-credential-crypto";
 import type { BuildDiagnosticContext } from "./build-diagnostics";
 import { createBuildProviderFetch } from "./build-provider-fetch";
+import { getThinkTransportModelName, THINK_MODEL_ID } from "./model-config";
 
 const secret = "test-only-buildcustom-encryption-secret";
 const apiKey = "sk-ant-test-only-credential";
@@ -160,19 +161,54 @@ describe("BuildCustom provider fetch boundary", () => {
 		expect(authHeader).toBeNull();
 	});
 
-	it("initializes the Anthropic chat model through the existing compatible adapter without calling a provider", () => {
+it.each([
+"anthropic/claude-haiku-5-5",
+"openai/gpt-5",
+"grok/grok-4",
+THINK_MODEL_ID,
+])("sends the full Gateway routing identifier for %s without contacting a provider", async (modelId) => {
+const baseURL = "https://gateway.example/v1/account/gateway/compat";
+const credential = await protectAiCredentialForStorage(secret, apiKey);
+let requestCount = 0;
+let captured: { url: string; body: string; headers: Headers } | undefined;
 		const model = createOpenAI({
-			baseURL: "https://gateway.example/compat",
+baseURL,
 			apiKey: "test-only-placeholder",
+headers: { "cf-aig-authorization": "Bearer test-only-gateway" },
 			fetch: createBuildProviderFetch({
-				model: { providerId: "anthropic", modelId: "anthropic/claude-haiku-5-5" },
+model: { providerId: modelId.split("/")[0], modelId, encryptedApiKey: credential.encryptedApiKey },
+encryptionSecret: secret,
 				buildDiagnostics: diagnostics,
-				fetchImpl: async () => {
-					throw new Error("The model must not be invoked in this test.");
+fetchImpl: async (input, init) => {
+requestCount++;
+captured = { url: String(input), body: String(init?.body), headers: new Headers(init?.headers) };
+return Response.json({
+id: "mock-completion",
+object: "chat.completion",
+created: 1,
+model: modelId,
+choices: [{ index: 0, message: { role: "assistant", content: "Mock response" }, finish_reason: "stop" }],
+usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+});
 				},
 			}),
-		}).chat("claude-haiku-5-5");
-		expect(model).toBeDefined();
-		expect(model.modelId).toContain("claude-haiku-5-5");
+}).chat(getThinkTransportModelName(modelId, baseURL));
+await model.doGenerate({
+prompt: [{ role: "user", content: [{ type: "text", text: "Offline regression fixture" }] }],
+});
+expect(requestCount).toBe(1);
+expect(captured?.url).toBe(`${baseURL}/chat/completions`);
+expect(JSON.parse(captured!.body).model).toBe(modelId);
+expect(captured?.headers.get("authorization")).toBe(`Bearer ${apiKey}`);
+expect(captured?.headers.get("cf-aig-authorization")).toBe("Bearer test-only-gateway");
+});
+
+it("keeps native provider model names unprefixed and accepts a trailing compat slash", () => {
+expect(getThinkTransportModelName("anthropic/claude-haiku-5-5", "https://api.anthropic.com/v1/"))
+.toBe("claude-haiku-5-5");
+expect(getThinkTransportModelName("openai/gpt-5", "https://gateway.example/compat/"))
+.toBe("openai/gpt-5");
+expect(getThinkTransportModelName("gpt-5", "https://api.openai.com/v1"))
+.toBe("gpt-5");
 	});
 });
