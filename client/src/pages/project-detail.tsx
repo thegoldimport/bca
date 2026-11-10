@@ -16,6 +16,7 @@ import { authHeaders, csrfToken } from "@/lib/auth";
 import { publicGeneratedAppUrl, usePublicCapabilities } from "@/hooks/use-public-capabilities";
 import { readNativeActivitySnapshot, type BuildActivityEvent } from "@/lib/native-activity";
 import { projectCollectionFromResponse } from "@/lib/project-collections";
+import { ProjectSavedContext } from "@/components/customer-experience/ProjectSavedContext";
 import { getDomain } from "tldts";
 import { actionableDomainDnsRecords, dnsConflictsForRequiredRecords, domainConnectionGuidance, domainWizardProgress, domainWizardStepAllowsChanges, selectDnsInspectionForHostname } from "@/lib/domain-dns-plan";
 const PREVIEW_IMAGES: Record<string, string> = {
@@ -184,7 +185,7 @@ function ProjectActivityTab({ projectId }: { projectId: number }) {
         <div>
           <h2 className={`text-xl font-bold ${darkText}`}>Project activity</h2>
           <p className={`mt-1 text-sm ${mutedText}`}>
-            Persistent connection and build stages. Prompts, source files, and credentials are not included.
+            Persistent connection and build stages. Open saved context below to read your project brief and conversation.
           </p>
         </div>
         <Link href={`/app/editor/${projectId}`}>
@@ -193,6 +194,8 @@ function ProjectActivityTab({ projectId }: { projectId: number }) {
           </button>
         </Link>
       </div>
+
+      <ProjectSavedContext projectId={projectId} />
 
       <GlassCard>
         <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-4 ${

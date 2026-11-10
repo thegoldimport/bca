@@ -392,7 +392,7 @@ function phasePresentation(phase: BuilderPhase) {
   if (phase === "planning") return { icon: Sparkles, title: "Putting a plan together", detail: "The shape of the work is coming into focus." };
   if (phase === "starting") return { icon: WandSparkles, title: "Getting the workspace ready", detail: "The build is getting set up. This view will change as real activity arrives." };
   if (phase === "running") return { icon: WandSparkles, title: "Your app is taking shape", detail: "A live preview will appear here when one is available." };
-  if (phase === "recovering") return { icon: RotateCw, title: "Finding the thread again", detail: "Your teammate is working through a recovery." };
+  if (phase === "recovering") return { icon: RotateCw, title: "Checking build status", detail: "Checking the saved runtime state. No new build request was sent." };
   if (phase === "stopping") return { icon: Pause, title: "Bringing this step to a pause", detail: "Waiting for the runtime to report what happens next." };
   if (phase === "paused") return { icon: Pause, title: "Paused for now", detail: "Nothing is moving until you choose what comes next." };
   if (phase === "needs_input") return { icon: MessageCircle, title: "Your teammate needs your input", detail: "Share a little direction to keep things moving." };

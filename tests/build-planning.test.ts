@@ -4,6 +4,7 @@ import {
   answerPlanningQuestion,
   approveBuildPlan,
   buildPromptFromPlanningSession,
+  buildFollowupPromptFromPlanningSession,
   isValidPlanningSession,
   startBuildPlanning,
 } from "../shared/build-planning";
@@ -88,4 +89,19 @@ test("planning state validation rejects malformed or oversized browser data", ()
   assert.equal(isValidPlanningSession(start.session), true);
   assert.equal(isValidPlanningSession({ ...start.session, messages: Array.from({ length: 17 }, () => start.session.messages[0]) }), false);
   assert.equal(isValidPlanningSession({ ...start.session, currentQuestion: { ...start.session.currentQuestion, options: Array.from({ length: 13 }, () => "choice") } }), false);
+});
+
+test("follow-up instructions retain the saved brief without replacing it or restarting the original request", () => {
+  const started = startBuildPlanning("Build a lead generation app", false, 100);
+  assert.equal(started.kind, "planning");
+  if (started.kind !== "planning") return;
+  const session = { ...started.session, phase: "submitted" as const, audience: "B2B companies", outcomes: ["Manage leads"] };
+  const before = structuredClone(session);
+  const prompt = buildFollowupPromptFromPlanningSession(session, "Use a Kanban pipeline instead.");
+  assert.match(prompt, /Saved project brief \(reference context, not a request to restart/);
+  assert.ok(prompt.includes(session.originalPrompt));
+  assert.match(prompt, /B2B companies/);
+  assert.match(prompt, /Manage leads/);
+  assert.match(prompt, /Latest customer instruction \(takes precedence over earlier direction\):\nUse a Kanban pipeline instead\./);
+  assert.deepEqual(session, before);
 });

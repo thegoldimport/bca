@@ -105,6 +105,7 @@ import {
   answerPlanningQuestion,
   approveBuildPlan,
   buildPromptFromPlanningSession,
+  buildFollowupPromptFromPlanningSession,
   isValidPlanningSession,
   startBuildPlanning,
   type PlanningQuestion,
@@ -182,7 +183,7 @@ function AppSidebar({ collapsed, onToggle, role, email }: {
       initial={false}
       animate={{ width: collapsed ? 56 : 140 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className={`h-screen relative z-[1000] flex flex-col overflow-visible border-r shrink-0 ${
+      className={`h-full relative z-[1000] flex flex-col overflow-visible border-r shrink-0 ${
         theme === "dark"
           ? "bg-[#0a0a12] border-white/10"
           : "bg-white border-gray-200"
@@ -1061,6 +1062,29 @@ async function hasNativeOperationEvidence(
   return hasCorrelatedNativeTurn(turns, baseline);
 }
 
+// A saved reply can settle a turn without proving an application was built.
+// Never use this outcome for an uncorrelated turn, an active runtime, or a
+// controller continuation that still needs its authoritative lifecycle gate.
+async function verifiedReplyWithoutNewCommit(
+  fetchRuntime: (path: string) => Promise<any>,
+  baseline: NativeOperationBaseline,
+  status: any,
+  revision: string | null,
+  isIdle: (status: any) => boolean,
+): Promise<{ turns: RuntimeBuilderTurn[]; status: any } | null> {
+  const eligible = (value: any) => isIdle(value)
+    && !nativeResourceLimitError(value, baseline.startedAt)
+    && !["WORKING", "STOPPED", "CONTINUE_AVAILABLE"].includes(customerLifecycleStatus(value?.nativeTaskLifecycle) || "")
+    && String(value?.nativeTaskLifecycle?.status || "").toUpperCase() !== "BLOCKED";
+  if (!hasNativeOperationCorrelation(baseline) || baseline.approvedTaskId || baseline.approvedOperationId
+    || typeof revision !== "string" || revision !== baseline.revision || !eligible(status)) return null;
+  const turns = runtimeTurnsFromResponse(await fetchRuntime("turns"));
+  if (!turns || !await hasCorrelatedNativeTurn(turns, baseline)) return null;
+  const [finalStatus, finalRevision] = await Promise.all([fetchRuntime("status"), fetchRuntime("revision")]);
+  if (!eligible(finalStatus) || finalRevision.commitHash !== revision) return null;
+  return { turns, status: finalStatus };
+}
+
 function isCurrentStoppedLifecycle(lifecycle: NativeTaskLifecycle | undefined, baseline: NativeOperationBaseline | null): boolean {
   if (customerLifecycleStatus(lifecycle) !== "STOPPED") return false;
   if (!baseline) return true;
@@ -1212,6 +1236,7 @@ function EditorPage() {
   const [activityFileLoading, setActivityFileLoading] = useState(false);
   const [nativeConnected, setNativeConnected] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [hasUnseenChatActivity, setHasUnseenChatActivity] = useState(false);
   const [chatWidth, setChatWidth] = useState(420);
   const [resizingChat, setResizingChat] = useState(false);
   const [planMode, setPlanMode] = useState(false);
@@ -1254,6 +1279,10 @@ function EditorPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const chatContentRef = useRef<HTMLDivElement | null>(null);
+  const chatFollowLatestRef = useRef(true);
+  const chatScrollFrameRef = useRef<number | null>(null);
+  const chatScrollTopRef = useRef(0);
   const recognitionRef = useRef<any>(null);
 
   const updatePlanningSession = (session: PlanningSession | null) => {
@@ -1284,20 +1313,6 @@ function EditorPage() {
     } finally {
       setPlanningSaving(false);
     }
-  };
-
-  const deletePlanningSession = async () => {
-    if (!projectId) return;
-    await planningPersistRef.current;
-    const token = await csrfToken();
-    const response = await fetch(`/api/projects/${projectId}/planning`, {
-      method: "DELETE",
-      credentials: "same-origin",
-      headers: { "X-CSRF-Token": token, ...authHeaders() },
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || "The saved planning conversation could not be cleared.");
-    updatePlanningSession(null);
   };
 
   const markPlanningSubmitted = () => {
@@ -1346,26 +1361,76 @@ function EditorPage() {
     textarea.style.overflowY = textarea.scrollHeight > 220 ? "auto" : "hidden";
   }, [chatInput]);
 
-  const scrollChatToBottom = (behavior: ScrollBehavior = "smooth") => {
-    window.requestAnimationFrame(() => {
+  const scrollChatToBottom = (behavior: ScrollBehavior = "auto", force = false) => {
+    if (chatScrollFrameRef.current !== null) window.cancelAnimationFrame(chatScrollFrameRef.current);
+    chatScrollFrameRef.current = window.requestAnimationFrame(() => {
+      chatScrollFrameRef.current = null;
       const chat = chatScrollRef.current;
-      if (chat) chat.scrollTo({ top: chat.scrollHeight, behavior });
+      if (!chat) return;
+      if (!force && !chatFollowLatestRef.current) {
+        setHasUnseenChatActivity(true);
+        return;
+      }
+      chat.scrollTo({ top: chat.scrollHeight, behavior });
+      chatScrollTopRef.current = chat.scrollTop;
+      setHasUnseenChatActivity(false);
     });
   };
 
   useEffect(() => {
     if (chatCollapsed) return;
-    scrollChatToBottom(turns.length ? "smooth" : "auto");
-  }, [turns.length, messages.length, messages.at(-1)?.content, runtimeError, sending, chatCollapsed]);
+    scrollChatToBottom();
+  }, [turns.length, messages.length, messages.at(-1)?.content, nativeProgress.length, runtimeError, sending, chatCollapsed]);
 
   useEffect(() => {
     if (chatCollapsed) return;
+    const content = chatContentRef.current;
+    if (!content) return;
+    // Observe content size, not every DOM mutation. The expanded activity clock
+    // updates once a second, but that is not a new message or reason to scroll.
+    const observer = new ResizeObserver(() => {
+      if (chatFollowLatestRef.current) scrollChatToBottom();
+      else setHasUnseenChatActivity(true);
+    });
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      if (chatScrollFrameRef.current !== null) window.cancelAnimationFrame(chatScrollFrameRef.current);
+      chatScrollFrameRef.current = null;
+    };
+  }, [chatCollapsed]);
+
+  const pauseChatFollow = () => {
+    chatFollowLatestRef.current = false;
+    if (chatScrollFrameRef.current !== null) window.cancelAnimationFrame(chatScrollFrameRef.current);
+    chatScrollFrameRef.current = null;
+    const chat = chatScrollRef.current;
+    if (chat) {
+      // Stop an explicit smooth "jump to latest" if the reader interrupts it.
+      chat.scrollTo({ top: chat.scrollTop, behavior: "auto" });
+      chatScrollTopRef.current = chat.scrollTop;
+    }
+  };
+
+  const handleChatScroll = () => {
     const chat = chatScrollRef.current;
     if (!chat) return;
-    const observer = new MutationObserver(() => scrollChatToBottom("smooth"));
-    observer.observe(chat, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
-  }, [chatCollapsed]);
+    const previousTop = chatScrollTopRef.current;
+    chatScrollTopRef.current = chat.scrollTop;
+    if (chat.scrollTop < previousTop - 1) {
+      pauseChatFollow();
+    } else if (chat.scrollTop > previousTop
+      && chat.scrollHeight - chat.clientHeight - chat.scrollTop <= 24) {
+      chatFollowLatestRef.current = true;
+      setHasUnseenChatActivity(false);
+    }
+  };
+
+  const jumpToLatestChatActivity = () => {
+    chatFollowLatestRef.current = true;
+    setHasUnseenChatActivity(false);
+    scrollChatToBottom("smooth", true);
+  };
 
   const toggleSelector = () => {
     const enabled = !selectorEnabled;
@@ -2061,9 +2126,17 @@ function EditorPage() {
         return;
       }
       const baselineCorrelatable = hasNativeOperationCorrelation(savedBaseline);
+      if (!baselineCorrelatable) {
+        setNativeCompletionPhase("error");
+        setNativeCompletionMessage("The saved request cannot be matched to this runtime operation. No new build request was sent.");
+        setNativeRecoveryUnverified(true);
+        setRuntimeError("The saved operation is missing its turn-count or prompt fingerprint. Its outcome is unverified.");
+        setSending(false);
+        return;
+      }
       setSending(true);
       setNativeCompletionPhase("recovering");
-      setNativeCompletionMessage("Reopened during a build · checking stock runtime state…");
+      setNativeCompletionMessage("Checking the saved runtime state. No new build request was sent.");
       setRuntimeError("");
       recordNativeProgress("Reopened editor · reconciling the existing Agent operation");
       let candidateRevision: string | null = null;
@@ -2115,6 +2188,20 @@ function EditorPage() {
               candidateRevision = null;
               candidateSince = 0;
               lastError = "The Agent is idle, but there is no new committed revision for the saved operation.";
+              const reply = await verifiedReplyWithoutNewCommit(fetchRuntime, savedBaseline, runtimeStatus, revision, isIdle);
+              if (cancelled || activeProjectIdRef.current !== projectId) return;
+              if (reply) {
+                setTurns(reply.turns);
+                setRuntimeCapability({ projectId, nativeThink: true, status: reply.status });
+                clearNativeOperationBaseline(projectId);
+                setNativeCompletionPhase("needs_input");
+                setNativeCompletionMessage("The Agent replied, but no new committed changes were verified. Read its reply in chat.");
+                setNativeRecoveryUnverified(false);
+                setRuntimeError("");
+                recordNativeProgress("Agent reply saved; no new committed changes verified");
+                setSending(false);
+                return;
+              }
             } else if (candidateRevision !== revision) {
               candidateRevision = revision;
               candidateSince = Date.now();
@@ -2659,6 +2746,24 @@ function EditorPage() {
           if (!currentCommitHash || currentCommitHash === baselineCommitHash) {
             revisionCandidate = null;
             settlementWaitReason = "The Agent did not produce a new authoritative project revision.";
+            const reply = await verifiedReplyWithoutNewCommit(fetchJson, operationBaseline, status, currentCommitHash, isRuntimeIdle);
+            if (!isOperationActive() || frameSequence !== checkFrameSequence) {
+              scheduleSettle(NATIVE_RECOVERY_POLL_MS);
+              return;
+            }
+            if (reply) {
+              setTurns(reply.turns);
+              setRuntimeCapability({ projectId, nativeThink: true, status: reply.status });
+              clearNativeOperationBaseline(projectId);
+              setNativeCompletionPhase("needs_input");
+              setNativeCompletionMessage("The Agent replied, but no new committed changes were verified. Read its reply in chat.");
+              setNativeRecoveryUnverified(false);
+              setRuntimeError("");
+              recordNativeProgress("Agent reply saved; no new committed changes verified");
+              setSending(false);
+              closeAndFinish();
+              return;
+            }
             if (quietFallbackReady || recoveryStarted) {
               setNativeCompletionPhase("recovering");
               setNativeCompletionMessage("The runtime is idle, but no new committed revision is verified yet…");
@@ -2838,7 +2943,6 @@ function EditorPage() {
           setNativeCompletionPhase("success");
           setNativeCompletionMessage("Your changes are ready to review.");
           setNativeRecoveryUnverified(false);
-          void deletePlanningSession().catch(() => undefined);
           setPreviewRevision((revision) => revision + 1);
           queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
           const runtimeFilesQueryKey = ["runtime-files", projectId] as const;
@@ -3426,12 +3530,8 @@ function EditorPage() {
     }
     if (sendAttemptRef.current) return;
     if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeConnectionRetry)) {
-      if (!sending && nativeRuntimeAlreadyWorking) {
-        const message = "This Agent is already working. The existing operation was not restarted; refresh to check its latest state.";
-        setNativeCompletionPhase("recovering");
-        setNativeCompletionMessage(message);
-        setRuntimeError(message);
-      }
+      // Keep the draft and the authoritative phase. Pressing Enter must not
+      // invent a recovery operation while an existing operation is still busy.
       return;
     }
     if (!prompt && !requestOptions.approvePlan) return;
@@ -3517,7 +3617,10 @@ function EditorPage() {
         setChatInput("");
         return;
       } else if (currentPlan?.phase === "submitted" && !requestOptions.bypassPlanning) {
-        await deletePlanningSession();
+        requestOptions = {
+          ...requestOptions,
+          agentPromptOverride: buildFollowupPromptFromPlanningSession(currentPlan, prompt),
+        };
       }
 
       const hasSupportingContext = attachments.length > 0 || textContext.length > 0 || Boolean(selectedElement);
@@ -3589,10 +3692,6 @@ function EditorPage() {
           setAttachments([]);
           setTextContext([]);
           setSelectedElement(null);
-          if (nativeCompletionPhase === "success" || nativeCompletionPhase === "paused"
-            || nativeCompletionPhase === "needs_input" || nativeCompletionPhase === "error") {
-            void deletePlanningSession().catch(() => undefined);
-          }
         } catch (error: any) {
           if (!isSendingContextActive()) return;
           const message = error?.message || "The native Agent could not complete the request.";
@@ -3633,7 +3732,6 @@ function EditorPage() {
         setTextContext([]);
         setSelectedElement(null);
         if (activePlanMode) return;
-        void deletePlanningSession().catch(() => undefined);
         const token = await csrfToken();
         const preview = await fetch(`/api/projects/${projectId}/runtime/previews`, {
           method: "POST",
@@ -4081,12 +4179,12 @@ function EditorPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)]">
+    <div className="flex h-full min-h-0 overflow-hidden">
       <motion.aside
         initial={false}
         animate={{ width: chatCollapsed ? 40 : chatWidth }}
         transition={{ duration: resizingChat ? 0 : 0.2, ease: "easeInOut" }}
-        className={`relative flex flex-col overflow-visible border-r shrink-0 ${
+        className={`relative flex min-h-0 flex-col overflow-visible border-r shrink-0 ${
         theme === "dark"
           ? "bg-[#0a0a12] border-white/10"
           : "bg-white border-gray-200"
@@ -4166,7 +4264,18 @@ function EditorPage() {
           </button>
         </div>
 
-        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="builder-chat-scroll">
+        <div
+          ref={chatScrollRef}
+          onScroll={handleChatScroll}
+          onWheelCapture={(event) => { if (event.deltaY < 0) pauseChatFollow(); }}
+          onPointerDownCapture={pauseChatFollow}
+          onKeyDownCapture={(event) => {
+            if (["ArrowUp", "PageUp", "Home"].includes(event.key)) pauseChatFollow();
+          }}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 [overflow-anchor:none]"
+          data-testid="builder-chat-scroll"
+        >
+          <div ref={chatContentRef} className="space-y-4" data-testid="builder-chat-content">
           {nativeThink && currentNativeLifecycle?.taskId && (
             <NativeAutoContinueControl
               enabled={currentNativeLifecycle.autoContinue?.taskId === currentNativeLifecycle.taskId
@@ -4415,7 +4524,7 @@ function EditorPage() {
             }`}>
               {nativeConnectionRetry
                 ? "The approved plan and conversation are saved. The Agent connection failed before any build prompt was sent."
-                : "The build request was sent. The editor will check the existing runtime state and will not submit it again."}
+                : "Your project brief is saved and will be included with follow-up instructions."}
             </p>
           )}
           {nativeConnectionRetry && (
@@ -4450,14 +4559,10 @@ function EditorPage() {
                 ? "clarifying"
                 : planningSession?.phase === "awaiting_approval"
                   ? "planning"
-                    : planningSession?.phase === "submitted" && nativeCompletionPhase === "idle"
-                    ? "recovering"
                     : nativeCompletionPhase === "error" && /paused before completion/i.test(nativeCompletionMessage)
                       ? "paused"
                     : nativeCompletionPhase === "idle" && sending ? "starting" : nativeCompletionPhase as BuilderPhase}
-              message={planningSession?.phase === "submitted" && !nativeCompletionMessage
-                ? "A build request was sent. Checking the existing runtime state."
-                : nativeCompletionMessage}
+              message={nativeCompletionMessage}
               startedAt={nativeOperationStartedAt}
               events={nativeProgress}
               connectionState={nativeConnected ? "Connected" : nativeCompletionPhase === "idle" ? "Idle" : "Disconnected"}
@@ -4469,7 +4574,23 @@ function EditorPage() {
               isBuilding={sending}
             />
           )}
+          </div>
         </div>
+
+        {hasUnseenChatActivity && !chatCollapsed && (
+          <button
+            type="button"
+            onClick={jumpToLatestChatActivity}
+            className={`absolute bottom-[132px] left-1/2 z-20 -translate-x-1/2 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg ${
+              theme === "dark"
+                ? "border-cyan-300/30 bg-[#101923] text-cyan-100 hover:bg-[#172531]"
+                : "border-cyan-200 bg-white text-cyan-800 hover:bg-cyan-50"
+            }`}
+            data-testid="button-jump-to-latest-chat"
+          >
+            New activity · Jump to latest
+          </button>
+        )}
 
         <div
           className={`relative p-4 border-t transition-colors ${
@@ -4635,6 +4756,15 @@ function EditorPage() {
               </button>
             </div>
           )}
+            {nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeConnectionRetry) && (
+              <p
+                className={`mb-2 text-[11px] leading-4 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}
+                role="status"
+                data-testid="native-composer-draft-hint"
+              >
+                You can draft a reply while the Agent works. It will stay here, ready to send when this update finishes.
+              </p>
+            )}
             <textarea
               ref={textareaRef}
               value={chatInput}
@@ -4645,7 +4775,7 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              disabled={!currentRuntimeCapability || planningSaving || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeConnectionRetry !== null))}
+              disabled={!currentRuntimeCapability || planningSaving}
               placeholder={!currentRuntimeCapability
                 ? "Checking project runtime…"
                 : planningSession?.phase === "clarifying"
@@ -5446,16 +5576,12 @@ function EditorPage() {
                       ? "clarifying"
                       : planningSession?.phase === "awaiting_approval"
                         ? "planning"
-                        : planningSession?.phase === "submitted" && nativeCompletionPhase === "idle"
-                          ? "recovering"
                           : nativeCompletionPhase === "error" && /paused before completion/i.test(nativeCompletionMessage)
                             ? "paused"
                           : nativeThink
                             ? nativeCompletionPhase === "idle" && sending ? "starting" : nativeCompletionPhase as BuilderPhase
                             : sending ? "running" : "idle"}
-                    message={planningSession?.phase === "submitted" && !nativeCompletionMessage
-                      ? "A build request was sent. Checking the existing runtime state."
-                      : nativeCompletionMessage || (projectId ? "" : "A project is required for a live preview.")}
+                    message={nativeCompletionMessage || (projectId ? "" : "A project is required for a live preview.")}
                     startedAt={nativeOperationStartedAt}
                     failureCode={nativeBuildFailure?.errorCode}
                     lastSuccessfulStage={nativeBuildFailure?.lastSuccessfulStage}
@@ -6856,7 +6982,8 @@ function AppDashboardContent({ user }: { user: AppUser }) {
     return !!localStorage.getItem("bc_new_user");
   });
   const { theme } = useTheme();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const isEditorRoute = location === "/app/editor" || location.startsWith("/app/editor/");
 
   const handleOnboardingComplete = (destination?: string) => {
     localStorage.removeItem("bc_new_user");
@@ -6866,7 +6993,7 @@ function AppDashboardContent({ user }: { user: AppUser }) {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden ${
+    <div data-testid="app-workspace" className={`flex h-dvh min-h-0 overflow-hidden ${isEditorRoute ? "fixed inset-0" : ""} ${
       theme === "dark"
         ? "bg-[#060610]"
         : "bg-gray-50"
@@ -6879,9 +7006,9 @@ function AppDashboardContent({ user }: { user: AppUser }) {
         email={user.email}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="min-h-0 min-w-0 flex-1 flex flex-col overflow-hidden">
         <AppTopBar />
-        <main className="flex-1 overflow-y-auto">
+        <main className={`min-h-0 flex-1 ${isEditorRoute ? "overflow-hidden" : "overflow-y-auto"}`}>
           <Switch>
             <Route path="/app" component={ProjectsPage} />
             <Route path="/app/templates" component={TemplatesPage} />

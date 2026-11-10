@@ -45,14 +45,31 @@ test("Builder composer renders removable thumbnails with an expanded preview", (
   assert.match(source, /setPreviewAttachmentId\(\(current\) => current === id \? null : current\)/);
 });
 
-test("Builder chat follows assistant responses and live activity", () => {
+test("Builder chat follows new activity only while the reader is at the latest message", () => {
   const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
   assert.match(source, /const chatScrollRef = useRef<HTMLDivElement \| null>\(null\)/);
   assert.match(source, /data-testid="builder-chat-scroll"/);
   assert.match(source, /chat\.scrollTo\(\{ top: chat\.scrollHeight, behavior \}\)/);
-  assert.match(source, /\[turns\.length, messages\.length, messages\.at\(-1\)\?\.content, runtimeError, sending, chatCollapsed\]/);
-  assert.match(source, /new MutationObserver\(\(\) => scrollChatToBottom\("smooth"\)\)/);
-  assert.match(source, /observer\.observe\(chat, \{ childList: true, subtree: true, characterData: true \}\)/);
+  assert.match(source, /\[turns\.length, messages\.length, messages\.at\(-1\)\?\.content, nativeProgress\.length, runtimeError, sending, chatCollapsed\]/);
+  assert.match(source, /if \(!force && !chatFollowLatestRef\.current\)/);
+  assert.match(source, /onScroll=\{handleChatScroll\}/);
+  assert.match(source, /chat\.scrollHeight - chat\.clientHeight - chat\.scrollTop <= 24/);
+  assert.match(source, /onPointerDownCapture=\{pauseChatFollow\}/);
+  assert.match(source, /if \(event\.deltaY < 0\) pauseChatFollow\(\)/);
+  assert.match(source, /new ResizeObserver/);
+  assert.match(source, /observer\.observe\(content\)/);
+  assert.doesNotMatch(source, /new MutationObserver/);
+  assert.match(source, /data-testid="button-jump-to-latest-chat"/);
+});
+
+test("Native build chat keeps drafts editable and locks the editor viewport", () => {
+  const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
+  assert.match(source, /data-testid="native-composer-draft-hint"/);
+  assert.match(source, /disabled=\{!currentRuntimeCapability \|\| planningSaving\}/);
+  assert.match(source, /const isEditorRoute = location === "\/app\/editor" \|\| location\.startsWith\("\/app\/editor\/"\)/);
+  assert.match(source, /isEditorRoute \? "overflow-hidden" : "overflow-y-auto"/);
+  assert.match(source, /className="flex h-full min-h-0 overflow-hidden"/);
+  assert.match(source, /isEditorRoute \? "fixed inset-0" : ""/);
 });
 
 test("Builder progress omits the workspace inventory and puts checkpoints before build replies", () => {

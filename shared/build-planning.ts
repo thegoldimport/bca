@@ -197,6 +197,10 @@ export function buildPromptFromPlanningSession(session: PlanningSession): string
   return `${session.originalPrompt}\n\nConfirmed build context:\n${audience}\n${outcomes}\n\nPlanning conversation:\n${transcript}`;
 }
 
+export function buildFollowupPromptFromPlanningSession(session: PlanningSession, instruction: string): string {
+  return `Saved project brief (reference context, not a request to restart the build):\n${buildPromptFromPlanningSession(session)}\n\nLatest customer instruction (takes precedence over earlier direction):\n${instruction}\n\nContinue from the existing project and conversation. Ask any clarification directly in this chat.`;
+}
+
 function createSession(prompt: string, mode: PlanningSession["mode"], now: number): PlanningSession {
   const cleanedPrompt = stripModeDirective(prompt);
   const isDetailed = sufficientlyDetailed(cleanedPrompt);
