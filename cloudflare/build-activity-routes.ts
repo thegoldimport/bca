@@ -25,6 +25,19 @@ type EventRow = {
   correlation_id: string | null;
 };
 
+type ConnectionAttemptRow = {
+  attempt_id: string;
+  started_at_ms: number;
+  finished_at_ms: number | null;
+  status: "connecting" | "connected" | "failed" | "disconnected";
+  stage: string;
+  http_status: number | null;
+  error_code: string | null;
+  correlation_id: string;
+  timeout_reason: string | null;
+  last_completed_stage: string | null;
+};
+
 const json = (body: unknown, status = 200) => Response.json(body, {
   status,
   headers: { "Cache-Control": "no-store" },
@@ -49,7 +62,7 @@ export async function handleProjectBuildActivityRoute(
   if (!owner) return json({ message: "Project not found." }, 404);
 
   try {
-    const [attemptResult, eventResult] = await Promise.all([
+    const [attemptResult, eventResult, connectionResult] = await Promise.all([
       env.DB.prepare(
         `SELECT attempt_id,started_at_ms,finished_at_ms,status,last_stage,last_successful_stage,
                 failure_stage,error_code,customer_message,correlation_id
@@ -65,6 +78,13 @@ export async function handleProjectBuildActivityRoute(
          WHERE a.project_id=? AND a.user_id=?
          ORDER BY e.occurred_at_ms DESC LIMIT 1000`,
       ).bind(projectId, userId).all<EventRow>(),
+      env.DB.prepare(
+        `SELECT attempt_id,started_at_ms,finished_at_ms,status,stage,http_status,error_code,
+                correlation_id,timeout_reason,last_completed_stage
+         FROM native_connection_attempts
+         WHERE project_id=? AND user_id=?
+         ORDER BY started_at_ms DESC LIMIT 50`,
+      ).bind(projectId, userId).all<ConnectionAttemptRow>(),
     ]);
 
     const eventsByAttempt = new Map<string, EventRow[]>();
@@ -102,7 +122,24 @@ export async function handleProjectBuildActivityRoute(
         })),
       };
     });
-    return json({ attempts, retainedEventCount: (eventResult.results || []).length });
+    const connections = (connectionResult.results || []).map((connection) => {
+      const startedAt = Number(connection.started_at_ms);
+      const finishedAt = connection.finished_at_ms == null ? null : Number(connection.finished_at_ms);
+      return {
+        attemptId: connection.attempt_id,
+        startedAt,
+        finishedAt,
+        durationMs: Math.max(0, (finishedAt ?? Date.now()) - startedAt),
+        status: connection.status,
+        stage: connection.stage,
+        httpStatus: connection.http_status == null ? null : Number(connection.http_status),
+        errorCode: connection.error_code,
+        correlationId: connection.correlation_id,
+        timeoutReason: connection.timeout_reason,
+        lastCompletedStage: connection.last_completed_stage,
+      };
+    });
+    return json({ attempts, connections, retainedEventCount: (eventResult.results || []).length });
   } catch {
     return json({ message: "Persistent build activity is temporarily unavailable." }, 503);
   }

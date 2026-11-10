@@ -4,6 +4,14 @@ import { refreshProjectAgent } from "./project-initialization";
 import { RuntimeIdentityError } from "./runtime-identity";
 import { launchPreviewCookie, launchPreviewProxyUrl } from "./preview-proxy";
 import { controlOriginForRequest } from "./control-origin";
+import {
+  closeNativeConnectionAttempt,
+  completeNativeConnectionHandshake,
+  failNativeConnectionAttempt,
+  setNativeConnectionStage,
+  startNativeConnectionAttempt,
+  type NativeConnectionStage,
+} from "./native-connection-diagnostics";
 
 const STOCK_RUNTIME_URL = "https://bc-vibesdk-lab-20260925.thegoldimport.workers.dev";
 const LAUNCH_RUNTIME_URL = "https://buildcustom-vibesdk-launch.thegoldimport.workers.dev";
@@ -43,6 +51,7 @@ type Project = {
 
 type SocketPair = { 0: WebSocket; 1: WebSocket };
 type StockResponse = Response & { webSocket?: WebSocket };
+type OwnerCsrfContext = { accessCookie: string; cookieValue: string; token: string };
 
 function stockRuntime(env: Env): Fetcher {
   const expectedUrl = env.ENVIRONMENT === "production" && env.CONTROL_PLANE_PROFILE === "launch"
@@ -104,6 +113,45 @@ export function ownerCsrfToken(request: Request): string | null {
   return null;
 }
 
+async function freshOwnerCsrfContext(env: Env, request: Request): Promise<OwnerCsrfContext> {
+  const accessCookie = ownerAccessCookie(request);
+  let response: Response;
+  try {
+    response = await stockRuntime(env).fetch(new Request(`${stockRuntimeUrl(env)}/api/auth/csrf-token`, {
+      method: "GET",
+      headers: { Accept: "application/json", Cookie: accessCookie, "Cache-Control": "no-store" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    }));
+  } catch (error) {
+    const timeout = error instanceof Error && error.name === "TimeoutError";
+    throw new RuntimeIdentityError(
+      "The owner-authorized runtime is temporarily unavailable.",
+      502,
+      timeout ? "NATIVE_CSRF_BOOTSTRAP_TIMEOUT" : "NATIVE_CSRF_BOOTSTRAP_FAILED",
+    );
+  }
+
+  let data: any;
+  try {
+    data = await responseJson(response);
+  } catch (error) {
+    const status = error instanceof RuntimeIdentityError && [401, 403].includes(error.status) ? error.status : 502;
+    throw new RuntimeIdentityError("The runtime could not authorize a secure request.", status, "NATIVE_CSRF_BOOTSTRAP_REJECTED");
+  }
+  const setCookies = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() || [];
+  const setCookie = setCookies.find((value) => /^csrf-token=/i.test(value))
+    || response.headers.get("Set-Cookie") || "";
+  const cookieValue = /^csrf-token=([^;]+)/i.exec(setCookie)?.[1] || "";
+  const token = data?.token;
+  if (typeof token !== "string" || !token || token.length > 4096 || /[\r\n]/.test(token)
+    || !cookieValue || cookieValue.length > 4096 || /[;\r\n]/.test(cookieValue)
+    || /(?:^|;)\s*Domain=/i.test(setCookie)) {
+    throw new RuntimeIdentityError("The runtime did not provide a valid secure request token.", 502, "NATIVE_CSRF_BOOTSTRAP_INVALID");
+  }
+  return { accessCookie, cookieValue, token };
+}
+
 function ownerAccessCookie(request: Request): string {
   for (const part of (request.headers.get("Cookie") || "").split(";")) {
     const index = part.indexOf("=");
@@ -136,8 +184,9 @@ export async function stockThinkRequest(
   if (origin && origin === controlOriginForRequest(env, request)) headers.set("Origin", origin);
   if (method === "POST") {
     headers.set("Content-Type", "application/json");
-    const csrf = ownerCsrfToken(request);
-    if (csrf) headers.set("X-CSRF-Token", csrf);
+    const csrf = await freshOwnerCsrfContext(env, request);
+    headers.set("Cookie", `${csrf.accessCookie}; csrf-token=${csrf.cookieValue}`);
+    headers.set("X-CSRF-Token", csrf.token);
   }
   try {
     return await stockRuntime(env).fetch(new Request(`${stockRuntimeUrl(env)}${path}`, {
@@ -146,8 +195,13 @@ export async function stockThinkRequest(
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: AbortSignal.timeout(30_000),
     }));
-  } catch {
-    throw new RuntimeIdentityError("The owner-authorized runtime is temporarily unavailable.", 502);
+  } catch (error) {
+    const timeout = error instanceof Error && error.name === "TimeoutError";
+    throw new RuntimeIdentityError(
+      "The owner-authorized runtime is temporarily unavailable.",
+      502,
+      timeout ? "NATIVE_STOCK_REQUEST_TIMEOUT" : "NATIVE_STOCK_REQUEST_FAILED",
+    );
   }
 }
 
@@ -474,34 +528,7 @@ function allowedPreviewUrl(env: Env, agentId: string, value: unknown): string | 
 }
 
 async function issueTicket(env: Env, request: Request, agentId: string): Promise<string> {
-  const accessCookie = ownerAccessCookie(request);
-  let csrfResponse: Response;
-  try {
-    csrfResponse = await stockRuntime(env).fetch(new Request(`${stockRuntimeUrl(env)}/api/auth/csrf-token`, {
-      method: "GET",
-      headers: { Accept: "application/json", Cookie: accessCookie, "Cache-Control": "no-store" },
-      redirect: "manual",
-      signal: AbortSignal.timeout(15_000),
-    }));
-  } catch {
-    throw new RuntimeIdentityError("The owner-authorized runtime is temporarily unavailable.", 502, "NATIVE_CSRF_BOOTSTRAP_FAILED");
-  }
-  let csrfData: any;
-  try {
-    csrfData = await responseJson(csrfResponse);
-  } catch (error) {
-    const status = error instanceof RuntimeIdentityError ? error.status : 502;
-    throw new RuntimeIdentityError("The runtime could not authorize a secure connection.", status, "NATIVE_CSRF_BOOTSTRAP_REJECTED");
-  }
-  const csrfToken = csrfData?.token;
-  const setCookies = (csrfResponse.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() || [];
-  const csrfSetCookie = setCookies.find((value) => /^csrf-token=/i.test(value));
-  const csrfCookieValue = csrfSetCookie?.split(";", 1)[0].slice("csrf-token=".length);
-  if (typeof csrfToken !== "string" || !csrfToken || csrfToken.length > 4096 || /[\r\n]/.test(csrfToken)
-    || !csrfCookieValue || csrfCookieValue.length > 4096 || /[;\r\n]/.test(csrfCookieValue)
-    || /(?:^|;)\s*Domain=/i.test(csrfSetCookie || "")) {
-    throw new RuntimeIdentityError("The runtime did not provide a valid secure request token.", 502, "NATIVE_CSRF_BOOTSTRAP_INVALID");
-  }
+  const csrf = await freshOwnerCsrfContext(env, request);
   let response: Response;
   try {
     response = await stockRuntime(env).fetch(new Request(`${stockRuntimeUrl(env)}/api/ws-ticket`, {
@@ -509,24 +536,30 @@ async function issueTicket(env: Env, request: Request, agentId: string): Promise
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        Cookie: `${accessCookie}; csrf-token=${csrfCookieValue}`,
-        "X-CSRF-Token": csrfToken,
+        Cookie: `${csrf.accessCookie}; csrf-token=${csrf.cookieValue}`,
+        "X-CSRF-Token": csrf.token,
         "Cache-Control": "no-store",
       },
       body: JSON.stringify({ resourceType: "agent", resourceId: agentId }),
       redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     }));
-  } catch {
-    throw new RuntimeIdentityError("The owner-authorized runtime is temporarily unavailable.", 502, "NATIVE_WS_TICKET_REQUEST_FAILED");
+  } catch (error) {
+    const timeout = error instanceof Error && error.name === "TimeoutError";
+    throw new RuntimeIdentityError(
+      "The owner-authorized runtime is temporarily unavailable.",
+      502,
+      timeout ? "NATIVE_WS_TICKET_REQUEST_TIMEOUT" : "NATIVE_WS_TICKET_REQUEST_FAILED",
+    );
   }
   let data: any;
   try {
     data = await responseJson(response);
   } catch (error) {
+    const status = error instanceof RuntimeIdentityError && [401, 403].includes(error.status) ? error.status : 502;
     throw new RuntimeIdentityError(
       "The runtime could not issue a project connection ticket.",
-      502,
+      status,
       "NATIVE_WS_TICKET_REJECTED",
     );
   }
@@ -548,8 +581,13 @@ export async function openStockAgentWebSocket(env: Env, request: Request, agentI
       `${stockRuntimeUrl(env)}/api/agent/${agentId}/ws?ticket=${encodeURIComponent(ticket)}`,
       { headers, signal: AbortSignal.timeout(15_000) },
     )) as StockResponse;
-  } catch {
-    throw new RuntimeIdentityError("The owner-authorized project connection failed.", 502, "NATIVE_AGENT_WS_REQUEST_FAILED");
+  } catch (error) {
+    const timeout = error instanceof Error && error.name === "TimeoutError";
+    throw new RuntimeIdentityError(
+      "The owner-authorized project connection failed.",
+      502,
+      timeout ? "NATIVE_AGENT_WS_TIMEOUT" : "NATIVE_AGENT_WS_REQUEST_FAILED",
+    );
   }
   if (response.status !== 101 || !response.webSocket) {
     throw new RuntimeIdentityError("The owner-authorized project connection was rejected.", 502, "NATIVE_AGENT_WS_REJECTED");
@@ -732,49 +770,129 @@ function relay(server: WebSocket, upstream: WebSocket): void {
   upstream.addEventListener("error", () => closeBoth(1011, "Project connection failed."));
 }
 
-async function bridgeWebSocket(env: Env, request: Request, project: Project, origin: string): Promise<Response> {
-  if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("WebSocket upgrade required.", { status: 426 });
-  if (request.headers.get("Origin") !== origin) {
-    console.warn("native_connection_diagnostic", { code: "NATIVE_CONTROL_ORIGIN_REJECTED", status: 403 });
-    return Response.json({ message: "Project connection origin rejected.", code: "NATIVE_CONTROL_ORIGIN_REJECTED" }, { status: 403 });
-  }
-  if ([...new URL(request.url).searchParams.keys()].length) return Response.json({ message: "Project connection parameters are not accepted." }, { status: 400 });
-  let link;
+async function bridgeWebSocket(
+  env: Env,
+  request: Request,
+  project: Project,
+  origin: string,
+  executionCtx?: ExecutionContext,
+): Promise<Response> {
+  let attemptId: string;
+  let correlationId: string;
   try {
-    link = await refreshProjectAgent(env, request, project);
-  } catch (error) {
-    const status = error instanceof RuntimeIdentityError ? error.status : 502;
-    const code = status === 403 ? "NATIVE_RUNTIME_OWNER_REJECTED" : "NATIVE_PROJECT_LINK_CHECK_FAILED";
-    throw new RuntimeIdentityError("Project ownership could not be verified.", status, code);
+    ({ attemptId, correlationId } = await startNativeConnectionAttempt(env.DB, request, project.id, project.user_id));
+  } catch {
+    throw new RuntimeIdentityError("Project connection diagnostics are temporarily unavailable.", 503, "NATIVE_CONNECTION_DIAGNOSTICS_WRITE_FAILED");
   }
-  const agentId = link?.agent_id;
-  if (!agentId || !AGENT_ID.test(agentId) || link.initialization_status !== "ready") {
-    return Response.json({ message: "This project is not ready for editing.", code: "NATIVE_PROJECT_LINK_NOT_READY" }, { status: 409 });
-  }
-  const aiSettings = await env.DB.prepare(
-    "SELECT mode FROM user_ai_credentials WHERE user_id=?",
-  ).bind(project.user_id).first<{ mode: string }>();
-  if (aiSettings) {
-    const configResponse = await stockThinkRequest(
-      env,
-      request,
-      `/api/agent/${agentId}/buildcustom-ai-config/refresh`,
-      { method: "POST", body: {} },
-    );
-    if (!configResponse.ok) {
-      const status = configResponse.status === 401 || configResponse.status === 403 ? configResponse.status : 503;
-      throw new RuntimeIdentityError(
-        "The project's AI settings could not be applied.",
-        status,
-        configResponse.status === 401 || configResponse.status === 403
-          ? "NATIVE_AI_CONFIG_REFRESH_REJECTED" : "NATIVE_AI_CONFIG_REFRESH_FAILED",
-      );
+
+  let stage: NativeConnectionStage = "request_received";
+  const markStage = async (next: NativeConnectionStage, completed = false) => {
+    stage = next;
+    try {
+      await setNativeConnectionStage(env.DB, attemptId, next, completed);
+    } catch {
+      throw new RuntimeIdentityError("Project connection diagnostics are temporarily unavailable.", 503, "NATIVE_CONNECTION_DIAGNOSTICS_UPDATE_FAILED");
     }
+  };
+  const markFailure = async (errorCode: string, status?: number, timeoutReason?: "runtime_timeout" | "upstream_timeout") => {
+    try {
+      await failNativeConnectionAttempt(env.DB, attemptId, { stage, errorCode, status, timeoutReason });
+    } catch {
+      console.warn("native_connection_diagnostic_write_failed", {
+        code: "NATIVE_CONNECTION_DIAGNOSTICS_UPDATE_FAILED",
+        correlationId,
+      });
+    }
+  };
+
+  try {
+    await markStage("upgrade_validation");
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+      await markFailure("NATIVE_WS_UPGRADE_REQUIRED", 426);
+      return new Response("WebSocket upgrade required.", { status: 426 });
+    }
+    await markStage("origin_validation");
+    if (request.headers.get("Origin") !== origin) {
+      console.warn("native_connection_diagnostic", { code: "NATIVE_CONTROL_ORIGIN_REJECTED", status: 403 });
+      await markFailure("NATIVE_CONTROL_ORIGIN_REJECTED", 403);
+      return Response.json({ message: "Project connection origin rejected.", code: "NATIVE_CONTROL_ORIGIN_REJECTED" }, { status: 403 });
+    }
+    if ([...new URL(request.url).searchParams.keys()].length) {
+      await markFailure("NATIVE_WS_QUERY_REJECTED", 400);
+      return Response.json({ message: "Project connection parameters are not accepted." }, { status: 400 });
+    }
+    await markStage("project_link_check");
+    let link;
+    try {
+      link = await refreshProjectAgent(env, request, project);
+    } catch (error) {
+      const status = error instanceof RuntimeIdentityError ? error.status : 502;
+      const code = status === 403 ? "NATIVE_RUNTIME_OWNER_REJECTED" : "NATIVE_PROJECT_LINK_CHECK_FAILED";
+      await markFailure(code, status);
+      throw new RuntimeIdentityError("Project ownership could not be verified.", status, code);
+    }
+    await markStage("project_link_check", true);
+    const agentId = link?.agent_id;
+    if (!agentId || !AGENT_ID.test(agentId) || link.initialization_status !== "ready") {
+      await markFailure("NATIVE_PROJECT_LINK_NOT_READY", 409);
+      return Response.json({ message: "This project is not ready for editing.", code: "NATIVE_PROJECT_LINK_NOT_READY" }, { status: 409 });
+    }
+    const aiSettings = await env.DB.prepare(
+      "SELECT mode FROM user_ai_credentials WHERE user_id=?",
+    ).bind(project.user_id).first<{ mode: string }>();
+    if (aiSettings) {
+      await markStage("ai_settings_refresh");
+      const configResponse = await stockThinkRequest(
+        env,
+        request,
+        `/api/agent/${agentId}/buildcustom-ai-config/refresh`,
+        { method: "POST", body: {} },
+      );
+      if (!configResponse.ok) {
+        const status = configResponse.status === 401 || configResponse.status === 403 ? configResponse.status : 503;
+        const code = configResponse.status === 401 || configResponse.status === 403
+          ? "NATIVE_AI_CONFIG_REFRESH_REJECTED" : "NATIVE_AI_CONFIG_REFRESH_FAILED";
+        await markFailure(code, status);
+        throw new RuntimeIdentityError("The project's AI settings could not be applied.", status, code);
+      }
+      await markStage("ai_settings_refresh", true);
+    }
+    await markStage("runtime_websocket");
+    const upstream = await openStockAgentWebSocket(env, request, agentId);
+    try {
+      await completeNativeConnectionHandshake(env.DB, attemptId);
+    } catch {
+      try { upstream.close(1011, "Connection diagnostics unavailable"); } catch { /* already closed */ }
+      throw new RuntimeIdentityError("Project connection diagnostics are temporarily unavailable.", 503, "NATIVE_CONNECTION_DIAGNOSTICS_UPDATE_FAILED");
+    }
+    const pair = new WebSocketPair() as SocketPair;
+    let disconnectRecorded = false;
+    const recordDisconnect = (event: CloseEvent) => {
+      if (disconnectRecorded) return;
+      disconnectRecorded = true;
+      const task = closeNativeConnectionAttempt(env.DB, attemptId, event.code === 1000)
+        .catch(() => console.warn("native_connection_diagnostic_write_failed", {
+          code: "NATIVE_CONNECTION_DIAGNOSTICS_UPDATE_FAILED",
+          correlationId,
+        }));
+      if (executionCtx) executionCtx.waitUntil(task);
+      else void task;
+    };
+    pair[1].addEventListener("close", recordDisconnect);
+    upstream.addEventListener("close", recordDisconnect);
+    relay(pair[1], upstream);
+    return new Response(null, { status: 101, webSocket: pair[0], headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    if (!(error instanceof RuntimeIdentityError) || error.code !== "NATIVE_AI_CONFIG_REFRESH_REJECTED") {
+      const code = error instanceof RuntimeIdentityError ? error.code || "NATIVE_CONNECTION_FAILED" : "NATIVE_CONNECTION_FAILED";
+      const status = error instanceof RuntimeIdentityError ? error.status : 502;
+      const timeoutReason = code.includes("TIMEOUT")
+        ? code.includes("CSRF") || code.includes("STOCK_REQUEST") ? "runtime_timeout" : "upstream_timeout"
+        : undefined;
+      await markFailure(code, status, timeoutReason);
+    }
+    throw error;
   }
-  const upstream = await openStockAgentWebSocket(env, request, agentId);
-  const pair = new WebSocketPair() as SocketPair;
-  relay(pair[1], upstream);
-  return new Response(null, { status: 101, webSocket: pair[0], headers: { "Cache-Control": "no-store" } });
 }
 
 export function shapeThinkHistory(messages: unknown): Array<{
@@ -974,11 +1092,12 @@ export async function handleThinkRuntime(
   request: Request,
   project: Project,
   operation: string,
+  executionCtx?: ExecutionContext,
 ): Promise<Response | null> {
   if (project.runtime_provider !== "stock-think" && !project.creation_key) return null;
   const origin = controlOriginForRequest(env, request);
   const agentId = project.agent_id || "";
-  if (operation === "ws" && request.method === "GET") return bridgeWebSocket(env, request, project, origin);
+  if (operation === "ws" && request.method === "GET") return bridgeWebSocket(env, request, project, origin, executionCtx);
 
   if (operation === "previews" && request.method === "POST" && !request.headers.get("X-CSRF-Token")) {
     return Response.json({ message: "A secure project request is required." }, { status: 403 });

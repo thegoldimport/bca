@@ -128,10 +128,24 @@ type PersistentBuildAttempt = {
   events: PersistentBuildEvent[];
 };
 
+type PersistentConnectionAttempt = {
+  attemptId: string;
+  startedAt: number;
+  finishedAt: number | null;
+  durationMs: number;
+  status: "connecting" | "connected" | "failed" | "disconnected";
+  stage: string;
+  httpStatus: number | null;
+  errorCode: string | null;
+  correlationId: string;
+  timeoutReason: string | null;
+  lastCompletedStage: string | null;
+};
+
 function ProjectActivityTab({ projectId }: { projectId: number }) {
   const { theme } = useTheme();
   const legacySnapshot = readNativeActivitySnapshot(projectId);
-  const query = useQuery<{ attempts: PersistentBuildAttempt[]; retainedEventCount: number }, Error>({
+  const query = useQuery<{ attempts: PersistentBuildAttempt[]; connections: PersistentConnectionAttempt[]; retainedEventCount: number }, Error>({
     queryKey: ["project-build-activity", projectId],
     queryFn: async () => {
       const response = await fetch(`/api/projects/${projectId}/build-activity`, {
@@ -143,16 +157,18 @@ function ProjectActivityTab({ projectId }: { projectId: number }) {
       }
       return await response.json();
     },
-    refetchInterval: (current) => current.state.data?.attempts?.some((attempt) => attempt.status === "running") ? 3_000 : false,
+    refetchInterval: (current) => current.state.data?.attempts?.some((attempt) => attempt.status === "running")
+      || current.state.data?.connections?.some((attempt) => attempt.status === "connecting") ? 3_000 : false,
     staleTime: 0,
   });
   const attempts = query.data?.attempts || [];
+  const connections = query.data?.connections || [];
   const selectedAttempt = new URLSearchParams(window.location.search).get("attempt");
   const darkText = theme === "dark" ? "text-white" : "text-gray-900";
   const mutedText = theme === "dark" ? "text-white/45" : "text-gray-500";
   const statusIcon = (status: string) => {
     if (status === "error" || status === "failed") return <AlertCircle size={15} className="text-rose-400" aria-hidden="true" />;
-    if (status === "complete" || status === "completed") return <CheckCircle2 size={15} className="text-emerald-400" aria-hidden="true" />;
+    if (status === "complete" || status === "completed" || status === "connected") return <CheckCircle2 size={15} className="text-emerald-400" aria-hidden="true" />;
     if (status === "active" || status === "running") return <RefreshCw size={14} className="animate-spin text-amber-300 motion-reduce:animate-none" aria-hidden="true" />;
     return <Circle size={12} className={theme === "dark" ? "text-white/35" : "text-gray-400"} aria-hidden="true" />;
   };
@@ -168,7 +184,7 @@ function ProjectActivityTab({ projectId }: { projectId: number }) {
         <div>
           <h2 className={`text-xl font-bold ${darkText}`}>Project activity</h2>
           <p className={`mt-1 text-sm ${mutedText}`}>
-            Persistent build attempts and observed stages. Prompts, source files, and credentials are not included.
+            Persistent connection and build stages. Prompts, source files, and credentials are not included.
           </p>
         </div>
         <Link href={`/app/editor/${projectId}`}>
@@ -270,12 +286,53 @@ function ProjectActivityTab({ projectId }: { projectId: number }) {
           </div>
         )}
 
-        {!query.isLoading && !query.isError && attempts.length === 0 && legacySnapshot.events.length === 0 && (
+        {!query.isLoading && !query.isError && attempts.length === 0 && connections.length === 0 && legacySnapshot.events.length === 0 && (
           <div className={`mt-4 rounded-xl border border-dashed px-4 py-8 text-center ${
             theme === "dark" ? "border-white/10 text-white/45" : "border-gray-200 text-gray-500"
           }`} data-testid="project-activity-empty">
-            No persistent build attempts are recorded yet. A customer-started build will appear here after it begins.
+            No persistent build or connection attempts are recorded yet. They will appear here when a customer starts a connection or build.
           </div>
+        )}
+      </GlassCard>
+      <GlassCard>
+        <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-4 ${
+          theme === "dark" ? "border-white/10" : "border-gray-200"
+        }`}>
+          <div className="flex items-center gap-2">
+            <Activity size={17} className="text-cyan-400" aria-hidden="true" />
+            <h3 className={`font-semibold ${darkText}`}>Native agent connections</h3>
+          </div>
+          <span className={`text-xs tabular-nums ${mutedText}`}>
+            {connections.length} {connections.length === 1 ? "attempt" : "attempts"}
+          </span>
+        </div>
+        {connections.length > 0 ? (
+          <ol className="mt-4 space-y-3" aria-label="Native agent connection attempts">
+            {connections.map((connection) => (
+              <li key={connection.attemptId} className={`rounded-xl border p-4 ${
+                theme === "dark" ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-gray-50"
+              }`} data-testid="project-connection-attempt">
+                <div className="flex flex-wrap items-center gap-3">
+                  {statusIcon(connection.status)}
+                  <span className={`min-w-0 flex-1 text-sm font-semibold ${darkText}`}>
+                    Connection · {new Date(connection.startedAt).toLocaleString()}
+                  </span>
+                  <span className={`text-xs ${mutedText}`}>{elapsedLabel(connection.durationMs)}</span>
+                </div>
+                <dl className={`mt-3 grid gap-2 text-xs sm:grid-cols-2 ${mutedText}`}>
+                  <div><dt className="inline">Status: </dt><dd className={`inline ${darkText}`}>{connection.status}</dd></div>
+                  <div><dt className="inline">Stage: </dt><dd className={`inline ${darkText}`}>{stageLabel(connection.stage)}</dd></div>
+                  {connection.lastCompletedStage && <div><dt className="inline">Last completed: </dt><dd className={`inline ${darkText}`}>{stageLabel(connection.lastCompletedStage)}</dd></div>}
+                  {connection.httpStatus !== null && <div><dt className="inline">HTTP: </dt><dd className={`inline ${darkText}`}>{connection.httpStatus}</dd></div>}
+                  {connection.timeoutReason && <div><dt className="inline">Disconnect: </dt><dd className={`inline ${darkText}`}>{stageLabel(connection.timeoutReason)}</dd></div>}
+                  {connection.errorCode && <div><dt className="inline">Error: </dt><dd className="inline"><code className="text-rose-300">{connection.errorCode}</code></dd></div>}
+                  <div className="sm:col-span-2"><dt className="inline">Reference: </dt><dd className={`inline break-all ${darkText}`}>{connection.correlationId}</dd></div>
+                </dl>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className={`pt-4 text-sm ${mutedText}`}>No native agent connection attempts are recorded yet.</p>
         )}
       </GlassCard>
     </section>

@@ -91,7 +91,9 @@ test("builder activity opens the full project activity tab in a separate window"
   assert.match(projectDetail, /new URLSearchParams\(window\.location\.search\)\.get\("tab"\) === "activity"/);
   assert.match(projectDetail, /data-testid="project-activity-page"/);
   assert.match(projectDetail, /\/api\/projects\/\$\{projectId\}\/build-activity/);
-  assert.match(projectDetail, /Persistent build attempts/);
+  assert.match(projectDetail, /Persistent connection and build stages/);
+  assert.match(projectDetail, /Native agent connections/);
+  assert.match(projectDetail, /project-connection-attempt/);
   assert.match(projectDetail, /prompts, source files, and credentials are not included/i);
   assert.match(projectDetail, /lastSuccessfulStage/);
   assert.match(builder, /activityParams\.set\("attempt"/);

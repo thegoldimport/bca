@@ -210,7 +210,7 @@ export async function verifyManagedStagingRoute(gateway: Fetcher, url: string, s
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, executionCtx?: ExecutionContext): Promise<Response> {
     try {
       assertControlPlaneEnvironment(env);
       assertSafeStagingTarget(env.VIBESDK_RUNTIME_URL || env.STAGING_RUNTIME_URL);
@@ -421,7 +421,7 @@ export default {
           }
           const nativePublishResponse = await handleNativeThinkPublish(env, request, project, operation, { id: user.id }, input);
           if (nativePublishResponse) return nativePublishResponse;
-          const nativeThinkResponse = await handleThinkRuntime(env, request, project, operation);
+          const nativeThinkResponse = await handleThinkRuntime(env, request, project, operation, executionCtx);
           if (nativeThinkResponse) return nativeThinkResponse;
           if ((operation === "agent" || operation.startsWith("agent/")) && request.method === "GET") {
             if (operation.startsWith("agent/") && operation.slice(6) !== project.agent_id) {

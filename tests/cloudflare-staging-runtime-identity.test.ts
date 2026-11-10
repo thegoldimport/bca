@@ -119,6 +119,8 @@ function database() {
   sqlite.exec(readFileSync("migrations/d1/0007_admin_account_status.sql", "utf8"));
   sqlite.exec(readFileSync("migrations/d1/0010_customer_experience.sql", "utf8"));
   sqlite.exec(readFileSync("migrations/d1/0011_user_ai_credentials.sql", "utf8"));
+  sqlite.exec(readFileSync("migrations/d1/0012_native_build_diagnostics.sql", "utf8"));
+  sqlite.exec(readFileSync("migrations/d1/0013_native_connection_diagnostics.sql", "utf8"));
   const db = {
     prepare(sql: string) {
       let args: unknown[] = [];
@@ -632,6 +634,7 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await anonymous.send("/api/projects/1")).status, 401);
   assert.equal((await anonymous.send("/api/projects", "POST", { name: "Unauthorized" })).status, 401);
   assert.equal((await anonymous.send("/api/projects/1/runtime/files")).status, 401);
+  assert.equal((await anonymous.send("/api/projects/1/runtime/ws")).status, 401);
   const anonymousCredentials = await anonymous.send("/api/ai-credentials");
   assert.equal(anonymousCredentials.status, 401);
   assert.match((await anonymousCredentials.json() as any).message, /sign in again/i);
@@ -691,6 +694,7 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await a.send(`/api/projects/${projectB.id}/planning`)).status, 404);
   assert.equal(stock.agents.get(projectA.agentId)?.owner, aMe.id);
   assert.equal(stock.agents.get(projectB.agentId)?.owner, bMe.id);
+  sqlite.prepare("INSERT INTO user_ai_credentials(user_id,mode) VALUES(?,'managed')").run(aMe.id);
   assert.equal(sqlite.prepare("SELECT agent_id,runtime_provider FROM runtime_project_links WHERE project_id=?").get(projectA.id)?.agent_id, projectA.agentId);
   assert.equal(sqlite.prepare("SELECT runtime_provider FROM runtime_project_links WHERE project_id=?").get(projectB.id)?.runtime_provider, "stock-think");
   assert.equal((await a.create({ name: "Different name on retry" }, aKey)).status, 200);
@@ -777,7 +781,10 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   a.jar.set("__Host-cf_oauth_token", "oauth-encrypted-value");
   await withMockSocketPlatform(async (pairs) => {
     const wsPath = `/api/projects/${projectA.id}/runtime/ws`;
-    const cookie = [...a.jar].map(([key, value]) => `${key}=${value}`).join("; ");
+    // Reproduce the production WebSocket case: the browser cannot attach a
+    // CSRF header, and the runtime CSRF cookie may not be present yet.
+    const cookie = [...a.jar].filter(([key]) => key !== "csrf-token")
+      .map(([key, value]) => `${key}=${value}`).join("; ");
     const request = (path: string, requestOrigin = origin) => new Request(`${origin}${path}`, {
       headers: { Cookie: cookie, Origin: requestOrigin, Upgrade: "websocket" },
     });
@@ -796,11 +803,21 @@ test("two runtime users have one verified session each and isolated BuildCustom 
     assert.equal(upgraded.status, 101);
     assert.equal(upgraded.body, null);
     assert.deepEqual(stock.ticketScopes.at(-1), { resourceType: "agent", resourceId: projectA.agentId });
+    const aiConfigRefresh = stock.requests.find(({ url }) => url.endsWith("/buildcustom-ai-config/refresh"));
+    assert.ok(aiConfigRefresh, "an existing AI settings row requires secure config refresh before the socket");
+    assert.ok(aiConfigRefresh.headers.get("Cookie")?.includes("csrf-token="));
+    assert.equal(aiConfigRefresh.headers.get("X-CSRF-Token"), "csrf-runtime-session-1");
+    assert.equal(aiConfigRefresh.headers.get("Authorization"), null);
     const ticketCall = stock.requests.filter(({ url }) => url.endsWith("/api/ws-ticket")).at(-1)!;
     const socketCall = stock.requests.filter(({ url }) => url.includes("/api/agent/") && url.includes("/ws?ticket=")).at(-1)!;
     assert.doesNotMatch(ticketCall.headers.get("Cookie") || "", /__Host-cf_oauth_token/);
     assert.match(socketCall.headers.get("Cookie") || "", /__Host-cf_oauth_token=oauth-encrypted-value/);
     assert.equal((await upgraded.text()).includes("tk_"), false);
+    const connectionRows = sqlite.prepare(
+      "SELECT status,stage,http_status,error_code,last_completed_stage FROM native_connection_attempts WHERE project_id=? ORDER BY started_at_ms DESC",
+    ).all(projectA.id);
+    assert.ok(connectionRows.some((row: any) => row.status === "connected" && row.http_status === 101));
+    assert.ok(connectionRows.some((row: any) => row.status === "failed" && row.stage === "origin_validation" && row.http_status === 403));
 
     const client = pairs.at(-1)![0];
     const upstream = stock.sockets.at(-1)!;
