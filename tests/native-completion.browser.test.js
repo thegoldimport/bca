@@ -1092,7 +1092,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       } finally { await page.close(); }
     });
 
-    await t.test("a reconnect settles only fresh idle status, preserves the draft, and never resends the old prompt", async () => {
+    await t.test("an idle reconnect preserves drafts without unlocking an unverified operation", async () => {
       const working = {
         status: "RUNNING",
         customerStatus: "WORKING",
@@ -1105,9 +1105,12 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       initial.websocketShouldBeGenerating = true;
       const page = await startEditor(serverUrl, browser, initial);
       try {
-        await page.waitForSelector('[data-testid="button-stop-build"]', { timeout: 10_000 });
+        await page.waitForSelector('[data-testid="button-send-chat"]', { timeout: 10_000 });
+        assert.equal(await page.$('[data-testid="button-stop-build"]'), null,
+          "passive recovery must not expose Stop when this tab did not start generation");
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
+          "the active runtime still blocks a new prompt");
         await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.openSockets === 1);
-        await page.click('[data-testid="button-stop-build"]');
         await page.waitForSelector('[data-testid="native-agent-reconnect"]', { timeout: 5_000 });
         await page.type('[data-testid="input-editor-chat"]', "Keep this follow-up draft after reconnect.");
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
@@ -1120,41 +1123,18 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           harness.setWebsocketState({ active: false, nativeTaskLifecycle: null });
         });
         await page.click('[data-testid="button-reconnect-native-agent"]');
-        await page.waitForFunction(() => {
-          const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
-          return button && !button.disabled && button.textContent.includes("Check Agent");
-        }, { timeout: 5_000 });
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .some((request) => request.path.endsWith("/runtime/status") && request.method === "GET"), { timeout: 5_000 });
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
           "an idle signal without a fresh terminal lifecycle cannot resolve a pending operation");
-
-        const stopped = {
-          status: "STOPPED",
-          customerStatus: "STOPPED",
-          taskId: "fixture-task",
-          operationId: "fixture-operation-stopped",
-          updatedAt: Date.now(),
-        };
-        await page.evaluate((lifecycle) => {
-          const harness = window.__nativeCompletionHarness;
-          harness.setRuntime({ active: false, nativeTaskLifecycle: lifecycle });
-          harness.setWebsocketState({ active: false, nativeTaskLifecycle: lifecycle });
-        }, stopped);
-        await page.click('[data-testid="button-reconnect-native-agent"]');
-        await page.waitForFunction(() => {
-          const send = document.querySelector('[data-testid="button-send-chat"]');
-          return send && !send.disabled && !document.querySelector('[data-testid="button-reconnect-native-agent"]');
-        }, { timeout: 5_000 });
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value),
           "Keep this follow-up draft after reconnect.");
-        let stats = await statsOf(page);
+        const stats = await statsOf(page);
         assert.equal(stats.userSuggestions, 0, "reconnect must not resend the saved prompt");
-        assert.equal(stats.maxOpenSockets, 1, "reconnect must replace rather than overlap idle sockets");
-        assert.ok(stats.conversationStateRequests >= 2);
-
-        await page.click('[data-testid="button-send-chat"]');
-        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 5_000 });
-        stats = await statsOf(page);
-        assert.equal(stats.userSuggestions, 1, "only the customer's explicit follow-up sends a prompt");
+        assert.equal(stats.maxOpenSockets, 1, "reconnect must not overlap idle sockets");
+        assert.ok(stats.conversationStateRequests >= 1);
+        assert.notEqual(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null,
+          "an uncorrelated idle status must leave the prior operation available for safe recovery");
         assert.equal(stats.agentCreationRequests, 0);
         assert.equal(stats.publishRequests, 0);
       } finally { await page.close(); }
@@ -1180,7 +1160,10 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       initial.websocketShouldBeGenerating = false;
       const page = await startEditor(serverUrl, browser, initial);
       try {
-        await page.waitForSelector('[data-testid="button-stop-build"]', { timeout: 10_000 });
+        await page.waitForSelector('[data-testid="button-send-chat"]', { timeout: 10_000 });
+        assert.equal(await page.$('[data-testid="button-stop-build"]'), null,
+          "an idle recovery connection is not a generation this tab can stop");
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true);
         await page.waitForFunction(() => {
           const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
           return button && !button.disabled;
@@ -1194,12 +1177,10 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
           return reads > before && button && !button.disabled;
         }, { timeout: 5_000 }, statusReads);
-        assert.equal(await page.$('[data-testid="button-send-chat"]'), null,
-          "Send is not offered while the existing operation is active");
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
+          "Send remains visible but disabled while the existing operation is active");
         assert.equal((await statsOf(page)).userSuggestions, 0);
-        await page.click('[data-testid="button-stop-build"]');
         await page.waitForSelector('[data-testid="native-agent-reconnect"]', { timeout: 5_000 });
-        await page.waitForSelector('[data-testid="button-send-chat"]', { timeout: 5_000 });
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
           "the live authenticated status, not an isolated WebSocket frame, controls Send");
         assert.equal((await statsOf(page)).userSuggestions, 0);
@@ -1207,7 +1188,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       } finally { await page.close(); }
     });
 
-    await t.test("legacy saved build becomes follow-up ready after stable correlated evidence, including after Stop", async () => {
+    await t.test("passive recovery allows drafting without showing Stop or sending early", async () => {
       const initial = fixture({ savedOperation: true, changed: true });
       initial.persistedTurns = [...BASE_TURNS, FINAL_TURN];
       const page = await startEditor(serverUrl, browser, initial);
@@ -1215,10 +1196,17 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await waitForState(page, "recovering");
         await page.waitForFunction(() => document.querySelector('[data-testid="build-activity-card"]')?.textContent.includes("stable")
           || document.querySelector('[data-testid="builder-chat-scroll"]')?.textContent.includes("stable"));
-        await page.click('[data-testid="button-stop-build"]');
+        assert.equal(await page.$('[data-testid="button-stop-build"]'), null,
+          "passive status recovery must not present a Stop control as if generation were active");
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true,
+          "customers can draft while the saved operation is being verified");
+        await page.type('[data-testid="input-editor-chat"]', "Keep this follow-up draft.");
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
+          "a draft cannot be sent until recovery verifies a safe boundary");
         assert.equal((await statsOf(page)).userSuggestions, 0);
         await page.evaluate(() => window.__nativeCompletionHarness.fastForward(35_000));
         await waitForState(page, "needs_input", 15_000);
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value), "Keep this follow-up draft.");
         assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
         assert.equal(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
         assert.equal((await statsOf(page)).previewPosts, 0);
@@ -2158,7 +2146,11 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
     await t.test("reopen after runtime completion shows persisted turns over a no-inference idle socket", async () => {
       const page = await startEditor(serverUrl, browser, fixture({ active: true, savedOperation: true }));
       try {
-        await page.waitForSelector('[data-testid="button-stop-build"]', { timeout: 10_000 });
+        await page.waitForSelector('[data-testid="button-send-chat"]', { timeout: 10_000 });
+        assert.equal(await page.$('[data-testid="button-stop-build"]'), null,
+          "reopening must not present Stop for an operation this tab did not start");
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
+          "the previous operation remains locked until runtime verification");
         await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.openSockets >= 1);
         const beforeRefresh = await statsOf(page);
         assert.equal(beforeRefresh.userSuggestions, 0);
