@@ -1056,6 +1056,7 @@ function nativeLifecycleConfirmsSettled(
   }
   if (customerStatus === "CONTINUE_AVAILABLE" && lifecycle.autoContinue?.enabled) return false;
   if (stopWasRequested && customerStatus !== "STOPPED"
+    && customerStatus !== "NEEDS_INPUT" && customerStatus !== "BUILD_COMPLETE"
     && !["COMPLETE", "FAILED", "ERROR", "STOPPED", "CANCELLED", "CANCELED"].includes(status)) return false;
   return true;
 }
@@ -1726,6 +1727,29 @@ function EditorPage() {
         if (!response.ok || cancelled || activeProjectIdRef.current !== projectId) return;
         setRuntimeCapability({ projectId, nativeThink: true, status });
         const customerStatus = customerLifecycleStatus(status.nativeTaskLifecycle);
+        const operationBaseline = readNativeOperationBaseline(projectId);
+        const localOperationPending = sending || Boolean(nativeOperationControllerRef.current);
+        const stopWasRequested = nativeCompletionPhaseRef.current === "stopping";
+        const currentOperationSettled = Boolean(
+          operationBaseline
+          && !nativeStateShowsActiveGeneration(status.state || status)
+          && nativeLifecycleConfirmsSettled(
+            status.nativeTaskLifecycle,
+            operationBaseline,
+            stopWasRequested,
+          ),
+        );
+        const canResolveLifecycle = !localOperationPending
+          || (stopWasRequested && currentOperationSettled);
+        const cancelResolvedOperation = () => {
+          if (!currentOperationSettled) return;
+          nativeCancelRef.current();
+          nativeOperationControllerRef.current?.abort();
+          nativeOperationControllerRef.current = null;
+          nativeSocketRef.current?.close(1000, "Runtime status confirmed the operation settled");
+          nativeSocketRef.current = null;
+          clearNativeOperationBaseline(projectId);
+        };
         // The old boundary is still authoritative while an approval is pending.
         // It must not cancel the socket before the new operation is accepted.
         if (continuationInFlightRef.current && customerStatus === "CONTINUE_AVAILABLE") return;
@@ -1733,16 +1757,19 @@ function EditorPage() {
           setNativeCompletionPhase("running");
           setNativeCompletionMessage("Working");
         }
-        if (customerStatus === "CONTINUE_AVAILABLE" && !sending && !nativeOperationControllerRef.current) {
+        if (customerStatus === "CONTINUE_AVAILABLE" && canResolveLifecycle) {
+          cancelResolvedOperation();
           setNativeCompletionPhase("paused");
           setNativeCompletionMessage("I made progress on your request, but I haven't finished everything yet. Would you like me to continue working?");
           setNativeRecoveryUnverified(false);
           setRuntimeError("");
           setSending(false);
-        } else if (customerStatus === "NEEDS_INPUT" && !sending && !nativeOperationControllerRef.current) {
+        } else if (customerStatus === "NEEDS_INPUT" && canResolveLifecycle) {
+          cancelResolvedOperation();
           setNativeCompletionPhase("needs_input");
           setNativeCompletionMessage("Needs your input");
           setNativeRecoveryUnverified(false);
+          setRuntimeError("");
           setSending(false);
         } else if (customerStatus === "BUILD_COMPLETE"
           && status.nativeTaskLifecycle?.status === "COMPLETE"
@@ -1750,9 +1777,9 @@ function EditorPage() {
           && !["pending", "queued", "starting", "running", "building", "generating"].includes(
             String(status.state?.generation?.status || "").toLowerCase(),
           )
-          && !sending
-          && !readNativeOperationBaseline(projectId)
-          && !nativeOperationControllerRef.current) {
+          && canResolveLifecycle
+          && (!operationBaseline || currentOperationSettled)) {
+          cancelResolvedOperation();
           setNativeCompletionPhase("needs_input");
           setNativeCompletionMessage("The Agent finished its turn. Review the generated files and live preview before treating this app as complete.");
           setNativeRecoveryUnverified(false);

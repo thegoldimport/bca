@@ -1586,6 +1586,53 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       } finally { await page.close(); }
     });
 
+    await t.test("fresh idle NEEDS_INPUT status clears a stale Stop state, but stale status stays blocked", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.click('[data-testid="button-stop-build"]');
+        await page.evaluate(() => {
+          window.__nativeCompletionHarness.setRuntime({
+            active: false,
+            nativeTaskLifecycle: {
+              status: "USER_INPUT_REQUIRED",
+              customerStatus: "NEEDS_INPUT",
+              taskId: "fixture-task",
+              operationId: "fixture-operation",
+              updatedAt: Date.now() - 120_000,
+            },
+          });
+        });
+        await new Promise((resolve) => setTimeout(resolve, 3_500));
+        assert.ok(await page.$('[data-testid="button-stop-build"]'),
+          "a terminal-looking lifecycle older than the sent operation must not clear Stop");
+        assert.equal((await statsOf(page)).userSuggestions, 1,
+          "stale status must not permit a second prompt");
+
+        await page.evaluate(() => {
+          window.__nativeCompletionHarness.setRuntime({
+            active: false,
+            nativeTaskLifecycle: {
+              status: "USER_INPUT_REQUIRED",
+              customerStatus: "NEEDS_INPUT",
+              taskId: "fixture-task",
+              operationId: "fixture-operation",
+              updatedAt: Date.now() + 1,
+            },
+          });
+        });
+        await waitForState(page, "needs_input", 10_000);
+        await page.waitForFunction(() => {
+          const send = document.querySelector('[data-testid="button-send-chat"]');
+          return send && !send.disabled && !document.querySelector('[data-testid="button-stop-build"]');
+        }, { timeout: 5_000 });
+        assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true);
+        assert.equal(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
+        assert.equal((await statsOf(page)).userSuggestions, 1,
+          "status recovery must never resend the previous prompt");
+      } finally { await page.close(); }
+    });
+
     await t.test("reopened active operation synchronizes a later stopped state without resending", async () => {
       const page = await startEditor(serverUrl, browser, fixture({ active: true, savedOperation: true }));
       try {
