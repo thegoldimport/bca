@@ -65,7 +65,14 @@ test("Builder chat follows new activity only while the reader is at the latest m
 test("Native build chat keeps drafts editable and locks the editor viewport", () => {
   const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
   assert.match(source, /data-testid="native-composer-draft-hint"/);
-  assert.match(source, /disabled=\{!currentRuntimeCapability \|\| planningSaving\}/);
+  const inputMarker = source.indexOf('data-testid="input-editor-chat"');
+  const composerStart = source.lastIndexOf("<textarea", inputMarker);
+  const composerEnd = source.indexOf("/>", inputMarker);
+  assert.ok(inputMarker >= 0 && composerStart >= 0 && composerEnd > inputMarker,
+    "the chat composer remains available while status loads");
+  const composer = source.slice(composerStart, composerEnd + 2);
+  assert.doesNotMatch(composer, /\bdisabled\b/, "runtime or planning status must not prevent drafting");
+  assert.match(source, /disabled=\{!currentRuntimeCapability \|\| !planningLoaded \|\| planningSaving/);
   assert.match(source, /const isEditorRoute = location === "\/app\/editor" \|\| location\.startsWith\("\/app\/editor\/"\)/);
   assert.match(source, /isEditorRoute \? "overflow-hidden" : "overflow-y-auto"/);
   assert.match(source, /className="flex h-full min-h-0 overflow-hidden"/);

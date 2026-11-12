@@ -3942,7 +3942,7 @@ function EditorPage() {
     }
     if (sendAttemptRef.current) return;
     if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified
-      || nativeIdleReconnectPendingRef.current || nativeConnectionRetry)) {
+      || nativeIdleReconnectPendingRef.current || nativeConnectionRetry || nativeCompletionPhase === "recovering")) {
       // Keep the draft and the authoritative phase. Pressing Enter must not
       // invent a recovery operation while an existing operation is still busy.
       return;
@@ -4966,7 +4966,8 @@ function EditorPage() {
               </button>
             </section>
           )}
-          {nativeThink && (nativeIdleReconnectAvailable || nativeRecoveryUnverified) && (
+          {nativeThink && (nativeIdleReconnectAvailable || nativeRecoveryUnverified
+            || nativeCompletionPhase === "recovering") && (
             <section
               className={`rounded-xl border px-3 py-3 ${
                 theme === "dark" ? "border-cyan-400/25 bg-cyan-400/10" : "border-cyan-200 bg-cyan-50"
@@ -5215,13 +5216,16 @@ function EditorPage() {
               </button>
             </div>
           )}
-            {nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeConnectionRetry) && (
+            {nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified
+              || nativeConnectionRetry || nativeCompletionPhase === "recovering") && (
               <p
                 className={`mb-2 text-[11px] leading-4 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}
                 role="status"
                 data-testid="native-composer-draft-hint"
               >
-                You can draft a reply while the Agent works. It will stay here, ready to send when this update finishes.
+                {nativeCompletionPhase === "recovering"
+                  ? "Checking the saved operation. You can draft a reply; it will not be sent automatically."
+                  : "You can draft a reply while the Agent works. It will stay here, ready to send when this update finishes."}
               </p>
             )}
             <textarea
@@ -5234,7 +5238,6 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              disabled={!currentRuntimeCapability || planningSaving}
               placeholder={!currentRuntimeCapability
                 ? "Checking project runtime…"
                 : planningSession?.phase === "clarifying"
@@ -5279,20 +5282,23 @@ function EditorPage() {
                   data-testid="button-element-selector"
                 ><MousePointer2 size={15} /></button>
               </div>
-              {sending ? (
+              {sending && (!nativeThink || nativeOperationControllerRef.current !== null)
+                && nativeCompletionPhase !== "recovering" ? (
               <button
                 onClick={stopBuild}
+                disabled={nativeCompletionPhase === "stopping"}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/15 border border-red-400/30 text-red-300 hover:bg-red-500/25 transition-colors text-xs font-semibold"
                 data-testid="button-stop-build"
               >
                 <StopCircle size={16} />
-                Stop
+                {nativeCompletionPhase === "stopping" ? "Stopping…" : "Stop"}
               </button>
               ) : (
               <button
                 onClick={() => handleSend()}
                 disabled={!currentRuntimeCapability || !planningLoaded || planningSaving
-                  || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified || nativeIdleReconnectPending))}
+                  || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified
+                    || nativeIdleReconnectPending || nativeCompletionPhase === "recovering"))}
                 className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                 data-testid="button-send-chat"
               >
