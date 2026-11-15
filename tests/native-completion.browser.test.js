@@ -1192,6 +1192,10 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await page.waitForFunction((before) => window.__nativeCompletionHarness.snapshot().stats.api
           .filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length > before,
         { timeout: 5_000 }, readsBeforeIdle);
+        await page.waitForFunction(() => {
+          const send = document.querySelector('[data-testid="button-send-chat"]');
+          return send && !send.disabled;
+        }, { timeout: 5_000 });
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), false,
           "fresh owner status and the live Agent socket can allow an explicit new instruction without claiming completion");
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value),
