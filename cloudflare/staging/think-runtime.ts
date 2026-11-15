@@ -511,6 +511,9 @@ export async function changedFilesBetweenCommits(
     .sort();
   const result: Array<{ path: string; change: string; size: number }> = [];
   for (const path of changed) {
+    try { safeProjectPath(path); } catch {
+      throw new RuntimeIdentityError("A Development checkpoint contains an unsafe file path.", 409);
+    }
     let change: string;
     let size = 0;
     if (!baselineSet.has(path)) {
@@ -560,6 +563,13 @@ async function finalizeNativeTurnCheckpoint(
   if (!row) return Response.json({ message: "The saved Agent turn was not found." }, { status: 404 });
   const activity = parseJsonArray(row.activity);
   const meta = nativeTurnMeta(activity);
+  if (meta?.status === "checkpoint_verified" && row.commit_hash === commitHash) {
+    return Response.json({
+      checkpointVerified: true,
+      commitHash,
+      changedFiles: parseJsonArray(row.changed_files),
+    }, { headers: { "Cache-Control": "no-store" } });
+  }
   if (!meta || meta.status !== "agent_turn_ended") {
     return Response.json({ message: "The Agent turn has not reached a verified checkpoint state." }, { status: 409 });
   }
@@ -570,19 +580,28 @@ async function finalizeNativeTurnCheckpoint(
     return Response.json({ message: "This turn did not produce a new Development revision." }, { status: 409 });
   }
 
-  const branch = await currentBranch(env, request, agentId);
-  if (!branch) return Response.json({ message: "A Development branch could not be verified." }, { status: 409 });
-  const snapshot = await currentGitSnapshot(env, request, agentId, branch);
-  if (!snapshot.commitHash || snapshot.commitHash !== commitHash) {
-    return Response.json({ message: "The Development revision changed before its checkpoint could be saved." }, { status: 409 });
-  }
-  if (meta.baselineCommitHash) {
-    const history = await git.log({ fs: snapshot.fs, dir: snapshot.dir, ref: commitHash, depth: 1000 });
-    if (!history.some((entry) => entry.oid === meta.baselineCommitHash)) {
-      return Response.json({ message: "The starting revision is no longer verifiable on this Development branch." }, { status: 409 });
+  let changedFiles: Array<{ path: string; change: string; size: number }>;
+  try {
+    const branch = await currentBranch(env, request, agentId);
+    if (!branch) return Response.json({ message: "A Development branch could not be verified." }, { status: 409 });
+    const snapshot = await currentGitSnapshot(env, request, agentId, branch);
+    if (!snapshot.commitHash || snapshot.commitHash !== commitHash) {
+      return Response.json({ message: "The Development revision changed before its checkpoint could be saved." }, { status: 409 });
     }
+    if (meta.baselineCommitHash) {
+      const history = await git.log({ fs: snapshot.fs, dir: snapshot.dir, ref: commitHash, depth: 1000 });
+      if (!history.some((entry) => entry.oid === meta.baselineCommitHash)) {
+        return Response.json({ message: "The starting revision is no longer verifiable on this Development branch." }, { status: 409 });
+      }
+    }
+    changedFiles = await changedFilesBetweenCommits(snapshot, meta.baselineCommitHash, commitHash);
+  } catch (error) {
+    const message = error instanceof RuntimeIdentityError
+      ? error.message
+      : "The Development checkpoint could not be verified.";
+    const status = error instanceof RuntimeIdentityError ? error.status : 409;
+    return Response.json({ message }, { status });
   }
-  const changedFiles = await changedFilesBetweenCommits(snapshot, meta.baselineCommitHash, commitHash);
   const nextMeta: NativeTurnMeta = { ...meta, status: "checkpoint_verified" };
   const cleanActivity = activity.filter((item) => item?.type !== NATIVE_TURN_META_TYPE);
   await env.DB.prepare(
@@ -803,7 +822,6 @@ function nativeTurnMeta(activity: unknown): NativeTurnMeta | null {
 
 export function safeNativeTurnEvent(frame: Record<string, any>): {
   activity?: NativeTurnActivity;
-  changedFile?: { path: string; change: string; size: number };
   status?: string;
 } | null {
   const type = typeof frame.type === "string" ? frame.type : "";
@@ -860,16 +878,11 @@ export function safeNativeTurnEvent(frame: Record<string, any>): {
     };
   }
   if (["file_generating", "file_generated", "file_regenerated", "file_chunk_generated", "file_deleted"].includes(type) && path) {
-    const change = type === "file_deleted" ? "deleted"
-      : type === "file_generated" ? "added"
-        : type === "file_regenerated" ? "modified" : null;
     const label = type === "file_generating" ? `Writing ${path}`
-      : type === "file_deleted" ? `Removed ${path}`
-        : `${change === "added" ? "Created" : "Updated"} ${path}`;
-    return {
-      activity: event(label, type === "file_generating" ? "info" : "success", "tool"),
-      ...(change ? { changedFile: { path, change, size: 0 } } : {}),
-    };
+      : type === "file_deleted" ? `Agent reported removing ${path}`
+        : type === "file_generated" ? `Agent reported generating ${path}`
+          : `Agent reported updating ${path}`;
+    return { activity: event(label, type === "file_generating" ? "info" : "success", "tool") };
   }
   const tool = frame.tool && typeof frame.tool === "object" ? frame.tool : null;
   if (type === "conversation_response" && tool && typeof tool.name === "string"
@@ -910,13 +923,12 @@ async function updateNativeTurn(
   turnId: number,
   response: string,
   activity: NativeTurnActivity[],
-  changedFiles: Array<{ path: string; change: string; size: number }>,
   meta: NativeTurnMeta,
 ): Promise<void> {
   const storedActivity = [meta, ...activity.slice(-NATIVE_TURN_ACTIVITY_LIMIT)];
   await db.prepare(
-    "UPDATE runtime_builder_turns SET response=?,changed_files=?,activity=? WHERE id=? AND project_id=? AND mode='native_build'",
-  ).bind(response, JSON.stringify(changedFiles), JSON.stringify(storedActivity), turnId, projectId).run();
+    "UPDATE runtime_builder_turns SET response=?,activity=? WHERE id=? AND project_id=? AND mode='native_build'",
+  ).bind(response, JSON.stringify(storedActivity), turnId, projectId).run();
 }
 
 function restoredNativeTurn(
@@ -1034,7 +1046,6 @@ function relay(
     id: number;
     response: string;
     activity: NativeTurnActivity[];
-    changedFiles: Map<string, { path: string; change: string; size: number }>;
     meta: NativeTurnMeta;
     persistQueue: Promise<void>;
     lastPersistAt: number;
@@ -1044,9 +1055,8 @@ function relay(
   const queueTurnSave = (wait = false) => {
     if (!activeTurn || !options) return Promise.resolve();
     const turn = activeTurn;
-    const files = [...turn.changedFiles.values()];
     const task = turn.persistQueue.then(() => updateNativeTurn(
-      options.db, options.projectId, turn.id, turn.response, turn.activity, files, turn.meta,
+      options.db, options.projectId, turn.id, turn.response, turn.activity, turn.meta,
     ));
     turn.persistQueue = task.catch(() => {
       if (persistenceWarningLogged) return;
@@ -1116,7 +1126,6 @@ function relay(
             id,
             response: "",
             activity: [],
-            changedFiles: new Map(),
             meta,
             persistQueue: Promise.resolve(),
             lastPersistAt: Date.now(),
@@ -1125,6 +1134,13 @@ function relay(
           try { server.send(JSON.stringify({ type: "error", error: "The conversation activity could not be saved. No request was sent." })); } catch { /* closed */ }
           return;
         }
+      }
+      if (server.readyState !== 1) {
+        if (activeTurn) {
+          setTurnStatus("interrupted");
+          await queueTurnSave(true);
+        }
+        return;
       }
       try {
         upstream.send(JSON.stringify(upstreamFrame));
@@ -1168,10 +1184,6 @@ function relay(
             activeTurn.activity = [...activeTurn.activity, next].slice(-NATIVE_TURN_ACTIVITY_LIMIT);
             shouldPersist = true;
           }
-        }
-        if (observation?.changedFile) {
-          activeTurn.changedFiles.set(observation.changedFile.path, observation.changedFile);
-          shouldPersist = true;
         }
         if (observation?.status && activeTurn.meta.status !== observation.status) {
           setTurnStatus(observation.status);

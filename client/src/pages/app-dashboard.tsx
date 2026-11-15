@@ -5267,6 +5267,14 @@ function EditorPage() {
               </button>
             </div>
           )}
+          {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
+            <p
+              className={`px-4 pt-3 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}
+              data-testid="native-composer-draft-hint"
+            >
+              You can draft a reply here. It will not be sent automatically.
+            </p>
+          )}
             <textarea
               ref={textareaRef}
               value={chatInput}

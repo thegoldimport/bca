@@ -22,6 +22,11 @@ test("separate turns with identical text retain their separate stable identities
   assert.deepEqual(readSavedAgentTurns([turn, { ...turn, id: 2 }]), [turn, { ...turn, id: 2 }]);
 });
 
+test("saved native turn status accepts observed states but rejects fabricated status values", () => {
+  assert.equal(readSavedAgentTurns([{ ...turn, status: "checkpoint_verified" }])[0].status, "checkpoint_verified");
+  assert.throws(() => readSavedAgentTurns([{ ...turn, status: "application_complete" }]));
+});
+
 test("invalid saved history fails explicitly rather than clearing a previously loaded conversation", () => {
   for (const invalid of [{}, { turns: {} }, { turns: null }, [{ ...turn, response: null }],
     [{ ...turn, id: "secret-looking-invalid-id" }], [{ ...turn, mode: "unknown" }]]) {

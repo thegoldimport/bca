@@ -479,16 +479,37 @@ test("native saved activity and Development checkpoints merge only into their ma
   assert.equal(turns[1].status, undefined);
 });
 
+test("persisted native turns remain readable when the stock transcript has not returned them", () => {
+  const saved = {
+    id: 45,
+    mode: "native_build",
+    prompt: "Saved prompt",
+    response: "Saved response",
+    changed_files: "[]",
+    commit_hash: null,
+    activity: JSON.stringify([
+      { type: "__buildcustom_native_turn", token: "c1e2d3f4-a5b6-4789-8abc-def012345678", status: "interrupted", baselineCommitHash: null },
+      { type: "progress", label: "Connection ended", status: "error", createdAt: "2026-11-15T12:00:00.000Z" },
+    ]),
+    created_at: "2026-11-15T12:00:00.000Z",
+  };
+  const turns = shapeThinkHistory([], [saved]);
+  assert.equal(turns.length, 1);
+  assert.equal(turns[0].prompt, "Saved prompt");
+  assert.equal(turns[0].response, "Saved response");
+  assert.equal(turns[0].status, "interrupted");
+  assert.equal(turns[0].commitHash, null);
+});
+
 test("native activity records safe progress, file changes, and explicit non-completion status", () => {
   assert.equal(safeNativeTurnEvent({ type: "generation_complete" })?.status, "agent_turn_ended");
   assert.equal(
     safeNativeTurnEvent({ type: "generation_complete" })?.activity?.label,
     "Agent turn ended · application completion is not verified",
   );
-  assert.deepEqual(safeNativeTurnEvent({ type: "file_generated", path: "/src/App.tsx" })?.changedFile, {
-    path: "src/App.tsx", change: "added", size: 0,
-  });
-  assert.equal(safeNativeTurnEvent({ type: "file_deleted", path: "../private.txt" })?.changedFile, undefined);
+  assert.equal(safeNativeTurnEvent({ type: "file_generated", path: "/src/App.tsx" })?.activity?.label,
+    "Agent reported generating src/App.tsx");
+  assert.equal(safeNativeTurnEvent({ type: "file_deleted", path: "../private.txt" }), null);
   assert.equal(safeNativeTurnEvent({ type: "user_suggestion", message: "private prompt" }), null);
 });
 
@@ -503,8 +524,10 @@ test("native checkpoint file comparison identifies additions, edits, and deletio
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(`${dir}/index.html`, "A");
   fs.writeFileSync(`${dir}/old.txt`, "old");
+  fs.writeFileSync(`${dir}/stable.txt`, "unchanged");
   await git.add({ fs, dir, filepath: "index.html" });
   await git.add({ fs, dir, filepath: "old.txt" });
+  await git.add({ fs, dir, filepath: "stable.txt" });
   const baseline = await commit("baseline");
 
   fs.writeFileSync(`${dir}/index.html`, "B");
@@ -523,4 +546,8 @@ test("native checkpoint file comparison identifies additions, edits, and deletio
     { path: "new.txt", change: "added", size: 3 },
     { path: "old.txt", change: "deleted", size: 0 },
   ]);
+  await assert.rejects(
+    changedFilesBetweenCommits({ fs, dir, commitHash: baseline, files: [] }, baseline, target),
+    /checkpoint no longer matches/,
+  );
 });

@@ -742,6 +742,19 @@ async function finishQuietCandidate(page) {
 }
 
 test("BuildCustom completion and recovery states in rendered Chromium client", { timeout: 300_000 }, async (t) => {
+  const testFilter = process.env.NATIVE_COMPLETION_TEST_FILTER;
+  if (testFilter) {
+    const originalSubtest = t.test.bind(t);
+    Object.defineProperty(t, "test", {
+      configurable: true,
+      value: (name, ...args) => {
+        if (String(name).includes(testFilter)) return originalSubtest(name, ...args);
+        const options = typeof args[0] === "function" ? {} : args[0] || {};
+        const run = typeof args[0] === "function" ? args[0] : args[1];
+        return originalSubtest(name, { ...options, skip: "filtered by NATIVE_COMPLETION_TEST_FILTER" }, run);
+      },
+    });
+  }
   const bundleDir = await mkdtemp(path.join(os.tmpdir(), "native-completion-browser-"));
   let httpServer;
   let browser;
@@ -844,6 +857,33 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.ok(stats.savedHistoryRequests.every(request =>
           request.path === "/api/projects/11/runtime/turns" && request.method === "GET"
           && request.credentials === "same-origin" && request.cache === "no-store"));
+      } finally { await page.close(); }
+    });
+
+    await t.test("reopened per-turn activity shows verified status, observed changes, and no native restore action", async () => {
+      const initial = fixture();
+      initial.persistedTurns = [...BASE_TURNS, {
+        ...FINAL_TURN,
+        changedFiles: [{ path: "public/index.html", change: "modified", size: 42 }],
+        activity: [{
+          type: "tool",
+          label: "Updated public/index.html",
+          path: "public/index.html",
+          status: "success",
+          createdAt: "2026-11-15T12:00:00.000Z",
+        }],
+        status: "checkpoint_verified",
+      }];
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await page.waitForSelector('[data-testid="builder-turn-checkpoint-2"]', { timeout: 10_000 });
+        const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
+        assert.match(checkpoint, /Verified Development checkpoint/);
+        assert.match(checkpoint, /Updated public\/index\.html/);
+        assert.match(checkpoint, /1 file changes/);
+        const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
+          Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
+        assert.equal(hasRestoreAction, false);
       } finally { await page.close(); }
     });
 
@@ -1473,9 +1513,9 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(stats.nativeCheckpointPosts[0].commitHash, EDITED);
         const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
         assert.match(checkpoint, /Verified Development checkpoint/);
-        assert.match(checkpoint, /Updated public\/index\.html/);
-        assert.equal(await page.$('[data-testid="builder-turn-checkpoint-2"] button'), null,
-          "native restore stays unavailable until its runtime path is verified");
+        const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
+          Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
+        assert.equal(hasRestoreAction, false, "native restore stays unavailable until its runtime path is verified");
         assert.ok(stats.api.filter((entry) => entry.path.endsWith("/runtime/files")).length >= 1);
         assert.equal(stats.frameworkEnvelopesFiltered, 0);
       } finally {
