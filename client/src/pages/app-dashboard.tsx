@@ -754,7 +754,21 @@ type RuntimeBuilderTurn = {
   activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
   commitHash: string | null;
   createdAt: string;
+  status?: "running" | "reply_saved" | "agent_turn_ended" | "interrupted" | "error" | "stopped" | "checkpoint_verified";
 };
+
+function nativeTurnStatusLabel(status: RuntimeBuilderTurn["status"]): string {
+  switch (status) {
+    case "running": return "Agent turn was running when last observed";
+    case "reply_saved": return "Agent reply saved · no completion claim";
+    case "agent_turn_ended": return "Agent turn ended · app completion not verified";
+    case "interrupted": return "Connection ended before the turn was verified";
+    case "error": return "Agent reported an error";
+    case "stopped": return "Agent stopped · partial work may remain";
+    case "checkpoint_verified": return "Development revision verified · app completeness not established";
+    default: return "Saved agent turn";
+  }
+}
 type ComposerImage = {
   id: string;
   filename: string;
@@ -2867,6 +2881,7 @@ function EditorPage() {
       ? baselineData.commitHash
       : typeof baselineData.revision?.commitHash === "string" ? baselineData.revision.commitHash : null;
     const startedAt = Date.now();
+    const nativeTurnId = window.crypto.randomUUID();
     const operationBaseline: NativeOperationBaseline = {
       revision: baselineCommitHash,
       startedAt,
@@ -3363,6 +3378,27 @@ function EditorPage() {
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
+          let checkpointSaved = false;
+          try {
+            const csrf = await csrfToken();
+            const checkpointResponse = await fetch(`/api/projects/${projectId}/runtime/turns/checkpoint`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, ...authHeaders() },
+              body: JSON.stringify({ turnId: nativeTurnId, commitHash: currentCommitHash }),
+              signal: operationController.signal,
+            });
+            const checkpointData = await checkpointResponse.json().catch(() => ({}));
+            if (!checkpointResponse.ok) throw new Error(checkpointData.message || "Checkpoint verification failed.");
+            checkpointSaved = checkpointData.checkpointVerified === true;
+            if (checkpointSaved) {
+              const savedTurnsData = await fetchJson("turns");
+              const savedTurns = runtimeTurnsFromResponse(savedTurnsData);
+              if (savedTurns) finalTurns.splice(0, finalTurns.length, ...savedTurns);
+            }
+          } catch {
+            recordNativeProgress("The verified Development revision could not be attached to this chat turn", "info");
+          }
           if (turnsSequence === turnLoadSequenceRef.current) setTurns(finalTurns);
           setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
           setRuntimeError("");
@@ -3378,7 +3414,9 @@ function EditorPage() {
           const runtimeFilesQueryKey = ["runtime-files", projectId] as const;
           queryClient.invalidateQueries({ queryKey: runtimeFilesQueryKey });
           queryClient.invalidateQueries({ queryKey: ["runtime-file-content", projectId] });
-          recordNativeProgress(`${files.length} project file${files.length === 1 ? "" : "s"} verified · preview ready`);
+          recordNativeProgress(checkpointSaved
+            ? `${files.length} project file${files.length === 1 ? "" : "s"} verified · Development checkpoint saved`
+            : `${files.length} project file${files.length === 1 ? "" : "s"} verified · preview ready`);
           closeAndFinish();
         } catch (error: any) {
           if (!isOperationActive()) {
@@ -3542,11 +3580,19 @@ function EditorPage() {
             setNativeRecoveryUnverified(false);
             writeNativeOperationBaseline(projectId, { ...operationBaseline, promptAttempted: true });
             try {
+              nativeProgressRef.current = [];
+              setNativeProgress([]);
+              writeNativeActivitySnapshot(projectId, {
+                events: [],
+                startedAt: nativeOperationStartedAtRef.current || startedAt,
+              });
               setNativeCompletionPhase(continuationApproval ? "starting" : "running");
               setNativeCompletionMessage(continuationApproval ? "Starting..." : "Agent started · streaming progress");
               socket.send(JSON.stringify({
                 type: "user_suggestion",
                 message: continuationApproval ? "Continue" : agentPrompt,
+                buildcustomTurnId: nativeTurnId,
+                buildcustomBaselineCommitHash: baselineCommitHash,
                 ...(continuationApproval ? {
                   continuationApproval: {
                     taskId: continuationApproval.taskId,
@@ -4817,9 +4863,9 @@ function EditorPage() {
                     <div className="min-w-0 flex-1">
                       <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>{nativeThink ? "Saved agent turn" : "Completed checkpoint"}</div>
                       <div className={`text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-                        {nativeThink && !turn.changedFiles.length ? "Reply saved · workspace stages in Activity" : <>
-                          {(turn.activity?.length || 0)} {(turn.activity?.length || 0) === 1 ? "action" : "actions"} · {turn.changedFiles.length} changed {turn.changedFiles.length === 1 ? "file" : "files"}
-                        </>}
+                        {nativeThink
+                          ? `${nativeTurnStatusLabel(turn.status)} · ${(turn.activity?.length || 0)} observed ${(turn.activity?.length || 0) === 1 ? "action" : "actions"} · ${turn.changedFiles.length} file changes`
+                          : `${(turn.activity?.length || 0)} ${(turn.activity?.length || 0) === 1 ? "action" : "actions"} · ${turn.changedFiles.length} changed ${turn.changedFiles.length === 1 ? "file" : "files"}`}
                       </div>
                     </div>
                     <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
@@ -4867,9 +4913,15 @@ function EditorPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{nativeThink ? "No file-change list is attached to this saved reply. Check Project Activity for recorded workspace stages." : "No file content changed in this turn."}</p>
+                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{nativeThink ? "No file changes were observed for this turn." : "No file content changed in this turn."}</p>
                     )}
-                    {turn.commitHash && canManageProduction && (
+                    {turn.commitHash && nativeThink && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className={`text-[10px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Verified Development checkpoint</span>
+                        <span className={`font-mono text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{turn.commitHash.slice(0, 8)}</span>
+                      </div>
+                    )}
+                    {turn.commitHash && canManageProduction && !nativeThink && (
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <span className={`font-mono text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{turn.commitHash.slice(0, 8)}</span>
                         <button

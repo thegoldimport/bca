@@ -424,12 +424,15 @@ export default {
         // A project may be visible between its D1 insert and link claim.
         // Its creation key still identifies the stock-only staging path.
         if (runtimeCustomer && (project.creation_key || project.runtime_provider === "stock-think")) {
+          if (operation === "turns/checkpoint" && request.method === "POST" && !hasValidCsrfToken(request)) {
+            return json({ message: "A secure project request is required." }, { status: 403 });
+          }
           if (operation === "ws" && request.method === "GET" && !rateLimit(`think-ws:${user.id}:${id}`, 60)) {
             return json({ message: "Too many project connections." }, { status: 429 });
           }
           const nativePublishResponse = await handleNativeThinkPublish(env, request, project, operation, { id: user.id }, input);
           if (nativePublishResponse) return nativePublishResponse;
-          const nativeThinkResponse = await handleThinkRuntime(env, request, project, operation, executionCtx);
+          const nativeThinkResponse = await handleThinkRuntime(env, request, project, operation, executionCtx, input);
           if (nativeThinkResponse) return nativeThinkResponse;
           if ((operation === "agent" || operation.startsWith("agent/")) && request.method === "GET") {
             if (operation.startsWith("agent/") && operation.slice(6) !== project.agent_id) {

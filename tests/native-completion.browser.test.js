@@ -124,6 +124,7 @@ function fixture({
       agentCreationRequests: 0,
       planningWrites: 0,
       planningDeletes: 0,
+      nativeCheckpointPosts: [],
       savedHistoryStatuses: [],
       api: [],
     },
@@ -275,6 +276,25 @@ function installBrowserHarness(initialFixture) {
     }
     if (url.pathname.endsWith("/runtime/files")) {
       return json({ files: state.filePaths.map((filePath) => ({ path: filePath })) });
+    }
+    if (url.pathname.endsWith("/runtime/turns/checkpoint") && method === "POST") {
+      const checkpoint = JSON.parse(String(init.body || "{}"));
+      state.stats.nativeCheckpointPosts.push(checkpoint);
+      state.persistedTurns = state.persistedTurns.map((turn) => turn.prompt === PROMPT ? {
+        ...turn,
+        status: "checkpoint_verified",
+        commitHash: checkpoint.commitHash,
+        changedFiles: [{ path: "public/index.html", change: "modified", size: 42 }],
+        activity: [{
+          type: "tool",
+          label: "Updated public/index.html",
+          path: "public/index.html",
+          status: "success",
+          createdAt: "2026-11-15T12:00:00.000Z",
+        }],
+      } : turn);
+      persist();
+      return json({ checkpointVerified: true, commitHash: checkpoint.commitHash });
     }
     if (url.pathname.endsWith("/runtime/turns")) {
       const savedConversationRead = init.cache === "no-store";
@@ -1448,6 +1468,14 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await finishQuietCandidate(page);
         await assertSinglePersistedTurn(page);
         const stats = await statsOf(page);
+        assert.equal(stats.nativeCheckpointPosts.length, 1,
+          "a verified Development revision is attached to this specific native chat turn");
+        assert.equal(stats.nativeCheckpointPosts[0].commitHash, EDITED);
+        const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
+        assert.match(checkpoint, /Verified Development checkpoint/);
+        assert.match(checkpoint, /Updated public\/index\.html/);
+        assert.equal(await page.$('[data-testid="builder-turn-checkpoint-2"] button'), null,
+          "native restore stays unavailable until its runtime path is verified");
         assert.ok(stats.api.filter((entry) => entry.path.endsWith("/runtime/files")).length >= 1);
         assert.equal(stats.frameworkEnvelopesFiltered, 0);
       } finally {

@@ -1,13 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import git from "isomorphic-git";
+import { createFsFromVolume, Volume } from "memfs";
 import {
   allowedNativeClientFrame,
+  changedFilesBetweenCommits,
   createNativeTicketRequest,
   filterNativeServerFrame,
   ownerCsrfToken,
   openStockAgentWebSocket,
   previewUrlAllowed,
   safeThinkFilePath,
+  safeNativeTurnEvent,
   shapeThinkHistory,
   stockThinkRequest,
 } from "../cloudflare/staging/think-runtime";
@@ -74,6 +78,34 @@ test("native Think image attachments and browser-supplied routing metadata are b
     type: "user_suggestion",
     message: "Use the reference",
     images: [image, image, image, image, image],
+  }), null);
+});
+
+test("native activity metadata is bounded, validated, and stripped from the upstream prompt", () => {
+  const turnId = "c1e2d3f4-a5b6-4789-8abc-def012345678";
+  const clean = allowedNativeClientFrame({
+    type: "user_suggestion",
+    message: "Update the dashboard",
+    buildcustomTurnId: turnId,
+    buildcustomBaselineCommitHash: "a".repeat(40),
+  });
+  assert.deepEqual(clean, {
+    type: "user_suggestion",
+    message: "Update the dashboard",
+    buildcustomTurnId: turnId,
+    buildcustomBaselineCommitHash: "a".repeat(40),
+  });
+  assert.equal(allowedNativeClientFrame({
+    type: "user_suggestion",
+    message: "Update the dashboard",
+    buildcustomTurnId: "not-a-turn-id",
+    buildcustomBaselineCommitHash: null,
+  }), null);
+  assert.equal(allowedNativeClientFrame({
+    type: "user_suggestion",
+    message: "Update the dashboard",
+    buildcustomTurnId: turnId,
+    buildcustomBaselineCommitHash: "bad-revision",
   }), null);
 });
 
@@ -412,4 +444,83 @@ test("reopened turns are derived from persisted stock conversation messages", ()
     createdAt: "",
   }]);
   assert.throws(() => shapeThinkHistory(null), /invalid result/);
+});
+
+test("native saved activity and Development checkpoints merge only into their matching turns", () => {
+  const turnId = "c1e2d3f4-a5b6-4789-8abc-def012345678";
+  const turns = shapeThinkHistory([
+    { role: "user", content: "Change the header", conversationId: "user-1" },
+    { role: "assistant", content: "Header updated.", conversationId: "assistant-1" },
+    { role: "user", content: "A request without saved activity" },
+    { role: "assistant", content: "Reply without a checkpoint." },
+  ], [{
+    id: 44,
+    mode: "native_build",
+    prompt: "Change the header",
+    response: "Persisted response",
+    changed_files: JSON.stringify([{ path: "src/Header.tsx", change: "modified", size: 120 }]),
+    commit_hash: "b".repeat(40),
+    activity: JSON.stringify([
+      { type: "__buildcustom_native_turn", token: turnId, status: "checkpoint_verified", baselineCommitHash: "a".repeat(40) },
+      { type: "tool", label: "Updated src/Header.tsx", path: "src/Header.tsx", status: "success", createdAt: "2026-11-15T12:00:00.000Z" },
+    ]),
+    created_at: "2026-11-15T12:00:00.000Z",
+  }]);
+
+  assert.equal(turns[0].id, 44);
+  assert.equal(turns[0].response, "Header updated.");
+  assert.equal(turns[0].status, "checkpoint_verified");
+  assert.equal(turns[0].commitHash, "b".repeat(40));
+  assert.deepEqual(turns[0].changedFiles, [{ path: "src/Header.tsx", change: "modified", size: 120 }]);
+  assert.deepEqual(turns[0].activity.map((event) => event.label), ["Updated src/Header.tsx"]);
+  assert.equal(turns[1].id, -2);
+  assert.equal(turns[1].activity.length, 0);
+  assert.equal(turns[1].commitHash, null);
+  assert.equal(turns[1].status, undefined);
+});
+
+test("native activity records safe progress, file changes, and explicit non-completion status", () => {
+  assert.equal(safeNativeTurnEvent({ type: "generation_complete" })?.status, "agent_turn_ended");
+  assert.equal(
+    safeNativeTurnEvent({ type: "generation_complete" })?.activity?.label,
+    "Agent turn ended · application completion is not verified",
+  );
+  assert.deepEqual(safeNativeTurnEvent({ type: "file_generated", path: "/src/App.tsx" })?.changedFile, {
+    path: "src/App.tsx", change: "added", size: 0,
+  });
+  assert.equal(safeNativeTurnEvent({ type: "file_deleted", path: "../private.txt" })?.changedFile, undefined);
+  assert.equal(safeNativeTurnEvent({ type: "user_suggestion", message: "private prompt" }), null);
+});
+
+test("native checkpoint file comparison identifies additions, edits, and deletions", async () => {
+  const fs = createFsFromVolume(new Volume());
+  const dir = "/native-checkpoint";
+  await git.init({ fs, dir, defaultBranch: "main" });
+  const commit = async (message: string) => git.commit({
+    fs, dir, message,
+    author: { name: "BuildCustom test", email: "test@example.invalid" },
+  });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(`${dir}/index.html`, "A");
+  fs.writeFileSync(`${dir}/old.txt`, "old");
+  await git.add({ fs, dir, filepath: "index.html" });
+  await git.add({ fs, dir, filepath: "old.txt" });
+  const baseline = await commit("baseline");
+
+  fs.writeFileSync(`${dir}/index.html`, "B");
+  fs.writeFileSync(`${dir}/new.txt`, "new");
+  await git.add({ fs, dir, filepath: "index.html" });
+  await git.add({ fs, dir, filepath: "new.txt" });
+  await git.remove({ fs, dir, filepath: "old.txt" });
+  const target = await commit("updated project");
+  const changes = await changedFilesBetweenCommits(
+    { fs, dir, commitHash: target, files: [] },
+    baseline,
+    target,
+  );
+  assert.deepEqual(changes, [
+    { path: "index.html", change: "modified", size: 1 },
+    { path: "new.txt", change: "added", size: 3 },
+    { path: "old.txt", change: "deleted", size: 0 },
+  ]);
 });
