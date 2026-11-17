@@ -10,6 +10,7 @@ export type SavedAgentTurn = {
   activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
   commitHash: string | null;
   createdAt: string;
+  status?: "running" | "reply_saved" | "agent_turn_ended" | "interrupted" | "error" | "stopped" | "checkpoint_verified";
 };
 
 export function readSavedAgentTurns(data: unknown): SavedAgentTurn[] {
@@ -21,6 +22,9 @@ export function readSavedAgentTurns(data: unknown): SavedAgentTurn[] {
       || typeof row.response !== "string" || !["plan", "build"].includes(row.mode)
       || !Array.isArray(row.changedFiles) || !Array.isArray(row.activity)) {
       throw new Error("Invalid saved turn");
+    }
+    if (row.status !== undefined && !["running", "reply_saved", "agent_turn_ended", "interrupted", "error", "stopped", "checkpoint_verified"].includes(row.status)) {
+      throw new Error("Invalid saved turn status");
     }
     byId.set(row.id, row);
   }

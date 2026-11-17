@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NativeAutoContinueControl } from "@/components/native-auto-continue-control";
 import { readSavedAgentTurns, useSavedNativeConversation } from "@/hooks/use-saved-native-conversation";
-import { SavedBuildEvidence } from "@/components/customer-experience/SavedBuildEvidence";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { csrfToken, getAppUser, setAppUser, authHeaders, isAdminUser, signOut, clearAppUser, type AppUser } from "@/lib/auth";
@@ -119,6 +118,7 @@ import {
   ClarificationOptions,
   type BuilderPhase,
 } from "@/components/customer-experience/BuilderExperience";
+import { SavedBuildEvidence } from "@/components/customer-experience/SavedBuildEvidence";
 import {
   MAX_NATIVE_ACTIVITY_EVENTS,
   readNativeActivitySnapshot,
@@ -754,7 +754,21 @@ type RuntimeBuilderTurn = {
   activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
   commitHash: string | null;
   createdAt: string;
+  status?: "running" | "reply_saved" | "agent_turn_ended" | "interrupted" | "error" | "stopped" | "checkpoint_verified";
 };
+
+function nativeTurnStatusLabel(status: RuntimeBuilderTurn["status"]): string {
+  switch (status) {
+    case "running": return "Agent turn was running when last observed";
+    case "reply_saved": return "Agent reply saved · no completion claim";
+    case "agent_turn_ended": return "Agent turn ended · app completion not verified";
+    case "interrupted": return "Connection ended before the turn was verified";
+    case "error": return "Agent reported an error";
+    case "stopped": return "Agent stopped · partial work may remain";
+    case "checkpoint_verified": return "Development revision verified · app completeness not established";
+    default: return "Saved agent turn";
+  }
+}
 type ComposerImage = {
   id: string;
   filename: string;
@@ -1304,8 +1318,8 @@ function EditorPage() {
     diagnosticsAvailable: boolean;
   } | null>(null);
   const [nativeRecoveryUnverified, setNativeRecoveryUnverified] = useState(false);
+  const [nativeSafeForNewPrompt, setNativeSafeForNewPrompt] = useState(false);
   const [nativeConnectionRetry, setNativeConnectionRetry] = useState<NativeConnectionRetry | null>(null);
-  const [nativeIdleReconnectAvailable, setNativeIdleReconnectAvailable] = useState(false);
   const [nativeIdleReconnectPending, setNativeIdleReconnectPending] = useState(false);
   const [nativeProgress, setNativeProgress] = useState<BuildActivityEvent[]>(() => (
     typeof window === "undefined" || !projectId ? [] : readNativeActivitySnapshot(projectId).events
@@ -1349,7 +1363,6 @@ function EditorPage() {
   const nativeSocketRef = useRef<WebSocket | null>(null);
   const nativeIdleSocketRef = useRef<WebSocket | null>(null);
   const nativeIdleStopRef = useRef<() => void>(() => undefined);
-  const nativeIdleReconnectRef = useRef<() => void>(() => undefined);
   const nativeIdleStatusCheckRef = useRef(false);
   const nativeIdleAgentStateRef = useRef<Record<string, unknown> | null>(null);
   const nativeRecoveryCancelRef = useRef<() => void>(() => undefined);
@@ -1839,6 +1852,8 @@ function EditorPage() {
     let retryTimer: number | null = null;
     let connectionTimer: number | null = null;
     let stabilityTimer: number | null = null;
+    let statusRetryTimer: number | null = null;
+    let statusRetryCount = 0;
     let socket: WebSocket | null = null;
     nativeIdleAgentStateRef.current = null;
     const setReconnectPending = (pending: boolean) => {
@@ -1852,14 +1867,15 @@ function EditorPage() {
       if (retryTimer !== null) window.clearTimeout(retryTimer);
       if (connectionTimer !== null) window.clearTimeout(connectionTimer);
       if (stabilityTimer !== null) window.clearTimeout(stabilityTimer);
+      if (statusRetryTimer !== null) window.clearTimeout(statusRetryTimer);
       retryTimer = null;
       connectionTimer = null;
       stabilityTimer = null;
+      statusRetryTimer = null;
       socket?.close(1000, "Idle native connection stopped");
       if (nativeIdleSocketRef.current === socket) nativeIdleSocketRef.current = null;
       socket = null;
       if (nativeIdleStopRef.current === stop) nativeIdleStopRef.current = () => undefined;
-      nativeIdleReconnectRef.current = () => undefined;
       setReconnectPending(false);
       if (activeProjectIdRef.current === idleProjectId) setNativeConnected(false);
     };
@@ -1867,7 +1883,6 @@ function EditorPage() {
 
     const scheduleRetry = () => {
       if (!active) return;
-      if (activeProjectIdRef.current === idleProjectId) setNativeIdleReconnectAvailable(true);
       if (retryTimer !== null || retryCount >= 5) return;
       retryCount += 1;
       retryTimer = window.setTimeout(() => {
@@ -1875,13 +1890,34 @@ function EditorPage() {
         connect();
       }, Math.min(2 ** retryCount * 1000, 30_000));
     };
+    const clearStatusRetry = () => {
+      if (statusRetryTimer !== null) window.clearTimeout(statusRetryTimer);
+      statusRetryTimer = null;
+    };
+    const scheduleStatusRetry = () => {
+      if (!active || statusRetryTimer !== null) return;
+      const delay = nativeCompletionPhaseRef.current === "recovering"
+        ? 30_000
+        : Math.min(NATIVE_RECOVERY_POLL_MS * (2 ** statusRetryCount), 30_000);
+      statusRetryCount = Math.min(statusRetryCount + 1, 4);
+      statusRetryTimer = window.setTimeout(() => {
+        statusRetryTimer = null;
+        const currentSocket = socket;
+        const latestAgentState = nativeIdleAgentStateRef.current;
+        if (!active || !currentSocket || currentSocket.readyState !== WebSocket.OPEN || !latestAgentState) return;
+        void verifyReconnectedRuntime(latestAgentState, currentSocket);
+      }, delay);
+    };
     const verifyReconnectedRuntime = async (
       agentState: Record<string, unknown>,
       sourceSocket: WebSocket,
     ) => {
       if (!active || socket !== sourceSocket || nativeIdleStatusCheckRef.current) return;
+      clearStatusRetry();
+      setNativeSafeForNewPrompt(false);
       nativeIdleStatusCheckRef.current = true;
       setReconnectPending(true);
+      let authenticationRejected = false;
       try {
         const response = await fetch(`/api/projects/${idleProjectId}/runtime/status`, {
           credentials: "same-origin",
@@ -1890,7 +1926,10 @@ function EditorPage() {
         });
         const status = await response.json().catch(() => ({}));
         if (!active || socket !== sourceSocket || activeProjectIdRef.current !== idleProjectId) return;
-        if (!response.ok) throw new Error("The Agent connection returned, but its current runtime status could not be verified.");
+        if (!response.ok) {
+          authenticationRejected = response.status === 401 || response.status === 403;
+          throw new Error("The Agent connection returned, but its current runtime status could not be verified.");
+        }
 
         const lifecycle = nativeTaskLifecycleFromFrame(status.nativeTaskLifecycle);
         const runtimeStatus = {
@@ -1913,13 +1952,26 @@ function EditorPage() {
           && nativeCompletionPhaseRef.current === "idle";
         const lifecycleIsSettled = nativeLifecycleConfirmsSettled(lifecycle, baseline, stopWasRequested);
         const resourceLimitMessage = nativeResourceLimitError({ nativeTaskLifecycle: lifecycle }, baseline?.startedAt);
+        const lifecycleStatus = lifecycle?.status.toUpperCase() || "";
+        const lifecycleCustomerStatus = customerLifecycleStatus(lifecycle);
+        const lifecycleExplicitlyActive = ["PENDING", "QUEUED", "STARTING", "RUNNING", "BUILDING", "GENERATING", "WORKING", "IN_PROGRESS"]
+          .includes(lifecycleStatus) || lifecycleCustomerStatus === "WORKING";
+        const autoContinuePending = lifecycleCustomerStatus === "CONTINUE_AVAILABLE" && lifecycle?.autoContinue?.enabled === true;
+        const baselineRequiresLifecycleCorrelation = Boolean(baseline && (
+          Object.prototype.hasOwnProperty.call(baseline, "approvedTaskId")
+          || Object.prototype.hasOwnProperty.call(baseline, "approvedOperationId")
+          || Object.prototype.hasOwnProperty.call(baseline, "lifecycleUpdatedAt")
+        ));
+        const idleForNewPrompt = bothSourcesConfirmIdle && !lifecycleExplicitlyActive
+          && !autoContinuePending && !baselineRequiresLifecycleCorrelation;
 
         if (bothSourcesConfirmIdle && (lifecycleIsSettled || noPriorOperationNeedsRecovery)) {
           nativeRecoveryCancelRef.current();
           if (baseline) clearNativeOperationBaseline(idleProjectId);
+          statusRetryCount = 0;
+          setNativeSafeForNewPrompt(false);
           nativeRecoveryUnverifiedRef.current = false;
           setNativeRecoveryUnverified(false);
-          setNativeIdleReconnectAvailable(false);
           setNativeCompletionPhase(
             customerLifecycleStatus(lifecycle) === "CONTINUE_AVAILABLE" ? "paused"
               : customerLifecycleStatus(lifecycle) === "STOPPED" ? "error"
@@ -1949,28 +2001,44 @@ function EditorPage() {
           setSending(false);
           savedConversationRefreshRef.current();
         } else if (nativeStateShowsActiveGeneration(agentState) || nativeStateShowsActiveGeneration(status.state)) {
-          setNativeIdleReconnectAvailable(true);
           if (nativeRecoveryUnverifiedRef.current) {
             setNativeCompletionMessage("The Agent is still working. Your draft is saved, and Send remains disabled.");
           }
-        } else if (nativeRecoveryUnverifiedRef.current || stopWasRequested) {
+          scheduleStatusRetry();
+        } else if (idleForNewPrompt && hasUnresolvedOperation) {
+          setNativeSafeForNewPrompt(true);
+          nativeRecoveryUnverifiedRef.current = true;
+          setNativeRecoveryUnverified(true);
+          setSending(false);
+          if (nativeCompletionPhaseRef.current !== "recovering") {
+            setNativeCompletionPhase("error");
+            setNativeCompletionMessage("The Agent is ready for a new instruction. The previous app result is still unverified.");
+          }
+        } else if (nativeRecoveryUnverifiedRef.current || stopWasRequested || hasUnresolvedOperation) {
+          setNativeSafeForNewPrompt(false);
           nativeRecoveryUnverifiedRef.current = true;
           setNativeRecoveryUnverified(true);
           setSending(false);
           setNativeCompletionPhase("error");
-          setNativeCompletionMessage("The Agent reconnected, but the previous operation is not yet verified. Your draft is saved; reconnect again after the runtime state updates.");
+          setNativeCompletionMessage("The previous Agent update is still being checked in the background.");
+          scheduleStatusRetry();
         }
       } catch {
         if (active && socket === sourceSocket && activeProjectIdRef.current === idleProjectId
-          && (nativeRecoveryUnverifiedRef.current
+          && !authenticationRejected
+          && (readNativeOperationBaseline(idleProjectId)
+            || nativeRecoveryUnverifiedRef.current
             || nativeCompletionPhaseRef.current === "stopping"
-            || (nativeCompletionPhaseRef.current === "error" && readNativeOperationBaseline(idleProjectId)))) {
+            || nativeCompletionPhaseRef.current === "recovering"
+            || nativeCompletionPhaseRef.current === "running")) {
+          setNativeSafeForNewPrompt(false);
           nativeRecoveryUnverifiedRef.current = true;
           setNativeRecoveryUnverified(true);
           setSending(false);
           setNativeCompletionPhase("error");
-          setNativeCompletionMessage("The Agent reconnected, but its current operation could not be verified. Your draft is saved; Send remains disabled.");
+          setNativeCompletionMessage("The previous Agent update is still being checked in the background.");
           setRuntimeError("The saved operation state is still unverified. No prompt was resent.");
+          scheduleStatusRetry();
         }
       } finally {
         nativeIdleStatusCheckRef.current = false;
@@ -2003,13 +2071,11 @@ function EditorPage() {
               retryCount = 0;
               if (!nativeIdleAgentStateRef.current) {
                 setNativeConnected(false);
-                setNativeIdleReconnectAvailable(true);
-                if (!nativeIdleStatusCheckRef.current) setReconnectPending(false);
+                nextSocket.close(4000, "Agent state was not received");
               }
             }
           }, 30_000);
           setNativeConnected(false);
-          setNativeIdleReconnectAvailable(true);
           try {
             nextSocket.send(JSON.stringify({ type: "get_conversation_state" }));
           } catch {
@@ -2048,7 +2114,6 @@ function EditorPage() {
           if (connectionTimer !== null) window.clearTimeout(connectionTimer);
           connectionTimer = null;
           setNativeConnected(true);
-          setNativeIdleReconnectAvailable(false);
           const needsReconciliation = Boolean(
             readNativeOperationBaseline(idleProjectId)
             || nativeRecoveryUnverifiedRef.current
@@ -2065,6 +2130,8 @@ function EditorPage() {
           connectionTimer = null;
           stabilityTimer = null;
           if (!active || socket !== nextSocket) return;
+          clearStatusRetry();
+          setNativeSafeForNewPrompt(false);
           if (nativeIdleSocketRef.current === nextSocket) nativeIdleSocketRef.current = null;
           socket = null;
           nativeIdleAgentStateRef.current = null;
@@ -2078,39 +2145,6 @@ function EditorPage() {
         scheduleRetry();
       }
     };
-    const reconnectAgent = () => {
-      if (!active || activeProjectIdRef.current !== idleProjectId || nativeIdleStatusCheckRef.current) return;
-      setReconnectPending(true);
-      setNativeIdleReconnectAvailable(false);
-      retryCount = 0;
-      if (retryTimer !== null) window.clearTimeout(retryTimer);
-      if (connectionTimer !== null) window.clearTimeout(connectionTimer);
-      if (stabilityTimer !== null) window.clearTimeout(stabilityTimer);
-      retryTimer = null;
-      connectionTimer = null;
-      stabilityTimer = null;
-      setNativeConnected(false);
-      if (socket) {
-        const oldSocket = socket;
-        socket = null;
-        if (nativeIdleSocketRef.current === oldSocket) nativeIdleSocketRef.current = null;
-        oldSocket.onopen = null;
-        oldSocket.onmessage = null;
-        oldSocket.onerror = null;
-        const openAfterClose = () => {
-          if (!active || activeProjectIdRef.current !== idleProjectId || socket !== null) return;
-          if (retryTimer !== null) window.clearTimeout(retryTimer);
-          retryTimer = null;
-          connect();
-        };
-        oldSocket.onclose = openAfterClose;
-        oldSocket.close(1000, "Customer requested a read-only Agent reconnect");
-        if (oldSocket.readyState === WebSocket.CLOSED) {
-          openAfterClose();
-        }
-      } else connect();
-    };
-    nativeIdleReconnectRef.current = reconnectAgent;
     connect();
     return stop;
   }, [projectId, nativeRuntimeReady, sending]);
@@ -2287,7 +2321,7 @@ function EditorPage() {
     setNativeCompletionMessage("");
     setNativeRecoveryUnverified(false);
     nativeRecoveryUnverifiedRef.current = false;
-    setNativeIdleReconnectAvailable(false);
+    setNativeSafeForNewPrompt(false);
     setNativeIdleReconnectPending(false);
     nativeIdleReconnectPendingRef.current = false;
     nativeIdleAgentStateRef.current = null;
@@ -2847,6 +2881,7 @@ function EditorPage() {
       ? baselineData.commitHash
       : typeof baselineData.revision?.commitHash === "string" ? baselineData.revision.commitHash : null;
     const startedAt = Date.now();
+    const nativeTurnId = window.crypto.randomUUID();
     const operationBaseline: NativeOperationBaseline = {
       revision: baselineCommitHash,
       startedAt,
@@ -2964,6 +2999,7 @@ function EditorPage() {
           replaceAssistantMessage(message);
           setNativeCompletionPhase("error");
           setNativeCompletionMessage(recoverable ? "The result is not verified yet · refresh to check the latest project state." : message);
+          setNativeSafeForNewPrompt(false);
           setNativeRecoveryUnverified(recoverable);
         }
         if (!recoverable) clearNativeOperationBaseline(projectId);
@@ -3342,6 +3378,27 @@ function EditorPage() {
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
           }
+          let checkpointSaved = false;
+          try {
+            const csrf = await csrfToken();
+            const checkpointResponse = await fetch(`/api/projects/${projectId}/runtime/turns/checkpoint`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, ...authHeaders() },
+              body: JSON.stringify({ turnId: nativeTurnId, commitHash: currentCommitHash }),
+              signal: operationController.signal,
+            });
+            const checkpointData = await checkpointResponse.json().catch(() => ({}));
+            if (!checkpointResponse.ok) throw new Error(checkpointData.message || "Checkpoint verification failed.");
+            checkpointSaved = checkpointData.checkpointVerified === true;
+            if (checkpointSaved) {
+              const savedTurnsData = await fetchJson("turns");
+              const savedTurns = runtimeTurnsFromResponse(savedTurnsData);
+              if (savedTurns) finalTurns.splice(0, finalTurns.length, ...savedTurns);
+            }
+          } catch {
+            recordNativeProgress("The verified Development revision could not be attached to this chat turn", "info");
+          }
           if (turnsSequence === turnLoadSequenceRef.current) setTurns(finalTurns);
           setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
           setRuntimeError("");
@@ -3357,7 +3414,9 @@ function EditorPage() {
           const runtimeFilesQueryKey = ["runtime-files", projectId] as const;
           queryClient.invalidateQueries({ queryKey: runtimeFilesQueryKey });
           queryClient.invalidateQueries({ queryKey: ["runtime-file-content", projectId] });
-          recordNativeProgress(`${files.length} project file${files.length === 1 ? "" : "s"} verified · preview ready`);
+          recordNativeProgress(checkpointSaved
+            ? `${files.length} project file${files.length === 1 ? "" : "s"} verified · Development checkpoint saved`
+            : `${files.length} project file${files.length === 1 ? "" : "s"} verified · preview ready`);
           closeAndFinish();
         } catch (error: any) {
           if (!isOperationActive()) {
@@ -3516,13 +3575,24 @@ function EditorPage() {
             }
             promptAttempted = true;
             setNativeConnectionRetry(null);
+            setNativeSafeForNewPrompt(false);
+            nativeRecoveryUnverifiedRef.current = false;
+            setNativeRecoveryUnverified(false);
             writeNativeOperationBaseline(projectId, { ...operationBaseline, promptAttempted: true });
             try {
+              nativeProgressRef.current = [];
+              setNativeProgress([]);
+              writeNativeActivitySnapshot(projectId, {
+                events: [],
+                startedAt: nativeOperationStartedAtRef.current || startedAt,
+              });
               setNativeCompletionPhase(continuationApproval ? "starting" : "running");
               setNativeCompletionMessage(continuationApproval ? "Starting..." : "Agent started · streaming progress");
               socket.send(JSON.stringify({
                 type: "user_suggestion",
                 message: continuationApproval ? "Continue" : agentPrompt,
+                buildcustomTurnId: nativeTurnId,
+                buildcustomBaselineCommitHash: baselineCommitHash,
                 ...(continuationApproval ? {
                   continuationApproval: {
                     taskId: continuationApproval.taskId,
@@ -3941,8 +4011,9 @@ function EditorPage() {
       return;
     }
     if (sendAttemptRef.current) return;
-    if (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified
-      || nativeIdleReconnectPendingRef.current || nativeConnectionRetry || nativeCompletionPhase === "recovering")) {
+    if (nativeThink && (sending || nativeRuntimeAlreadyWorking || (nativeRecoveryUnverified && !nativeSafeForNewPrompt)
+      || nativeIdleReconnectPendingRef.current || nativeConnectionRetry
+      || (nativeCompletionPhase === "recovering" && !nativeSafeForNewPrompt))) {
       // Keep the draft and the authoritative phase. Pressing Enter must not
       // invent a recovery operation while an existing operation is still busy.
       return;
@@ -4070,6 +4141,8 @@ function EditorPage() {
         ...(appendAcknowledgement ? [{ role: "assistant" as const, content: acknowledgement, ...(nativeThink ? { nativeRequestId: assistantMessageId } : {}) }] : []),
         { id: assistantMessageId, role: "assistant" as const, content: "", ...(nativeThink ? { nativeRequestId: assistantMessageId } : {}) },
       ]);
+      setNativeSafeForNewPrompt(false);
+      if (nativeThink) nativeRecoveryCancelRef.current();
       setNativeCompletionPhase(nativeThink ? "starting" : "idle");
       setNativeCompletionMessage(nativeThink ? "Connecting to the project runtime. No build request is sent until the connection is confirmed." : "");
       setNativeActivityStart(Date.now());
@@ -4790,9 +4863,9 @@ function EditorPage() {
                     <div className="min-w-0 flex-1">
                       <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>{nativeThink ? "Saved agent turn" : "Completed checkpoint"}</div>
                       <div className={`text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
-                        {nativeThink && !turn.changedFiles.length ? "Reply saved · workspace stages in Activity" : <>
-                          {(turn.activity?.length || 0)} {(turn.activity?.length || 0) === 1 ? "action" : "actions"} · {turn.changedFiles.length} changed {turn.changedFiles.length === 1 ? "file" : "files"}
-                        </>}
+                        {nativeThink
+                          ? `${nativeTurnStatusLabel(turn.status)} · ${(turn.activity?.length || 0)} observed ${(turn.activity?.length || 0) === 1 ? "action" : "actions"} · ${turn.changedFiles.length} file changes`
+                          : `${(turn.activity?.length || 0)} ${(turn.activity?.length || 0) === 1 ? "action" : "actions"} · ${turn.changedFiles.length} changed ${turn.changedFiles.length === 1 ? "file" : "files"}`}
                       </div>
                     </div>
                     <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
@@ -4840,9 +4913,15 @@ function EditorPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{nativeThink ? "No file-change list is attached to this saved reply. Check Project Activity for recorded workspace stages." : "No file content changed in this turn."}</p>
+                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{nativeThink ? "No file changes were observed for this turn." : "No file content changed in this turn."}</p>
                     )}
-                    {turn.commitHash && canManageProduction && (
+                    {turn.commitHash && nativeThink && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className={`text-[10px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>Verified Development checkpoint</span>
+                        <span className={`font-mono text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{turn.commitHash.slice(0, 8)}</span>
+                      </div>
+                    )}
+                    {turn.commitHash && canManageProduction && !nativeThink && (
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <span className={`font-mono text-[10px] ${theme === "dark" ? "text-white/30" : "text-gray-400"}`}>{turn.commitHash.slice(0, 8)}</span>
                         <button
@@ -4966,37 +5045,6 @@ function EditorPage() {
               </button>
             </section>
           )}
-          {nativeThink && (nativeIdleReconnectAvailable || nativeRecoveryUnverified
-            || nativeCompletionPhase === "recovering") && (
-            <section
-              className={`rounded-xl border px-3 py-3 ${
-                theme === "dark" ? "border-cyan-400/25 bg-cyan-400/10" : "border-cyan-200 bg-cyan-50"
-              }`}
-              role="status"
-              data-testid="native-agent-reconnect"
-            >
-              <p className={`text-xs leading-5 ${theme === "dark" ? "text-cyan-100" : "text-cyan-950"}`}>
-                {nativeIdleReconnectPending
-                  ? "Checking the Agent connection and saved runtime state."
-                  : nativeConnected
-                    ? "The Agent is connected, but the previous operation may still need verification."
-                    : "The Agent connection was interrupted. Reconnect to check the saved runtime state."}
-                {" "}This check reads saved conversation and runtime status only; it does not resend your prompt.
-              </p>
-              <button
-                type="button"
-                onClick={() => nativeIdleReconnectRef.current()}
-                disabled={nativeIdleReconnectPending || !nativeRuntimeReady}
-                className="mt-2 min-h-9 rounded-lg bg-cyan-400 px-3 text-xs font-semibold text-gray-950 disabled:cursor-not-allowed disabled:opacity-50"
-                data-testid="button-reconnect-native-agent"
-              >
-                {nativeIdleReconnectPending ? "Checking…" : nativeConnected ? "Check Agent status" : "Reconnect Agent"}
-              </button>
-            </section>
-          )}
-          {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
-            <SavedBuildEvidence projectId={projectId} theme={theme} observing={nativeCompletionPhase === "recovering"} />
-          )}
           {nativeThink && nativeCompletionPhase === "needs_input"
             && customerLifecycleStatus(currentNativeLifecycle) === "BUILD_COMPLETE" && (
               <p
@@ -5008,6 +5056,9 @@ function EditorPage() {
                 The Agent finished its turn. Review the generated files and live preview before treating this app as complete.
               </p>
             )}
+          {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
+            <SavedBuildEvidence projectId={projectId} theme={theme} observing={nativeCompletionPhase === "recovering"} />
+          )}
           {nativeThink ? (
             <NativeBuildActivity
               projectId={projectId}
@@ -5216,18 +5267,14 @@ function EditorPage() {
               </button>
             </div>
           )}
-            {nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified
-              || nativeConnectionRetry || nativeCompletionPhase === "recovering") && (
-              <p
-                className={`mb-2 text-[11px] leading-4 ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}
-                role="status"
-                data-testid="native-composer-draft-hint"
-              >
-                {nativeCompletionPhase === "recovering"
-                  ? "Checking the saved operation. You can draft a reply; it will not be sent automatically."
-                  : "You can draft a reply while the Agent works. It will stay here, ready to send when this update finishes."}
-              </p>
-            )}
+          {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
+            <p
+              className={`px-4 pt-3 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}
+              data-testid="native-composer-draft-hint"
+            >
+              You can draft a reply here. It will not be sent automatically.
+            </p>
+          )}
             <textarea
               ref={textareaRef}
               value={chatInput}
@@ -5238,13 +5285,15 @@ function EditorPage() {
                   handleSend();
                 }
               }}
-              placeholder={!currentRuntimeCapability
-                ? "Checking project runtime…"
-                : planningSession?.phase === "clarifying"
-                  ? "Reply here in the chat…"
-                  : planningSession?.phase === "awaiting_approval"
-                    ? "Add a note to the plan, or approve it above…"
-                    : "Describe what you want to build…"}
+              placeholder={nativeThink
+                ? "Message the Agent…"
+                : !currentRuntimeCapability
+                  ? "Checking project runtime…"
+                  : planningSession?.phase === "clarifying"
+                    ? "Reply here in the chat…"
+                    : planningSession?.phase === "awaiting_approval"
+                      ? "Add a note to the plan, or approve it above…"
+                      : "Describe what you want to build…"}
               rows={1}
               className={`block w-full min-h-10 max-h-[220px] bg-transparent border-none outline-none resize-none text-sm leading-6 ${
                 theme === "dark"
@@ -5297,8 +5346,8 @@ function EditorPage() {
               <button
                 onClick={() => handleSend()}
                 disabled={!currentRuntimeCapability || !planningLoaded || planningSaving
-                  || (nativeThink && (sending || nativeRuntimeAlreadyWorking || nativeRecoveryUnverified
-                    || nativeIdleReconnectPending || nativeCompletionPhase === "recovering"))}
+                  || (nativeThink && (sending || nativeRuntimeAlreadyWorking || (nativeRecoveryUnverified && !nativeSafeForNewPrompt)
+                    || nativeIdleReconnectPending || (nativeCompletionPhase === "recovering" && !nativeSafeForNewPrompt)))}
                 className="shrink-0 p-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                 data-testid="button-send-chat"
               >

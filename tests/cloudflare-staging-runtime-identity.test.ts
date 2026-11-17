@@ -597,6 +597,7 @@ async function withMockSocketPlatform<T>(
   class MockSocket extends EventTarget {
     peer!: MockSocket;
     sent: unknown[] = [];
+    readyState = 1;
     accepted = false;
     closed: { code: number; reason: string } | null = null;
     accept() { this.accepted = true; }
@@ -605,6 +606,7 @@ async function withMockSocketPlatform<T>(
       this.peer?.dispatchEvent(new MessageEvent("message", { data }));
     }
     close(code = 1000, reason = "") {
+      this.readyState = 3;
       this.closed = { code, reason };
     }
   }
@@ -923,6 +925,16 @@ test("two runtime users have one verified session each and isolated BuildCustom 
   assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/files`)).status, 404);
   assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/files/content?path=src%2FApp.tsx`)).status, 404);
   assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/previews`, "POST", {}, { "X-CSRF-Token": "csrf-value" })).status, 404);
+  assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/turns/checkpoint`, "POST", {
+    turnId: "c1e2d3f4-a5b6-4789-8abc-def012345678",
+    commitHash: "a".repeat(40),
+  }, { "X-CSRF-Token": "csrf-value" })).status, 404,
+  "a different account cannot read or finalize this project's checkpoint");
+  assert.equal((await a.send(`/api/projects/${projectA.id}/runtime/turns/checkpoint`, "POST", {
+    turnId: "c1e2d3f4-a5b6-4789-8abc-def012345678",
+    commitHash: "a".repeat(40),
+  })).status, 403,
+  "the owner checkpoint endpoint still requires a valid CSRF token");
   assert.equal(
     stock.calls.filter((path) => path.startsWith("/api/agent/") || path.startsWith("/apps/")).length,
     ownerDataCallsBeforeForeignReads,

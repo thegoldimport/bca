@@ -124,6 +124,7 @@ function fixture({
       agentCreationRequests: 0,
       planningWrites: 0,
       planningDeletes: 0,
+      nativeCheckpointPosts: [],
       savedHistoryStatuses: [],
       api: [],
     },
@@ -275,6 +276,25 @@ function installBrowserHarness(initialFixture) {
     }
     if (url.pathname.endsWith("/runtime/files")) {
       return json({ files: state.filePaths.map((filePath) => ({ path: filePath })) });
+    }
+    if (url.pathname.endsWith("/runtime/turns/checkpoint") && method === "POST") {
+      const checkpoint = JSON.parse(String(init.body || "{}"));
+      state.stats.nativeCheckpointPosts.push(checkpoint);
+      state.persistedTurns = state.persistedTurns.map((turn) => turn.prompt === PROMPT ? {
+        ...turn,
+        status: "checkpoint_verified",
+        commitHash: checkpoint.commitHash,
+        changedFiles: [{ path: "public/index.html", change: "modified", size: 42 }],
+        activity: [{
+          type: "tool",
+          label: "Updated public/index.html",
+          path: "public/index.html",
+          status: "success",
+          createdAt: "2026-11-15T12:00:00.000Z",
+        }],
+      } : turn);
+      persist();
+      return json({ checkpointVerified: true, commitHash: checkpoint.commitHash });
     }
     if (url.pathname.endsWith("/runtime/turns")) {
       const savedConversationRead = init.cache === "no-store";
@@ -722,6 +742,19 @@ async function finishQuietCandidate(page) {
 }
 
 test("BuildCustom completion and recovery states in rendered Chromium client", { timeout: 300_000 }, async (t) => {
+  const testFilter = process.env.NATIVE_COMPLETION_TEST_FILTER;
+  if (testFilter) {
+    const originalSubtest = t.test.bind(t);
+    Object.defineProperty(t, "test", {
+      configurable: true,
+      value: (name, ...args) => {
+        if (String(name).includes(testFilter)) return originalSubtest(name, ...args);
+        const options = typeof args[0] === "function" ? {} : args[0] || {};
+        const run = typeof args[0] === "function" ? args[0] : args[1];
+        return originalSubtest(name, { ...options, skip: "filtered by NATIVE_COMPLETION_TEST_FILTER" }, run);
+      },
+    });
+  }
   const bundleDir = await mkdtemp(path.join(os.tmpdir(), "native-completion-browser-"));
   let httpServer;
   let browser;
@@ -824,6 +857,33 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.ok(stats.savedHistoryRequests.every(request =>
           request.path === "/api/projects/11/runtime/turns" && request.method === "GET"
           && request.credentials === "same-origin" && request.cache === "no-store"));
+      } finally { await page.close(); }
+    });
+
+    await t.test("reopened per-turn activity shows verified status, observed changes, and no native restore action", async () => {
+      const initial = fixture();
+      initial.persistedTurns = [...BASE_TURNS, {
+        ...FINAL_TURN,
+        changedFiles: [{ path: "public/index.html", change: "modified", size: 42 }],
+        activity: [{
+          type: "tool",
+          label: "Updated public/index.html",
+          path: "public/index.html",
+          status: "success",
+          createdAt: "2026-11-15T12:00:00.000Z",
+        }],
+        status: "checkpoint_verified",
+      }];
+      const page = await startEditor(serverUrl, browser, initial);
+      try {
+        await page.waitForSelector('[data-testid="builder-turn-checkpoint-2"]', { timeout: 10_000 });
+        const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
+        assert.match(checkpoint, /Verified Development checkpoint/);
+        assert.match(checkpoint, /Updated public\/index\.html/);
+        assert.match(checkpoint, /1 file changes/);
+        const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
+          Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
+        assert.equal(hasRestoreAction, false);
       } finally { await page.close(); }
     });
 
@@ -1092,7 +1152,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       } finally { await page.close(); }
     });
 
-    await t.test("an idle reconnect preserves drafts without unlocking an unverified operation", async () => {
+    await t.test("automatic recovery preserves drafts and never needs a manual status check", async () => {
       const working = {
         status: "RUNNING",
         customerStatus: "WORKING",
@@ -1111,32 +1171,48 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
           "the active runtime still blocks a new prompt");
         await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.openSockets === 1);
-        await page.waitForSelector('[data-testid="native-agent-reconnect"]', { timeout: 5_000 });
+        assert.equal(await page.$('[data-testid="button-reconnect-native-agent"]'), null,
+          "passive recovery must not ask the customer to check or reconnect the Agent");
+        assert.equal(await page.$('[data-testid="native-agent-reconnect"]'), null);
+        assert.equal(await page.$('[data-testid="native-composer-draft-hint"]'), null,
+          "the composer should not be covered by recovery instructions");
         await page.type('[data-testid="input-editor-chat"]', "Keep this follow-up draft after reconnect.");
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
           "Send stays blocked while the previous operation is unverified");
         assert.equal((await statsOf(page)).userSuggestions, 0);
 
+        const readsBeforeIdle = await page.evaluate(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length);
         await page.evaluate(() => {
           const harness = window.__nativeCompletionHarness;
           harness.setRuntime({ active: false, nativeTaskLifecycle: null });
           harness.setWebsocketState({ active: false, nativeTaskLifecycle: null });
+          harness.emit({ type: "cf_agent_state", state: { shouldBeGenerating: false, generation: { status: "idle" } } });
         });
-        await page.click('[data-testid="button-reconnect-native-agent"]');
-        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.api
-          .some((request) => request.path.endsWith("/runtime/status") && request.method === "GET"), { timeout: 5_000 });
-        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
-          "an idle signal without a fresh terminal lifecycle cannot resolve a pending operation");
+        await page.waitForFunction((before) => window.__nativeCompletionHarness.snapshot().stats.api
+          .filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length > before,
+        { timeout: 5_000 }, readsBeforeIdle);
+        await page.waitForFunction(() => {
+          const send = document.querySelector('[data-testid="button-send-chat"]');
+          return send && !send.disabled;
+        }, { timeout: 5_000 });
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), false,
+          "fresh owner status and the live Agent socket can allow an explicit new instruction without claiming completion");
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value),
           "Keep this follow-up draft after reconnect.");
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null,
+          "idle status does not establish that the previous application is complete");
+        assert.equal((await statsOf(page)).userSuggestions, 0, "recovery never replays a prompt");
         const stats = await statsOf(page);
-        assert.equal(stats.userSuggestions, 0, "reconnect must not resend the saved prompt");
-        assert.equal(stats.maxOpenSockets, 1, "reconnect must not overlap idle sockets");
+        assert.equal(stats.userSuggestions, 0, "recovery never resends the saved prompt");
+        assert.equal(stats.maxOpenSockets, 1, "automatic reconnects must not overlap idle sockets");
         assert.ok(stats.conversationStateRequests >= 1);
         assert.notEqual(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null,
-          "an uncorrelated idle status must leave the prior operation available for safe recovery");
+          "the previous operation stays recoverable until stronger completion evidence or an explicit new turn");
         assert.equal(stats.agentCreationRequests, 0);
         assert.equal(stats.publishRequests, 0);
+        await sendOnePrompt(page);
+        assert.equal((await statsOf(page)).userSuggestions, 1, "only the customer's explicit follow-up is sent");
       } finally { await page.close(); }
     });
 
@@ -1164,25 +1240,20 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(await page.$('[data-testid="button-stop-build"]'), null,
           "an idle recovery connection is not a generation this tab can stop");
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true);
-        await page.waitForFunction(() => {
-          const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
-          return button && !button.disabled;
-        }, { timeout: 5_000 });
-        const statusReads = await page.evaluate(() => window.__nativeCompletionHarness.snapshot().stats.api
-          .filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length);
-        await page.click('[data-testid="button-reconnect-native-agent"]');
-        await page.waitForFunction((before) => {
-          const stats = window.__nativeCompletionHarness.snapshot().stats;
-          const reads = stats.api.filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length;
-          const button = document.querySelector('[data-testid="button-reconnect-native-agent"]');
-          return reads > before && button && !button.disabled;
-        }, { timeout: 5_000 }, statusReads);
+        await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .some((request) => request.path.endsWith("/runtime/status") && request.method === "GET"), { timeout: 5_000 });
+        assert.equal(await page.$('[data-testid="button-reconnect-native-agent"]'), null,
+          "the customer should not need to click a recovery control");
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
           "Send remains visible but disabled while the existing operation is active");
         assert.equal((await statsOf(page)).userSuggestions, 0);
-        await page.waitForSelector('[data-testid="native-agent-reconnect"]', { timeout: 5_000 });
+        const firstStatusReads = await page.evaluate(() => window.__nativeCompletionHarness.snapshot().stats.api
+          .filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length);
+        await page.waitForFunction((before) => window.__nativeCompletionHarness.snapshot().stats.api
+          .filter((request) => request.path.endsWith("/runtime/status") && request.method === "GET").length > before,
+        { timeout: 7_500 }, firstStatusReads);
         assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
-          "the live authenticated status, not an isolated WebSocket frame, controls Send");
+          "automatic status retries cannot override authoritative active runtime state");
         assert.equal((await statsOf(page)).userSuggestions, 0);
         assert.notEqual(await page.evaluate(() => sessionStorage.getItem("buildcustom:native-operation:10")), null);
       } finally { await page.close(); }
@@ -1201,9 +1272,9 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true,
           "customers can draft while the saved operation is being verified");
         await page.type('[data-testid="input-editor-chat"]', "Keep this follow-up draft.");
-        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), true,
-          "a draft cannot be sent until recovery verifies a safe boundary");
-        assert.equal((await statsOf(page)).userSuggestions, 0);
+        assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => node.disabled), false,
+          "a fresh idle boundary lets the customer choose to send without waiting for a completion claim");
+        assert.equal((await statsOf(page)).userSuggestions, 0, "no prompt is sent until the customer chooses Send");
         await page.evaluate(() => window.__nativeCompletionHarness.fastForward(35_000));
         await waitForState(page, "needs_input", 15_000);
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => node.value), "Keep this follow-up draft.");
@@ -1239,8 +1310,29 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           assert.notEqual(await stateOf(page), "needs_input");
           assert.equal(await page.$('[data-testid="native-build-complete"]'), null);
           await page.type('[data-testid="input-editor-chat"]', "Offline blocked follow-up");
-          await page.keyboard.press("Enter");
-          assert.equal((await statsOf(page)).userSuggestions, 0);
+          if (guard === "wrong revision") {
+            await page.waitForFunction(() => {
+              const button = document.querySelector('[data-testid="button-send-chat"]');
+              return button && !button.disabled;
+            }, { timeout: 5_000 });
+          }
+          if (guard === "wrong revision") {
+            await page.click('[data-testid="button-send-chat"]');
+            await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1,
+              { timeout: 10_000 });
+          } else {
+            await page.keyboard.press("Enter");
+          }
+          assert.equal((await statsOf(page)).userSuggestions, guard === "wrong revision" ? 1 : 0,
+            guard === "wrong revision"
+              ? "a fresh idle boundary permits a new explicit prompt without resolving the previous result"
+              : "unsafe or approved continuation state must remain blocked");
+          if (guard === "wrong revision") {
+            await page.waitForFunction(() => document.querySelector('[data-testid="native-completion-state"]')?.dataset.state === "running");
+            assert.equal(await page.$('[data-testid="native-build-complete"]'), null,
+              "sending a new prompt does not claim the previous app is complete");
+            return;
+          }
           const baseline = await page.evaluate(() => JSON.parse(sessionStorage.getItem("buildcustom:native-operation:10")));
           assert.ok(baseline);
           if (guard === "approved continuation") assert.equal(baseline.approvedTaskId, "offline-task");
@@ -1420,6 +1512,14 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await finishQuietCandidate(page);
         await assertSinglePersistedTurn(page);
         const stats = await statsOf(page);
+        assert.equal(stats.nativeCheckpointPosts.length, 1,
+          "a verified Development revision is attached to this specific native chat turn");
+        assert.equal(stats.nativeCheckpointPosts[0].commitHash, EDITED);
+        const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
+        assert.match(checkpoint, /Verified Development checkpoint/);
+        const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
+          Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
+        assert.equal(hasRestoreAction, false, "native restore stays unavailable until its runtime path is verified");
         assert.ok(stats.api.filter((entry) => entry.path.endsWith("/runtime/files")).length >= 1);
         assert.equal(stats.frameworkEnvelopesFiltered, 0);
       } finally {

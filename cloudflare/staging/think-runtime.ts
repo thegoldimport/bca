@@ -488,6 +488,130 @@ async function currentGitSnapshot(
   return { fs, dir, commitHash, files };
 }
 
+export async function changedFilesBetweenCommits(
+  snapshot: GitSnapshot,
+  baselineCommitHash: string | null,
+  targetCommitHash: string,
+): Promise<Array<{ path: string; change: string; size: number }>> {
+  if (!snapshot.commitHash || snapshot.commitHash !== targetCommitHash || !HASH.test(targetCommitHash)) {
+    throw new RuntimeIdentityError("The checkpoint no longer matches the current Development revision.", 409);
+  }
+  if (baselineCommitHash && !HASH.test(baselineCommitHash)) {
+    throw new RuntimeIdentityError("The starting Development revision could not be verified.", 409);
+  }
+  const targetFiles = await git.listFiles({ fs: snapshot.fs, dir: snapshot.dir, ref: targetCommitHash });
+  const baselineFiles = baselineCommitHash
+    ? await git.listFiles({ fs: snapshot.fs, dir: snapshot.dir, ref: baselineCommitHash })
+    : [];
+  const targetSet = new Set(targetFiles);
+  const baselineSet = new Set(baselineFiles);
+  const changed = [...new Set([...baselineFiles, ...targetFiles])]
+    .filter((path) => baselineSet.has(path) !== targetSet.has(path)
+      || baselineSet.has(path) && targetSet.has(path) && baselineCommitHash !== targetCommitHash)
+    .sort();
+  const result: Array<{ path: string; change: string; size: number }> = [];
+  for (const path of changed) {
+    try { safeProjectPath(path); } catch {
+      throw new RuntimeIdentityError("A Development checkpoint contains an unsafe file path.", 409);
+    }
+    let change: string;
+    let size = 0;
+    if (!baselineSet.has(path)) {
+      change = "added";
+      const target = await git.readBlob({ fs: snapshot.fs, dir: snapshot.dir, oid: targetCommitHash, filepath: path });
+      size = target.blob.byteLength;
+    } else if (!targetSet.has(path)) {
+      change = "deleted";
+    } else {
+      const [before, after] = await Promise.all([
+        git.readBlob({ fs: snapshot.fs, dir: snapshot.dir, oid: baselineCommitHash!, filepath: path }),
+        git.readBlob({ fs: snapshot.fs, dir: snapshot.dir, oid: targetCommitHash, filepath: path }),
+      ]);
+      if (before.oid === after.oid) continue;
+      change = "modified";
+      size = after.blob.byteLength;
+    }
+    result.push({ path, change, size });
+    if (result.length > TREE_ENTRY_LIMIT) {
+      throw new RuntimeIdentityError("This checkpoint changes too many files to record safely.", 413);
+    }
+  }
+  return result;
+}
+
+async function finalizeNativeTurnCheckpoint(
+  env: Env,
+  request: Request,
+  projectId: number,
+  agentId: string,
+  body: unknown,
+): Promise<Response> {
+  const input = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown> : {};
+  const token = typeof input.turnId === "string" && NATIVE_TURN_TOKEN.test(input.turnId)
+    ? input.turnId.toLowerCase() : "";
+  const commitHash = typeof input.commitHash === "string" && HASH.test(input.commitHash)
+    ? input.commitHash.toLowerCase() : "";
+  if (!token || !commitHash) {
+    return Response.json({ message: "A verified Agent turn and Development revision are required." }, { status: 400 });
+  }
+
+  const rows = await env.DB.prepare(
+    "SELECT id,project_id,mode,prompt,response,changed_files,commit_hash,activity,created_at FROM runtime_builder_turns WHERE project_id=? AND mode='native_build' ORDER BY id DESC LIMIT 200",
+  ).bind(projectId).all<any>();
+  const row = (rows.results || []).find((candidate) => nativeTurnMeta(parseJsonArray(candidate.activity))?.token === token);
+  if (!row) return Response.json({ message: "The saved Agent turn was not found." }, { status: 404 });
+  const activity = parseJsonArray(row.activity);
+  const meta = nativeTurnMeta(activity);
+  if (meta?.status === "checkpoint_verified" && row.commit_hash === commitHash) {
+    return Response.json({
+      checkpointVerified: true,
+      commitHash,
+      changedFiles: parseJsonArray(row.changed_files),
+    }, { headers: { "Cache-Control": "no-store" } });
+  }
+  if (!meta || meta.status !== "agent_turn_ended") {
+    return Response.json({ message: "The Agent turn has not reached a verified checkpoint state." }, { status: 409 });
+  }
+  if (row.commit_hash && row.commit_hash !== commitHash) {
+    return Response.json({ message: "A different checkpoint is already saved for this turn." }, { status: 409 });
+  }
+  if (meta.baselineCommitHash === commitHash) {
+    return Response.json({ message: "This turn did not produce a new Development revision." }, { status: 409 });
+  }
+
+  let changedFiles: Array<{ path: string; change: string; size: number }>;
+  try {
+    const branch = await currentBranch(env, request, agentId);
+    if (!branch) return Response.json({ message: "A Development branch could not be verified." }, { status: 409 });
+    const snapshot = await currentGitSnapshot(env, request, agentId, branch);
+    if (!snapshot.commitHash || snapshot.commitHash !== commitHash) {
+      return Response.json({ message: "The Development revision changed before its checkpoint could be saved." }, { status: 409 });
+    }
+    if (meta.baselineCommitHash) {
+      const history = await git.log({ fs: snapshot.fs, dir: snapshot.dir, ref: commitHash, depth: 1000 });
+      if (!history.some((entry) => entry.oid === meta.baselineCommitHash)) {
+        return Response.json({ message: "The starting revision is no longer verifiable on this Development branch." }, { status: 409 });
+      }
+    }
+    changedFiles = await changedFilesBetweenCommits(snapshot, meta.baselineCommitHash, commitHash);
+  } catch (error) {
+    const message = error instanceof RuntimeIdentityError
+      ? error.message
+      : "The Development checkpoint could not be verified.";
+    const status = error instanceof RuntimeIdentityError ? error.status : 409;
+    return Response.json({ message }, { status });
+  }
+  const nextMeta: NativeTurnMeta = { ...meta, status: "checkpoint_verified" };
+  const cleanActivity = activity.filter((item) => item?.type !== NATIVE_TURN_META_TYPE);
+  await env.DB.prepare(
+    "UPDATE runtime_builder_turns SET commit_hash=?,changed_files=?,activity=? WHERE id=? AND project_id=? AND mode='native_build'",
+  ).bind(commitHash, JSON.stringify(changedFiles), JSON.stringify([nextMeta, ...cleanActivity]), row.id, projectId).run();
+  return Response.json({ checkpointVerified: true, commitHash, changedFiles }, {
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
 async function listCurrentFiles(env: Env, request: Request, agentId: string): Promise<Array<{ path: string; size?: number }>> {
   const branch = await currentBranch(env, request, agentId);
   const snapshot = await currentGitSnapshot(env, request, agentId, branch);
@@ -607,6 +731,13 @@ export function allowedNativeClientFrame(value: unknown): Record<string, unknown
   if (frame.type === "user_suggestion" && typeof frame.message === "string"
     && frame.message.trim().length > 0 && frame.message.length <= 30_000) {
     const clean: Record<string, unknown> = { type: frame.type, message: frame.message };
+    if (frame.buildcustomTurnId !== undefined) {
+      if (typeof frame.buildcustomTurnId !== "string" || !/^[a-f0-9-]{36}$/i.test(frame.buildcustomTurnId)
+        || (frame.buildcustomBaselineCommitHash !== null
+          && (typeof frame.buildcustomBaselineCommitHash !== "string" || !HASH.test(frame.buildcustomBaselineCommitHash)))) return null;
+      clean.buildcustomTurnId = frame.buildcustomTurnId.toLowerCase();
+      clean.buildcustomBaselineCommitHash = frame.buildcustomBaselineCommitHash;
+    }
     if (frame.continuationApproval !== undefined) {
       const approval = frame.continuationApproval as Record<string, unknown> | null;
       if (!approval || typeof approval !== "object" || Array.isArray(approval)
@@ -650,6 +781,182 @@ function socketText(data: unknown): string | null {
   if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
   if (ArrayBuffer.isView(data)) return new TextDecoder().decode(data);
   return null;
+}
+
+const NATIVE_TURN_META_TYPE = "__buildcustom_native_turn";
+const NATIVE_TURN_ACTIVITY_LIMIT = 300;
+const NATIVE_TURN_TOKEN = /^[a-f0-9-]{36}$/i;
+const NATIVE_TURN_STATUSES = new Set([
+  "running", "reply_saved", "agent_turn_ended", "interrupted", "error", "stopped", "checkpoint_verified",
+]);
+
+type NativeTurnMeta = {
+  type: typeof NATIVE_TURN_META_TYPE;
+  token: string;
+  status: string;
+  baselineCommitHash: string | null;
+};
+
+type NativeTurnActivity = {
+  type: string;
+  label: string;
+  path?: string;
+  status?: string;
+  createdAt: string;
+};
+
+function nativeTurnMeta(activity: unknown): NativeTurnMeta | null {
+  if (!Array.isArray(activity)) return null;
+  const value = activity.find((item) => item?.type === NATIVE_TURN_META_TYPE) as Record<string, unknown> | undefined;
+  if (!value || typeof value.token !== "string" || !NATIVE_TURN_TOKEN.test(value.token)
+    || typeof value.status !== "string" || !NATIVE_TURN_STATUSES.has(value.status)
+    || (value.baselineCommitHash !== null
+      && (typeof value.baselineCommitHash !== "string" || !HASH.test(value.baselineCommitHash)))) return null;
+  return {
+    type: NATIVE_TURN_META_TYPE,
+    token: value.token.toLowerCase(),
+    status: value.status,
+    baselineCommitHash: value.baselineCommitHash as string | null,
+  };
+}
+
+export function safeNativeTurnEvent(frame: Record<string, any>): {
+  activity?: NativeTurnActivity;
+  status?: string;
+} | null {
+  const type = typeof frame.type === "string" ? frame.type : "";
+  const now = new Date().toISOString();
+  const pathValue = typeof frame.path === "string" ? frame.path
+    : typeof frame.file?.filePath === "string" ? frame.file.filePath
+      : typeof frame.file?.path === "string" ? frame.file.path
+        : typeof frame.filePath === "string" ? frame.filePath : "";
+  let path: string | undefined;
+  if (pathValue) {
+    const normalizedPath = pathValue.startsWith("/") ? pathValue.slice(1) : pathValue;
+    try { path = safeProjectPath(normalizedPath); } catch { path = undefined; }
+  }
+  const event = (label: string, status = "info", eventType = "progress"): NativeTurnActivity => ({
+    type: eventType,
+    label: label.slice(0, 300),
+    ...(path ? { path } : {}),
+    status,
+    createdAt: now,
+  });
+
+  if (type === "generation_started") return { activity: event("Agent started this turn", "info"), status: "running" };
+  if (type === "generation_complete") {
+    return {
+      activity: event("Agent turn ended · application completion is not verified", "success"),
+      status: "agent_turn_ended",
+    };
+  }
+  if (type === "generation_stopped" || type === "generation_cancelled") {
+    return { activity: event("Agent turn stopped", "error"), status: "stopped" };
+  }
+  if (type === "error") return { activity: event("Agent reported an error", "error"), status: "error" };
+  if (type === "user_input_required" || type === "needs_input") {
+    return { activity: event("Agent needs your input"), status: "reply_saved" };
+  }
+  const phases: Record<string, string> = {
+    phase_generating: "Generating project files",
+    phase_implementing: "Applying project changes",
+    phase_validating: "Validating project changes",
+    phase_generated: "Project file generation phase ended",
+    phase_implemented: "Project implementation phase ended",
+    phase_validated: "Project validation phase ended",
+    deployment_started: "Preparing the Development preview",
+    deployment_completed: "Development preview deployment reported",
+    deployment_failed: "Development preview deployment failed",
+  };
+  if (phases[type]) {
+    const failed = type === "deployment_failed";
+    const terminal = type.endsWith("_generated") || type.endsWith("_implemented")
+      || type.endsWith("_validated") || type === "deployment_completed" || failed;
+    return {
+      activity: event(phases[type], failed ? "error" : terminal ? "success" : "info"),
+      ...(type === "deployment_completed" || failed ? { status: "reply_saved" } : {}),
+    };
+  }
+  if (["file_generating", "file_generated", "file_regenerated", "file_chunk_generated", "file_deleted"].includes(type) && path) {
+    const label = type === "file_generating" ? `Writing ${path}`
+      : type === "file_deleted" ? `Agent reported removing ${path}`
+        : type === "file_generated" ? `Agent reported generating ${path}`
+          : `Agent reported updating ${path}`;
+    return { activity: event(label, type === "file_generating" ? "info" : "success", "tool") };
+  }
+  const tool = frame.tool && typeof frame.tool === "object" ? frame.tool : null;
+  if (type === "conversation_response" && tool && typeof tool.name === "string"
+    && /^[A-Za-z0-9_-]{1,80}$/.test(tool.name)) {
+    const toolPathValue = typeof tool.args?.path === "string" ? tool.args.path : "";
+    let toolPath: string | undefined;
+    if (toolPathValue) {
+      const normalizedPath = toolPathValue.startsWith("/") ? toolPathValue.slice(1) : toolPathValue;
+      try { toolPath = safeProjectPath(normalizedPath); } catch { /* omit unsafe path */ }
+    }
+    const status = typeof tool.status === "string" ? tool.status.toLowerCase() : "";
+    const label = toolPath
+      ? `${["success", "complete", "completed"].includes(status) ? "Updated" : "Working on"} ${toolPath}`
+      : tool.name.replaceAll("_", " ");
+    return { activity: { ...event(label, ["success", "complete", "completed"].includes(status) ? "success" : "info", "tool"),
+      ...(toolPath ? { path: toolPath } : {}) } };
+  }
+  if (type === "conversation_response" && frame.isStreaming === false && typeof frame.message === "string") {
+    return { status: "reply_saved" };
+  }
+  return null;
+}
+
+function parseJsonArray(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function updateNativeTurn(
+  db: D1Database,
+  projectId: number,
+  turnId: number,
+  response: string,
+  activity: NativeTurnActivity[],
+  meta: NativeTurnMeta,
+): Promise<void> {
+  const storedActivity = [meta, ...activity.slice(-NATIVE_TURN_ACTIVITY_LIMIT)];
+  await db.prepare(
+    "UPDATE runtime_builder_turns SET response=?,activity=? WHERE id=? AND project_id=? AND mode='native_build'",
+  ).bind(response, JSON.stringify(storedActivity), turnId, projectId).run();
+}
+
+function restoredNativeTurn(
+  row: any,
+): {
+  id: number;
+  prompt: string;
+  response: string;
+  changedFiles: Array<{ path: string; change: string; size: number }>;
+  activity: NativeTurnActivity[];
+  commitHash: string | null;
+  createdAt: string;
+  status: string;
+} | null {
+  if (!Number.isSafeInteger(row?.id) || typeof row.prompt !== "string" || typeof row.response !== "string") return null;
+  const rawActivity = parseJsonArray(row.activity);
+  const meta = nativeTurnMeta(rawActivity);
+  if (!meta) return null;
+  return {
+    id: row.id,
+    prompt: row.prompt,
+    response: row.response,
+    changedFiles: parseJsonArray(row.changed_files ?? row.changedFiles),
+    activity: rawActivity.filter((item) => item?.type !== NATIVE_TURN_META_TYPE),
+    commitHash: typeof (row.commit_hash ?? row.commitHash) === "string" ? (row.commit_hash ?? row.commitHash) : null,
+    createdAt: String(row.created_at ?? row.createdAt ?? ""),
+    status: meta.status,
+  };
 }
 
 const SENSITIVE_STATE_KEY = /token|secret|credential|authorization|cookie|password|api.?key|private.?key/i;
@@ -724,14 +1031,57 @@ export function filterNativeServerFrame(value: string): string | null {
   return JSON.stringify({ ...record, type: frameType });
 }
 
-function relay(server: WebSocket, upstream: WebSocket): void {
+function relay(
+  server: WebSocket,
+  upstream: WebSocket,
+  options?: {
+    db: D1Database;
+    projectId: number;
+    executionCtx?: ExecutionContext;
+  },
+): void {
   server.accept();
   upstream.accept();
+  let activeTurn: {
+    id: number;
+    response: string;
+    activity: NativeTurnActivity[];
+    meta: NativeTurnMeta;
+    persistQueue: Promise<void>;
+    lastPersistAt: number;
+  } | null = null;
+  let suggestionReceived = false;
+  let persistenceWarningLogged = false;
+  const queueTurnSave = (wait = false) => {
+    if (!activeTurn || !options) return Promise.resolve();
+    const turn = activeTurn;
+    const task = turn.persistQueue.then(() => updateNativeTurn(
+      options.db, options.projectId, turn.id, turn.response, turn.activity, turn.meta,
+    ));
+    turn.persistQueue = task.catch(() => {
+      if (persistenceWarningLogged) return;
+      persistenceWarningLogged = true;
+      console.warn("native_turn_activity_write_failed", { projectId: options.projectId, turnId: turn.id });
+    });
+    options.executionCtx?.waitUntil(turn.persistQueue);
+    return wait ? turn.persistQueue : Promise.resolve();
+  };
+  const setTurnStatus = (status: string) => {
+    if (!activeTurn || !NATIVE_TURN_STATUSES.has(status)) return;
+    const current = activeTurn.meta.status;
+    if (current === "checkpoint_verified") return;
+    if (["agent_turn_ended", "interrupted", "error", "stopped"].includes(current)
+      && status !== "checkpoint_verified") return;
+    if (current !== "running" && (status === "running" || status === "reply_saved")) return;
+    activeTurn.meta = { ...activeTurn.meta, status };
+  };
   const closeBoth = (code = 1000, reason = "Connection closed") => {
+    if (activeTurn?.meta.status === "running") setTurnStatus("interrupted");
+    void queueTurnSave(true);
     try { server.close(code, reason); } catch { /* already closed */ }
     try { upstream.close(code, reason); } catch { /* already closed */ }
   };
-  server.addEventListener("message", (event) => {
+  server.addEventListener("message", async (event) => {
     const text = socketText(event.data);
     if (text === null || new TextEncoder().encode(text).byteLength > CLIENT_FRAME_LIMIT) {
       closeBoth(1009, "Message is too large.");
@@ -747,9 +1097,65 @@ function relay(server: WebSocket, upstream: WebSocket): void {
       try { server.send(JSON.stringify({ type: "error", error: "This project action is not available." })); } catch { /* closed */ }
       return;
     }
+    if (clean.type === "user_suggestion") {
+      if (suggestionReceived) {
+        try { server.send(JSON.stringify({ type: "error", error: "Send one Agent request per connection." })); } catch { /* closed */ }
+        return;
+      }
+      suggestionReceived = true;
+      const token = typeof clean.buildcustomTurnId === "string" ? clean.buildcustomTurnId : null;
+      const baselineCommitHash = clean.buildcustomBaselineCommitHash === null
+        || typeof clean.buildcustomBaselineCommitHash === "string" ? clean.buildcustomBaselineCommitHash : undefined;
+      const upstreamFrame = { ...clean };
+      delete upstreamFrame.buildcustomTurnId;
+      delete upstreamFrame.buildcustomBaselineCommitHash;
+      if (token && baselineCommitHash !== undefined && options) {
+        const meta: NativeTurnMeta = {
+          type: NATIVE_TURN_META_TYPE,
+          token,
+          status: "running",
+          baselineCommitHash,
+        };
+        try {
+          const inserted = await options.db.prepare(
+            "INSERT INTO runtime_builder_turns(project_id,mode,prompt,response,changed_files,commit_hash,activity) VALUES(?,'native_build',?,'','[]',NULL,?)",
+          ).bind(options.projectId, String(clean.message), JSON.stringify([meta])).run();
+          const id = Number(inserted.meta?.last_row_id);
+          if (!Number.isSafeInteger(id) || id < 1) throw new Error("Native turn insert did not return its row ID.");
+          activeTurn = {
+            id,
+            response: "",
+            activity: [],
+            meta,
+            persistQueue: Promise.resolve(),
+            lastPersistAt: Date.now(),
+          };
+        } catch {
+          try { server.send(JSON.stringify({ type: "error", error: "The conversation activity could not be saved. No request was sent." })); } catch { /* closed */ }
+          return;
+        }
+      }
+      if (server.readyState !== 1) {
+        if (activeTurn) {
+          setTurnStatus("interrupted");
+          await queueTurnSave(true);
+        }
+        return;
+      }
+      try {
+        upstream.send(JSON.stringify(upstreamFrame));
+      } catch {
+        if (activeTurn) {
+          setTurnStatus("interrupted");
+          await queueTurnSave(true);
+        }
+        closeBoth(1011, "Project connection failed.");
+      }
+      return;
+    }
     try { upstream.send(JSON.stringify(clean)); } catch { closeBoth(1011, "Project connection failed."); }
   });
-  upstream.addEventListener("message", (event) => {
+  upstream.addEventListener("message", async (event) => {
     const text = socketText(event.data);
     const size = text === null ? (event.data instanceof ArrayBuffer ? event.data.byteLength : SERVER_FRAME_LIMIT + 1)
       : new TextEncoder().encode(text).byteLength;
@@ -760,11 +1166,49 @@ function relay(server: WebSocket, upstream: WebSocket): void {
     if (text === null) return;
     const safeFrame = filterNativeServerFrame(text);
     if (safeFrame === null) return;
+    if (activeTurn) {
+      try {
+        const frame = JSON.parse(safeFrame) as Record<string, any>;
+        let shouldPersist = false;
+        if (frame.type === "conversation_response" && typeof frame.message === "string") {
+          activeTurn.response = frame.isDelta === true
+            ? `${activeTurn.response}${frame.message}`.slice(-100_000)
+            : frame.message.slice(-100_000);
+          shouldPersist = frame.isStreaming === false || Date.now() - activeTurn.lastPersistAt >= 2_000;
+        }
+        const observation = safeNativeTurnEvent(frame);
+        if (observation?.activity) {
+          const previous = activeTurn.activity[activeTurn.activity.length - 1];
+          const next = observation.activity;
+          if (!previous || previous.label !== next.label || previous.status !== next.status || previous.path !== next.path) {
+            activeTurn.activity = [...activeTurn.activity, next].slice(-NATIVE_TURN_ACTIVITY_LIMIT);
+            shouldPersist = true;
+          }
+        }
+        if (observation?.status && activeTurn.meta.status !== observation.status) {
+          setTurnStatus(observation.status);
+          shouldPersist = true;
+        }
+        if (frame.type === "conversation_response" && frame.isStreaming === false
+          && activeTurn.meta.status === "running") {
+          setTurnStatus("reply_saved");
+          shouldPersist = true;
+        }
+        if (shouldPersist) {
+          activeTurn.lastPersistAt = Date.now();
+          await queueTurnSave(frame.type === "generation_complete"
+            || frame.type === "generation_stopped" || frame.type === "generation_cancelled"
+            || frame.type === "error" || frame.type === "conversation_response" && frame.isStreaming === false);
+        }
+      } catch {
+        // Persisted activity is best-effort; validated runtime frames still flow to the editor.
+      }
+    }
     try { server.send(safeFrame); } catch { closeBoth(1011, "Project connection failed."); }
   });
   server.addEventListener("close", (event) => closeBoth(event.code, event.reason));
   upstream.addEventListener("close", (event) => {
-    try { server.close(event.code, event.reason); } catch { /* already closed */ }
+    closeBoth(event.code, event.reason);
   });
   server.addEventListener("error", () => closeBoth(1011, "Project connection failed."));
   upstream.addEventListener("error", () => closeBoth(1011, "Project connection failed."));
@@ -880,7 +1324,7 @@ async function bridgeWebSocket(
     };
     pair[1].addEventListener("close", recordDisconnect);
     upstream.addEventListener("close", recordDisconnect);
-    relay(pair[1], upstream);
+    relay(pair[1], upstream, { db: env.DB, projectId: project.id, executionCtx });
     return new Response(null, { status: 101, webSocket: pair[0], headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (!(error instanceof RuntimeIdentityError) || error.code !== "NATIVE_AI_CONFIG_REFRESH_REJECTED") {
@@ -895,15 +1339,16 @@ async function bridgeWebSocket(
   }
 }
 
-export function shapeThinkHistory(messages: unknown): Array<{
+export function shapeThinkHistory(messages: unknown, persistedRows: any[] = []): Array<{
   id: number;
   mode: "build";
   prompt: string;
   response: string;
-  changedFiles: Array<never>;
-  activity: Array<never>;
-  commitHash: null;
+  changedFiles: Array<{ path: string; change: string; size: number }>;
+  activity: NativeTurnActivity[];
+  commitHash: string | null;
   createdAt: string;
+  status?: string;
 }> {
   if (!Array.isArray(messages)) throw new RuntimeIdentityError("The project conversation returned an invalid result.", 502);
   const turns: Array<{
@@ -911,9 +1356,9 @@ export function shapeThinkHistory(messages: unknown): Array<{
     mode: "build";
     prompt: string;
     response: string;
-    changedFiles: Array<never>;
-    activity: Array<never>;
-    commitHash: null;
+    changedFiles: Array<{ path: string; change: string; size: number }>;
+    activity: NativeTurnActivity[];
+    commitHash: string | null;
     createdAt: string;
   }> = [];
   const contentText = (content: unknown): string => {
@@ -938,7 +1383,51 @@ export function shapeThinkHistory(messages: unknown): Array<{
       if (text) turns[turns.length - 1].response += `${turns[turns.length - 1].response ? "\n" : ""}${text}`;
     }
   }
-  return turns;
+  const savedQueues = new Map<string, any[]>();
+  for (const row of persistedRows) {
+    if (row?.mode !== "native_build" || typeof row.prompt !== "string") continue;
+    const restored = restoredNativeTurn(row);
+    if (!restored) continue;
+    const queue = savedQueues.get(row.prompt) || [];
+    queue.push({ row, restored });
+    savedQueues.set(row.prompt, queue);
+  }
+  for (const queue of savedQueues.values()) queue.sort((a, b) => Number(a.row.id) - Number(b.row.id));
+  const usedIds = new Set<number>();
+  const merged = turns.map((turn, index) => {
+    const saved = savedQueues.get(turn.prompt)?.shift();
+    if (!saved) return { ...turn, id: persistedRows.length ? -(index + 1) : index + 1 };
+    usedIds.add(saved.restored.id);
+    return {
+      ...turn,
+      id: saved.restored.id,
+      response: turn.response || saved.restored.response,
+      changedFiles: saved.restored.changedFiles,
+      activity: saved.restored.activity,
+      commitHash: saved.restored.commitHash,
+      createdAt: saved.restored.createdAt,
+      status: saved.restored.status,
+    };
+  });
+  // If the stock transcript temporarily omits a turn, surface only the
+  // independently persisted prompt/reply that the bridge actually observed.
+  for (const row of persistedRows) {
+    if (row?.mode !== "native_build") continue;
+    const saved = restoredNativeTurn(row);
+    if (!saved || usedIds.has(saved.id) || !saved.prompt.trim()) continue;
+    merged.push({
+      id: saved.id,
+      mode: "build",
+      prompt: saved.prompt,
+      response: saved.response,
+      changedFiles: saved.changedFiles,
+      activity: saved.activity,
+      commitHash: saved.commitHash,
+      createdAt: saved.createdAt,
+      status: saved.status,
+    });
+  }
+  return merged;
 }
 
 const NATIVE_TASK_STATUSES = new Set(["RUNNING", "COMPLETE", "BLOCKED", "USER_INPUT_REQUIRED", "INCOMPLETE_RESOURCE_LIMIT"]);
@@ -1055,8 +1544,18 @@ async function stockStatusSnapshot(env: Env, request: Request, agentId: string):
   });
 }
 
-async function stockHistory(env: Env, request: Request, agentId: string): Promise<any[]> {
-  const socket = await openStockAgentWebSocket(env, request, agentId);
+async function stockHistory(env: Env, request: Request, projectId: number, agentId: string): Promise<any[]> {
+  const savedRows = await env.DB.prepare(
+    "SELECT id,project_id,mode,prompt,response,changed_files,commit_hash,activity,created_at FROM runtime_builder_turns WHERE project_id=? AND mode='native_build' ORDER BY id ASC",
+  ).bind(projectId).all<any>();
+  const savedFallback = () => shapeThinkHistory([], savedRows.results || []);
+  let socket: WebSocket;
+  try {
+    socket = await openStockAgentWebSocket(env, request, agentId);
+  } catch (error) {
+    if ((savedRows.results || []).length) return savedFallback();
+    throw error;
+  }
   socket.accept();
   return new Promise<any[]>((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -1066,7 +1565,8 @@ async function stockHistory(env: Env, request: Request, agentId: string): Promis
     const finish = (error: Error | null, value: any[] = []) => {
       clearTimeout(timeout);
       try { socket.close(1000, "History read complete."); } catch { /* closed */ }
-      if (error) reject(error);
+      if (error && (savedRows.results || []).length) resolve(savedFallback());
+      else if (error) reject(error);
       else resolve(value);
     };
     socket.addEventListener("message", (event) => {
@@ -1076,7 +1576,7 @@ async function stockHistory(env: Env, request: Request, agentId: string): Promis
         const message = JSON.parse(text);
         if (message?.type !== "conversation_state") return;
         const messages = message.state?.fullHistory;
-        finish(null, shapeThinkHistory(messages));
+        finish(null, shapeThinkHistory(messages, savedRows.results || []));
       } catch {
         finish(new RuntimeIdentityError("The project conversation could not be read.", 502));
       }
@@ -1093,6 +1593,7 @@ export async function handleThinkRuntime(
   project: Project,
   operation: string,
   executionCtx?: ExecutionContext,
+  input?: unknown,
 ): Promise<Response | null> {
   if (project.runtime_provider !== "stock-think" && !project.creation_key) return null;
   const origin = controlOriginForRequest(env, request);
@@ -1104,7 +1605,8 @@ export async function handleThinkRuntime(
   }
   const supportedRead = request.method === "GET"
     && ["status", "revision", "files", "files/content", "turns"].includes(operation);
-  if (!supportedRead && !(operation === "previews" && request.method === "POST")) return null;
+  const supportedTurnCheckpoint = operation === "turns/checkpoint" && request.method === "POST";
+  if (!supportedRead && !supportedTurnCheckpoint && !(operation === "previews" && request.method === "POST")) return null;
   const link = await refreshProjectAgent(env, request, project);
   if ((!link?.agent_id || !AGENT_ID.test(link.agent_id) || link.initialization_status !== "ready")
     && operation === "status" && request.method === "GET") {
@@ -1122,6 +1624,9 @@ export async function handleThinkRuntime(
     return Response.json({ message: "This project is not ready for runtime access." }, { status: 409 });
   }
   const linkedAgentId = link.agent_id;
+  if (supportedTurnCheckpoint) {
+    return finalizeNativeTurnCheckpoint(env, request, project.id, linkedAgentId, input);
+  }
   if (operation === "revision" && request.method === "GET") {
     const branch = await currentBranch(env, request, linkedAgentId);
     if (!branch) {
@@ -1164,7 +1669,7 @@ export async function handleThinkRuntime(
     return Response.json(await readCurrentFile(env, request, linkedAgentId, path), { headers: { "Cache-Control": "no-store" } });
   }
   if (operation === "turns" && request.method === "GET") {
-    return Response.json({ turns: await stockHistory(env, request, linkedAgentId) }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ turns: await stockHistory(env, request, project.id, linkedAgentId) }, { headers: { "Cache-Control": "no-store" } });
   }
   if (operation === "previews" && request.method === "POST") {
     const response = await stockThinkRequest(env, request, `/api/agent/${linkedAgentId}/preview`);
