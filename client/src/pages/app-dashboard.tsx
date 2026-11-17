@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NativeAutoContinueControl } from "@/components/native-auto-continue-control";
-import { readSavedAgentTurns, useSavedNativeConversation } from "@/hooks/use-saved-native-conversation";
+import { mergeSavedAgentTurns, readSavedAgentTurns, useSavedNativeConversation } from "@/hooks/use-saved-native-conversation";
 import { Route, Switch, useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { csrfToken, getAppUser, setAppUser, authHeaders, isAdminUser, signOut, clearAppUser, type AppUser } from "@/lib/auth";
@@ -113,12 +113,10 @@ import {
   type PlanningSession,
 } from "@shared/build-planning";
 import {
-  BuildActivityTimeline,
   BuildPreviewPlaceholder,
   ClarificationOptions,
   type BuilderPhase,
 } from "@/components/customer-experience/BuilderExperience";
-import { SavedBuildEvidence } from "@/components/customer-experience/SavedBuildEvidence";
 import {
   MAX_NATIVE_ACTIVITY_EVENTS,
   readNativeActivitySnapshot,
@@ -754,20 +752,44 @@ type RuntimeBuilderTurn = {
   activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
   commitHash: string | null;
   createdAt: string;
-  status?: "running" | "reply_saved" | "agent_turn_ended" | "interrupted" | "error" | "stopped" | "checkpoint_verified";
+  status?: "running" | "reply_saved" | "needs_input" | "agent_turn_ended" | "interrupted" | "error" | "stopped" | "checkpoint_verified";
 };
 
 function nativeTurnStatusLabel(status: RuntimeBuilderTurn["status"]): string {
   switch (status) {
-    case "running": return "Agent turn was running when last observed";
-    case "reply_saved": return "Agent reply saved · no completion claim";
-    case "agent_turn_ended": return "Agent turn ended · app completion not verified";
-    case "interrupted": return "Connection ended before the turn was verified";
-    case "error": return "Agent reported an error";
-    case "stopped": return "Agent stopped · partial work may remain";
-    case "checkpoint_verified": return "Development revision verified · app completeness not established";
-    default: return "Saved agent turn";
+    case "running": return "Working on your app…";
+    case "reply_saved": return "Agent replied";
+    case "needs_input": return "Needs your input";
+    case "agent_turn_ended": return "Agent turn ended";
+    case "interrupted": return "Connection interrupted";
+    case "error": return "Needs attention";
+    case "stopped": return "Agent stopped";
+    case "checkpoint_verified": return "Development checkpoint saved";
+    default: return "Agent activity";
   }
+}
+
+function nativeReportedFileChangeCount(turn: RuntimeBuilderTurn): number {
+  return new Set(
+    turn.activity
+      .filter((entry) => entry.type === "tool" && entry.status === "success" && entry.path)
+      .map((entry) => entry.path),
+  ).size;
+}
+
+function nativeTurnActivityDetail(turn: RuntimeBuilderTurn, nativeThink: boolean): string {
+  if (turn.commitHash && turn.changedFiles.length > 0
+    && (!nativeThink || turn.status === "checkpoint_verified")) {
+    const count = turn.changedFiles.length;
+    return `Updated ${count} ${count === 1 ? "file" : "files"}`;
+  }
+  const reportedCount = nativeReportedFileChangeCount(turn);
+  if (reportedCount > 0) {
+    return `${reportedCount} file change${reportedCount === 1 ? "" : "s"} reported`;
+  }
+  return turn.activity.length
+    ? `${turn.activity.length} update${turn.activity.length === 1 ? "" : "s"}`
+    : "";
 }
 type ComposerImage = {
   id: string;
@@ -908,62 +930,6 @@ function BuildActivity({
   );
 }
 
-function NativeBuildActivity({
-  projectId,
-  theme,
-  phase,
-  message,
-  startedAt,
-  events,
-  connectionState,
-}: {
-  projectId: number;
-  theme: string;
-  phase: BuilderPhase;
-  message: string;
-  startedAt: number | null;
-  events: BuildActivityEvent[];
-  connectionState: string;
-}) {
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileLoading, setFileLoading] = useState(false);
-
-  const openFile = async (path: string) => {
-    setSelectedFile(path);
-    setFileContent(null);
-    setFileLoading(true);
-    try {
-      const response = await fetch(
-        `/api/projects/${projectId}/runtime/files/content?path=${encodeURIComponent(path)}`,
-        { credentials: "same-origin", headers: authHeaders(), cache: "no-store" },
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Source content is unavailable.");
-      setFileContent(typeof data.content === "string" ? data.content : "");
-    } catch (error) {
-      setFileContent(error instanceof Error ? error.message : "Source content is unavailable.");
-    } finally {
-      setFileLoading(false);
-    }
-  };
-
-  return (
-    <BuildActivityTimeline
-      theme={theme}
-      phase={phase}
-      message={message || (phase === "idle" ? "Ready when you are." : "Waiting for runtime activity.")}
-      startedAt={startedAt}
-      events={events}
-      connectionState={connectionState}
-      currentFile={selectedFile}
-      currentFileContent={fileContent}
-      fileLoading={fileLoading}
-      onOpenFile={(path) => void openFile(path)}
-    />
-  );
-}
-
 type NativeCompletionPhase = "idle" | "starting" | "running" | "recovering" | "stopping" | "paused" | "needs_input" | "success" | "error";
 
 type NativeTaskLifecycle = {
@@ -1100,12 +1066,28 @@ function hasNativeOperationCorrelation(baseline: NativeOperationBaseline | null)
   );
 }
 
-async function hasCorrelatedNativeTurn(turns: any[], baseline: NativeOperationBaseline, requiredCommit?: string): Promise<boolean> {
+const NATIVE_TURN_END_WITHOUT_REPLY = new Set(["agent_turn_ended", "checkpoint_verified"]);
+const NATIVE_SETTLED_TURN_WITHOUT_REPLY = new Set([
+  "agent_turn_ended",
+  "checkpoint_verified",
+  "needs_input",
+  "stopped",
+  "error",
+]);
+
+async function hasCorrelatedNativeTurn(
+  turns: any[],
+  baseline: NativeOperationBaseline,
+  requiredCommit?: string,
+  allowNoReplyStatuses: ReadonlySet<string> = NATIVE_TURN_END_WITHOUT_REPLY,
+): Promise<boolean> {
   if (!hasNativeOperationCorrelation(baseline) || turns.length <= baseline.startingTurnCount) return false;
   const appended = turns.slice(baseline.startingTurnCount);
   const matches: any[] = [];
   for (const turn of appended) {
-    if (typeof turn?.prompt !== "string" || typeof turn?.response !== "string" || !turn.response.trim()) continue;
+    if (typeof turn?.prompt !== "string" || typeof turn?.response !== "string") continue;
+    if (["running", "interrupted"].includes(turn.status)) continue;
+    if (!turn.response.trim() && !allowNoReplyStatuses.has(turn.status)) continue;
     if (await sha256Hex(turn.prompt) !== baseline.promptDigest) continue;
     const persistedImages = Array.isArray(turn.images) ? turn.images
       : Array.isArray(turn.attachments) ? turn.attachments
@@ -1174,7 +1156,12 @@ async function verifiedSettledNativeReply(
   // Never substitute legacy admission evidence for a supplied controller.
   if (changedRevision && status?.nativeTaskLifecycle !== undefined) return null;
   const turns = runtimeTurnsFromResponse(await fetchRuntime("turns"));
-  if (!turns || !await hasCorrelatedNativeTurn(turns, baseline, changedRevision ? revision : undefined)) return null;
+  if (!turns || !await hasCorrelatedNativeTurn(
+    turns,
+    baseline,
+    changedRevision ? revision : undefined,
+    NATIVE_SETTLED_TURN_WITHOUT_REPLY,
+  )) return null;
   const [finalStatus, finalRevision] = await Promise.all([fetchRuntime("status"), fetchRuntime("revision")]);
   if (!eligible(finalStatus) || finalRevision.commitHash !== revision
     || (changedRevision && finalStatus?.nativeTaskLifecycle !== undefined)) return null;
@@ -1321,6 +1308,8 @@ function EditorPage() {
   const [nativeSafeForNewPrompt, setNativeSafeForNewPrompt] = useState(false);
   const [nativeConnectionRetry, setNativeConnectionRetry] = useState<NativeConnectionRetry | null>(null);
   const [nativeIdleReconnectPending, setNativeIdleReconnectPending] = useState(false);
+  const [nativeIdleRetryAvailable, setNativeIdleRetryAvailable] = useState(false);
+  const [nativeIdleReconnectVersion, setNativeIdleReconnectVersion] = useState(0);
   const [nativeProgress, setNativeProgress] = useState<BuildActivityEvent[]>(() => (
     typeof window === "undefined" || !projectId ? [] : readNativeActivitySnapshot(projectId).events
   ));
@@ -1365,6 +1354,8 @@ function EditorPage() {
   const nativeIdleStopRef = useRef<() => void>(() => undefined);
   const nativeIdleStatusCheckRef = useRef(false);
   const nativeIdleAgentStateRef = useRef<Record<string, unknown> | null>(null);
+  const nativeIdleRetryCountRef = useRef(0);
+  const nativeIdleRetryProjectRef = useRef<number | null>(null);
   const nativeRecoveryCancelRef = useRef<() => void>(() => undefined);
   const savedConversationRefreshRef = useRef<() => void>(() => undefined);
   const nativeCompletionPhaseRef = useRef(nativeCompletionPhase);
@@ -1794,7 +1785,7 @@ function EditorPage() {
           && (!operationBaseline || currentOperationSettled)) {
           cancelResolvedOperation();
           setNativeCompletionPhase("needs_input");
-          setNativeCompletionMessage("The Agent finished its turn. Review the generated files and live preview before treating this app as complete.");
+          setNativeCompletionMessage("The Agent is ready for your next instruction.");
           setNativeRecoveryUnverified(false);
           setRuntimeError("");
           setSending(false);
@@ -1847,8 +1838,11 @@ function EditorPage() {
     // socket. Keep the no-prompt connection available during that observation.
     if (!projectId || !nativeRuntimeReady || (sending && nativeOperationControllerRef.current)) return;
     const idleProjectId = projectId;
+    if (nativeIdleRetryProjectRef.current !== idleProjectId) {
+      nativeIdleRetryProjectRef.current = idleProjectId;
+      nativeIdleRetryCountRef.current = 0;
+    }
     let active = true;
-    let retryCount = 0;
     let retryTimer: number | null = null;
     let connectionTimer: number | null = null;
     let stabilityTimer: number | null = null;
@@ -1883,12 +1877,16 @@ function EditorPage() {
 
     const scheduleRetry = () => {
       if (!active) return;
-      if (retryTimer !== null || retryCount >= 5) return;
-      retryCount += 1;
+      if (retryTimer !== null) return;
+      if (nativeIdleRetryCountRef.current >= 5) {
+        setNativeIdleRetryAvailable(true);
+        return;
+      }
+      nativeIdleRetryCountRef.current += 1;
       retryTimer = window.setTimeout(() => {
         retryTimer = null;
         connect();
-      }, Math.min(2 ** retryCount * 1000, 30_000));
+      }, Math.min(2 ** nativeIdleRetryCountRef.current * 1000, 30_000));
     };
     const clearStatusRetry = () => {
       if (statusRetryTimer !== null) window.clearTimeout(statusRetryTimer);
@@ -1984,7 +1982,7 @@ function EditorPage() {
           if (resourceLimitMessage) {
             setNativeCompletionMessage(resourceLimitMessage);
           } else if (customerLifecycleStatus(lifecycle) === "BUILD_COMPLETE" || lifecycle?.status === "COMPLETE") {
-            setNativeCompletionMessage("The Agent finished its turn. Review the generated files and live preview before treating this app as complete.");
+            setNativeCompletionMessage("The Agent is ready for your next instruction.");
           } else if (customerLifecycleStatus(lifecycle) === "STOPPED") {
             setNativeCompletionMessage("The Agent stopped. Review the saved changes before continuing.");
             stopConfirmedRef.current = true;
@@ -2047,6 +2045,7 @@ function EditorPage() {
     };
     const connect = () => {
       if (!active || activeProjectIdRef.current !== idleProjectId) return;
+      setNativeIdleRetryAvailable(false);
       const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const socketUrl = `${websocketProtocol}//${window.location.host}/api/projects/${idleProjectId}/runtime/ws`;
       try {
@@ -2068,7 +2067,7 @@ function EditorPage() {
           stabilityTimer = window.setTimeout(() => {
             stabilityTimer = null;
             if (active && socket === nextSocket && nextSocket.readyState === WebSocket.OPEN) {
-              retryCount = 0;
+              nativeIdleRetryCountRef.current = 0;
               if (!nativeIdleAgentStateRef.current) {
                 setNativeConnected(false);
                 nextSocket.close(4000, "Agent state was not received");
@@ -2147,7 +2146,7 @@ function EditorPage() {
     };
     connect();
     return stop;
-  }, [projectId, nativeRuntimeReady, sending]);
+  }, [projectId, nativeRuntimeReady, sending, nativeIdleReconnectVersion]);
 
   useEffect(() => {
     if (!projectId || !nativeThink || nativeRuntimeReady) return;
@@ -2301,7 +2300,10 @@ function EditorPage() {
         savedReplyIdsRef.current.add(id);
         pendingTranscriptRef.current.delete(id);
       }
-      setTurns((current) => JSON.stringify(current) === JSON.stringify(snapshot) ? current : snapshot);
+      setTurns((current) => {
+        const merged = mergeSavedAgentTurns(current, snapshot);
+        return JSON.stringify(current) === JSON.stringify(merged) ? current : merged;
+      });
       if (resolved.length) setMessages((current) => current.filter((message) =>
         !message.nativeRequestId || !savedReplyIdsRef.current.has(message.nativeRequestId)));
       // No lifecycle changes, send unlocks, preview creation, or prompt submission here.
@@ -2429,7 +2431,7 @@ function EditorPage() {
       )
       && !savedBaseline) {
       setNativeCompletionPhase("needs_input");
-      setNativeCompletionMessage("The Agent finished its turn. Review the generated files and live preview before treating this app as complete.");
+      setNativeCompletionMessage("The Agent is ready for your next instruction.");
       setNativeRecoveryUnverified(false);
       setSending(false);
       return;
@@ -2602,10 +2604,10 @@ function EditorPage() {
                 setRuntimeCapability({ projectId, nativeThink: true, status: reply.status });
                 clearNativeOperationBaseline(projectId);
                 setNativeCompletionPhase("needs_input");
-                setNativeCompletionMessage("The Agent replied, but no new committed changes were verified. Read its reply in chat.");
+                setNativeCompletionMessage("The Agent is ready for your next instruction.");
                 setNativeRecoveryUnverified(false);
                 setRuntimeError("");
-                recordNativeProgress("Agent reply saved; no new committed changes verified");
+                recordNativeProgress("Agent turn settled; no new committed changes verified");
                 setSending(false);
                 return;
               }
@@ -2621,7 +2623,7 @@ function EditorPage() {
                 setRuntimeCapability({ projectId, nativeThink: true, status: reply.status });
                 clearNativeOperationBaseline(projectId);
                 setNativeCompletionPhase("needs_input");
-                setNativeCompletionMessage("Agent reply saved. You can request changes. Build completion has not been confirmed.");
+                setNativeCompletionMessage("The Agent is ready for your next instruction.");
                 setNativeRecoveryUnverified(false);
                 setRuntimeError("");
                 recordNativeProgress("Agent reply and stable revision verified; follow-up chat available");
@@ -2640,7 +2642,7 @@ function EditorPage() {
                 const turnsBeforePreview = runtimeTurnsFromResponse(await fetchRuntime("turns"));
                 if (cancelled || activeProjectIdRef.current !== projectId) return;
                 if (!turnsBeforePreview || !await hasNativeOperationEvidence(turnsBeforePreview, savedBaseline, finalStatus)) {
-                  throw new Error("The changed revision is not yet correlated with this operation's appended prompt turn and assistant response.");
+                  throw new Error("The changed revision is not yet correlated with this request and an ended Agent turn.");
                 }
                 const previewState = finalStatus.state || {};
                 const deployedCommit = previewState.lastDeployedCommit || finalStatus.lastDeployedCommit;
@@ -2681,7 +2683,7 @@ function EditorPage() {
                 } else {
                   const finalTurns = runtimeTurnsFromResponse(turnsData);
                   if (!finalTurns || !await hasNativeOperationEvidence(finalTurns, savedBaseline, lastStatus)) {
-                    lastError = "No newly appended user turn with this prompt fingerprint and a completed assistant response is verified yet.";
+                    lastError = "The saved Agent turn is not yet verified for this request.";
                   } else {
                     const [verifiedStatus, verifiedRevision] = await Promise.all([
                       fetchRuntime("status"),
@@ -2720,7 +2722,7 @@ function EditorPage() {
                       clearNativeOperationBaseline(projectId);
                       setRuntimeError("");
                       setNativeCompletionPhase("needs_input");
-                      setNativeCompletionMessage("The Agent finished its turn. Review the generated files and live preview before treating this app as complete.");
+                      setNativeCompletionMessage("The Agent is ready for your next instruction.");
                       setNativeRecoveryUnverified(false);
                       recordNativeProgress(`${files.length} project files verified · preview ready`);
                       setSending(false);
@@ -2744,7 +2746,7 @@ function EditorPage() {
 
       if (cancelled) return;
       setNativeCompletionPhase("error");
-      setNativeCompletionMessage(`BuildCustom could not verify the last operation before the recovery window ended. Your project may still have saved work. Refresh the editor to check the latest stock state. ${lastError}`);
+      setNativeCompletionMessage("The Agent state could not be confirmed yet. Your project and draft are still saved.");
       setNativeRecoveryUnverified(true);
       setRuntimeError("The operation's final state is still unverified. Refresh to check the latest project state; no request was resent.");
       setSending(false);
@@ -3182,17 +3184,17 @@ function EditorPage() {
               setRuntimeCapability({ projectId, nativeThink: true, status: reply.status });
               clearNativeOperationBaseline(projectId);
               setNativeCompletionPhase("needs_input");
-              setNativeCompletionMessage("The Agent replied, but no new committed changes were verified. Read its reply in chat.");
+              setNativeCompletionMessage("The Agent is ready for your next instruction.");
               setNativeRecoveryUnverified(false);
               setRuntimeError("");
-              recordNativeProgress("Agent reply saved; no new committed changes verified");
+              recordNativeProgress("Agent turn settled; no new committed changes verified");
               setSending(false);
               closeAndFinish();
               return;
             }
             if (quietFallbackReady || recoveryStarted) {
               setNativeCompletionPhase("recovering");
-              setNativeCompletionMessage("The runtime is idle, but no new committed revision is verified yet…");
+              setNativeCompletionMessage("The Agent is ready for another instruction.");
             }
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
             return;
@@ -3220,7 +3222,7 @@ function EditorPage() {
             setRuntimeCapability({ projectId, nativeThink: true, status: settledReply.status });
             clearNativeOperationBaseline(projectId);
             setNativeCompletionPhase("needs_input");
-            setNativeCompletionMessage("Agent reply saved. You can request changes. Build completion has not been confirmed.");
+            setNativeCompletionMessage("The Agent is ready for your next instruction.");
             setNativeRecoveryUnverified(false);
             setRuntimeError("");
             recordNativeProgress("Agent reply and stable revision verified; follow-up chat available");
@@ -3288,7 +3290,7 @@ function EditorPage() {
           }
           const turnsBeforePreview = runtimeTurnsFromResponse(turnsBeforePreviewData);
           if (!turnsBeforePreview || !await hasNativeOperationEvidence(turnsBeforePreview, operationBaseline, latestStatus)) {
-            settlementWaitReason = "The revision is not yet correlated with an appended user turn matching this prompt and a completed assistant response.";
+            settlementWaitReason = "The revision is not yet correlated with this request and an ended Agent turn.";
             setNativeCompletionPhase("recovering");
             setNativeCompletionMessage("The revision is saved · verifying its matching conversation turn before completion…");
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
@@ -3326,7 +3328,7 @@ function EditorPage() {
           const finalTurns = runtimeTurnsFromResponse(turnsData);
           if (!finalTurns || turnsSequence !== turnLoadSequenceRef.current
             || !await hasNativeOperationEvidence(finalTurns, operationBaseline, latestStatus)) {
-            settlementWaitReason = "The new revision is not yet correlated with an appended user turn matching this prompt and an assistant response.";
+            settlementWaitReason = "The new revision is not yet correlated with this request and an ended Agent turn.";
             setNativeCompletionPhase("recovering");
             setNativeCompletionMessage("The revision is saved · verifying its matching conversation turn before completion…");
             scheduleSettle(NATIVE_RECOVERY_POLL_MS);
@@ -3399,7 +3401,7 @@ function EditorPage() {
           } catch {
             recordNativeProgress("The verified Development revision could not be attached to this chat turn", "info");
           }
-          if (turnsSequence === turnLoadSequenceRef.current) setTurns(finalTurns);
+          setTurns((current) => mergeSavedAgentTurns(current, finalTurns));
           setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
           setRuntimeError("");
           setMessages([]);
@@ -3407,7 +3409,7 @@ function EditorPage() {
           setPreviewEnvironment("development");
           clearNativeOperationBaseline(projectId);
           setNativeCompletionPhase("needs_input");
-          setNativeCompletionMessage("The Agent finished its turn. Review the generated files and live preview before treating this app as complete.");
+          setNativeCompletionMessage("The Agent is ready for your next instruction.");
           setNativeRecoveryUnverified(false);
           setPreviewRevision((revision) => revision + 1);
           queryClient.invalidateQueries({ queryKey: ["runtime-status", projectId] });
@@ -4835,9 +4837,6 @@ function EditorPage() {
             <p>{savedConversation.error}</p>
             <button type="button" onClick={savedConversation.retry} className="mt-2 underline">Retry saved replies</button>
           </div>}
-          {nativeThink && turns.some((turn) => turn.response.trim()) && <p data-testid="saved-agent-reply-available" className="text-xs text-cyan-500">
-            Agent reply available. Build verification is tracked separately.
-          </p>}
           {turns.map((turn) => (
             <div key={turn.id} className="space-y-3" data-testid={`builder-turn-${turn.id}`}>
               <div className="flex justify-end">
@@ -4861,11 +4860,16 @@ function EditorPage() {
                       {nativeThink ? <MessageSquare size={13} /> : <Check size={13} />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>{nativeThink ? "Saved agent turn" : "Completed checkpoint"}</div>
-                      <div className={`text-[11px] ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>
+                      <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>
+                        {nativeThink ? nativeTurnStatusLabel(turn.status) : "Completed checkpoint"}
+                      </div>
+                      <div
+                        className={`text-[11px] ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}
+                        data-testid={`native-turn-activity-summary-${turn.id}`}
+                      >
                         {nativeThink
-                          ? `${nativeTurnStatusLabel(turn.status)} · ${(turn.activity?.length || 0)} observed ${(turn.activity?.length || 0) === 1 ? "action" : "actions"} · ${turn.changedFiles.length} file changes`
-                          : `${(turn.activity?.length || 0)} ${(turn.activity?.length || 0) === 1 ? "action" : "actions"} · ${turn.changedFiles.length} changed ${turn.changedFiles.length === 1 ? "file" : "files"}`}
+                          ? nativeTurnActivityDetail(turn, true) || "Activity details"
+                          : nativeTurnActivityDetail(turn, false) || `${(turn.activity?.length || 0)} ${(turn.activity?.length || 0) === 1 ? "action" : "actions"}`}
                       </div>
                     </div>
                     <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
@@ -4913,7 +4917,11 @@ function EditorPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className={`text-xs ${theme === "dark" ? "text-white/40" : "text-gray-500"}`}>{nativeThink ? "No file changes were observed for this turn." : "No file content changed in this turn."}</p>
+                      <p className={`text-xs ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}>
+                        {nativeThink && nativeReportedFileChangeCount(turn) > 0
+                          ? `${nativeReportedFileChangeCount(turn)} file change${nativeReportedFileChangeCount(turn) === 1 ? "" : "s"} reported; no Development checkpoint was verified.`
+                          : nativeThink ? "No file changes were reported for this turn." : "No file content changed in this turn."}
+                      </p>
                     )}
                     {turn.commitHash && nativeThink && (
                       <div className="mt-3 flex items-center gap-2">
@@ -4938,7 +4946,7 @@ function EditorPage() {
                   </div>
                 </details>
               )}
-              {turn.mode === "build" && <div className="flex justify-start">
+              {turn.mode === "build" && (!nativeThink || turn.response.trim().length > 0) && <div className="flex justify-start">
                 <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
                   theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
                 }`} data-testid={`builder-turn-build-response-${turn.id}`}>
@@ -5014,15 +5022,6 @@ function EditorPage() {
               </div>
             </section>
           )}
-          {planningSession?.phase === "submitted" && (
-            <p className={`rounded-xl border px-3 py-2.5 text-xs leading-5 ${
-              theme === "dark" ? "border-white/10 bg-white/[0.025] text-white/55" : "border-gray-200 bg-gray-50 text-gray-600"
-            }`}>
-              {nativeConnectionRetry
-                ? "The approved plan and conversation are saved. The Agent connection failed before any build prompt was sent."
-                : "Your project brief is saved and will be included with follow-up instructions."}
-            </p>
-          )}
           {nativeConnectionRetry && (
             <section
               className={`rounded-xl border px-3 py-3 ${
@@ -5045,40 +5044,35 @@ function EditorPage() {
               </button>
             </section>
           )}
-          {nativeThink && nativeCompletionPhase === "needs_input"
-            && customerLifecycleStatus(currentNativeLifecycle) === "BUILD_COMPLETE" && (
-              <p
-                className={`rounded-xl border px-3 py-2.5 text-xs leading-5 ${
-                  theme === "dark" ? "border-emerald-400/20 bg-emerald-400/5 text-emerald-100" : "border-emerald-200 bg-emerald-50 text-emerald-950"
+          {nativeThink && nativeIdleRetryAvailable
+            && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering" || nativeCompletionPhase === "stopping")
+            && !nativeConnected && (
+              <div
+                className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${
+                  theme === "dark" ? "border-amber-400/25 bg-amber-400/10" : "border-amber-200 bg-amber-50"
                 }`}
-                data-testid="native-build-review-needed"
+                role="status"
+                data-testid="native-recovery-retry"
               >
-                The Agent finished its turn. Review the generated files and live preview before treating this app as complete.
-              </p>
+                <span className={`text-xs leading-5 ${theme === "dark" ? "text-amber-100" : "text-amber-900"}`}>
+                  The Agent connection needs another try. Reconnecting will not send a prompt.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    nativeIdleRetryCountRef.current = 0;
+                    setNativeIdleRetryAvailable(false);
+                    setNativeIdleReconnectVersion((version) => version + 1);
+                  }}
+                  disabled={nativeIdleReconnectPending}
+                  className="shrink-0 rounded-lg bg-cyan-400 px-3 py-2 text-xs font-semibold text-gray-950 disabled:opacity-50"
+                  data-testid="button-retry-idle-native-connection"
+                >
+                  Reconnect
+                </button>
+              </div>
             )}
-          {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
-            <SavedBuildEvidence projectId={projectId} theme={theme} observing={nativeCompletionPhase === "recovering"} />
-          )}
-          {nativeThink ? (
-            <NativeBuildActivity
-              projectId={projectId}
-              theme={theme}
-              phase={nativeConnectionRetry
-                ? "error"
-                : nativeRecoveryUnverified ? "unverified"
-                : planningSession?.phase === "clarifying"
-                ? "clarifying"
-                : planningSession?.phase === "awaiting_approval"
-                  ? "planning"
-                    : nativeCompletionPhase === "error" && /paused before completion/i.test(nativeCompletionMessage)
-                      ? "paused"
-                    : nativeCompletionPhase === "idle" && sending ? "starting" : nativeCompletionPhase as BuilderPhase}
-              message={nativeCompletionMessage}
-              startedAt={nativeOperationStartedAt}
-              events={nativeProgress}
-              connectionState={nativeConnected ? "Connected" : nativeCompletionPhase === "idle" ? "Idle" : "Disconnected"}
-            />
-          ) : projectId > 0 && sending && (
+          {!nativeThink && projectId > 0 && sending && (
             <BuildActivity
               projectId={projectId}
               theme={theme}
@@ -5266,14 +5260,6 @@ function EditorPage() {
                 Retry
               </button>
             </div>
-          )}
-          {nativeThink && (nativeRecoveryUnverified || nativeCompletionPhase === "recovering") && (
-            <p
-              className={`px-4 pt-3 text-[11px] ${theme === "dark" ? "text-white/45" : "text-gray-500"}`}
-              data-testid="native-composer-draft-hint"
-            >
-              You can draft a reply here. It will not be sent automatically.
-            </p>
           )}
             <textarea
               ref={textareaRef}

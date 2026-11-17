@@ -64,7 +64,9 @@ test("Builder chat follows new activity only while the reader is at the latest m
 
 test("Native build chat keeps drafts editable and locks the editor viewport", () => {
   const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
-  assert.match(source, /data-testid="native-composer-draft-hint"/);
+  assert.doesNotMatch(source, /native-composer-draft-hint|You can draft a reply here/);
+  assert.match(source, /data-testid="native-recovery-retry"/);
+  assert.match(source, /data-testid="button-retry-idle-native-connection"/);
   const inputMarker = source.indexOf('data-testid="input-editor-chat"');
   const composerStart = source.lastIndexOf("<textarea", inputMarker);
   const composerEnd = source.indexOf("/>", inputMarker);
@@ -82,6 +84,8 @@ test("Native build chat keeps drafts editable and locks the editor viewport", ()
 test("Builder progress omits the workspace inventory and puts checkpoints before build replies", () => {
   const source = readFileSync(new URL("../client/src/pages/app-dashboard.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /data-testid=\{`button-file-\$\{file\.path\}`\}/);
+  assert.doesNotMatch(source, /Your project brief is saved and will be included|Latest saved attempt|SavedBuildEvidence/);
+  assert.doesNotMatch(source, /NativeBuildActivity/);
   assert.match(source, /Loading current code…/);
   const checkpoint = source.indexOf("builder-turn-checkpoint-");
   const buildResponse = source.indexOf("builder-turn-build-response-");
