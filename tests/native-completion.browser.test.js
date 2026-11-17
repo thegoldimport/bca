@@ -44,9 +44,10 @@ const FINAL_TURN = {
   mode: "build",
   prompt: PROMPT,
   response: ASSISTANT,
-  changedFiles: ["public/index.html"],
+  changedFiles: [{ path: "public/index.html", change: "modified", size: 42 }],
   activity: [],
   commitHash: EDITED,
+  status: "checkpoint_verified",
   createdAt: "2026-09-25T21:20:00.000Z",
 };
 const FOREIGN_TURN = {
@@ -280,7 +281,8 @@ function installBrowserHarness(initialFixture) {
     if (url.pathname.endsWith("/runtime/turns/checkpoint") && method === "POST") {
       const checkpoint = JSON.parse(String(init.body || "{}"));
       state.stats.nativeCheckpointPosts.push(checkpoint);
-      state.persistedTurns = state.persistedTurns.map((turn) => turn.prompt === PROMPT ? {
+      const correlatedPrompt = state.stats.lastUserSuggestion?.message;
+      state.persistedTurns = state.persistedTurns.map((turn) => turn.prompt === correlatedPrompt ? {
         ...turn,
         status: "checkpoint_verified",
         commitHash: checkpoint.commitHash,
@@ -709,20 +711,29 @@ async function waitForVerificationRevision(page, minimumRequests = 2) {
   }, { timeout: 10_000 }, minimumRequests);
 }
 
-async function assertSinglePersistedTurn(page, expectedPrompt = PROMPT) {
+async function assertSinglePersistedTurn(page, expectedPrompt = PROMPT, expectedAssistant = ASSISTANT) {
   await page.waitForFunction((prompt) => {
     const node = document.querySelector('[data-testid="builder-chat-scroll"]');
     return node?.innerText.includes(prompt);
   }, { timeout: 10_000 }, expectedPrompt);
   const text = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
   assert.equal(text.split(expectedPrompt).length - 1, 1, "the user turn must be rendered exactly once");
-  assert.equal(text.split(ASSISTANT).length - 1, 1, "the assistant response must be rendered exactly once");
+  if (expectedAssistant) {
+    assert.equal(text.split(expectedAssistant).length - 1, 1, "the saved assistant response must be rendered exactly once");
+  }
   const composer = await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled);
   assert.equal(composer, true, "composer must be usable after verified completion");
+  assert.equal(await page.$eval('[data-testid="button-send-chat"]', (node) => !node.disabled), true,
+    "Send must be available after the runtime confirms the operation is settled");
   const review = await page.$('[data-testid="native-build-review-needed"]');
-  assert.ok(review, "an Agent completion claim must prompt the customer to verify files and preview");
-  assert.match(await page.evaluate((node) => node.textContent || "", review), /Agent finished its turn.*generated files and live preview/);
+  assert.equal(review, null, "normal chat should not contain a permanent completion disclaimer");
   assert.equal(await page.$('[data-testid="native-build-complete"]'), null, "Agent lifecycle completion alone must not claim the app is complete");
+  const checkpointRow = await page.$('[data-testid="builder-turn-checkpoint-2"]');
+  assert.ok(checkpointRow, "activity should be attached to the individual Agent turn");
+  assert.doesNotMatch(text, /Your project brief is saved|Latest saved attempt|You can draft a reply here/i,
+    "normal chat should not be occupied by permanent instructions or project-wide diagnostics");
+  assert.equal(await page.$('[data-testid="saved-build-evidence"]'), null,
+    "project-wide build diagnostics are not repeated in the normal chat");
   const stats = await statsOf(page);
   assert.equal(stats.userSuggestions, 1, "recovery must not resend the prompt");
   assert.equal(stats.agentCreationRequests, 0, "recovery must not create an agent");
@@ -812,7 +823,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
     });
 
-    await t.test("Project 11 saved replies and questions survive unverified completion, timeout, and refresh", async () => {
+    await t.test("Project 11 saved replies survive unverified completion, timeout, and refresh without a large diagnostic panel", async () => {
       const reply = "**Offline saved reply.**\nWhich CRM columns should we include?\nPlease reply in this chat.";
       const initial = fixture({ changed: true, savedOperation: true });
       initial.projectId = 11;
@@ -833,13 +844,13 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await page.waitForSelector('[data-testid="builder-turn-build-response-2"]');
         assert.equal(await page.$eval('[data-testid="builder-turn-build-response-2"]', node => node.textContent.trim()), reply);
         assert.equal(await page.$$eval('[data-testid="builder-turn-build-response-2"]', nodes => nodes.length), 1);
-        await page.waitForSelector('[data-testid="saved-build-evidence"]');
-        const facts = await page.$eval('[data-testid="saved-build-evidence"]', node => node.textContent);
-        assert.ok(facts.includes("2 file-change events recorded"));
-        assert.ok(facts.includes("Build validation completed"));
-        assert.ok(facts.includes("Preview generation recorded"));
-        assert.ok(facts.includes("Agent turn ended"));
-        assert.ok(facts.includes("do not establish"));
+        assert.equal(await page.$('[data-testid="saved-build-evidence"]'), null);
+        assert.equal(await page.$('[data-testid="native-build-review-needed"]'), null);
+        const activityRow = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', node => node.textContent);
+        assert.match(activityRow, /Development checkpoint saved/);
+        assert.match(activityRow, /Updated 1 file/);
+        const chatText = await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent);
+        assert.doesNotMatch(chatText, /Latest saved attempt|Your project brief is saved|You can draft a reply here/);
         await page.evaluate(() => window.__nativeCompletionHarness.advanceClock(11 * 60_000));
         await waitForState(page, "error");
         assert.ok(await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent.includes("Which CRM columns")));
@@ -880,7 +891,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
         assert.match(checkpoint, /Verified Development checkpoint/);
         assert.match(checkpoint, /Updated public\/index\.html/);
-        assert.match(checkpoint, /1 file changes/);
+        assert.match(checkpoint, /Updated 1 file/);
         const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
           Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
         assert.equal(hasRestoreAction, false);
@@ -926,7 +937,9 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
     await t.test("a failed owner-authorized history read preserves existing replies and can recover without a prompt", async () => {
       const page = await startEditor(serverUrl, browser);
       try {
-        await page.waitForSelector('[data-testid="saved-agent-reply-available"]');
+        await page.waitForFunction(() => document
+          .querySelector('[data-testid="builder-turn-build-response-1"]')
+          ?.textContent?.includes("Initial Task 3 revision"));
         const before = await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent);
         await page.evaluate(() => {
           window.__nativeCompletionHarness.setSavedHistoryStatus(401);
@@ -987,18 +1000,17 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         prompt: `Offline scrolling fixture request ${i + 1}`,
         response: `Offline scrolling fixture response ${i + 1}. Prior project instructions remain readable.`,
       }));
-      initial.activitySnapshot = {
-        startedAt: Date.now() - 60_000,
-        events: Array.from({ length: 25 }, (_, i) => ({
-          id: `scroll-fixture-${i}`, label: `Offline activity event ${i + 1}`,
-          observedAt: Date.now() - 30_000 + i, status: "info",
-        })),
-      };
+      initial.persistedTurns[29].activity = Array.from({ length: 25 }, (_, i) => ({
+        type: "status",
+        label: `Offline activity event ${i + 1}`,
+        createdAt: new Date(Date.now() - 30_000 + i).toISOString(),
+        status: "info",
+      }));
       const page = await startEditor(serverUrl, browser, initial);
       try {
         await page.setViewport({ width: 1024, height: 640 });
         await waitForState(page, "recovering");
-        await page.click("#build-activity-timeline-toggle");
+        await page.click('[data-testid="builder-turn-checkpoint-30"] > summary');
         await page.evaluate(() => {
           const chat = document.querySelector('[data-testid="builder-chat-scroll"]');
           chat.scrollTop = chat.scrollHeight;
@@ -1265,8 +1277,9 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       const page = await startEditor(serverUrl, browser, initial);
       try {
         await waitForState(page, "recovering");
-        await page.waitForFunction(() => document.querySelector('[data-testid="build-activity-card"]')?.textContent.includes("stable")
-          || document.querySelector('[data-testid="builder-chat-scroll"]')?.textContent.includes("stable"));
+        const chatText = await page.$eval('[data-testid="builder-chat-scroll"]', node => node.textContent);
+        assert.doesNotMatch(chatText, /stable revision|runtime state is idle/i,
+          "passive recovery keeps low-level diagnostics out of normal chat");
         assert.equal(await page.$('[data-testid="button-stop-build"]'), null,
           "passive status recovery must not present a Stop control as if generation were active");
         assert.equal(await page.$eval('[data-testid="input-editor-chat"]', (node) => !node.disabled), true,
@@ -1341,17 +1354,24 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
     }
 
     for (const theme of ["light", "dark"]) {
-      await t.test(`saved-build notice is readable in ${theme} mode`, async () => {
-        const initial = fixture({ active: true, savedOperation: true });
+      await t.test(`compact per-turn activity is readable in ${theme} mode`, async () => {
+        const initial = fixture();
         initial.theme = theme;
         initial.savedBuildActivity = { attempts: [{
           startedAt: Date.now(), status: "completed",
           events: [{ eventType: "file_changed", status: "complete" }],
         }] };
+        initial.persistedTurns = [...BASE_TURNS, {
+          ...FINAL_TURN,
+          changedFiles: [{ path: "public/index.html", change: "modified", size: 42 }],
+        }];
         const page = await startEditor(serverUrl, browser, initial);
         try {
-          await page.waitForSelector('[data-testid="saved-build-evidence"]');
-          const contrast = await page.$eval('[data-testid="saved-build-evidence"]', node => {
+          await page.waitForSelector('[data-testid="native-turn-activity-summary-2"]');
+          const summary = await page.$eval('[data-testid="native-turn-activity-summary-2"]', node => node.textContent);
+          assert.match(summary, /Updated 1 file/);
+          assert.equal(await page.$('[data-testid="saved-build-evidence"]'), null);
+          const contrast = await page.$eval('[data-testid="native-turn-activity-summary-2"]', node => {
             // Tailwind emits OKLCH as well as RGB. Let Chromium convert its
             // actual computed colors to sRGB instead of parsing OKLCH as RGB.
             const canvas = document.createElement("canvas");
@@ -1377,8 +1397,8 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
             const a = luminance(fg), b = luminance(bg);
             return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
           });
-          assert.ok(contrast >= 4.5, `notice contrast ${contrast} must meet normal-text accessibility requirements`);
-          await page.screenshot({ path: path.join(os.tmpdir(), `buildcustom-saved-build-${theme}.png`) });
+          assert.ok(contrast >= 4.5, `activity summary contrast ${contrast} must meet normal-text accessibility requirements`);
+          await page.screenshot({ path: path.join(os.tmpdir(), `buildcustom-turn-activity-${theme}.png`) });
         } finally { await page.close(); }
       });
     }
@@ -1501,7 +1521,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
     });
 
-    await t.test("normal generation_complete reconciles changes but still asks the customer to review the app", async () => {
+    await t.test("normal generation_complete records the Development checkpoint without claiming app completion", async () => {
       const page = await startEditor(serverUrl, browser);
       try {
         await sendOnePrompt(page);
@@ -1522,6 +1542,63 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(hasRestoreAction, false, "native restore stays unavailable until its runtime path is verified");
         assert.ok(stats.api.filter((entry) => entry.path.endsWith("/runtime/files")).length >= 1);
         assert.equal(stats.frameworkEnvelopesFiltered, 0);
+      } finally {
+        await page.close();
+      }
+    });
+
+    await t.test("an explicitly ended turn without a saved reply keeps the prompt and safely unlocks follow-up", async () => {
+      const page = await startEditor(serverUrl, browser);
+      const endedTurnWithoutReply = {
+        ...FINAL_TURN,
+        response: "",
+        changedFiles: [],
+        commitHash: null,
+        status: "agent_turn_ended",
+      };
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate(({ revision, turn }) => {
+          const harness = window.__nativeCompletionHarness;
+          harness.setRuntime({
+            active: false,
+            revision,
+            deployedRevision: revision,
+            persistedTurns: [...harness.snapshot().persistedTurns, turn],
+          });
+          harness.emit({ type: "generation_started" });
+          // A preview deployment is activity, not proof that a text reply was saved.
+          harness.emit({ type: "deployment_completed" });
+          harness.emit({ type: "generation_complete" });
+        }, { revision: EDITED, turn: endedTurnWithoutReply });
+        await waitForState(page, "recovering");
+        await finishQuietCandidate(page);
+        await assertSinglePersistedTurn(page, PROMPT, "");
+        await page.waitForFunction(() => document
+          .querySelector('[data-testid="native-turn-activity-summary-2"]')
+          ?.textContent?.includes("Updated 1 file"), { timeout: 10_000 }).catch(async (error) => {
+          const debug = await page.evaluate(() => ({
+            summary: document.querySelector('[data-testid="native-turn-activity-summary-2"]')?.textContent,
+            checkpoint: document.querySelector('[data-testid="builder-turn-checkpoint-2"]')?.textContent,
+            state: document.querySelector('[data-testid="native-completion-state"]')?.getAttribute("data-state"),
+            stats: window.__nativeCompletionHarness.snapshot().stats,
+            turns: window.__nativeCompletionHarness.snapshot().persistedTurns,
+          }));
+          error.message += `; activity state: ${JSON.stringify(debug)}`;
+          throw error;
+        });
+        assert.equal(await page.$('[data-testid="builder-turn-build-response-2"]'), null,
+          "an empty saved response must not render as a blank assistant bubble");
+        const activity = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', node => node.textContent);
+        assert.match(activity, /Development checkpoint saved/);
+        assert.match(activity, /Updated 1 file/,
+          "file changes are labeled verified only after the checkpoint is persisted");
+        assert.equal(await page.$('[data-testid="native-build-complete"]'), null,
+          "a settled Agent turn and verified preview do not claim the app is complete");
+        const stats = await statsOf(page);
+        assert.equal(stats.userSuggestions, 1, "the original prompt is never replayed");
+        assert.equal(stats.nativeCheckpointPosts.length, 1,
+          "an explicit turn end plus revision and preview verification can save a Development checkpoint without inventing a reply");
       } finally {
         await page.close();
       }
@@ -1837,7 +1914,9 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         }));
         assert.equal(completion.phase, "error", "native resource exhaustion is terminal and non-success");
         const customerText = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
-        assert.match(customerText, /paused before completion/i);
+        assert.match(completion.text, /Paused/,
+          "terminal issues use the compact status indicator instead of another chat panel");
+        assert.doesNotMatch(customerText, /paused before completion/i);
         assert.doesNotMatch(customerText, /operation credit ceiling|INCOMPLETE_RESOURCE_LIMIT/i);
         assert.doesNotMatch(completion.text, /credit|resource ceiling|INCOMPLETE_RESOURCE_LIMIT/i);
         assert.doesNotMatch(completion.text, /SUCCESS|COMPLETE ·/);
@@ -2085,10 +2164,8 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await waitForState(page, "needs_input", 10_000);
         assert.equal(await page.$('[data-testid="native-build-complete"]'), null,
           "an unrelated persisted turn must never create a green application-complete state");
-        assert.ok(await page.$('[data-testid="native-build-review-needed"]'),
-          "the runtime can be idle for follow-up without claiming the generated app is complete");
         const text = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.innerText);
-        assert.match(text, /review the generated files and live preview before treating this app as complete/i);
+        assert.doesNotMatch(text, /review the generated files and live preview before treating this app as complete/i);
         const stats = await statsOf(page);
         assert.equal(stats.userSuggestions, 1);
         assert.equal(stats.agentCreationRequests, 0);
@@ -2465,6 +2542,8 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       }
 
       const exhaustedPage = await startEditor(serverUrl, browser, fixture({
+        active: true,
+        savedOperation: true,
         rejectHandshakes: 6,
         accelerateSocketRetries: true,
       }));
@@ -2476,6 +2555,16 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(exhausted.openSockets, 0);
         assert.equal(exhausted.conversationStateRequests, 0);
         assert.equal(exhausted.userSuggestions, 0);
+        await exhaustedPage.waitForSelector('[data-testid="native-recovery-retry"]', { timeout: 5_000 });
+        await exhaustedPage.click('[data-testid="button-retry-idle-native-connection"]');
+        await exhaustedPage.waitForFunction(() => {
+          const state = window.__nativeCompletionHarness.snapshot().stats;
+          return state.sockets === 7 && state.conversationStateRequests === 1;
+        }, { timeout: 10_000 });
+        assert.equal((await statsOf(exhaustedPage)).userSuggestions, 0,
+          "manual reconnect only observes the Agent and never resends the saved prompt");
+        assert.equal(await exhaustedPage.$eval('[data-testid="input-editor-chat"]', node => !node.disabled), true,
+          "the customer can continue drafting while the Agent state is checked");
       } finally {
         await exhaustedPage.close();
       }

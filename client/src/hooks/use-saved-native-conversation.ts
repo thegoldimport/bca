@@ -10,7 +10,7 @@ export type SavedAgentTurn = {
   activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
   commitHash: string | null;
   createdAt: string;
-  status?: "running" | "reply_saved" | "agent_turn_ended" | "interrupted" | "error" | "stopped" | "checkpoint_verified";
+  status?: "running" | "reply_saved" | "needs_input" | "agent_turn_ended" | "interrupted" | "error" | "stopped" | "checkpoint_verified";
 };
 
 export function readSavedAgentTurns(data: unknown): SavedAgentTurn[] {
@@ -23,12 +23,69 @@ export function readSavedAgentTurns(data: unknown): SavedAgentTurn[] {
       || !Array.isArray(row.changedFiles) || !Array.isArray(row.activity)) {
       throw new Error("Invalid saved turn");
     }
-    if (row.status !== undefined && !["running", "reply_saved", "agent_turn_ended", "interrupted", "error", "stopped", "checkpoint_verified"].includes(row.status)) {
+    if (row.status !== undefined && !["running", "reply_saved", "needs_input", "agent_turn_ended", "interrupted", "error", "stopped", "checkpoint_verified"].includes(row.status)) {
       throw new Error("Invalid saved turn status");
     }
     byId.set(row.id, row);
   }
   return Array.from(byId.values());
+}
+
+const savedTurnStatusRank: Record<string, number> = {
+  running: 0,
+  interrupted: 1,
+  reply_saved: 2,
+  needs_input: 3,
+  agent_turn_ended: 3,
+  error: 3,
+  stopped: 3,
+  checkpoint_verified: 4,
+};
+
+/** Merge append-only history snapshots without letting a stale read erase a saved reply or checkpoint. */
+export function mergeSavedAgentTurns(
+  current: SavedAgentTurn[],
+  incoming: SavedAgentTurn[],
+): SavedAgentTurn[] {
+  const byId = new Map(current.map((turn) => [turn.id, turn]));
+  for (const next of incoming) {
+    const previous = byId.get(next.id);
+    if (!previous) {
+      byId.set(next.id, next);
+      continue;
+    }
+    const nextRank = savedTurnStatusRank[next.status || ""] ?? -1;
+    const previousRank = savedTurnStatusRank[previous.status || ""] ?? -1;
+    const preferred = nextRank >= previousRank ? next : previous;
+    const fallback = preferred === next ? previous : next;
+    const activity = new Map<string, SavedAgentTurn["activity"][number]>();
+    const activityKey = (event: SavedAgentTurn["activity"][number]) =>
+      [event.type, event.label, event.path || "", event.status || "", event.createdAt].join("\u0000");
+    for (const event of [...previous.activity, ...next.activity, ...preferred.activity]) {
+      activity.set(activityKey(event), event);
+    }
+    const changedFiles = new Map<string, SavedAgentTurn["changedFiles"][number]>();
+    for (const file of [...previous.changedFiles, ...next.changedFiles, ...preferred.changedFiles]) {
+      const key = typeof file?.path === "string" ? file.path : JSON.stringify(file) || String(file);
+      changedFiles.set(key, file);
+    }
+    byId.set(next.id, {
+      ...preferred,
+      response: preferred.response.trim() ? preferred.response : fallback.response,
+      changedFiles: Array.from(changedFiles.values()),
+      activity: Array.from(activity.values()),
+      commitHash: preferred.commitHash || fallback.commitHash,
+      createdAt: previous.createdAt || next.createdAt,
+    });
+  }
+  return Array.from(byId.values()).sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt);
+    const rightTime = Date.parse(right.createdAt);
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+      return leftTime - rightTime;
+    }
+    return left.id - right.id;
+  });
 }
 
 /** Read-only transcript observation, deliberately independent of build acceptance. */

@@ -787,7 +787,7 @@ const NATIVE_TURN_META_TYPE = "__buildcustom_native_turn";
 const NATIVE_TURN_ACTIVITY_LIMIT = 300;
 const NATIVE_TURN_TOKEN = /^[a-f0-9-]{36}$/i;
 const NATIVE_TURN_STATUSES = new Set([
-  "running", "reply_saved", "agent_turn_ended", "interrupted", "error", "stopped", "checkpoint_verified",
+  "running", "reply_saved", "needs_input", "agent_turn_ended", "interrupted", "error", "stopped", "checkpoint_verified",
 ]);
 
 type NativeTurnMeta = {
@@ -855,7 +855,7 @@ export function safeNativeTurnEvent(frame: Record<string, any>): {
   }
   if (type === "error") return { activity: event("Agent reported an error", "error"), status: "error" };
   if (type === "user_input_required" || type === "needs_input") {
-    return { activity: event("Agent needs your input"), status: "reply_saved" };
+    return { activity: event("Agent needs your input"), status: "needs_input" };
   }
   const phases: Record<string, string> = {
     phase_generating: "Generating project files",
@@ -874,7 +874,6 @@ export function safeNativeTurnEvent(frame: Record<string, any>): {
       || type.endsWith("_validated") || type === "deployment_completed" || failed;
     return {
       activity: event(phases[type], failed ? "error" : terminal ? "success" : "info"),
-      ...(type === "deployment_completed" || failed ? { status: "reply_saved" } : {}),
     };
   }
   if (["file_generating", "file_generated", "file_regenerated", "file_chunk_generated", "file_deleted"].includes(type) && path) {
@@ -900,7 +899,8 @@ export function safeNativeTurnEvent(frame: Record<string, any>): {
     return { activity: { ...event(label, ["success", "complete", "completed"].includes(status) ? "success" : "info", "tool"),
       ...(toolPath ? { path: toolPath } : {}) } };
   }
-  if (type === "conversation_response" && frame.isStreaming === false && typeof frame.message === "string") {
+  if (type === "conversation_response" && frame.isStreaming === false
+    && typeof frame.message === "string" && frame.message.trim().length > 0) {
     return { status: "reply_saved" };
   }
   return null;
@@ -1070,7 +1070,7 @@ function relay(
     if (!activeTurn || !NATIVE_TURN_STATUSES.has(status)) return;
     const current = activeTurn.meta.status;
     if (current === "checkpoint_verified") return;
-    if (["agent_turn_ended", "interrupted", "error", "stopped"].includes(current)
+    if (["agent_turn_ended", "needs_input", "interrupted", "error", "stopped"].includes(current)
       && status !== "checkpoint_verified") return;
     if (current !== "running" && (status === "running" || status === "reply_saved")) return;
     activeTurn.meta = { ...activeTurn.meta, status };
@@ -1170,7 +1170,8 @@ function relay(
       try {
         const frame = JSON.parse(safeFrame) as Record<string, any>;
         let shouldPersist = false;
-        if (frame.type === "conversation_response" && typeof frame.message === "string") {
+        if (frame.type === "conversation_response" && typeof frame.message === "string"
+          && frame.message.trim().length > 0) {
           activeTurn.response = frame.isDelta === true
             ? `${activeTurn.response}${frame.message}`.slice(-100_000)
             : frame.message.slice(-100_000);
@@ -1187,11 +1188,6 @@ function relay(
         }
         if (observation?.status && activeTurn.meta.status !== observation.status) {
           setTurnStatus(observation.status);
-          shouldPersist = true;
-        }
-        if (frame.type === "conversation_response" && frame.isStreaming === false
-          && activeTurn.meta.status === "running") {
-          setTurnStatus("reply_saved");
           shouldPersist = true;
         }
         if (shouldPersist) {

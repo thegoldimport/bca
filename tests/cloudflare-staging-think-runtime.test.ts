@@ -503,6 +503,17 @@ test("persisted native turns remain readable when the stock transcript has not r
 
 test("native activity records safe progress, file changes, and explicit non-completion status", () => {
   assert.equal(safeNativeTurnEvent({ type: "generation_complete" })?.status, "agent_turn_ended");
+  assert.equal(safeNativeTurnEvent({ type: "deployment_completed" })?.status, undefined,
+    "preview deployment is activity, not an Agent reply");
+  assert.equal(safeNativeTurnEvent({ type: "deployment_failed" })?.status, undefined,
+    "a deployment stage can fail before the Agent turn ends");
+  assert.equal(safeNativeTurnEvent({
+    type: "conversation_response", message: "  ", isStreaming: false,
+  })?.status, undefined, "an empty final frame is not a saved reply");
+  assert.equal(safeNativeTurnEvent({
+    type: "conversation_response", message: "Actual saved reply", isStreaming: false,
+  })?.status, "reply_saved");
+  assert.equal(safeNativeTurnEvent({ type: "user_input_required" })?.status, "needs_input");
   assert.equal(
     safeNativeTurnEvent({ type: "generation_complete" })?.activity?.label,
     "Agent turn ended · application completion is not verified",
