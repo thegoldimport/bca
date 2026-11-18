@@ -791,6 +791,25 @@ function nativeTurnActivityDetail(turn: RuntimeBuilderTurn, nativeThink: boolean
     ? `${turn.activity.length} update${turn.activity.length === 1 ? "" : "s"}`
     : "";
 }
+
+function nativeTurnActivitySummary(
+  turn: RuntimeBuilderTurn,
+  nativeThink: boolean,
+  liveEvents: BuildActivityEvent[] = [],
+  useLiveProgress = false,
+): string {
+  const status = nativeTurnStatusLabel(turn.status).replace(/…$/, "");
+  const liveLabel = liveEvents.at(-1)?.label?.trim();
+  if (useLiveProgress && liveLabel) return liveLabel;
+  const detail = (turn.status === "running" || turn.status === "interrupted") && liveLabel
+    ? liveLabel
+    : nativeTurnActivityDetail(turn, nativeThink);
+  if (turn.status === "interrupted" && detail?.toLowerCase().includes("connection interrupted")) {
+    return detail;
+  }
+  return detail ? `${status} · ${detail}` : status;
+}
+
 type ComposerImage = {
   id: string;
   filename: string;
@@ -943,6 +962,8 @@ type NativeTaskLifecycle = {
 };
 
 const NATIVE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
+const NATIVE_FILE_MUTATION_TOOLS = new Set(["write", "edit", "patch", "create", "delete", "rm", "remove"]);
+const NATIVE_FILE_REMOVAL_TOOLS = new Set(["delete", "rm", "remove"]);
 const NATIVE_STREAM_QUIET_MS = 30_000;
 const NATIVE_REVISION_STABILITY_MS = 5_000;
 const NATIVE_RECOVERY_POLL_MS = 5_000;
@@ -1075,13 +1096,13 @@ const NATIVE_SETTLED_TURN_WITHOUT_REPLY = new Set([
   "error",
 ]);
 
-async function hasCorrelatedNativeTurn(
+async function findCorrelatedNativeTurn(
   turns: any[],
   baseline: NativeOperationBaseline,
   requiredCommit?: string,
   allowNoReplyStatuses: ReadonlySet<string> = NATIVE_TURN_END_WITHOUT_REPLY,
-): Promise<boolean> {
-  if (!hasNativeOperationCorrelation(baseline) || turns.length <= baseline.startingTurnCount) return false;
+): Promise<any | null> {
+  if (!hasNativeOperationCorrelation(baseline) || turns.length <= baseline.startingTurnCount) return null;
   const appended = turns.slice(baseline.startingTurnCount);
   const matches: any[] = [];
   for (const turn of appended) {
@@ -1111,7 +1132,18 @@ async function hasCorrelatedNativeTurn(
     }
     matches.push(turn);
   }
-  return matches.length === 1 && (requiredCommit === undefined || matches[0].commitHash === requiredCommit);
+  return matches.length === 1 && (requiredCommit === undefined || matches[0].commitHash === requiredCommit)
+    ? matches[0]
+    : null;
+}
+
+async function hasCorrelatedNativeTurn(
+  turns: any[],
+  baseline: NativeOperationBaseline,
+  requiredCommit?: string,
+  allowNoReplyStatuses: ReadonlySet<string> = NATIVE_TURN_END_WITHOUT_REPLY,
+): Promise<boolean> {
+  return Boolean(await findCorrelatedNativeTurn(turns, baseline, requiredCommit, allowNoReplyStatuses));
 }
 
 async function hasNativeOperationEvidence(
@@ -1310,6 +1342,11 @@ function EditorPage() {
   const [nativeIdleReconnectPending, setNativeIdleReconnectPending] = useState(false);
   const [nativeIdleRetryAvailable, setNativeIdleRetryAvailable] = useState(false);
   const [nativeIdleReconnectVersion, setNativeIdleReconnectVersion] = useState(0);
+  const [nativeActiveOperation, setNativeActiveOperation] = useState<{
+    projectId: number;
+    prompt: string;
+    startingTurnCount: number;
+  } | null>(null);
   const [nativeProgress, setNativeProgress] = useState<BuildActivityEvent[]>(() => (
     typeof window === "undefined" || !projectId ? [] : readNativeActivitySnapshot(projectId).events
   ));
@@ -1382,6 +1419,25 @@ function EditorPage() {
   const activeProjectIdRef = useRef(projectId);
   activeProjectIdRef.current = projectId;
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const previewEnvironmentRef = useRef(previewEnvironment);
+  previewEnvironmentRef.current = previewEnvironment;
+  const previewUrlRef = useRef(previewUrl);
+  previewUrlRef.current = previewUrl;
+  const previewRefreshTimerRef = useRef<number | null>(null);
+  const activeNativeTurnIndex = nativeActiveOperation?.projectId === projectId
+    ? turns.findIndex((turn, index) =>
+      index >= nativeActiveOperation.startingTurnCount && turn.prompt === nativeActiveOperation.prompt)
+    : -1;
+  const lastTurn = turns.at(-1);
+  const recoveredNativeTurnIndex = nativeThink
+    && nativeCompletionPhase === "recovering"
+    && nativeOperationStartedAt !== null
+    && lastTurn
+    && typeof lastTurn.status === "string"
+    && ["running", "interrupted", "agent_turn_ended"].includes(lastTurn.status)
+    ? turns.length - 1
+    : -1;
+  const liveNativeTurnIndex = activeNativeTurnIndex >= 0 ? activeNativeTurnIndex : recoveredNativeTurnIndex;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1830,6 +1886,11 @@ function EditorPage() {
       nativeIdleStopRef.current();
       nativeSocketRef.current?.close(1000, "Project view closed");
       nativeSocketRef.current = null;
+      if (previewRefreshTimerRef.current !== null) {
+        window.clearTimeout(previewRefreshTimerRef.current);
+        previewRefreshTimerRef.current = null;
+      }
+      setNativeActiveOperation(null);
     };
   }, [projectId]);
 
@@ -2797,6 +2858,20 @@ function EditorPage() {
     });
   };
 
+  const queueDevelopmentPreviewRefresh = () => {
+    if (previewEnvironmentRef.current !== "development" || !previewUrlRef.current) return;
+    if (previewRefreshTimerRef.current !== null) window.clearTimeout(previewRefreshTimerRef.current);
+    const refreshProjectId = projectId;
+    previewRefreshTimerRef.current = window.setTimeout(() => {
+      previewRefreshTimerRef.current = null;
+      if (!nativeMountedRef.current
+        || activeProjectIdRef.current !== refreshProjectId
+        || previewEnvironmentRef.current !== "development"
+        || !previewUrlRef.current) return;
+      setPreviewRevision((revision) => revision + 1);
+    }, 350);
+  };
+
   const streamNativeTurn = async (
     agentPrompt: string,
     images: ComposerImage[],
@@ -2806,6 +2881,10 @@ function EditorPage() {
   ) => {
     setNativeConnectionRetry(null);
     nativeIdleStopRef.current();
+    nativeProgressRef.current = [];
+    setNativeProgress([]);
+    setNativeActivityStart(Date.now());
+    recordNativeProgress("Starting...", "active");
     const operationController = new AbortController();
     nativeOperationControllerRef.current = operationController;
     const isOperationActive = () => nativeMountedRef.current
@@ -2897,6 +2976,11 @@ function EditorPage() {
         lifecycleUpdatedAt,
       } : {}),
     };
+    setNativeActiveOperation({
+      projectId,
+      prompt: continuationApproval ? "Continue" : agentPrompt,
+      startingTurnCount: startingTurns.length,
+    });
     writeNativeOperationBaseline(projectId, operationBaseline);
     if (assistantMessageId) pendingTranscriptRef.current.set(assistantMessageId, { projectId, baseline: operationBaseline });
 
@@ -2910,6 +2994,7 @@ function EditorPage() {
       let frameSequence = 0;
       let generationComplete = false;
       let assistantStreaming = false;
+      let streamedAssistantResponse = "";
       let suggestionSent = false;
       let promptAttempted = false;
       let recoveryStarted = false;
@@ -2927,6 +3012,7 @@ function EditorPage() {
         operationController.abort();
         if (nativeOperationControllerRef.current === operationController) nativeOperationControllerRef.current = null;
         if (nativeSocketRef.current === socket) nativeSocketRef.current = null;
+        setNativeActiveOperation((current) => current?.projectId === projectId ? null : current);
         if (nativeCancelRef.current === cancelForLifecycle) nativeCancelRef.current = () => undefined;
         socket.onopen = null;
         socket.onmessage = null;
@@ -2952,6 +3038,14 @@ function EditorPage() {
         });
       };
 
+      const reportTurnUpdate = (content: string) => {
+        const statusMessageId = `native-turn-status-${nativeTurnId}`;
+        setMessages((current) => [
+          ...current.filter((message) => message.id !== statusMessageId),
+          { id: statusMessageId, role: "assistant", content },
+        ]);
+      };
+
       const closeAndFinish = (error?: Error) => {
         if (finished) return;
         finished = true;
@@ -2960,6 +3054,7 @@ function EditorPage() {
         if (nativeOperationControllerRef.current === operationController) nativeOperationControllerRef.current = null;
         const ownsSocket = nativeSocketRef.current === socket;
         if (ownsSocket) nativeSocketRef.current = null;
+        setNativeActiveOperation((current) => current?.projectId === projectId ? null : current);
         if (nativeCancelRef.current === cancelForLifecycle) nativeCancelRef.current = () => undefined;
         if (ownsSocket && isOperationActive()) setNativeConnected(false);
         socket.close(1000, error ? "Build stream ended with an error" : "Build stream settled");
@@ -3187,7 +3282,9 @@ function EditorPage() {
               setNativeCompletionMessage("The Agent is ready for your next instruction.");
               setNativeRecoveryUnverified(false);
               setRuntimeError("");
-              recordNativeProgress("Agent turn settled; no new committed changes verified");
+              const settledMessage = "No new committed Development changes were verified. Your Agent conversation is saved.";
+              recordNativeProgress(settledMessage);
+              reportTurnUpdate(settledMessage);
               setSending(false);
               closeAndFinish();
               return;
@@ -3401,10 +3498,24 @@ function EditorPage() {
           } catch {
             recordNativeProgress("The verified Development revision could not be attached to this chat turn", "info");
           }
+          const verifiedOperationTurn = await findCorrelatedNativeTurn(
+            finalTurns,
+            operationBaseline,
+            currentCommitHash,
+          );
           setTurns((current) => mergeSavedAgentTurns(current, finalTurns));
           setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
           setRuntimeError("");
-          setMessages([]);
+          setMessages((current) => {
+            if (typeof verifiedOperationTurn?.response === "string" && verifiedOperationTurn.response.trim()) return [];
+            const streamedReply = assistantMessageId
+              ? current.find((message) => message.id === assistantMessageId)
+              : undefined;
+            if (streamedReply?.content.trim()) return [streamedReply];
+            return streamedAssistantResponse.trim() && assistantMessageId
+              ? [{ id: assistantMessageId, role: "assistant", content: streamedAssistantResponse }]
+              : [];
+          });
           setPreviewUrl(previewUrl);
           setPreviewEnvironment("development");
           clearNativeOperationBaseline(projectId);
@@ -3416,9 +3527,25 @@ function EditorPage() {
           const runtimeFilesQueryKey = ["runtime-files", projectId] as const;
           queryClient.invalidateQueries({ queryKey: runtimeFilesQueryKey });
           queryClient.invalidateQueries({ queryKey: ["runtime-file-content", projectId] });
-          recordNativeProgress(checkpointSaved
-            ? `${files.length} project file${files.length === 1 ? "" : "s"} verified · Development checkpoint saved`
-            : `${files.length} project file${files.length === 1 ? "" : "s"} verified · preview ready`);
+          if (previewRefreshTimerRef.current !== null) {
+            window.clearTimeout(previewRefreshTimerRef.current);
+            previewRefreshTimerRef.current = null;
+          }
+          const changedPaths = Array.isArray(verifiedOperationTurn?.changedFiles)
+            ? verifiedOperationTurn.changedFiles
+              .map((file: any) => typeof file === "string" ? file : file?.path)
+              .filter((filePath: unknown): filePath is string => typeof filePath === "string" && filePath.length > 0)
+            : null;
+          const changedFileCount = changedPaths === null ? null : new Set(changedPaths).size;
+          const changedFileStatus = changedFileCount === null
+            ? "Changed-file count unavailable"
+            : `Confirmed ${changedFileCount} changed file${changedFileCount === 1 ? "" : "s"}`;
+          const checkpointStatus = checkpointSaved
+            ? "Development checkpoint saved"
+            : "Development checkpoint not saved";
+          const finalUpdate = `${changedFileStatus} · ${checkpointStatus} · Development preview link ready`;
+          recordNativeProgress(finalUpdate);
+          reportTurnUpdate(finalUpdate);
           closeAndFinish();
         } catch (error: any) {
           if (!isOperationActive()) {
@@ -3613,18 +3740,22 @@ function EditorPage() {
             break;
           }
           case "conversation_response": {
-            if (typeof frame.message === "string" && frame.message
-              && !(assistantMessageId && savedReplyIdsRef.current.has(assistantMessageId))) {
+            if (typeof frame.message === "string" && frame.message) {
               const safeMessage = normalizeBuilderAssistantText(frame.message);
-              setMessages((current) => {
-                const index = assistantMessageId
-                  ? current.findIndex((message) => message.id === assistantMessageId)
-                  : current.findLastIndex((message) => message.role === "assistant");
-                if (index < 0) return [...current, { id: assistantMessageId, role: "assistant", content: safeMessage }];
-                return current.map((message, messageIndex) => messageIndex === index
-                  ? { ...message, content: frame.isDelta ? `${message.content}${safeMessage}` : safeMessage }
-                  : message);
-              });
+              streamedAssistantResponse = frame.isDelta
+                ? `${streamedAssistantResponse}${safeMessage}`
+                : safeMessage;
+              if (!(assistantMessageId && savedReplyIdsRef.current.has(assistantMessageId))) {
+                setMessages((current) => {
+                  const index = assistantMessageId
+                    ? current.findIndex((message) => message.id === assistantMessageId)
+                    : current.findLastIndex((message) => message.role === "assistant");
+                  if (index < 0) return [...current, { id: assistantMessageId, role: "assistant", content: safeMessage }];
+                  return current.map((message, messageIndex) => messageIndex === index
+                    ? { ...message, content: frame.isDelta ? `${message.content}${safeMessage}` : safeMessage }
+                    : message);
+                });
+              }
             }
             assistantStreaming = frame.isStreaming === true;
             if (toolName) {
@@ -3633,12 +3764,22 @@ function EditorPage() {
               } else if (tool.status) {
                 activeWork.delete(toolKey);
               }
+              const toolStatus = String(tool.status || "").toLowerCase();
+              const toolSucceeded = ["success", "complete", "completed"].includes(toolStatus);
+              const waitingForFilePersistence = Boolean(
+                toolPath && toolSucceeded && NATIVE_FILE_MUTATION_TOOLS.has(toolName.toLowerCase()),
+              );
+              const isFileRemoval = NATIVE_FILE_REMOVAL_TOOLS.has(toolName.toLowerCase());
+              if (waitingForFilePersistence) activeWork.add(`file:${toolPath.replace(/^\/+/, "")}`);
               const label = toolPath
-                ? `${tool.status === "success" ? "Updated" : "Working on"} ${toolPath}`
+                ? waitingForFilePersistence
+                  ? `${isFileRemoval ? "Removing" : "Saving"} ${toolPath}`
+                  : `${toolSucceeded ? "Completed" : "Working on"} ${toolPath}`
                 : toolName.replaceAll("_", " ");
               recordNativeProgress(label,
-                ["success", "complete", "completed"].includes(String(tool.status || "").toLowerCase()) ? "complete"
-                  : ["start", "running", "pending", "started"].includes(String(tool.status || "").toLowerCase()) ? "active" : "info",
+                waitingForFilePersistence ? "active"
+                  : toolSucceeded ? "complete"
+                    : ["start", "running", "pending", "started"].includes(toolStatus) ? "active" : "info",
                 toolPath || undefined);
             }
             break;
@@ -3683,18 +3824,26 @@ function EditorPage() {
               recordNativeProgress(`Writing ${eventPath}`, "active", eventPath);
             }
             break;
+          case "file_chunk_generated":
+            if (eventPath) {
+              activeWork.add(`file:${eventPath}`);
+              recordNativeProgress(`Writing ${eventPath}`, "active", eventPath);
+            }
+            break;
           case "file_generated":
           case "file_regenerated":
-          case "file_chunk_generated":
             if (eventPath) {
               activeWork.delete(`file:${eventPath}`);
               recordNativeProgress(`Updated ${eventPath}`, "complete", eventPath);
+              // These completion events follow persistence into the runtime file manager.
+              queueDevelopmentPreviewRefresh();
             }
             break;
           case "file_deleted":
             if (eventPath) {
               activeWork.delete(`file:${eventPath}`);
               recordNativeProgress(`Removed ${eventPath}`, "complete", eventPath);
+              queueDevelopmentPreviewRefresh();
             }
             break;
           case "deployment_started":
@@ -3704,6 +3853,7 @@ function EditorPage() {
           case "deployment_completed":
             activeWork.delete("deployment");
             recordNativeProgress("Runtime preview deployment completed", "complete");
+            queueDevelopmentPreviewRefresh();
             break;
           case "deployment_failed":
             activeWork.delete("deployment");
@@ -4837,7 +4987,30 @@ function EditorPage() {
             <p>{savedConversation.error}</p>
             <button type="button" onClick={savedConversation.retry} className="mt-2 underline">Retry saved replies</button>
           </div>}
-          {turns.map((turn) => (
+          {turns.map((turn, turnIndex) => {
+            const currentLiveTurn = turnIndex === liveNativeTurnIndex
+              && ["starting", "running", "recovering", "stopping"].includes(nativeCompletionPhase);
+            const savedActivity = (turn.activity || []).map((entry, index) => ({
+              id: `saved-${entry.createdAt}-${index}`,
+              label: entry.label,
+              status: entry.status,
+              type: entry.type,
+            }));
+            const liveActivity = currentLiveTurn
+              ? nativeProgress.map((entry) => ({
+                id: `live-${entry.id}`,
+                label: entry.label,
+                status: entry.status === "complete" ? "success" : entry.status,
+                type: "progress",
+              }))
+              : [];
+            const visibleActivity = [...savedActivity, ...liveActivity];
+            const rowIsActive = currentLiveTurn
+              || turnIndex === turns.length - 1 && turn.status === "running"
+              || turnIndex === turns.length - 1
+                && turn.status === "interrupted"
+                && nativeCompletionPhase === "recovering";
+            return (
             <div key={turn.id} className="space-y-3" data-testid={`builder-turn-${turn.id}`}>
               <div className="flex justify-end">
                 <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-r from-cyan-500 to-cyan-400 px-4 py-3 text-sm leading-relaxed text-black">
@@ -4857,32 +5030,42 @@ function EditorPage() {
                 }`} data-testid={`builder-turn-checkpoint-${turn.id}`}>
                   <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5">
                     <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${nativeThink ? "bg-cyan-400/15 text-cyan-500" : "bg-emerald-400/15 text-emerald-400"}`}>
-                      {nativeThink ? <MessageSquare size={13} /> : <Check size={13} />}
+                      {nativeThink && rowIsActive
+                        ? <RefreshCw size={13} className="animate-spin" />
+                        : nativeThink ? <MessageSquare size={13} /> : <Check size={13} />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}>
-                        {nativeThink ? nativeTurnStatusLabel(turn.status) : "Completed checkpoint"}
-                      </div>
                       <div
-                        className={`text-[11px] ${theme === "dark" ? "text-white/60" : "text-gray-600"}`}
+                        className={`truncate text-xs font-semibold ${theme === "dark" ? "text-white/85" : "text-gray-800"}`}
                         data-testid={`native-turn-activity-summary-${turn.id}`}
                       >
                         {nativeThink
-                          ? nativeTurnActivityDetail(turn, true) || "Activity details"
-                          : nativeTurnActivityDetail(turn, false) || `${(turn.activity?.length || 0)} ${(turn.activity?.length || 0) === 1 ? "action" : "actions"}`}
+                          ? nativeTurnActivitySummary(
+                            turn,
+                            true,
+                            currentLiveTurn ? nativeProgress : [],
+                            currentLiveTurn,
+                          )
+                          : `Completed checkpoint · ${nativeTurnActivityDetail(turn, false)
+                            || `${(turn.activity?.length || 0)} ${(turn.activity?.length || 0) === 1 ? "action" : "actions"}`}`}
                       </div>
                     </div>
                     <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
                   </summary>
                   <div className={`border-t px-3 py-3 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-                    {(turn.activity?.length || 0) > 0 && (
+                    {visibleActivity.length > 0 && (
                       <div className={`mb-3 space-y-1 border-b pb-3 ${theme === "dark" ? "border-white/10" : "border-gray-200"}`}>
-                        {turn.activity.map((entry, index) => (
-                          <div key={`${entry.createdAt}-${index}`} className={`flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs ${
+                        {visibleActivity.map((entry, index) => (
+                          <div
+                            key={entry.id}
+                            data-testid={`native-turn-activity-event-${turn.id}-${index}`}
+                            className={`flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs ${
                             theme === "dark" ? "text-white/60" : "text-gray-600"
                           }`}>
                             <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
-                              entry.status === "success" ? "bg-emerald-400/15 text-emerald-400" : "bg-cyan-400/15 text-cyan-400"
+                              entry.status === "success" || entry.status === "complete"
+                                ? "bg-emerald-400/15 text-emerald-400"
+                                : "bg-cyan-400/15 text-cyan-400"
                             }`}>
                               {entry.type === "tool" ? <Terminal size={11} /> : <Sparkles size={11} />}
                             </div>
@@ -4954,7 +5137,46 @@ function EditorPage() {
                 </div>
               </div>}
             </div>
-          ))}
+            );
+          })}
+          {nativeThink
+            && ["starting", "running", "recovering", "stopping"].includes(nativeCompletionPhase)
+            && liveNativeTurnIndex < 0
+            && !turns.some((turn, index) => index === turns.length - 1
+              && (turn.status === "running" || turn.status === "interrupted"))
+            && (
+              <details
+                className={`group rounded-xl border ${
+                  theme === "dark" ? "border-cyan-300/20 bg-cyan-300/[0.05]" : "border-cyan-200 bg-cyan-50/70"
+                }`}
+                data-testid="native-live-activity"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5">
+                  <RefreshCw size={13} className="shrink-0 animate-spin text-cyan-500" />
+                  <span
+                    className={`min-w-0 flex-1 truncate text-xs font-medium ${theme === "dark" ? "text-cyan-100" : "text-cyan-900"}`}
+                    title={nativeProgress.at(-1)?.label || nativeCompletionMessage}
+                    data-testid="native-live-activity-summary"
+                  >
+                    {nativeProgress.at(-1)?.label || nativeCompletionMessage || "Starting..."}
+                  </span>
+                  <ChevronDown size={14} className="shrink-0 transition-transform group-open:rotate-180" />
+                </summary>
+                {nativeProgress.length > 0 && (
+                  <div className={`space-y-1 border-t px-3 py-2 ${
+                    theme === "dark" ? "border-white/10" : "border-cyan-100"
+                  }`}>
+                    {nativeProgress.map((event) => (
+                      <div key={event.id} className={`truncate text-[11px] ${
+                        theme === "dark" ? "text-white/60" : "text-gray-600"
+                      }`}>
+                        {event.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </details>
+            )}
           {messages
             .filter((msg) => msg.content.trim().length > 0
               && !(planningSession?.currentQuestion && msg.role === "assistant"

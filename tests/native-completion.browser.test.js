@@ -644,6 +644,12 @@ async function statsOf(page) {
   return page.evaluate(() => window.__nativeCompletionHarness.snapshot().stats);
 }
 
+async function previewRequestsOf(page) {
+  return page.evaluate(async () => Number(
+    await fetch("/__native_completion_preview_count", { cache: "no-store" }).then((response) => response.text()),
+  ));
+}
+
 async function startEditor(serverUrl, browser, initialFixture = fixture()) {
   const page = await browser.newPage();
   await page.evaluateOnNewDocument(installBrowserHarness, initialFixture);
@@ -693,7 +699,7 @@ async function emitObservedProgress(page, { includeFilteredEnvelope = false } = 
   }, { filter: includeFilteredEnvelope, assistant: ASSISTANT });
 }
 
-async function persistSuccessfulTurn(page) {
+async function persistSuccessfulTurn(page, turn = FINAL_TURN) {
   await page.evaluate(({ editedRevision, turn }) => {
     window.__nativeCompletionHarness.setRuntime({
       active: false,
@@ -701,7 +707,7 @@ async function persistSuccessfulTurn(page) {
       deployedRevision: editedRevision,
       persistedTurns: [...window.__nativeCompletionHarness.snapshot().persistedTurns, turn],
     });
-  }, { editedRevision: EDITED, turn: FINAL_TURN });
+  }, { editedRevision: EDITED, turn });
 }
 
 async function waitForVerificationRevision(page, minimumRequests = 2) {
@@ -776,15 +782,22 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       logLevel: "error",
       build: { outDir: bundleDir, emptyOutDir: true },
     });
+    let previewRequestCount = 0;
     httpServer = createHttpServer(async (request, response) => {
       const requestUrl = new URL(request.url || "/", "http://localhost");
       if (requestUrl.pathname.startsWith("/api/")) {
         response.writeHead(501, { "Content-Type": "application/json" }).end("{}");
         return;
       }
+      if (requestUrl.pathname === "/__native_completion_preview_count") {
+        response.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" })
+          .end(String(previewRequestCount));
+        return;
+      }
       if (requestUrl.pathname.startsWith("/__native_completion_preview/")) {
-        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        response.end("<!doctype html><html><body><h1>Task 3 browser-test preview</h1></body></html>");
+        previewRequestCount += 1;
+        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+        response.end(`<!doctype html><html><body><h1>Development preview response ${previewRequestCount}</h1></body></html>`);
         return;
       }
       const relative = path.normalize(decodeURIComponent(requestUrl.pathname).replace(/^[/\\]+/, ""));
@@ -895,6 +908,109 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
           Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
         assert.equal(hasRestoreAction, false);
+      } finally { await page.close(); }
+    });
+
+    await t.test("live activity stays on the active turn and preserves the Agent reply", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await sendOnePrompt(page);
+        await page.evaluate((baseRevision) => {
+          const harness = window.__nativeCompletionHarness;
+          const snapshot = harness.snapshot();
+          harness.setRuntime({
+            persistedTurns: [...snapshot.persistedTurns, {
+              id: 2,
+              mode: "build",
+              prompt: snapshot.stats.lastUserSuggestion.message,
+              response: "The Agent's actual response is preserved.",
+              changedFiles: [],
+              activity: [],
+              commitHash: baseRevision,
+              status: "agent_turn_ended",
+              createdAt: new Date().toISOString(),
+            }],
+          });
+        }, BASELINE);
+        await page.waitForSelector('[data-testid="builder-turn-checkpoint-2"]', { timeout: 10_000 });
+        await emitObservedProgress(page);
+        assert.equal(await page.$$eval('[data-testid="native-live-activity"]', (nodes) => nodes.length), 0,
+          "a persisted active turn must not be duplicated by a project-level row");
+        const summary = await page.$eval('[data-testid="native-turn-activity-summary-2"]', (node) => node.textContent);
+        assert.equal(summary, "Runtime preview deployment completed");
+        assert.equal(
+          await page.$eval('[data-testid="builder-turn-build-response-2"]', (node) => node.textContent.trim()),
+          "The Agent's actual response is preserved.",
+        );
+        assert.doesNotMatch(
+          await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.textContent),
+          /Confirmed \d+ changed files?/,
+          "file events alone must not produce a successful final response",
+        );
+        await page.click('[data-testid="builder-turn-checkpoint-2"] > summary');
+        const activityLabels = await page.$$eval(
+          '[data-testid^="native-turn-activity-event-2-"]',
+          (nodes) => nodes.map((node) => node.textContent),
+        );
+        assert.ok(activityLabels.includes("Writing public/index.html"));
+        assert.ok(activityLabels.includes("Updated public/index.html"));
+        assert.ok(activityLabels.includes("Runtime preview deployment completed"));
+        assert.equal((await statsOf(page)).userSuggestions, 1, "activity updates must not submit another prompt");
+      } finally { await page.close(); }
+    });
+
+    await t.test("Development preview refreshes only after persisted file updates and coalesces bursts", async () => {
+      const page = await startEditor(serverUrl, browser);
+      try {
+        await page.waitForFunction(async () =>
+          Number(await fetch("/__native_completion_preview_count", { cache: "no-store" }).then((response) => response.text())) > 0,
+        { timeout: 10_000 });
+        await sendOnePrompt(page);
+        const before = await previewRequestsOf(page);
+        await page.evaluate(() => {
+          window.__previewFrameBeforeRefresh = document.querySelector('iframe[title="Development project preview"]');
+        });
+        await page.evaluate(() => {
+          const harness = window.__nativeCompletionHarness;
+          harness.emit({
+            type: "conversation_response",
+            message: "",
+            isStreaming: false,
+            tool: { id: "write-theme", name: "write", args: { path: "src/theme.css" }, status: "success" },
+          });
+          harness.emit({ type: "file_chunk_generated", path: "src/theme.css", chunk: "body { background: pink;" });
+        });
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        assert.equal(await previewRequestsOf(page), before,
+          "tool success and streamed file chunks precede persistence and must not refresh the preview");
+        assert.match(
+          await page.$eval('[data-testid="native-live-activity-summary"]', (node) => node.textContent),
+          /Writing src\/theme\.css/,
+        );
+
+        await page.evaluate(() => {
+          const harness = window.__nativeCompletionHarness;
+          harness.emit({ type: "file_generated", path: "src/theme.css" });
+          harness.emit({ type: "file_regenerated", path: "src/theme.css" });
+          harness.emit({ type: "file_deleted", path: "src/old-theme.css" });
+          harness.emit({ type: "deployment_completed" });
+        });
+        await page.waitForFunction(async (previousCount) =>
+          Number(await fetch("/__native_completion_preview_count", { cache: "no-store" }).then((response) => response.text())) === previousCount + 1,
+        { timeout: 5_000 }, before);
+        await page.waitForFunction(() => {
+          const preview = document.querySelector('iframe[title="Development project preview"]');
+          return preview && preview !== window.__previewFrameBeforeRefresh;
+        }, { timeout: 5_000 });
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        assert.equal(await previewRequestsOf(page), before + 1,
+          "file updates and preview deployment completion should share one debounced refresh");
+        assert.equal((await statsOf(page)).userSuggestions, 1, "preview refresh must not resend the prompt");
+        assert.doesNotMatch(
+          await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.textContent),
+          /Confirmed \d+ changed files?/,
+          "unverified file events must not claim a completed edit",
+        );
       } finally { await page.close(); }
     });
 
@@ -1011,6 +1127,11 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await page.setViewport({ width: 1024, height: 640 });
         await waitForState(page, "recovering");
         await page.click('[data-testid="builder-turn-checkpoint-30"] > summary');
+        assert.equal(
+          await page.$$eval('[data-testid^="native-turn-activity-event-30-"]', (nodes) => nodes.length),
+          25,
+          "expanded per-turn details must retain all saved activity",
+        );
         await page.evaluate(() => {
           const chat = document.querySelector('[data-testid="builder-chat-scroll"]');
           chat.scrollTop = chat.scrollHeight;
@@ -1526,17 +1647,24 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
       try {
         await sendOnePrompt(page);
         await emitObservedProgress(page);
-        await persistSuccessfulTurn(page);
+        await persistSuccessfulTurn(page, {
+          ...FINAL_TURN,
+          response: "",
+          status: "agent_turn_ended",
+        });
         await page.evaluate(() => window.__nativeCompletionHarness.emit({ type: "generation_complete" }));
         await waitForState(page, "recovering");
         await finishQuietCandidate(page);
-        await assertSinglePersistedTurn(page);
         const stats = await statsOf(page);
         assert.equal(stats.nativeCheckpointPosts.length, 1,
           "a verified Development revision is attached to this specific native chat turn");
         assert.equal(stats.nativeCheckpointPosts[0].commitHash, EDITED);
         const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
         assert.match(checkpoint, /Verified Development checkpoint/);
+        const finalStatus = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.textContent);
+        assert.match(finalStatus, /Confirmed 1 changed file · Development checkpoint saved · Development preview link ready/);
+        assert.equal(finalStatus.split(ASSISTANT).length - 1, 1,
+          "the final status must preserve the streamed Agent reply when no saved reply was returned");
         const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
           Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
         assert.equal(hasRestoreAction, false, "native restore stays unavailable until its runtime path is verified");
