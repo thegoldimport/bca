@@ -280,12 +280,16 @@ function installBrowserHarness(initialFixture) {
     }
     if (url.pathname.endsWith("/runtime/turns/checkpoint") && method === "POST") {
       const checkpoint = JSON.parse(String(init.body || "{}"));
+      const completionSummary = "Verified update: 1 changed file; Development checkpoint saved; Development preview ready for review. Next: review the Development preview and tell me what to adjust.";
       state.stats.nativeCheckpointPosts.push(checkpoint);
       const correlatedPrompt = state.stats.lastUserSuggestion?.message;
-      state.persistedTurns = state.persistedTurns.map((turn) => turn.prompt === correlatedPrompt ? {
+      state.persistedTurns = state.persistedTurns.map((turn) => (
+        turn.prompt === correlatedPrompt || correlatedPrompt?.startsWith(turn.prompt)
+      ) ? {
         ...turn,
         status: "checkpoint_verified",
         commitHash: checkpoint.commitHash,
+        completionSummary,
         changedFiles: [{ path: "public/index.html", change: "modified", size: 42 }],
         activity: [{
           type: "tool",
@@ -293,10 +297,15 @@ function installBrowserHarness(initialFixture) {
           path: "public/index.html",
           status: "success",
           createdAt: "2026-11-15T12:00:00.000Z",
+        }, {
+          type: "verification",
+          label: completionSummary,
+          status: "success",
+          createdAt: "2026-11-15T12:00:00.000Z",
         }],
       } : turn);
       persist();
-      return json({ checkpointVerified: true, commitHash: checkpoint.commitHash });
+      return json({ checkpointVerified: true, commitHash: checkpoint.commitHash, completionSummary });
     }
     if (url.pathname.endsWith("/runtime/turns")) {
       const savedConversationRead = init.cache === "no-store";
@@ -516,7 +525,17 @@ function installBrowserHarness(initialFixture) {
       }
       if (typeof revision === "string") state.currentRevision = revision;
       if (typeof deployedRevision === "string") state.deployedRevision = deployedRevision;
-      if (Array.isArray(persistedTurns)) state.persistedTurns = persistedTurns;
+      if (Array.isArray(persistedTurns)) {
+        const submittedPrompt = state.stats.lastUserSuggestion?.message;
+        state.persistedTurns = persistedTurns.map((turn, index) => (
+          index >= state.baseTurnCount
+          && typeof submittedPrompt === "string"
+          && typeof turn?.prompt === "string"
+          && submittedPrompt.startsWith(turn.prompt)
+          ? { ...turn, prompt: submittedPrompt }
+          : turn
+        ));
+      }
       if (nativeTaskLifecycle === undefined && active === false && state.currentRevision !== state.baseRevision && state.persistedTurns.length > state.baseTurnCount) {
         state.nativeTaskLifecycle = {
           status: "COMPLETE",
@@ -680,6 +699,14 @@ async function sendOnePrompt(page) {
     error.message += `; browser state: ${JSON.stringify(debug)}`;
     throw error;
   });
+  const submitted = (await statsOf(page)).lastUserSuggestion.message;
+  assert.match(submitted, /whether each requested item is complete or what remains/,
+    "the Agent is asked to report completion and any remaining work");
+  assert.match(
+    await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.textContent),
+    /I'll get started on that for you/,
+    "the request receives the short acknowledgement immediately",
+  );
   await waitForState(page, "running");
   const stats = await statsOf(page);
   assert.equal(stats.openSockets, 1, "generation replaces the idle socket instead of opening a duplicate");
@@ -947,6 +974,8 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
           /Confirmed \d+ changed files?/,
           "file events alone must not produce a successful final response",
         );
+        assert.equal(await page.$('[data-testid="builder-turn-summary-2"]'), null,
+          "a final summary is not shown before checkpoint and preview verification");
         await page.click('[data-testid="builder-turn-checkpoint-2"] > summary');
         const activityLabels = await page.$$eval(
           '[data-testid^="native-turn-activity-event-2-"]',
@@ -1649,7 +1678,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await emitObservedProgress(page);
         await persistSuccessfulTurn(page, {
           ...FINAL_TURN,
-          response: "",
+          response: ASSISTANT,
           status: "agent_turn_ended",
         });
         await page.evaluate(() => window.__nativeCompletionHarness.emit({ type: "generation_complete" }));
@@ -1659,12 +1688,22 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         assert.equal(stats.nativeCheckpointPosts.length, 1,
           "a verified Development revision is attached to this specific native chat turn");
         assert.equal(stats.nativeCheckpointPosts[0].commitHash, EDITED);
+        assert.ok(stats.nativeCheckpointPosts[0].previewUrl.includes("/__native_completion_preview/"));
         const checkpoint = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) => node.textContent);
         assert.match(checkpoint, /Verified Development checkpoint/);
+        assert.match(checkpoint, /Development preview ready for review/);
         const finalStatus = await page.$eval('[data-testid="builder-chat-scroll"]', (node) => node.textContent);
-        assert.match(finalStatus, /Confirmed 1 changed file · Development checkpoint saved · Development preview link ready/);
+        assert.match(finalStatus, /Verified update: 1 changed file; Development checkpoint saved; Development preview ready for review/);
+        assert.match(finalStatus, /Next: review the Development preview and tell me what to adjust/);
         assert.equal(finalStatus.split(ASSISTANT).length - 1, 1,
-          "the final status must preserve the streamed Agent reply when no saved reply was returned");
+          "the final status must preserve the Agent's actual saved reply");
+        assert.equal(await page.$eval('[data-testid="builder-turn-summary-2"]', (node) => node.textContent),
+          "Verified update: 1 changed file; Development checkpoint saved; Development preview ready for review. Next: review the Development preview and tell me what to adjust.");
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForSelector('[data-testid="builder-turn-summary-2"]');
+        assert.equal(await page.$eval('[data-testid="builder-turn-build-response-2"]', (node) => node.textContent.trim()), ASSISTANT);
+        assert.match(await page.$eval('[data-testid="builder-turn-summary-2"]', (node) => node.textContent),
+          /Development checkpoint saved/);
         const hasRestoreAction = await page.$eval('[data-testid="builder-turn-checkpoint-2"]', (node) =>
           Array.from(node.querySelectorAll("button")).some((button) => button.textContent?.includes("Restore checkpoint")));
         assert.equal(hasRestoreAction, false, "native restore stays unavailable until its runtime path is verified");
@@ -1994,7 +2033,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await unrelated.click('[data-testid="button-send-chat"]');
         await unrelated.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
         const frame = (await statsOf(unrelated)).lastUserSuggestion;
-        assert.equal(frame.message, "yes");
+        assert.ok(frame.message.startsWith("yes"));
         assert.equal(frame.continuationApproval, undefined);
       } finally {
         await unrelated.close();
@@ -2017,7 +2056,7 @@ test("BuildCustom completion and recovery states in rendered Chromium client", {
         await page.click('[data-testid="button-send-chat"]');
         await page.waitForFunction(() => window.__nativeCompletionHarness.snapshot().stats.userSuggestions === 1, { timeout: 10_000 });
         const frame = (await statsOf(page)).lastUserSuggestion;
-        assert.equal(frame.message, "Actually add a settings page instead.");
+        assert.ok(frame.message.startsWith("Actually add a settings page instead."));
         assert.equal(frame.continuationApproval, undefined);
       } finally {
         await page.close();
