@@ -921,6 +921,46 @@ test("two runtime users have one verified session each and isolated BuildCustom 
     path: "src/App.tsx",
     content: "hello",
   });
+  const checkpointTurnId = "c1e2d3f4-a5b6-4789-8abc-def012345678";
+  sqlite.prepare(
+    "INSERT INTO runtime_builder_turns(project_id,mode,prompt,response,changed_files,commit_hash,activity) VALUES(?,'native_build',?,'Agent reply remains unchanged','[]',NULL,?)",
+  ).run(projectA.id, "Change the project header", JSON.stringify([{
+    type: "__buildcustom_native_turn",
+    token: checkpointTurnId,
+    status: "agent_turn_ended",
+    baselineCommitHash: null,
+  }]));
+  const checkpointBody = {
+    turnId: checkpointTurnId,
+    commitHash: stock.gitFixture!.commitHash,
+    previewUrl: runtimeStatus.previewUrl,
+  };
+  const checkpointResponse = await a.send(
+    `/api/projects/${projectA.id}/runtime/turns/checkpoint`,
+    "POST",
+    checkpointBody,
+    { "X-CSRF-Token": "csrf-value" },
+  );
+  assert.equal(checkpointResponse.status, 200);
+  const checkpointResult = await checkpointResponse.json() as any;
+  assert.equal(checkpointResult.checkpointVerified, true);
+  assert.match(checkpointResult.completionSummary, /2 changed files; Development checkpoint saved/);
+  assert.match(checkpointResult.completionSummary, /Development preview ready for review/);
+  assert.deepEqual(checkpointResult.changedFiles.map((file: any) => file.path).sort(), ["README.md", "src/App.tsx"]);
+  const checkpointRow = sqlite.prepare(
+    "SELECT response,activity,commit_hash FROM runtime_builder_turns WHERE project_id=? AND mode='native_build' AND id=(SELECT max(id) FROM runtime_builder_turns WHERE project_id=? AND mode='native_build')",
+  ).get(projectA.id, projectA.id) as any;
+  assert.equal(checkpointRow.response, "Agent reply remains unchanged");
+  assert.equal(checkpointRow.commit_hash, stock.gitFixture!.commitHash);
+  assert.equal(JSON.parse(checkpointRow.activity)[0].completionSummary, checkpointResult.completionSummary);
+  const repeatedCheckpoint = await a.send(
+    `/api/projects/${projectA.id}/runtime/turns/checkpoint`,
+    "POST",
+    checkpointBody,
+    { "X-CSRF-Token": "csrf-value" },
+  );
+  assert.equal((await repeatedCheckpoint.json() as any).completionSummary, checkpointResult.completionSummary,
+    "recovery retries return the same saved summary without duplicating or altering the Agent reply");
   const ownerDataCallsBeforeForeignReads = stock.calls.filter((path) => path.startsWith("/api/agent/") || path.startsWith("/apps/")).length;
   assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/files`)).status, 404);
   assert.equal((await b.send(`/api/projects/${projectA.id}/runtime/files/content?path=src%2FApp.tsx`)).status, 404);
@@ -1024,7 +1064,12 @@ test("two runtime users have one verified session each and isolated BuildCustom 
     }));
     assert.equal(expiredReplay.status, 403);
   });
-  assert.deepEqual(await (await a.send(`/api/projects/${projectA.id}/runtime/turns`, "GET", undefined, { "X-CSRF-Token": "csrf-value" })).json(), { turns: [] });
+  const savedTurns = await (await a.send(`/api/projects/${projectA.id}/runtime/turns`, "GET", undefined, {
+    "X-CSRF-Token": "csrf-value",
+  })).json() as any;
+  assert.equal(savedTurns.turns.length, 1);
+  assert.equal(savedTurns.turns[0].response, "Agent reply remains unchanged");
+  assert.match(savedTurns.turns[0].completionSummary, /2 changed files; Development checkpoint saved/);
   assert.equal(
     (await worker.fetch(new Request(`${origin}/api/projects/${projectA.id}/runtime/turns`, {
       headers: { Origin: origin },

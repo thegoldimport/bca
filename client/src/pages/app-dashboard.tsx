@@ -748,6 +748,7 @@ type RuntimeBuilderTurn = {
   mode: "plan" | "build";
   prompt: string;
   response: string;
+  completionSummary?: string;
   changedFiles: Array<{ path: string; change: string; size: number }>;
   activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
   commitHash: string | null;
@@ -775,6 +776,10 @@ function nativeReportedFileChangeCount(turn: RuntimeBuilderTurn): number {
       .filter((entry) => entry.type === "tool" && entry.status === "success" && entry.path)
       .map((entry) => entry.path),
   ).size;
+}
+
+function visibleNativeTurnPrompt(prompt: string): string {
+  return prompt.split("\n\nBuildCustom chat behavior:", 1)[0];
 }
 
 function nativeTurnActivityDetail(turn: RuntimeBuilderTurn, nativeThink: boolean): string {
@@ -3478,18 +3483,22 @@ function EditorPage() {
             return;
           }
           let checkpointSaved = false;
+          let checkpointCompletionSummary: string | null = null;
           try {
             const csrf = await csrfToken();
             const checkpointResponse = await fetch(`/api/projects/${projectId}/runtime/turns/checkpoint`, {
               method: "POST",
               credentials: "same-origin",
               headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, ...authHeaders() },
-              body: JSON.stringify({ turnId: nativeTurnId, commitHash: currentCommitHash }),
+              body: JSON.stringify({ turnId: nativeTurnId, commitHash: currentCommitHash, previewUrl }),
               signal: operationController.signal,
             });
             const checkpointData = await checkpointResponse.json().catch(() => ({}));
             if (!checkpointResponse.ok) throw new Error(checkpointData.message || "Checkpoint verification failed.");
             checkpointSaved = checkpointData.checkpointVerified === true;
+            checkpointCompletionSummary = typeof checkpointData.completionSummary === "string"
+              ? checkpointData.completionSummary
+              : null;
             if (checkpointSaved) {
               const savedTurnsData = await fetchJson("turns");
               const savedTurns = runtimeTurnsFromResponse(savedTurnsData);
@@ -3503,6 +3512,19 @@ function EditorPage() {
             operationBaseline,
             currentCommitHash,
           );
+          if (checkpointSaved && checkpointCompletionSummary && verifiedOperationTurn) {
+            verifiedOperationTurn.completionSummary ||= checkpointCompletionSummary;
+            if (!verifiedOperationTurn.activity.some((event: any) => (
+              event.type === "verification" && event.label === checkpointCompletionSummary
+            ))) {
+              verifiedOperationTurn.activity = [...verifiedOperationTurn.activity, {
+                type: "verification",
+                label: checkpointCompletionSummary,
+                status: "success",
+                createdAt: new Date().toISOString(),
+              }];
+            }
+          }
           setTurns((current) => mergeSavedAgentTurns(current, finalTurns));
           setRuntimeCapability({ projectId, nativeThink: true, status: verifiedStatus });
           setRuntimeError("");
@@ -3543,9 +3565,11 @@ function EditorPage() {
           const checkpointStatus = checkpointSaved
             ? "Development checkpoint saved"
             : "Development checkpoint not saved";
-          const finalUpdate = `${changedFileStatus} · ${checkpointStatus} · Development preview link ready`;
+          const finalUpdate = `${changedFileStatus} · ${checkpointStatus} · Development preview ready for review. Next: review it and tell me what to adjust.`;
           recordNativeProgress(finalUpdate);
-          reportTurnUpdate(finalUpdate);
+          if (!checkpointSaved || !verifiedOperationTurn) {
+            reportTurnUpdate(checkpointCompletionSummary || finalUpdate);
+          }
           closeAndFinish();
         } catch (error: any) {
           if (!isOperationActive()) {
@@ -4284,7 +4308,7 @@ function EditorPage() {
       const appendUserMessage = requestOptions.appendUserMessage !== false;
       const appendAcknowledgement = requestOptions.appendAcknowledgement !== false;
       const acknowledgement = requestOptions.acknowledgement
-        || "I have enough detail to start. I'll focus on the workflow you described and show updates here as the runtime reports them.";
+        || "I'll get started on that for you";
       const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const visiblePrompt = prompt;
       setMessages((previous) => [
@@ -4316,8 +4340,7 @@ function EditorPage() {
         ? `\n\nApproved implementation plan from Plan mode:\n${pendingPlan}\n\nFollow this approved plan while applying the user's request.`
         : "";
       const conversationUiInstruction = nativeThink
-        && (turns.length === 0 || planningSessionRef.current !== null)
-        ? "\n\nBuildCustom chat behavior: If you need another detail, ask the customer directly in this chat and wait for their reply here. Do not refer to a question panel or any external panel. Do not claim completion until the runtime confirms it."
+        ? "\n\nBuildCustom chat behavior: If you need another detail, ask the customer directly in this chat and wait for their reply here. Do not refer to a question panel or any external panel. When the work is done, preserve your actual response and give a concise summary of what changed, whether each requested item is complete or what remains, and one useful next step. Clearly label anything unverified. Do not claim the application is complete merely because your turn ended, files changed, or the runtime is idle."
         : "";
       const promptBase = requestOptions.agentPromptOverride || prompt;
       const agentPrompt = `${promptBase}${imageContext}${selectedContext}${textFileContext}${approvedPlanContext}${conversationUiInstruction}`;
@@ -5014,7 +5037,7 @@ function EditorPage() {
             <div key={turn.id} className="space-y-3" data-testid={`builder-turn-${turn.id}`}>
               <div className="flex justify-end">
                 <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-r from-cyan-500 to-cyan-400 px-4 py-3 text-sm leading-relaxed text-black">
-                  {turn.prompt}
+                  {nativeThink ? visibleNativeTurnPrompt(turn.prompt) : turn.prompt}
                 </div>
               </div>
               {turn.mode !== "build" && <div className="flex justify-start">
@@ -5134,6 +5157,13 @@ function EditorPage() {
                   theme === "dark" ? "border-white/10 bg-white/5 text-white/80" : "border-gray-200 bg-gray-100 text-gray-800"
                 }`} data-testid={`builder-turn-build-response-${turn.id}`}>
                   {nativeThink ? turn.response : normalizeBuilderAssistantText(turn.response)}
+                </div>
+              </div>}
+              {nativeThink && turn.completionSummary && <div className="flex justify-start">
+                <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-md border px-4 py-3 text-sm leading-relaxed ${
+                  theme === "dark" ? "border-cyan-300/20 bg-cyan-300/[0.06] text-white/80" : "border-cyan-200 bg-cyan-50 text-gray-800"
+                }`} data-testid={`builder-turn-summary-${turn.id}`}>
+                  {turn.completionSummary}
                 </div>
               </div>}
             </div>

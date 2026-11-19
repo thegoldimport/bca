@@ -563,11 +563,24 @@ async function finalizeNativeTurnCheckpoint(
   if (!row) return Response.json({ message: "The saved Agent turn was not found." }, { status: 404 });
   const activity = parseJsonArray(row.activity);
   const meta = nativeTurnMeta(activity);
+  const previewUrl = allowedPreviewUrl(env, agentId, input.previewUrl);
   if (meta?.status === "checkpoint_verified" && row.commit_hash === commitHash) {
+    const completionSummary = meta.completionSummary
+      || (typeof input.previewUrl === "string"
+        ? verifiedNativeCompletionSummary(parseJsonArray(row.changed_files).length, Boolean(previewUrl))
+        : undefined);
+    if (completionSummary && !meta.completionSummary) {
+      const nextMeta: NativeTurnMeta = { ...meta, completionSummary };
+      const cleanActivity = activity.filter((item) => item?.type !== NATIVE_TURN_META_TYPE);
+      await env.DB.prepare(
+        "UPDATE runtime_builder_turns SET activity=? WHERE id=? AND project_id=? AND mode='native_build'",
+      ).bind(JSON.stringify([nextMeta, ...cleanActivity]), row.id, projectId).run();
+    }
     return Response.json({
       checkpointVerified: true,
       commitHash,
       changedFiles: parseJsonArray(row.changed_files),
+      ...(completionSummary ? { completionSummary } : {}),
     }, { headers: { "Cache-Control": "no-store" } });
   }
   if (!meta || meta.status !== "agent_turn_ended") {
@@ -602,12 +615,13 @@ async function finalizeNativeTurnCheckpoint(
     const status = error instanceof RuntimeIdentityError ? error.status : 409;
     return Response.json({ message }, { status });
   }
-  const nextMeta: NativeTurnMeta = { ...meta, status: "checkpoint_verified" };
+  const completionSummary = verifiedNativeCompletionSummary(changedFiles.length, Boolean(previewUrl));
+  const nextMeta: NativeTurnMeta = { ...meta, status: "checkpoint_verified", completionSummary };
   const cleanActivity = activity.filter((item) => item?.type !== NATIVE_TURN_META_TYPE);
   await env.DB.prepare(
     "UPDATE runtime_builder_turns SET commit_hash=?,changed_files=?,activity=? WHERE id=? AND project_id=? AND mode='native_build'",
   ).bind(commitHash, JSON.stringify(changedFiles), JSON.stringify([nextMeta, ...cleanActivity]), row.id, projectId).run();
-  return Response.json({ checkpointVerified: true, commitHash, changedFiles }, {
+  return Response.json({ checkpointVerified: true, commitHash, changedFiles, completionSummary }, {
     headers: { "Cache-Control": "no-store" },
   });
 }
@@ -795,6 +809,7 @@ type NativeTurnMeta = {
   token: string;
   status: string;
   baselineCommitHash: string | null;
+  completionSummary?: string;
 };
 
 type NativeTurnActivity = {
@@ -817,7 +832,18 @@ function nativeTurnMeta(activity: unknown): NativeTurnMeta | null {
     token: value.token.toLowerCase(),
     status: value.status,
     baselineCommitHash: value.baselineCommitHash as string | null,
+    ...(typeof value.completionSummary === "string" && value.completionSummary.length <= 700
+      ? { completionSummary: value.completionSummary }
+      : {}),
   };
+}
+
+function verifiedNativeCompletionSummary(changedFileCount: number, previewReady: boolean): string {
+  const fileLabel = `${changedFileCount} changed file${changedFileCount === 1 ? "" : "s"}`;
+  const previewLabel = previewReady
+    ? "Development preview ready for review"
+    : "Development preview was not verified";
+  return `Verified update: ${fileLabel}; Development checkpoint saved; ${previewLabel}. Next: review the Development preview and tell me what to adjust.`;
 }
 
 export function safeNativeTurnEvent(frame: Record<string, any>): {
@@ -942,20 +968,31 @@ function restoredNativeTurn(
   commitHash: string | null;
   createdAt: string;
   status: string;
+  completionSummary?: string;
 } | null {
   if (!Number.isSafeInteger(row?.id) || typeof row.prompt !== "string" || typeof row.response !== "string") return null;
   const rawActivity = parseJsonArray(row.activity);
   const meta = nativeTurnMeta(rawActivity);
   if (!meta) return null;
+  const createdAt = String(row.created_at ?? row.createdAt ?? "");
   return {
     id: row.id,
     prompt: row.prompt,
     response: row.response,
     changedFiles: parseJsonArray(row.changed_files ?? row.changedFiles),
-    activity: rawActivity.filter((item) => item?.type !== NATIVE_TURN_META_TYPE),
+    activity: [
+      ...rawActivity.filter((item) => item?.type !== NATIVE_TURN_META_TYPE),
+      ...(meta.completionSummary ? [{
+        type: "verification",
+        label: meta.completionSummary,
+        status: "success",
+        createdAt,
+      }] : []),
+    ],
     commitHash: typeof (row.commit_hash ?? row.commitHash) === "string" ? (row.commit_hash ?? row.commitHash) : null,
-    createdAt: String(row.created_at ?? row.createdAt ?? ""),
+    createdAt,
     status: meta.status,
+    ...(meta.completionSummary ? { completionSummary: meta.completionSummary } : {}),
   };
 }
 
@@ -1340,6 +1377,7 @@ export function shapeThinkHistory(messages: unknown, persistedRows: any[] = []):
   mode: "build";
   prompt: string;
   response: string;
+  completionSummary?: string;
   changedFiles: Array<{ path: string; change: string; size: number }>;
   activity: NativeTurnActivity[];
   commitHash: string | null;
@@ -1398,6 +1436,7 @@ export function shapeThinkHistory(messages: unknown, persistedRows: any[] = []):
       ...turn,
       id: saved.restored.id,
       response: turn.response || saved.restored.response,
+      ...(saved.restored.completionSummary ? { completionSummary: saved.restored.completionSummary } : {}),
       changedFiles: saved.restored.changedFiles,
       activity: saved.restored.activity,
       commitHash: saved.restored.commitHash,
@@ -1416,6 +1455,7 @@ export function shapeThinkHistory(messages: unknown, persistedRows: any[] = []):
       mode: "build",
       prompt: saved.prompt,
       response: saved.response,
+      ...(saved.completionSummary ? { completionSummary: saved.completionSummary } : {}),
       changedFiles: saved.changedFiles,
       activity: saved.activity,
       commitHash: saved.commitHash,

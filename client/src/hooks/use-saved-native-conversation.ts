@@ -6,6 +6,7 @@ export type SavedAgentTurn = {
   mode: "plan" | "build";
   prompt: string;
   response: string;
+  completionSummary?: string;
   changedFiles: Array<{ path: string; change: string; size: number }>;
   activity: Array<{ type: string; label: string; path?: string; status?: string; createdAt: string }>;
   commitHash: string | null;
@@ -22,6 +23,10 @@ export function readSavedAgentTurns(data: unknown): SavedAgentTurn[] {
       || typeof row.response !== "string" || !["plan", "build"].includes(row.mode)
       || !Array.isArray(row.changedFiles) || !Array.isArray(row.activity)) {
       throw new Error("Invalid saved turn");
+    }
+    if (row.completionSummary !== undefined
+      && (typeof row.completionSummary !== "string" || row.completionSummary.length > 700)) {
+      throw new Error("Invalid saved turn summary");
     }
     if (row.status !== undefined && !["running", "reply_saved", "needs_input", "agent_turn_ended", "interrupted", "error", "stopped", "checkpoint_verified"].includes(row.status)) {
       throw new Error("Invalid saved turn status");
@@ -72,6 +77,9 @@ export function mergeSavedAgentTurns(
     byId.set(next.id, {
       ...preferred,
       response: preferred.response.trim() ? preferred.response : fallback.response,
+      ...((preferred.completionSummary || fallback.completionSummary)
+        ? { completionSummary: preferred.completionSummary || fallback.completionSummary }
+        : {}),
       changedFiles: Array.from(changedFiles.values()),
       activity: Array.from(activity.values()),
       commitHash: preferred.commitHash || fallback.commitHash,

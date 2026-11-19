@@ -448,31 +448,44 @@ test("reopened turns are derived from persisted stock conversation messages", ()
 
 test("native saved activity and Development checkpoints merge only into their matching turns", () => {
   const turnId = "c1e2d3f4-a5b6-4789-8abc-def012345678";
+  const internalInstruction = "\n\nBuildCustom chat behavior: summarize completed work.";
   const turns = shapeThinkHistory([
-    { role: "user", content: "Change the header", conversationId: "user-1" },
+    { role: "user", content: `Change the header${internalInstruction}`, conversationId: "user-1" },
     { role: "assistant", content: "Header updated.", conversationId: "assistant-1" },
     { role: "user", content: "A request without saved activity" },
     { role: "assistant", content: "Reply without a checkpoint." },
   ], [{
     id: 44,
     mode: "native_build",
-    prompt: "Change the header",
+    prompt: `Change the header${internalInstruction}`,
     response: "Persisted response",
     changed_files: JSON.stringify([{ path: "src/Header.tsx", change: "modified", size: 120 }]),
     commit_hash: "b".repeat(40),
     activity: JSON.stringify([
-      { type: "__buildcustom_native_turn", token: turnId, status: "checkpoint_verified", baselineCommitHash: "a".repeat(40) },
+      {
+        type: "__buildcustom_native_turn",
+        token: turnId,
+        status: "checkpoint_verified",
+        baselineCommitHash: "a".repeat(40),
+        completionSummary: "Verified update: 1 changed file; Development checkpoint saved; Development preview ready for review. Next: review the Development preview and tell me what to adjust.",
+      },
       { type: "tool", label: "Updated src/Header.tsx", path: "src/Header.tsx", status: "success", createdAt: "2026-11-15T12:00:00.000Z" },
     ]),
     created_at: "2026-11-15T12:00:00.000Z",
   }]);
 
   assert.equal(turns[0].id, 44);
+  assert.equal(turns[0].prompt, `Change the header${internalInstruction}`,
+    "the saved internal prompt remains intact for request correlation");
   assert.equal(turns[0].response, "Header updated.");
+  assert.equal(turns[0].completionSummary, "Verified update: 1 changed file; Development checkpoint saved; Development preview ready for review. Next: review the Development preview and tell me what to adjust.");
   assert.equal(turns[0].status, "checkpoint_verified");
   assert.equal(turns[0].commitHash, "b".repeat(40));
   assert.deepEqual(turns[0].changedFiles, [{ path: "src/Header.tsx", change: "modified", size: 120 }]);
-  assert.deepEqual(turns[0].activity.map((event) => event.label), ["Updated src/Header.tsx"]);
+  assert.deepEqual(turns[0].activity.map((event) => event.label), [
+    "Updated src/Header.tsx",
+    "Verified update: 1 changed file; Development checkpoint saved; Development preview ready for review. Next: review the Development preview and tell me what to adjust.",
+  ]);
   assert.equal(turns[1].id, -2);
   assert.equal(turns[1].activity.length, 0);
   assert.equal(turns[1].commitHash, null);

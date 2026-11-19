@@ -13,6 +13,17 @@ test("saved conversation accepts both authorized API snapshot envelopes without 
   assert.equal(readSavedAgentTurns([turn])[0].response, turn.response);
 });
 
+test("saved completion summaries survive stale transcript snapshots without changing the Agent reply", () => {
+  const saved = {
+    ...turn,
+    completionSummary: "Verified update: 2 changed files; Development checkpoint saved.",
+  };
+  const stale = { ...turn, completionSummary: undefined };
+  const merged = mergeSavedAgentTurns([saved], [stale])[0];
+  assert.equal(merged.response, turn.response);
+  assert.equal(merged.completionSummary, saved.completionSummary);
+});
+
 test("replayed saved IDs render once, retaining the latest record for that ID", () => {
   const final = { ...turn, response: `${turn.response}\nFinal persisted question?` };
   assert.deepEqual(readSavedAgentTurns({ turns: [turn, final] }), [final]);
