@@ -115,7 +115,7 @@ For version `122e2da3-5617-49cc-92ca-5c5723e30af3`, exact reconstructed-source p
 
 ## Development Restore port — prepared, not deployed
 
-The Development-only restore port is based on the exact accepted workspace source recorded by `manual-auto-continuation-source.json` and its parent receipts, not on an assumption that Worker v41 matches that source. The runtime package remains `1.5.0`; `bun.lock` SHA-256 remains `b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f`. The focused patch is `production/patches/development-restore.patch`, pinned by `development-restore-source.json`; it changes 14 runtime source and test files.
+The Development-only restore port starts from upstream VibeSDK commit `9da158d82c597a0e8f4bf033cdccd1053fb6fb15`, then applies the accepted workspace source chain recorded by `manual-auto-continuation-source.json` and its parent receipts. It does not assume Worker v41 matches that source. The runtime package remains `1.5.0`; `bun.lock` SHA-256 remains `b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f`. The focused patch is `production/patches/development-restore.patch`, pinned by `development-restore-source.json`; it changes 14 runtime source and test files.
 
 Reconstruction is reproducible with `scripts/reconstruct-development-restore-runtime.mjs`: it rebuilds the accepted parent, applies the restore patch, and verifies all changed-source hashes. The port preserves the current Think operation lifecycle and FileManager projection code. It reuses the already-existing control-plane `rollback_to_commit` route; no control-plane behavior or Native Restore UI is enabled by this patch. Restore is limited to Development `main`, and does not add bindings, database migrations, or Production changes.
 

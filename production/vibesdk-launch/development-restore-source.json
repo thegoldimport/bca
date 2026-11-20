@@ -2,6 +2,7 @@
   "parentReceipt": "production/vibesdk-launch/manual-auto-continuation-source.json",
   "parentReceiptSha256": "f2b934f63c592245da38f997910661b331688a28ceec4bc5a85b716f5e685a62",
   "canonicalBaseline": "208f97099ae297d3d205fec0e813ae87427e6269",
+  "upstreamCommit": "9da158d82c597a0e8f4bf033cdccd1053fb6fb15",
   "runtimePackageVersion": "1.5.0",
   "runtimeLockSha256": "b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f",
   "patch": {

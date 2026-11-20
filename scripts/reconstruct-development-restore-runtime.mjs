@@ -10,8 +10,10 @@ assert(process.argv[2] && directory !== process.cwd(), "Pass a new reconstructio
 const receiptPath = "production/vibesdk-launch/development-restore-source.json";
 const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
 const parentBytes = await readFile(receipt.parentReceipt);
+const upstream = JSON.parse(await readFile("production/vibesdk-launch/resource-envelope-source-parity.json", "utf8"));
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 assert.equal(sha(parentBytes), receipt.parentReceiptSha256, "Parent runtime receipt changed");
+assert.equal(receipt.upstreamCommit, upstream.reconstruction.upstreamCommit, "Upstream VibeSDK source pin changed");
 execFileSync(process.execPath, ["scripts/reconstruct-manual-auto-continuation-runtime.mjs", directory], { stdio: "inherit" });
 const patchBytes = await readFile(receipt.patch.path);
 assert.equal(sha(patchBytes), receipt.patch.sha256, "Development restore patch changed");

@@ -11,6 +11,7 @@ const baseline = path.resolve(baselineArg);
 const candidate = path.resolve(candidateArg);
 const parentPath = "production/vibesdk-launch/manual-auto-continuation-source.json";
 const parent = JSON.parse(await readFile(parentPath, "utf8"));
+const upstream = JSON.parse(await readFile("production/vibesdk-launch/resource-envelope-source-parity.json", "utf8"));
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const addedFiles = [
   "space/test/artifacts-restore.test.ts",
@@ -56,6 +57,7 @@ const sourceReceipt = {
   parentReceipt: parentPath,
   parentReceiptSha256: sha(await readFile(parentPath)),
   canonicalBaseline: parent.canonicalBaseline,
+  upstreamCommit: upstream.reconstruction.upstreamCommit,
   runtimePackageVersion: JSON.parse(await readFile(path.join(candidate, "package.json"), "utf8")).version,
   runtimeLockSha256: sha(await readFile(path.join(candidate, "bun.lock"))),
   patch: { path: patchPath, sha256: sha(patch) },
