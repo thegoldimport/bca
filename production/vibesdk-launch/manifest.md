@@ -7,6 +7,42 @@ below document historical releases, not the current final candidate.
 
 Cloudflare account: `03ef1e6e42498920987f07059e107538`. No BuildCustom public domain, route, marketing site, old product D1, or Replit deployment has been changed.
 
+## PR #27 restore compatibility gate
+
+Production Worker v41 was inspected read-only. Its active version has no
+`ARTIFACTS` binding, while the tracked production `wrangler.jsonc` declares
+`ARTIFACTS` as `vibesdk-production`. Do not deploy that config or add the
+binding to the serving Worker until the resulting storage-mode behavior is
+explicitly reviewed; this PR does not change production configuration.
+
+`resolveSpaceFsBackendMode` first honors the persisted `space:fsBackend` key,
+so an initialized SQL workspace stays SQL even if a binding is later added.
+For an unpinned workspace, an existing Artifacts remote URL or checkpoint row
+selects Artifacts; otherwise Artifacts is selected only when
+`ENABLE_ARTIFACTS=true` and the binding exists. Adding the binding alone does
+not migrate pinned SQL projects, but it can make legacy Artifacts markers
+select a backend that was unavailable on v41, and a preserved dashboard flag
+can select Artifacts for unpinned projects. Existing project data was not
+inspected to determine how many projects have these markers.
+
+Compatibility strategy: keep production bindings unchanged and deployment
+blocked until the serving config is reconciled with v41. Test Artifacts restore
+only on a separately named Worker using new Durable Object and Artifacts
+namespaces; do not point a canary at `vibesdk-production`, customer D1, or
+customer routes.
+
+## Reproducible restore source baseline
+
+The current workspace runtime matches all 865 hashes in the existing
+manual-continuation receipt. Reconstructing the upstream resource baseline
+produces 860 verified files; the previous intermediate publisher patch does
+not apply cleanly to that source. The checked-in
+`workspace-runtime-baseline.patch` captures the verified difference: five
+added files and thirteen updated files. Replaying it yields the exact 865-file
+workspace receipt. The patch does not change `wrangler.jsonc`; generated local
+files (`README.buildcustom-test-slice.md`, `tsconfig.tsbuildinfo`, and
+`wrangler.manual-auto-build.jsonc`) are excluded from the source snapshot.
+
 ## Pinned build
 
 - Stock `cloudflare/vibesdk`: `9da158d82c597a0e8f4bf033cdccd1053fb6fb15`

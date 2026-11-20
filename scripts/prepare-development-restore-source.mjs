@@ -9,13 +9,14 @@ const [baselineArg, candidateArg] = process.argv.slice(2);
 assert(baselineArg && candidateArg, "Pass the reconstructed baseline and tested candidate directories");
 const baseline = path.resolve(baselineArg);
 const candidate = path.resolve(candidateArg);
-const parentPath = "production/vibesdk-launch/manual-auto-continuation-source.json";
+const parentPath = "production/vibesdk-launch/workspace-runtime-baseline-source.json";
 const parent = JSON.parse(await readFile(parentPath, "utf8"));
 const upstream = JSON.parse(await readFile("production/vibesdk-launch/resource-envelope-source-parity.json", "utf8"));
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const addedFiles = [
   "space/test/artifacts-restore.test.ts",
   "space/test/development-restore.test.ts",
+  "space/test/development-restore-compatibility.test.ts",
   "worker/agents/core/behaviors/think-restore-sync.ts",
   "worker/agents/core/behaviors/think.restore.test.ts",
   "worker/agents/services/implementations/FileManager.restore.test.ts",

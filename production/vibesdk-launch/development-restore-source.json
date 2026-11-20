@@ -1,13 +1,13 @@
 {
-  "parentReceipt": "production/vibesdk-launch/manual-auto-continuation-source.json",
-  "parentReceiptSha256": "f2b934f63c592245da38f997910661b331688a28ceec4bc5a85b716f5e685a62",
+  "parentReceipt": "production/vibesdk-launch/workspace-runtime-baseline-source.json",
+  "parentReceiptSha256": "5c2643d8713705bf83401d55ab9debf0408829fbb420d7cb93a22f5e873a7503",
   "canonicalBaseline": "208f97099ae297d3d205fec0e813ae87427e6269",
   "upstreamCommit": "9da158d82c597a0e8f4bf033cdccd1053fb6fb15",
   "runtimePackageVersion": "1.5.0",
   "runtimeLockSha256": "b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f",
   "patch": {
     "path": "production/patches/development-restore.patch",
-    "sha256": "53378290a3679c9de1e4acfc94db5db905a3a9389aae3642499883e211419b05"
+    "sha256": "579659acb906631730db7c5e04f57fb423177b3682c374e489593781f4f827ae"
   },
   "changed": [
     "space/src/space/deploy-engine.test.ts",
@@ -15,6 +15,7 @@
     "space/src/space/fs-backend.ts",
     "space/src/space/git-objects.ts",
     "space/test/artifacts-restore.test.ts",
+    "space/test/development-restore-compatibility.test.ts",
     "space/test/development-restore.test.ts",
     "worker/agents/core/behaviors/think-restore-sync.ts",
     "worker/agents/core/behaviors/think.restore.test.ts",
@@ -27,13 +28,14 @@
   ],
   "sourceHashes": {
     "space/src/space/deploy-engine.test.ts": "3a0c3b028d5ccbb696ec9527d9db682afb7b74500d0908fef68fd21f0fd5d181",
-    "space/src/space/durable-object.ts": "2050f1327d473c854430890c1a4fa059e1e067465ff963a45a2a94edd6ae22cc",
+    "space/src/space/durable-object.ts": "baafe35d6ca9cd071871f4ec2508875375ddc408564b7613c562b5b336bfbbea",
     "space/src/space/fs-backend.ts": "6eac12eea99dfb37ddc0eea32dc20b33a5f5869c8a92e990d4c8511b3ab80fc9",
     "space/src/space/git-objects.ts": "b9b1698f083d4f187d8ba4adb62c31ead32377d55e370918fd905ed16d74ac7d",
-    "space/test/artifacts-restore.test.ts": "de55f1fe57ba42c4842bc52f941e79c805149ddc69bce776cc743573c1c00970",
+    "space/test/artifacts-restore.test.ts": "24b9069e4f1cd3b195b6bcdff18048fc00bc9e0694036642ea642cd77b30445e",
+    "space/test/development-restore-compatibility.test.ts": "18c4d3ac106e51ba48573a5eb99f6d0d514d1e4006c2bff2e7fef4eaf3f55866",
     "space/test/development-restore.test.ts": "1389705de351c9f988b37449920424c7114d303f3a592fc0a38351e03e277331",
     "worker/agents/core/behaviors/think-restore-sync.ts": "c5e88818fa8fa99019fb378b28852bf6e8dfda17cb056aadcc769a95b97ae27e",
-    "worker/agents/core/behaviors/think.restore.test.ts": "16e2d58e0b5a709df14360792e91acd706c071ac385e5e2bbb02c9b9b3db7c2d",
+    "worker/agents/core/behaviors/think.restore.test.ts": "b89286d51321015b3d15e4b485f3ab7a377e0d21ac2993134e49b6ab824625dc",
     "worker/agents/core/behaviors/think.ts": "3abe0233a55d8d8228d9440b4205a95e1578df56532de7e0473708404585be69",
     "worker/agents/core/codingAgent.ts": "da0ef392f8872838a1afa902deddb7b9ae483b5d942c02405707a22f62a4a56c",
     "worker/agents/services/implementations/FileManager.restore.test.ts": "c4e6bc9e6d85d258f7cfe32a7e38151988c81286be5bedae03621ab6e40bc344",
