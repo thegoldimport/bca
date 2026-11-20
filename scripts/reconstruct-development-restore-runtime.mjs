@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
+// Source reconstruction only. Never installs, deploys, or calls a model.
+const directory = path.resolve(process.argv[2] ?? "");
+assert(process.argv[2] && directory !== process.cwd(), "Pass a new reconstruction directory");
+const receiptPath = "production/vibesdk-launch/development-restore-source.json";
+const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+const parentBytes = await readFile(receipt.parentReceipt);
+const baselineReceiptPath = "production/vibesdk-launch/workspace-runtime-baseline-source.json";
+const baselineBytes = await readFile(baselineReceiptPath);
+const upstream = JSON.parse(await readFile("production/vibesdk-launch/resource-envelope-source-parity.json", "utf8"));
+const sha = bytes => createHash("sha256").update(bytes).digest("hex");
+assert.equal(sha(parentBytes), receipt.parentReceiptSha256, "Parent runtime receipt changed");
+assert.equal(receipt.parentReceipt, baselineReceiptPath, "Unexpected Development restore baseline");
+assert.equal(sha(baselineBytes), receipt.parentReceiptSha256, "Workspace baseline receipt changed");
+assert.equal(receipt.upstreamCommit, upstream.reconstruction.upstreamCommit, "Upstream VibeSDK source pin changed");
+execFileSync(process.execPath, ["scripts/reconstruct-workspace-runtime-baseline.mjs", directory], { stdio: "inherit" });
+const patchBytes = await readFile(receipt.patch.path);
+assert.equal(sha(patchBytes), receipt.patch.sha256, "Development restore patch changed");
+execFileSync("git", ["apply", "--check", path.resolve(receipt.patch.path)], { cwd: directory });
+execFileSync("git", ["apply", path.resolve(receipt.patch.path)], { cwd: directory });
+for (const [relative, expected] of Object.entries(receipt.sourceHashes)) {
+  assert.equal(sha(await readFile(path.join(directory, relative))), expected, `Source mismatch: ${relative}`);
+}
+console.log(JSON.stringify({
+  status: "PASS",
+  changedSourcePaths: Object.keys(receipt.sourceHashes).length,
+  directory,
+  productionMutations: 0,
+}));

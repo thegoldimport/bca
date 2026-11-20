@@ -1,0 +1,3085 @@
+diff --git a/space/src/space/deploy-engine.test.ts b/space/src/space/deploy-engine.test.ts
+index 29f9f83..7a15a7b 100644
+--- a/space/src/space/deploy-engine.test.ts
++++ b/space/src/space/deploy-engine.test.ts
+@@ -5,6 +5,16 @@ import type { BranchDeploymentBundle, DeployContext } from "./deploy-engine"
+ import { SpaceDO } from "./durable-object"
+ import { ArtifactsBackend } from "./fs-backend"
+ 
++function mockStorage(sql: Record<string, unknown> = {}) {
++  const values = new Map<string, unknown>()
++  return {
++    sql,
++    get: vi.fn(async (key: string) => values.get(key)),
++    put: vi.fn(async (key: string, value: unknown) => { values.set(key, value) }),
++    delete: vi.fn(async (key: string) => values.delete(key)),
++  }
++}
++
+ function workspaceContext(source: string): DeployContext {
+   const files: Record<string, string> = {
+     "/wrangler.json": JSON.stringify({ main: "src/index.tsx", compatibility_date: "2025-04-01" }),
+@@ -200,7 +210,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: {} } },
++      ctx: { storage: mockStorage() },
+       ensureInit: async () => {},
+       currentBranch: async () => "main",
+     })
+@@ -247,7 +257,7 @@ describe("workspace deployment preflight", () => {
+       initialized: false,
+       initializationPromise: null,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } } },
++      ctx: { storage: mockStorage({ exec: sqlExec }) },
+       initializeBackend,
+       ensureInit,
+       currentBranch,
+@@ -285,7 +295,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ctx: { storage: mockStorage({ exec: sqlExec }), id: { name: "test-space" } },
+       ensureInit: vi.fn(async () => {}),
+       currentBranch: vi.fn(async () => "feature"),
+       readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({})),
+@@ -328,7 +338,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ctx: { storage: mockStorage({ exec: sqlExec }), id: { name: "test-space" } },
+       ensureInit: vi.fn(async () => {}),
+       currentBranch: vi.fn().mockResolvedValueOnce("main").mockResolvedValueOnce("feature"),
+       readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({ "src/index.ts": "same source" })),
+@@ -399,7 +409,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ctx: { storage: mockStorage({ exec: sqlExec }), id: { name: "test-space" } },
+       ensureInit: vi.fn(async () => {}),
+       currentBranch: vi.fn(async () => "main"),
+       readOnlyWorkspaceSnapshot: vi.fn(async () => snapshot),
+@@ -475,7 +485,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ctx: { storage: mockStorage({ exec: sqlExec }), id: { name: "test-space" } },
+       ensureInit: vi.fn(async () => {}),
+       currentBranch: vi.fn(async () => "main"),
+       readOnlyWorkspaceSnapshot: vi.fn(async () => snapshot),
+@@ -543,7 +553,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ctx: { storage: mockStorage({ exec: sqlExec }), id: { name: "test-space" } },
+       ensureInit: vi.fn(async () => {}),
+       currentBranch: vi.fn(async () => "main"),
+       readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({ "src/index.ts": "unchanged" })),
+@@ -585,7 +595,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ctx: { storage: mockStorage({ exec: sqlExec }), id: { name: "test-space" } },
+       ensureInit: vi.fn(async () => {}),
+       currentBranch: vi.fn(async () => "main"),
+       readOnlyWorkspaceSnapshot: vi.fn(async () => workspaceSnapshot({ "src/index.ts": "unchanged" })),
+@@ -634,7 +644,7 @@ describe("workspace deployment preflight", () => {
+     Object.assign(space, {
+       initialized: true,
+       backend,
+-      ctx: { storage: { sql: { exec: sqlExec } }, id: { name: "test-space" } },
++      ctx: { storage: mockStorage({ exec: sqlExec }), id: { name: "test-space" } },
+       ensureInit: vi.fn(async () => {}),
+       currentBranch: vi.fn(async () => "main"),
+       readOnlyWorkspaceSnapshot,
+diff --git a/space/src/space/durable-object.ts b/space/src/space/durable-object.ts
+index 4b9eb05..d9267cf 100644
+--- a/space/src/space/durable-object.ts
++++ b/space/src/space/durable-object.ts
+@@ -16,7 +16,13 @@ import {
+   buildInspectorWrapperSource,
+   VIBE_APP_MODULE,
+ } from "./inspector-wrapper"
+-import { ArtifactsBackend, resolveSpaceFsBackendMode, SqlBackend, type SpaceFsBackend } from "./fs-backend"
++import {
++  ArtifactsBackend,
++  resolveSpaceFsBackendMode,
++  SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY,
++  SqlBackend,
++  type SpaceFsBackend,
++} from "./fs-backend"
+ import {
+   readBlobBytes,
+   resolveHead,
+@@ -80,6 +86,65 @@ interface WorkspaceSnapshot {
+   bytes: Record<string, Uint8Array>
+ }
+ 
++interface GitTreeFile {
++  bytes: Uint8Array
++  mode: number
++}
++
++type RestoreJournal = {
++  version: 1
++  requestId: string
++  branch: string
++  targetCommit: string
++  safetyCommit: string
++  restoreCommit: string
++  mode: "artifacts" | "sql"
++  previousWorkspaceNamespace?: string
++  candidateWorkspaceNamespace?: string
++  phase: "prepared" | "activated"
++  startedAt: number
++}
++
++type ActiveRestore = {
++  requestId: string
++  result: RestoreResult
++  previousWorkspaceNamespace?: string
++}
++
++type RestoreResult = {
++  ok: true
++  branch: string
++  target_commit: string
++  safety_commit: string
++  commit_hash: string
++  preview_url: string
++}
++
++const RESTORE_JOURNAL_KEY = "space:restoreJournal:v1"
++const LAST_RESTORE_RESULT_KEY = "space:lastRestoreResult:v1"
++const ACTIVE_RESTORE_KEY = "space:activeRestore:v1"
++const ACTIVE_GENERATION_KEY = "space:activeGeneration:v1"
++const DIRTY_WORKSPACE_PATHS_KEY = "space:dirtyWorkspacePaths:v1"
++const RESTORE_WORKSPACE_PREFIX = "restore_"
++const ARTIFACTS_RESTORE_VERIFY_TIMEOUT_MS = 10_000
++
++async function withRestoreVerificationTimeout<T>(operation: Promise<T>, name: string): Promise<T> {
++  let timer: ReturnType<typeof setTimeout> | undefined
++  try {
++    return await Promise.race([
++      operation,
++      new Promise<never>((_, reject) => {
++        timer = setTimeout(
++          () => reject(new Error(`${name} timed out`)),
++          ARTIFACTS_RESTORE_VERIFY_TIMEOUT_MS,
++        )
++      }),
++    ])
++  } finally {
++    if (timer !== undefined) clearTimeout(timer)
++  }
++}
++
+ function workspaceSnapshotsEqual(a: WorkspaceSnapshot, b: WorkspaceSnapshot): boolean {
+   const aPaths = Object.keys(a.bytes).sort()
+   const bPaths = Object.keys(b.bytes).sort()
+@@ -119,9 +184,12 @@ const ASSET_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+ export class SpaceDO extends DurableObject<Env> {
+   private backend!: SpaceFsBackend
+   private initializationPromise: Promise<void> | null = null
++  private restoreRecoveryPromise: Promise<void> | null = null
+   private initialized = false
+   private assetCache = new Map<string, CachedAssets>()
+   private workspaceOperationTail: Promise<void> = Promise.resolve()
++  private restoreCallInFlight = false
++  private restoreMutationActive = false
+ 
+   private get overlay(): FileSystem { return this.backend.overlay }
+   private get fs(): FileSystem { return this.backend.fs }
+@@ -262,6 +330,30 @@ export class SpaceDO extends DurableObject<Env> {
+       })
+     }
+     await this.initializationPromise
++    if (!this.restoreMutationActive) await this.recoverPendingRestore()
++  }
++
++  private async assertMutationAllowed(): Promise<void> {
++    if (await this.ctx.storage.get(RESTORE_JOURNAL_KEY)
++      || await this.ctx.storage.get(ACTIVE_RESTORE_KEY)) {
++      throw new Error("Development restore must finish syncing before workspace edits continue")
++    }
++  }
++
++  private async markWorkspacePathDirty(path: string): Promise<void> {
++    const normalized = path.replace(/^\/+/, "")
++    if (!normalized || isReservedPath(`/${normalized}`)) return
++    const dirty = new Set(await this.ctx.storage.get<string[]>(DIRTY_WORKSPACE_PATHS_KEY) ?? [])
++    dirty.add(normalized)
++    await this.ctx.storage.put(DIRTY_WORKSPACE_PATHS_KEY, [...dirty])
++  }
++
++  private async dirtyWorkspacePaths(): Promise<string[]> {
++    return await this.ctx.storage.get<string[]>(DIRTY_WORKSPACE_PATHS_KEY) ?? []
++  }
++
++  private async clearDirtyWorkspacePaths(): Promise<void> {
++    await this.ctx.storage.delete(DIRTY_WORKSPACE_PATHS_KEY)
+   }
+ 
+   private assertInitializedForPreflight(): void {
+@@ -306,43 +398,262 @@ export class SpaceDO extends DurableObject<Env> {
+   private async initializeBackend(): Promise<void> {
+     const mode = await resolveSpaceFsBackendMode(this.ctx.storage, this.env)
+     const repoName = this.ctx.id.name ?? "space"
++    const activeWorkspaceNamespace = await this.ctx.storage.get<string>(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)
++    if (activeWorkspaceNamespace && !activeWorkspaceNamespace.startsWith(RESTORE_WORKSPACE_PREFIX)) {
++      throw new Error("The active Development workspace identity is invalid")
++    }
+     this.backend = mode === "artifacts"
+       ? new ArtifactsBackend(this.ctx, this.env, repoName)
+-      : new SqlBackend(this.ctx, repoName)
++      : new SqlBackend(this.ctx, repoName, activeWorkspaceNamespace)
+   }
+ 
+-  // ── Filesystem RPC methods ──────────────────────────────────────
++  private async recoverPendingRestore(): Promise<void> {
++    const journal = await this.ctx.storage.get<RestoreJournal>(RESTORE_JOURNAL_KEY)
++    if (!journal) return
++    if (!this.restoreRecoveryPromise) {
++      this.restoreRecoveryPromise = this.recoverRestoreJournal(journal).finally(() => {
++        this.restoreRecoveryPromise = null
++      })
++    }
++    await this.restoreRecoveryPromise
++  }
++
++  private async buildBranchDeploymentFor(
++    backend: SpaceFsBackend,
++    branch: string,
++  ): Promise<BranchDeploymentBundle> {
++    return buildBranchDeployment({
++      sql: this.ctx.storage.sql,
++      git: backend.git,
++      fs: backend.fs,
++    }, branch)
++  }
++
++  private async recoverRestoreJournal(journal: RestoreJournal): Promise<void> {
++    if (journal.version !== 1 || journal.branch !== "main"
++      || !/^[a-f0-9]{40}$/.test(journal.targetCommit)
++      || !/^[a-f0-9]{40}$/.test(journal.safetyCommit)
++      || !/^[a-f0-9]{40}$/.test(journal.restoreCommit)
++      || !/^[a-f0-9-]{36}$/.test(journal.requestId)) {
++      throw new Error("A Development restore journal is invalid; workspace access is blocked")
++    }
++
++    if (journal.mode === "sql") {
++      const repoName = this.ctx.id.name ?? "space"
++      const activeNamespace = await this.ctx.storage.get<string>(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)
++      if (activeNamespace !== journal.candidateWorkspaceNamespace) {
++        if (journal.candidateWorkspaceNamespace) {
++          await new SqlBackend(
++            this.ctx,
++            this.ctx.id.name ?? "space",
++            journal.candidateWorkspaceNamespace,
++          ).discard()
++        }
++        await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++        return
++      }
++    } else if (journal.mode !== "artifacts") {
++      throw new Error("The Development restore journal has an unsupported backend")
++    }
++
++    if (journal.mode === "artifacts") {
++      await this.recoverArtifactsRestoreJournal(journal)
++      return
++    }
++
++    const head = await resolveHead(this.fs, `refs/heads/${journal.branch}`)
++      ?? await resolveHead(this.fs, journal.branch)
++    if (head !== journal.restoreCommit) {
++      if (journal.mode === "artifacts" && head === journal.safetyCommit) {
++        await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++        return
++      }
++      if (journal.mode === "sql") {
++        if (journal.previousWorkspaceNamespace) {
++          await this.ctx.storage.put(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY, journal.previousWorkspaceNamespace)
++        } else {
++          await this.ctx.storage.delete(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)
++        }
++        await this.initializeBackend()
++        this.assetCache.clear()
++        await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++        throw new Error("Restore activation was interrupted; the previous Development workspace was retained")
++      }
++      throw new Error("The Artifacts restore commit could not be confirmed; workspace access is blocked")
++    }
+ 
+-  async readFile(path: string, opts?: { offset?: number; limit?: number }): Promise<string> {
+-    await this.ensureInit()
+-    // Read through the overlay FS: it hydrates the blob from the Artifacts base
+-    // on demand and honours whiteouts (a deleted base file stays deleted).
+-    let content: string
+     try {
+-      content = await this.fs.readFile(path)
+-    } catch {
+-      throw new Error(`File not found: ${path}`)
++      if (journal.mode === "artifacts") {
++        await this.backend.clearCheckpointsAfterRestore()
++        await this.initializeBackend()
++        await this.backend.ready()
++      }
++      const deployment = this.readDeployment(journal.branch)
++      if (deployment?.commitHash !== journal.restoreCommit) {
++        const bundle = await this.buildBranchDeploymentFor(this.backend, journal.branch)
++        if (bundle.commitHash !== journal.restoreCommit) {
++          throw new Error("The recovered preview does not match the restored Development revision")
++        }
++        persistDeploymentBundle(this.ctxForDeploy(), bundle)
++      }
++      const result: RestoreResult = {
++        ok: true,
++        branch: journal.branch,
++        target_commit: journal.targetCommit,
++        safety_commit: journal.safetyCommit,
++        commit_hash: journal.restoreCommit,
++        preview_url: `/space/${this.ctx.id.name ?? "space"}/preview/${encodeURIComponent(journal.branch)}/`,
++      }
++      await this.ctx.storage.put(LAST_RESTORE_RESULT_KEY, { requestId: journal.requestId, result })
++      await this.ctx.storage.put(ACTIVE_RESTORE_KEY, {
++        requestId: journal.requestId,
++        result,
++        ...(journal.previousWorkspaceNamespace
++          ? { previousWorkspaceNamespace: journal.previousWorkspaceNamespace }
++          : {}),
++      })
++      await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++      this.assetCache.clear()
++    } catch (error) {
++      if (journal.mode === "sql") {
++        if (journal.previousWorkspaceNamespace) {
++          await this.ctx.storage.put(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY, journal.previousWorkspaceNamespace)
++        } else {
++          await this.ctx.storage.delete(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)
++        }
++        if (journal.candidateWorkspaceNamespace) {
++          await new SqlBackend(
++            this.ctx,
++            this.ctx.id.name ?? "space",
++            journal.candidateWorkspaceNamespace,
++          ).discard()
++        }
++        await this.initializeBackend()
++        this.assetCache.clear()
++        await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++      }
++      throw new Error(
++        `Development restore recovery failed: ${error instanceof Error ? error.message : String(error)}`,
++      )
++    }
++  }
++
++  private async recoverArtifactsRestoreJournal(journal: RestoreJournal): Promise<void> {
++    const { backend, head } = await this.createVerifiedArtifactsBackend(journal.branch)
++    const history = await backend.git.log({ ref: journal.branch, depth: 10_000 })
++    const historyOids = new Set(history.map((entry) => entry.oid))
++    if (!historyOids.has(journal.targetCommit) || !historyOids.has(journal.safetyCommit)) {
++      throw new Error("The verified Artifacts history does not contain the restore checkpoints")
+     }
+ 
+-    if (opts?.offset !== undefined || opts?.limit !== undefined) {
+-      const lines = content.split("\n")
+-      const start = (opts.offset ?? 1) - 1
+-      const end = opts.limit !== undefined ? start + opts.limit : lines.length
+-      return lines
+-        .slice(start, end)
+-        .map((line, i) => `${start + i + 1}\t${line}`)
+-        .join("\n")
++    if (head === journal.safetyCommit && journal.phase === "prepared") {
++      const bundle = await this.buildBranchDeploymentFor(backend, journal.branch)
++      if (bundle.commitHash !== journal.safetyCommit) {
++        throw new Error("The verified safety checkpoint preview could not be confirmed")
++      }
++      persistDeploymentBundle(this.ctxForDeploy(), bundle)
++      if (this.readDeployment(journal.branch)?.commitHash !== journal.safetyCommit) {
++        throw new Error("The safety checkpoint preview was not durably saved")
++      }
++      await this.backend.clearCheckpointsAfterRestore()
++      this.backend = backend
++      this.initialized = true
++      this.assetCache.clear()
++      await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++      return
++    }
++
++    if (head !== journal.restoreCommit || !historyOids.has(journal.restoreCommit)) {
++      throw new Error("The verified Artifacts branch diverged from this restore; retry after reconciling it")
++    }
++
++    const [restoredFiles, targetFiles] = await Promise.all([
++      this.treeFilesAtCommit(backend.fs, journal.restoreCommit),
++      this.treeFilesAtCommit(backend.fs, journal.targetCommit),
++    ])
++    if (!this.treeFilesEqual(restoredFiles, targetFiles)) {
++      throw new Error("The verified Artifacts restore tree does not match its target checkpoint")
++    }
++
++    const bundle = await this.buildBranchDeploymentFor(backend, journal.branch)
++    if (bundle.commitHash !== journal.restoreCommit) {
++      throw new Error("The verified Development preview does not match the restored revision")
++    }
++    persistDeploymentBundle(this.ctxForDeploy(), bundle)
++    if (this.readDeployment(journal.branch)?.commitHash !== journal.restoreCommit) {
++      throw new Error("The restored Development preview was not durably saved")
++    }
++    await this.backend.clearCheckpointsAfterRestore()
++
++    const result: RestoreResult = {
++      ok: true,
++      branch: journal.branch,
++      target_commit: journal.targetCommit,
++      safety_commit: journal.safetyCommit,
++      commit_hash: journal.restoreCommit,
++      preview_url: `/space/${this.ctx.id.name ?? "space"}/preview/${encodeURIComponent(journal.branch)}/`,
++    }
++    await this.ctx.storage.put(LAST_RESTORE_RESULT_KEY, { requestId: journal.requestId, result })
++    await this.ctx.storage.put(ACTIVE_RESTORE_KEY, {
++      requestId: journal.requestId,
++      result,
++      ...(journal.previousWorkspaceNamespace
++        ? { previousWorkspaceNamespace: journal.previousWorkspaceNamespace }
++        : {}),
++    })
++    const savedResult = await this.ctx.storage.get<{ requestId: string; result: RestoreResult }>(
++      LAST_RESTORE_RESULT_KEY,
++    )
++    const activeRestore = await this.ctx.storage.get<ActiveRestore>(ACTIVE_RESTORE_KEY)
++    if (savedResult?.requestId !== journal.requestId
++      || savedResult.result.commit_hash !== journal.restoreCommit
++      || activeRestore?.requestId !== journal.requestId
++      || activeRestore.result.commit_hash !== journal.restoreCommit) {
++      throw new Error("The restored Development status was not durably saved")
+     }
+ 
+-    return content
++    this.backend = backend
++    this.initialized = true
++    this.assetCache.clear()
++    await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++  }
++
++  // ── Filesystem RPC methods ──────────────────────────────────────
++
++  async readFile(path: string, opts?: { offset?: number; limit?: number }): Promise<string> {
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      // Read through the overlay FS: it hydrates the blob from the Artifacts base
++      // on demand and honours whiteouts (a deleted base file stays deleted).
++      let content: string
++      try {
++        content = await this.fs.readFile(path)
++      } catch {
++        throw new Error(`File not found: ${path}`)
++      }
++
++      if (opts?.offset !== undefined || opts?.limit !== undefined) {
++        const lines = content.split("\n")
++        const start = (opts.offset ?? 1) - 1
++        const end = opts.limit !== undefined ? start + opts.limit : lines.length
++        return lines
++          .slice(start, end)
++          .map((line, i) => `${start + i + 1}\t${line}`)
++          .join("\n")
++      }
++
++      return content
++    })
+   }
+ 
+   async writeFile(path: string, content: string): Promise<{ path: string; size: number }> {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       // Route through the overlay FS so a write to a previously-deleted base path
+       // clears its whiteout tombstone and makes the file visible again.
+       await this.fs.writeFile(path, content)
++      await this.markWorkspacePathDirty(path)
+       return { path, size: content.length }
+     })
+   }
+@@ -350,11 +661,13 @@ export class SpaceDO extends DurableObject<Env> {
+   async editFile(path: string, oldString: string, newString: string): Promise<{ path: string; size: number }> {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       await this.hydrate(path)
+       const result = await this.stateBackend.replaceInFile(path, oldString, newString)
+       if (result.replaced === 0) {
+         throw new Error(`old_string not found in ${path}`)
+       }
++      await this.markWorkspacePathDirty(path)
+       const content = await this.fs.readFile(path)
+       return { path, size: content.length }
+     })
+@@ -363,45 +676,53 @@ export class SpaceDO extends DurableObject<Env> {
+   async deleteFile(path: string): Promise<void> {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       await this.fs.rm(path, { force: true })
++      await this.markWorkspacePathDirty(path)
+     })
+   }
+ 
+   async glob(pattern: string): Promise<string[]> {
+-    await this.ensureInit()
+-    await this.materializeAll()
+-    const files = await globInfos(this.overlay, pattern)
+-    return files
+-      .filter((f: FileInfo) => f.type === "file" && !isReservedPath(f.path))
+-      .sort((a: FileInfo, b: FileInfo) => b.updatedAt - a.updatedAt)
+-      .map((f: FileInfo) => f.path)
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.materializeAll()
++      const files = await globInfos(this.overlay, pattern)
++      return files
++        .filter((f: FileInfo) => f.type === "file" && !isReservedPath(f.path))
++        .sort((a: FileInfo, b: FileInfo) => b.updatedAt - a.updatedAt)
++        .map((f: FileInfo) => f.path)
++    })
+   }
+ 
+   async grep(query: string, include?: string): Promise<Array<{ path: string; line: number; content: string }>> {
+-    await this.ensureInit()
+-    await this.materializeAll()
+-    const results = await this.stateBackend.searchFiles(include ?? "**/*", query)
+-    const matches: Array<{ path: string; line: number; content: string }> = []
+-    for (const file of results) {
+-      for (const match of file.matches) {
+-        matches.push({
+-          path: file.path,
+-          line: match.line,
+-          content: match.lineText,
+-        })
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.materializeAll()
++      const results = await this.stateBackend.searchFiles(include ?? "**/*", query)
++      const matches: Array<{ path: string; line: number; content: string }> = []
++      for (const file of results) {
++        for (const match of file.matches) {
++          matches.push({
++            path: file.path,
++            line: match.line,
++            content: match.lineText,
++          })
++        }
+       }
+-    }
+-    return matches
++      return matches
++    })
+   }
+ 
+   async list(prefix?: string): Promise<Array<{ path: string; mtime: number }>> {
+-    await this.ensureInit()
+-    await this.materializeAll()
+-    const pattern = prefix ? `${prefix.replace(/^\//, "")}/**/*` : "**/*"
+-    const files = await globInfos(this.overlay, pattern)
+-    return files
+-      .filter((f: FileInfo) => f.type === "file" && !isReservedPath(f.path))
+-      .map((f: FileInfo) => ({ path: f.path, mtime: f.updatedAt }))
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.materializeAll()
++      const pattern = prefix ? `${prefix.replace(/^\//, "")}/**/*` : "**/*"
++      const files = await globInfos(this.overlay, pattern)
++      return files
++        .filter((f: FileInfo) => f.type === "file" && !isReservedPath(f.path))
++        .map((f: FileInfo) => ({ path: f.path, mtime: f.updatedAt }))
++    })
+   }
+ 
+   // ── Workspace RPC methods consumed by VibeSDK's Think workspace tools ──
+@@ -410,55 +731,123 @@ export class SpaceDO extends DurableObject<Env> {
+   // read/write/edit/list/find/grep/delete tools with this SpaceDO.
+ 
+   async stat(path: string): Promise<FileInfo | null> {
+-    await this.ensureInit()
+-    await this.hydrate(path)
+-    try {
+-      return toFileInfo(path, await this.overlay.stat(path))
+-    } catch {
+-      return null
+-    }
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.hydrate(path)
++      try {
++        return toFileInfo(path, await this.overlay.stat(path))
++      } catch {
++        return null
++      }
++    })
+   }
+ 
+   async readFileBytes(path: string): Promise<Uint8Array | null> {
+-    await this.ensureInit()
+-    // Overlay FS hydrates from the base on demand and honours whiteouts; it
+-    // throws ENOENT for a missing path, but this RPC's contract returns null.
+-    try {
+-      return await this.fs.readFileBytes(path)
+-    } catch {
+-      return null
+-    }
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      // Overlay FS hydrates from the base on demand and honours whiteouts; it
++      // throws ENOENT for a missing path, but this RPC's contract returns null.
++      try {
++        return await this.fs.readFileBytes(path)
++      } catch {
++        return null
++      }
++    })
+   }
+ 
+   async readDir(dir?: string, opts?: { limit?: number; offset?: number }): Promise<FileInfo[]> {
+-    await this.ensureInit()
+-    await this.materializeAll()
+-    return readDirInfos(this.overlay, dir, opts)
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.materializeAll()
++      return readDirInfos(this.overlay, dir, opts)
++    })
+   }
+ 
+   async mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       await this.fs.mkdir(path, opts)
+     })
+   }
+ 
++  async beginGeneration(operationId: string): Promise<{ ok: boolean; reason?: string }> {
++    if (this.restoreCallInFlight || this.restoreMutationActive) {
++      return { ok: false, reason: "A Development restore is in progress" }
++    }
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      if (this.restoreCallInFlight || this.restoreMutationActive
++        || await this.ctx.storage.get(RESTORE_JOURNAL_KEY)
++        || await this.ctx.storage.get(ACTIVE_RESTORE_KEY)) {
++        return { ok: false, reason: "Development restore recovery must finish before editing" }
++      }
++      const current = await this.ctx.storage.get<string>(ACTIVE_GENERATION_KEY)
++      if (current && current !== operationId) {
++        return { ok: false, reason: "Another Agent operation is still active" }
++      }
++      await this.ctx.storage.put(ACTIVE_GENERATION_KEY, operationId)
++      return { ok: true }
++    })
++  }
++
++  async endGeneration(operationId: string): Promise<boolean> {
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      const current = await this.ctx.storage.get<string>(ACTIVE_GENERATION_KEY)
++      if (current !== operationId) return false
++      await this.ctx.storage.delete(ACTIVE_GENERATION_KEY)
++      return true
++    })
++  }
++
++  async getPendingRestore(): Promise<ActiveRestore | null> {
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      return (await this.ctx.storage.get<ActiveRestore>(ACTIVE_RESTORE_KEY)) ?? null
++    })
++  }
++
++  async completeRestore(requestId: string): Promise<boolean> {
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      const pending = await this.ctx.storage.get<ActiveRestore>(ACTIVE_RESTORE_KEY)
++      if (!pending || pending.requestId !== requestId) return false
++      const deployment = this.readDeployment(pending.result.branch)
++      if (deployment?.commitHash !== pending.result.commit_hash) return false
++      if (pending.previousWorkspaceNamespace
++        && pending.previousWorkspaceNamespace !== await this.ctx.storage.get<string>(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)) {
++        await new SqlBackend(
++          this.ctx,
++          this.ctx.id.name ?? "space",
++          pending.previousWorkspaceNamespace,
++        ).discard()
++      }
++      await this.ctx.storage.delete(ACTIVE_RESTORE_KEY)
++      return true
++    })
++  }
++
+   async rm(path: string, opts?: { recursive?: boolean; force?: boolean }): Promise<void> {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       await this.fs.rm(path, opts)
++      await this.markWorkspacePathDirty(path)
+     })
+   }
+ 
+   async patch(diff: string): Promise<{ applied: string[]; failed: string[] }> {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       const edits = parseUnifiedDiffToEdits(diff)
+       const applied: string[] = []
+       const failed: string[] = []
+       for (const edit of edits) {
+         try {
+           await this.fs.writeFile(edit.path, edit.content)
++          await this.markWorkspacePathDirty(edit.path)
+           applied.push(edit.path)
+         } catch {
+           failed.push(edit.path)
+@@ -485,7 +874,11 @@ export class SpaceDO extends DurableObject<Env> {
+     message: string,
+     author?: { name: string; email: string }
+   ): Promise<{ sha: string; message: string }> {
+-    return this.withWorkspaceOperation(() => this.gitCommitLocalUnlocked(message, author))
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.assertMutationAllowed()
++      return this.gitCommitLocalUnlocked(message, author)
++    })
+   }
+ 
+   private async gitCommitLocalUnlocked(
+@@ -497,17 +890,19 @@ export class SpaceDO extends DurableObject<Env> {
+     await this.flushCheckpoint()
+     // Stage the workdir (incl. deletions) but never reserved bookkeeping
+     // paths — a committed `.afs/state.json` would pollute the Artifacts base.
+-    await stageWorkdir(this.fs, isReservedPath)
++    await stageWorkdir(this.fs, isReservedPath, await this.dirtyWorkspacePaths())
+     // Skip no-op commits (nothing changed since HEAD) so callers that commit
+     // defensively don't append empty restore points.
+     if (await stagedTreeMatchesHead(this.fs, isReservedPath)) {
+       const head = await resolveHead(this.fs, "HEAD")
++      await this.clearDirtyWorkspacePaths()
+       return { sha: head ?? "", message }
+     }
+     const result = await this.git.commit({
+       message,
+       author: author ?? { name: "Agent", email: "agent@vibesdk.local" },
+     })
++    await this.clearDirtyWorkspacePaths()
+     return { sha: result.oid, message: result.message }
+   }
+ 
+@@ -515,7 +910,11 @@ export class SpaceDO extends DurableObject<Env> {
+     message: string,
+     author?: { name: string; email: string }
+   ): Promise<{ sha: string; message: string }> {
+-    return this.withWorkspaceOperation(() => this.gitCommitUnlocked(message, author))
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.assertMutationAllowed()
++      return this.gitCommitUnlocked(message, author)
++    })
+   }
+ 
+   private async gitCommitUnlocked(
+@@ -530,17 +929,19 @@ export class SpaceDO extends DurableObject<Env> {
+     await this.materializeAll()
+     // Persist pending overlay writes before the commit captures the tree.
+     await this.flushCheckpoint()
+-    await stageWorkdir(this.fs, isReservedPath)
++    await stageWorkdir(this.fs, isReservedPath, await this.dirtyWorkspacePaths())
+     // Skip no-op commits (e.g. a preview redeploy on page reload) so history is
+     // not polluted with empty commits and the remote is not pushed needlessly.
+     if (await stagedTreeMatchesHead(this.fs, isReservedPath)) {
+       const head = await resolveHead(this.fs, "HEAD")
++      await this.clearDirtyWorkspacePaths()
+       return { sha: head ?? "", message }
+     }
+     const result = await this.git.commit({
+       message,
+       author: author ?? { name: "Agent", email: "agent@vibesdk.local" },
+     })
++    await this.clearDirtyWorkspacePaths()
+ 
+     if (pushAfterCommit) {
+       this.ctx.waitUntil(
+@@ -555,18 +956,23 @@ export class SpaceDO extends DurableObject<Env> {
+   }
+ 
+   async gitLog(limit?: number): Promise<GitLogEntry[]> {
+-    await this.ensureInit()
+-    return this.git.log({ depth: limit })
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      return this.git.log({ depth: limit })
++    })
+   }
+ 
+   async gitStatus(): Promise<GitStatusEntry[]> {
+-    await this.ensureInit()
+-    return this.git.status()
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      return this.git.status()
++    })
+   }
+ 
+   async gitCheckout(ref: string): Promise<void> {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       await this.git.checkout({ ref })
+     })
+   }
+@@ -574,13 +980,16 @@ export class SpaceDO extends DurableObject<Env> {
+   async gitBranch(opts?: { name?: string; list?: boolean; delete?: string }) {
+     return this.withWorkspaceOperation(async () => {
+       await this.ensureInit()
++      await this.assertMutationAllowed()
+       return this.git.branch(opts)
+     })
+   }
+ 
+   async gitDiff(): Promise<Array<{ filepath: string; status: string }>> {
+-    await this.ensureInit()
+-    return this.git.diff()
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      return this.git.diff()
++    })
+   }
+ 
+   /**
+@@ -596,12 +1005,20 @@ export class SpaceDO extends DurableObject<Env> {
+    * `.git/objects/…`) to match the loose-object layout callers expect.
+    */
+   async exportGitObjects(): Promise<Array<{ path: string; data: Uint8Array }>> {
+-    await this.ensureInit()
+-    try {
+-      const branch = (await this.currentBranch()) ?? "main"
+-      await this.backend.fetch(branch)
+-    } catch {
+-      // Best-effort: export whatever is already local.
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      return this.exportGitObjectsUnlocked()
++    })
++  }
++
++  private async exportGitObjectsUnlocked(): Promise<Array<{ path: string; data: Uint8Array }>> {
++    if (this.backend instanceof ArtifactsBackend) {
++      try {
++        const branch = (await this.currentBranch()) ?? "main"
++        await this.backend.fetch(branch)
++      } catch {
++        // Export the locally available object store; callers verify its HEAD.
++      }
+     }
+ 
+     const out: Array<{ path: string; data: Uint8Array }> = []
+@@ -632,77 +1049,370 @@ export class SpaceDO extends DurableObject<Env> {
+     return out
+   }
+ 
+-  /**
+-   * Roll back `branch` to the tree of `commitHash` and redeploy. This is a
+-   * forward restore (not a destructive reset): it captures the file tree at the
+-   * target commit, reconciles the branch working tree to match it, then creates
+-   * a new commit on `branch` and deploys — so history stays intact and the
+-   * preview rebuilds from the restored files.
+-   */
+-  async rollbackToCommit(branch: string, commitHash: string): Promise<unknown> {
+-    return this.withWorkspaceOperation(() => this.rollbackToCommitUnlocked(branch, commitHash))
++  private async treeFilesAtCommit(
++    fs: FileSystem,
++    commitHash: string,
++  ): Promise<Map<string, GitTreeFile>> {
++    const files = new Map<string, GitTreeFile>()
++    for (const [path, entry] of await walkTreeFiles(fs, commitHash)) {
++      if (isReservedPath(path)) continue
++      if (!path.startsWith("/") || path.split("/").some((part) => part === "..")) {
++        throw new Error("Checkpoint contains an unsafe file path")
++      }
++      files.set(path, { bytes: await readBlobBytes(fs, entry.oid), mode: entry.mode })
++    }
++    return files
+   }
+ 
+-  private async rollbackToCommitUnlocked(branch: string, commitHash: string): Promise<unknown> {
+-    await this.ensureInit()
+-    // Reads/walks the whole working tree below, so the Artifacts base must be
+-    // fully materialized into the overlay first.
+-    await this.materializeAll()
++  private async writeFileBytesTo(fs: FileSystem, path: string, bytes: Uint8Array): Promise<void> {
++    const parent = path.slice(0, path.lastIndexOf("/")) || "/"
++    if (parent !== "/") await fs.mkdir(parent, { recursive: true })
++    await fs.writeFileBytes(path, bytes)
++  }
+ 
+-    await this.backend.fetch(branch)
++  private async writeTreeFileTo(
++    backend: SpaceFsBackend,
++    path: string,
++    file: GitTreeFile,
++  ): Promise<void> {
++    const parent = path.slice(0, path.lastIndexOf("/")) || "/"
++    if (parent !== "/") await backend.fs.mkdir(parent, { recursive: true })
++    if ((file.mode & 0o170000) === 0o120000) {
++      const target = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(file.bytes)
++      await backend.fs.symlink(target, path)
++      return
++    }
++    if ((file.mode & 0o170000) !== 0o100000) {
++      throw new Error(`Checkpoint contains an unsupported file mode for ${path}`)
++    }
++    await backend.fs.writeFileBytes(path, file.bytes)
++    await backend.setFileMode(path, file.mode)
++  }
+ 
+-    // Verify the target commit exists on this branch's history.
+-    const history = await this.git.log({ ref: branch, depth: 1000 })
+-    const target = history.find(
+-      (entry) => entry.oid === commitHash || entry.oid.startsWith(commitHash),
+-    )
+-    if (!target) {
+-      return { error: `Commit ${commitHash} not found on branch "${branch}"` }
+-    }
+-
+-    // Capture the file tree at the target commit as raw bytes. Reading and
+-    // rewriting via bytes (not strings) keeps binary assets — fonts, images,
+-    // favicons — byte-for-byte intact. Round-tripping them through UTF-8
+-    // corrupts them and inflates each invalid byte into a 3-byte replacement
+-    // char, which can push a file past the SQLite inline-value limit and throw
+-    // SQLITE_TOOBIG (only reproduced on rollback, since normal deploys never
+-    // rewrite these files).
+-    await this.git.checkout({ ref: target.oid })
+-    const targetFiles = new Map<string, Uint8Array>()
+-    for (const info of await globInfos(this.overlay, "**/*")) {
+-      if (info.type !== "file") continue
+-      if (isReservedPath(info.path)) continue
+-      const bytes = await this.overlay.readFileBytes(info.path)
+-      if (bytes) targetFiles.set(info.path, bytes)
++  private async replaceCandidateTree(
++    backend: SpaceFsBackend,
++    branch: string,
++    targetCommit: string,
++  ): Promise<string> {
++    await backend.git.checkout({ ref: branch })
++    await backend.materializeAll()
++    const targetFiles = await this.treeFilesAtCommit(backend.fs, targetCommit)
++    const currentPaths = await backend.fs.glob("/**/*")
++    for (const path of currentPaths.sort((a, b) => b.length - a.length)) {
++      if (path === "/" || isReservedPath(path)) continue
++      await backend.fs.rm(path, { force: true, recursive: true })
++    }
++    for (const [path, file] of targetFiles) await this.writeTreeFileTo(backend, path, file)
++
++    await stageWorkdir(backend.fs, isReservedPath, targetFiles.keys())
++    let commitHash = await resolveHead(backend.fs, `refs/heads/${branch}`)
++    if (!(await stagedTreeMatchesHead(backend.fs, isReservedPath))) {
++      const committed = await backend.git.commit({
++        message: `restore: Development checkpoint ${targetCommit.slice(0, 8)}`,
++        author: { name: "BuildCustom Restore", email: "restore@buildcustom.local" },
++      })
++      commitHash = committed.oid
+     }
++    if (!commitHash) throw new Error("Could not create a forward restore checkpoint")
++
++    const restoredFiles = await this.treeFilesAtCommit(backend.fs, commitHash)
++    if (!this.treeFilesEqual(targetFiles, restoredFiles)) {
++      const missing = [...targetFiles.keys()].filter((path) => !restoredFiles.has(path))
++      const added = [...restoredFiles.keys()].filter((path) => !targetFiles.has(path))
++      const changed = [...targetFiles.keys()].filter((path) => {
++        const actual = restoredFiles.get(path)
++        const expected = targetFiles.get(path)
++        return actual && expected && !this.treeFilesEqual(
++          new Map([[path, expected]]),
++          new Map([[path, actual]]),
++        )
++      })
++      throw new Error(
++        `The staged Development tree does not exactly match the checkpoint (missing=${missing.join(",")}; added=${added.join(",")}; changed=${changed.join(",")})`,
++      )
++    }
++    const liveFiles = new Map<string, GitTreeFile>()
++    for (const path of await backend.fs.glob("/**/*")) {
++      if (isReservedPath(path)) continue
++      const stat = await backend.fs.lstat(path).catch(() => null)
++      if (!stat || stat.type === "directory") continue
++      if (stat.type === "symlink") {
++        liveFiles.set(path, {
++          bytes: new TextEncoder().encode(await backend.fs.readlink(path)),
++          mode: stat.mode ?? 0o120000,
++        })
++      } else {
++        liveFiles.set(path, {
++          bytes: await backend.fs.readFileBytes(path),
++          mode: (stat.mode ?? 0) & 0o111 ? 0o100755 : 0o100644,
++        })
++      }
++    }
++    if (!this.treeFilesEqual(targetFiles, liveFiles)) {
++      throw new Error("The candidate workspace files changed after its restore commit was created")
++    }
++    return commitHash
++  }
+ 
+-    // Return to the branch HEAD and reconcile the working tree: remove files
+-    // that are absent from the target, then (over)write the captured files.
+-    await this.git.checkout({ ref: branch })
+-    for (const info of await globInfos(this.overlay, "**/*")) {
+-      if (info.type !== "file") continue
+-      if (isReservedPath(info.path)) continue
+-      if (!targetFiles.has(info.path)) {
+-        await this.overlay.rm(info.path, { force: true })
++  private treeFilesEqual(a: Map<string, GitTreeFile>, b: Map<string, GitTreeFile>): boolean {
++    if (a.size !== b.size) return false
++    for (const [path, file] of a) {
++      const other = b.get(path)
++      if (!other || file.mode !== other.mode || file.bytes.length !== other.bytes.length) return false
++      for (let index = 0; index < file.bytes.length; index++) {
++        if (file.bytes[index] !== other.bytes[index]) return false
+       }
+     }
+-    for (const [path, bytes] of targetFiles) {
+-      await this.overlay.writeFileBytes(path, bytes)
++    return true
++  }
++
++  private async createSqlRestoreBackend(
++    branch: string,
++    safetyCommit: string,
++  ): Promise<{ backend: SqlBackend; workspaceNamespace: string }> {
++    const repoName = this.ctx.id.name ?? "space"
++    const workspaceNamespace = `${RESTORE_WORKSPACE_PREFIX}${crypto.randomUUID().replace(/-/g, "")}`
++    const candidate = new SqlBackend(this.ctx, repoName, workspaceNamespace)
++    const snapshot = await this.readOnlyWorkspaceSnapshot()
++    for (const [path, bytes] of Object.entries(snapshot.bytes)) {
++      await this.writeFileBytesTo(candidate.fs, `/${path}`, bytes)
++    }
++    for (const object of await this.exportGitObjectsUnlocked()) {
++      await this.writeFileBytesTo(candidate.fs, `/${object.path}`, object.data)
++    }
++    const copiedHead = await resolveHead(candidate.fs, `refs/heads/${branch}`)
++    if (copiedHead !== safetyCommit) {
++      throw new Error("The isolated restore workspace did not copy the safety checkpoint")
+     }
++    return { backend: candidate, workspaceNamespace }
++  }
++
++  private async createArtifactsRestoreBackend(
++    branch: string,
++    safetyCommit: string,
++  ): Promise<ArtifactsBackend> {
++    const { backend, head } = await this.createVerifiedArtifactsBackend(branch)
++    if (head !== safetyCommit) {
++      throw new Error("The isolated restore workspace does not match the verified safety checkpoint")
++    }
++    return backend
++  }
+ 
+-    // Commit the restored tree (no-op if nothing changed) and redeploy.
++  private async createVerifiedArtifactsBackend(
++    branch: string,
++  ): Promise<{ backend: ArtifactsBackend; head: string }> {
++    const candidate = new ArtifactsBackend(
++      this.ctx,
++      this.env,
++      this.ctx.id.name ?? "space",
++      true,
++    )
+     try {
+-      await this.gitCommitUnlocked(`rollback: restore ${target.oid.slice(0, 8)}`)
++      await candidate.git.init({ defaultBranch: branch })
+     } catch {
+-      // Clean tree (already at target) — proceed to redeploy existing HEAD.
++      // The fetched repository already contains the branch.
++    }
++    if (!(await withRestoreVerificationTimeout(
++      candidate.fetchVerified(branch),
++      "Artifacts branch verification",
++    ))) {
++      throw new Error("Could not verify the Development history in Artifacts")
++    }
++    await withRestoreVerificationTimeout(
++      candidate.materializeAll(),
++      "Artifacts restore materialization",
++    )
++    const remoteHead = await resolveHead(candidate.fs, `refs/remotes/artifacts/${branch}`)
++    const localHead = await resolveHead(candidate.fs, `refs/heads/${branch}`)
++    if (!remoteHead || remoteHead !== localHead) {
++      throw new Error("Artifacts branch verification was inconclusive; the remote head was not confirmed")
++    }
++    return { backend: candidate, head: remoteHead }
++  }
++
++  /**
++   * Restore a complete Development tree through an isolated workspace. The
++   * candidate is verified and built before its workspace pointer or Artifacts
++   * branch is activated. The journal makes activation recoverable after a DO
++   * restart; readers and writers share the operation queue.
++   */
++  async rollbackToCommit(
++    branch: string,
++    commitHash: string,
++    requestId = crypto.randomUUID(),
++  ): Promise<RestoreResult | { error: string }> {
++    if (this.restoreCallInFlight) return { error: "A Development restore is already running" }
++    this.restoreCallInFlight = true
++    try {
++      if (branch !== "main") return { error: "Restore is available only for the Development workspace" }
++      const targetInput = (commitHash ?? "").trim().toLowerCase()
++      if (!/^[a-f0-9]{40}$/.test(targetInput)) {
++        return { error: "Restore requires the full checkpoint commit hash" }
++      }
++      if (!/^[a-f0-9-]{36}$/.test(requestId)) {
++        return { error: "Restore request identity is invalid" }
++      }
++      const prior = await this.ctx.storage.get<{ requestId: string; result: RestoreResult }>(LAST_RESTORE_RESULT_KEY)
++      if (prior?.requestId === requestId) return prior.result
++
++      return await this.withWorkspaceOperation(async () => {
++        await this.ensureInit()
++        if (await this.ctx.storage.get<RestoreJournal>(RESTORE_JOURNAL_KEY)) {
++          return { error: "Another Development restore is still being recovered" }
++        }
++        if (await this.ctx.storage.get(ACTIVE_RESTORE_KEY)) {
++          return { error: "Finish syncing the previous Development restore before starting another" }
++        }
++        if (await this.ctx.storage.get(ACTIVE_GENERATION_KEY)) {
++          return { error: "Cannot restore while an Agent operation is active" }
++        }
++
++        this.restoreMutationActive = true
++        const priorBackend = this.backend
++        const mode = this.backend instanceof ArtifactsBackend ? "artifacts" : "sql"
++        let journal: RestoreJournal | undefined
++        let candidateBackend: SpaceFsBackend | undefined
++        let candidateWorkspaceNamespace: string | undefined
++        let activated = false
++        try {
++          await this.materializeAll()
++          if (this.backend instanceof ArtifactsBackend) {
++            if (!(await this.backend.fetchVerified(branch))) {
++              throw new Error("Could not verify the Development checkpoint history")
++            }
++          }
++          const history = await this.git.log({ ref: branch, depth: 10000 })
++          const target = history.find((entry) => entry.oid === targetInput)
++          if (!target) throw new Error(`Checkpoint ${targetInput} is not in Development history`)
++
++          const safety = await this.gitCommitUnlocked("Checkpoint before Development restore", undefined, false)
++          if (!/^[a-f0-9]{40}$/.test(safety.sha)) {
++            throw new Error("Could not create the pre-restore safety checkpoint")
++          }
++          if (this.backend instanceof ArtifactsBackend && !(await this.backend.push(branch))) {
++            throw new Error("Could not persist the pre-restore safety checkpoint")
++          }
++
++          if (mode === "artifacts") {
++            candidateBackend = await this.createArtifactsRestoreBackend(branch, safety.sha)
++          } else {
++            const candidate = await this.createSqlRestoreBackend(branch, safety.sha)
++            candidateBackend = candidate.backend
++            candidateWorkspaceNamespace = candidate.workspaceNamespace
++          }
++
++          const restoreCommit = await this.replaceCandidateTree(candidateBackend, branch, target.oid)
++          const bundle = await this.buildBranchDeploymentFor(candidateBackend, branch)
++          if (bundle.commitHash !== restoreCommit) {
++            throw new Error("The candidate preview does not match the restored Development commit")
++          }
++
++          const previousWorkspaceNamespace = mode === "sql"
++            ? await this.ctx.storage.get<string>(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)
++            : undefined
++          journal = {
++            version: 1,
++            requestId,
++            branch,
++            targetCommit: target.oid,
++            safetyCommit: safety.sha,
++            restoreCommit,
++            mode,
++            ...(previousWorkspaceNamespace !== undefined ? { previousWorkspaceNamespace } : {}),
++            ...(candidateWorkspaceNamespace ? { candidateWorkspaceNamespace } : {}),
++            phase: "prepared",
++            startedAt: Date.now(),
++          }
++          await this.ctx.storage.put(RESTORE_JOURNAL_KEY, journal)
++
++          if (mode === "artifacts") {
++            const pushed = await (candidateBackend as ArtifactsBackend).push(branch)
++            if (!pushed) {
++              const fetchOk = await (candidateBackend as ArtifactsBackend).fetchVerified(branch)
++              const remoteHead = fetchOk
++                ? await resolveHead(candidateBackend.fs, `refs/heads/${branch}`)
++                : null
++              if (remoteHead !== restoreCommit) {
++                if (remoteHead === safety.sha) await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++                throw new Error("The restored Development commit could not be confirmed in Artifacts")
++              }
++            }
++            await priorBackend.clearCheckpointsAfterRestore()
++          } else if (candidateWorkspaceNamespace) {
++            await this.ctx.storage.put(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY, candidateWorkspaceNamespace)
++          }
++
++          journal = { ...journal, phase: "activated" }
++          await this.ctx.storage.put(RESTORE_JOURNAL_KEY, journal)
++          this.backend = candidateBackend
++          this.initialized = true
++          this.assetCache.clear()
++          activated = true
++
++          persistDeploymentBundle(this.ctxForDeploy(), bundle)
++          const result: RestoreResult = {
++            ok: true,
++            branch,
++            target_commit: target.oid,
++            safety_commit: safety.sha,
++            commit_hash: restoreCommit,
++            preview_url: `/space/${this.ctx.id.name ?? "space"}/preview/${encodeURIComponent(branch)}/`,
++          }
++          await this.ctx.storage.put(LAST_RESTORE_RESULT_KEY, { requestId, result })
++          await this.ctx.storage.put(ACTIVE_RESTORE_KEY, {
++            requestId,
++            result,
++            ...(journal.previousWorkspaceNamespace
++              ? { previousWorkspaceNamespace: journal.previousWorkspaceNamespace }
++              : {}),
++          })
++          await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++          return result
++        } catch (error) {
++          const message = error instanceof Error ? error.message : String(error)
++          if (mode === "sql" && journal) {
++            const activeWorkspaceNamespace = await this.ctx.storage.get<string>(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)
++            if (activeWorkspaceNamespace === journal.candidateWorkspaceNamespace) {
++              const deployment = this.readDeployment(branch)
++              if (deployment?.commitHash !== journal.restoreCommit) {
++                if (journal.previousWorkspaceNamespace) {
++                  await this.ctx.storage.put(
++                    SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY,
++                    journal.previousWorkspaceNamespace,
++                  )
++                } else {
++                  await this.ctx.storage.delete(SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY)
++                }
++                this.backend = priorBackend
++                this.assetCache.clear()
++                await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++                await candidateBackend?.discard()
++              }
++            } else if (!activated) {
++              await this.ctx.storage.delete(RESTORE_JOURNAL_KEY)
++              await candidateBackend?.discard()
++            }
++          } else if (mode === "sql" && candidateBackend && !activated) {
++            await candidateBackend.discard()
++          }
++          return { error: message }
++        } finally {
++          this.restoreMutationActive = false
++        }
++      })
++    } finally {
++      this.restoreCallInFlight = false
+     }
+-    return this.deployUnlocked(branch)
+   }
+ 
+   // ── Deploy RPC methods ──────────────────────────────────────────
+ 
+   async deploy(branch: string): Promise<unknown> {
+-    return this.withWorkspaceOperation(() => this.deployUnlocked(branch))
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.assertMutationAllowed()
++      return this.deployUnlocked(branch)
++    })
+   }
+ 
+   private async deployUnlocked(branch: string): Promise<unknown> {
+@@ -711,30 +1421,24 @@ export class SpaceDO extends DurableObject<Env> {
+     // base is materialized into the overlay first.
+     await this.materializeAll()
+     await this.flushCheckpoint()
+-    const fakeRequest = new Request("http://internal/?cmd=deploy", {
+-      method: "POST",
+-      headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({ branch }),
+-    })
+-    const ctx: DeployContext = {
+-      sql: this.ctx.storage.sql,
+-      git: this.git,
+-      fs: this.fs,
+-    }
+-    const res = await handleDeployCommand(ctx, "deploy", fakeRequest)
+-    const data = await res.json() as Record<string, unknown>
+-    const spaceName = this.ctx.id.name ?? "space"
+-    data.preview_url = `/space/${spaceName}/preview/${encodeURIComponent(branch)}/`
++    try {
++      const bundle = await this.buildBranchDeploymentFor(this.backend, branch)
++      const data: Record<string, unknown> = persistDeploymentBundle(this.ctxForDeploy(), bundle)
++      const spaceName = this.ctx.id.name ?? "space"
++      data.preview_url = `/space/${spaceName}/preview/${encodeURIComponent(branch)}/`
+ 
+-    if (!data.error && this.backend instanceof ArtifactsBackend) {
+-      const pushed = await this.backend.push(branch)
+-      if (!pushed) {
++      if (this.backend instanceof ArtifactsBackend && !(await this.backend.push(branch))) {
+         delete data.preview_url
+         data.error = `Artifacts push failed or was refused for branch "${branch}"`
+       }
++      return data
++    } catch (error) {
++      return {
++        error: "Build failed",
++        details: error instanceof Error ? error.message : String(error),
++        preview_url: `/space/${this.ctx.id.name ?? "space"}/preview/${encodeURIComponent(branch)}/`,
++      }
+     }
+-
+-    return data
+   }
+ 
+   async preflightCommitDeploy(branch: string): Promise<
+@@ -743,6 +1447,7 @@ export class SpaceDO extends DurableObject<Env> {
+   > {
+     return this.withWorkspaceOperation(async () => {
+       try {
++        await this.assertMutationAllowed()
+         // Validation is strictly read-only: a cold DO must not initialize,
+         // replay backend state, or mutate storage as a side effect of preflight.
+         this.assertInitializedForPreflight()
+@@ -914,19 +1619,22 @@ export class SpaceDO extends DurableObject<Env> {
+   }
+ 
+   async undeploy(branch: string): Promise<unknown> {
+-    await this.ensureInit()
+-    const fakeRequest = new Request("http://internal/?cmd=undeploy", {
+-      method: "POST",
+-      headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({ branch }),
++    return this.withWorkspaceOperation(async () => {
++      await this.ensureInit()
++      await this.assertMutationAllowed()
++      const fakeRequest = new Request("http://internal/?cmd=undeploy", {
++        method: "POST",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ branch }),
++      })
++      const ctx: DeployContext = {
++        sql: this.ctx.storage.sql,
++        git: this.git,
++        fs: this.overlay,
++      }
++      const res = await handleDeployCommand(ctx, "undeploy", fakeRequest)
++      return res.json()
+     })
+-    const ctx: DeployContext = {
+-      sql: this.ctx.storage.sql,
+-      git: this.git,
+-      fs: this.overlay,
+-    }
+-    const res = await handleDeployCommand(ctx, "undeploy", fakeRequest)
+-    return res.json()
+   }
+ 
+   async listDeployments(): Promise<unknown> {
+diff --git a/space/src/space/fs-backend.ts b/space/src/space/fs-backend.ts
+index 8f23ec4..e9dd3d0 100644
+--- a/space/src/space/fs-backend.ts
++++ b/space/src/space/fs-backend.ts
+@@ -15,6 +15,7 @@ import { createArtifactsBaseSource } from "./git-objects"
+ 
+ export const ARTIFACTS_REMOTE_URL_KEY = "artifacts:remoteUrl"
+ export const SPACE_FS_BACKEND_KEY = "space:fsBackend"
++export const SPACE_ACTIVE_WORKSPACE_NAMESPACE_KEY = "space:activeWorkspaceNamespace"
+ const ARTIFACTS_BASE_BRANCH = "main"
+ const ARTIFACTS_INIT_TIMEOUT_MS = 10_000
+ const CHECKPOINT_DEBOUNCE_MS = 2_000
+@@ -50,6 +51,106 @@ export interface SpaceFsBackend {
+   flushCheckpoint(): Promise<void>
+   push(branch: string): Promise<boolean>
+   fetch(branch: string): Promise<void>
++  setFileMode(path: string, mode: number): Promise<void>
++  clearCheckpointsAfterRestore(): Promise<void>
++  discard(): Promise<void>
++}
++
++const DEFAULT_FILE_MODE = 0o100644
++
++function normalizeModePath(path: string): string {
++  const normalized = `/${path.replace(/^\/+/, "")}`
++  return normalized.endsWith("/") && normalized !== "/"
++    ? normalized.slice(0, -1)
++    : normalized
++}
++
++function createModeAwareFileSystem(
++  base: FileSystem,
++  storage: DurableObjectStorage,
++  namespace: string,
++): { fs: FileSystem; setFileMode(path: string, mode: number): Promise<void> } {
++  const storageKey = `space:workspaceFileModes:v1:${namespace}`
++  let modes: Map<string, number> | undefined
++  const getModes = async (): Promise<Map<string, number>> => {
++    if (!modes) {
++      const saved = await storage.get<Record<string, number>>(storageKey)
++      modes = new Map(Object.entries(saved ?? {}))
++    }
++    return modes
++  }
++  const persistModes = async (next: Map<string, number>): Promise<void> => {
++    modes = next
++    if (next.size === 0) await storage.delete(storageKey)
++    else await storage.put(storageKey, Object.fromEntries(next))
++  }
++  const removeModes = async (path: string): Promise<void> => {
++    const normalized = normalizeModePath(path)
++    const next = new Map(await getModes())
++    for (const key of next.keys()) {
++      if (key === normalized || key.startsWith(`${normalized}/`)) next.delete(key)
++    }
++    await persistModes(next)
++  }
++  const copyModes = async (src: string, dest: string, move: boolean): Promise<void> => {
++    const source = normalizeModePath(src)
++    const destination = normalizeModePath(dest)
++    const current = await getModes()
++    const next = new Map(current)
++    for (const [path, mode] of current) {
++      if (path !== source && !path.startsWith(`${source}/`)) continue
++      const target = `${destination}${path.slice(source.length)}`
++      next.set(target, mode)
++      if (move) next.delete(path)
++    }
++    await persistModes(next)
++  }
++
++  const fs = new Proxy(base, {
++    get(target, property) {
++      if (property === "stat" || property === "lstat") {
++        return async (path: string) => {
++          const result = await target[property](path)
++          const normalized = normalizeModePath(path)
++          const kind = result.type === "symlink" ? 0o120000
++            : result.type === "directory" ? 0o040000
++              : (await getModes()).get(normalized) ?? DEFAULT_FILE_MODE
++          return { ...result, mode: kind }
++        }
++      }
++      if (property === "rm") {
++        return async (path: string, options?: { recursive?: boolean; force?: boolean }) => {
++          await target.rm(path, options)
++          await removeModes(path)
++        }
++      }
++      if (property === "mv") {
++        return async (src: string, dest: string) => {
++          await target.mv(src, dest)
++          await copyModes(src, dest, true)
++        }
++      }
++      if (property === "cp") {
++        return async (src: string, dest: string, options?: { recursive?: boolean }) => {
++          await target.cp(src, dest, options)
++          await copyModes(src, dest, false)
++        }
++      }
++      const value = Reflect.get(target, property, target)
++      return typeof value === "function" ? value.bind(target) : value
++    },
++  }) as FileSystem
++
++  return {
++    fs,
++    async setFileMode(path, mode) {
++      const normalized = normalizeModePath(path)
++      const next = new Map(await getModes())
++      if (mode === DEFAULT_FILE_MODE) next.delete(normalized)
++      else next.set(normalized, mode)
++      await persistModes(next)
++    },
++  }
+ }
+ 
+ function isReservedPath(path: string): boolean {
+@@ -85,6 +186,7 @@ export class ArtifactsBackend implements SpaceFsBackend {
+     ctx: DurableObjectState,
+     private readonly env: Env,
+     private readonly repoName: string,
++    private readonly isolatedRestore = false,
+   ) {
+     if (!env.ARTIFACTS) throw new Error("SpaceDO is pinned to Artifacts but the ARTIFACTS binding is unavailable")
+ 
+@@ -111,8 +213,8 @@ export class ArtifactsBackend implements SpaceFsBackend {
+     this.fs = new ArtifactsFileSystem(overlay, {
+       source,
+       branch: ARTIFACTS_BASE_BRANCH,
+-      checkpoint: this.checkpointStore,
+-      onChange: (path) => this.noteCheckpointDirty(path),
++      ...(isolatedRestore ? {} : { checkpoint: this.checkpointStore }),
++      ...(isolatedRestore ? {} : { onChange: (path: string) => this.noteCheckpointDirty(path) }),
+     })
+     this.git = createGit(this.fs)
+     this.stateBackend = new FileSystemStateBackend(overlay)
+@@ -154,7 +256,7 @@ export class ArtifactsBackend implements SpaceFsBackend {
+ 
+   async push(branch: string): Promise<boolean> {
+     const pushed = await this.getArtifactsSync().push(branch)
+-    if (pushed) this.resetCheckpointAfterPush()
++    if (pushed && !this.isolatedRestore) this.resetCheckpointAfterPush()
+     return pushed
+   }
+ 
+@@ -162,6 +264,23 @@ export class ArtifactsBackend implements SpaceFsBackend {
+     await this.getArtifactsSync().fetch(branch)
+   }
+ 
++  async fetchVerified(branch: string): Promise<boolean> {
++    return this.getArtifactsSync().fetch(branch)
++  }
++
++  async setFileMode(path: string, mode: number): Promise<void> {
++    await (this.overlay as InMemoryFs).chmod(path, mode & 0o777)
++  }
++
++  async clearCheckpointsAfterRestore(): Promise<void> {
++    if (this.checkpointTimer !== null) clearTimeout(this.checkpointTimer)
++    this.checkpointTimer = null
++    this.checkpointDirty.clear()
++    this.checkpointStore.clear()
++  }
++
++  async discard(): Promise<void> {}
++
+   private noteCheckpointDirty(path: string): void {
+     if (isReservedPath(path)) return
+     this.checkpointDirty.add(path)
+@@ -199,13 +318,28 @@ export class SqlBackend implements SpaceFsBackend {
+   readonly fs: FileSystem
+   readonly git: Git
+   readonly stateBackend: FileSystemStateBackend
++  private readonly setFileModeInternal: (path: string, mode: number) => Promise<void>
++  private readonly namespace: string
++  private readonly ctx: DurableObjectState
+ 
+-  constructor(ctx: DurableObjectState, repoName: string) {
+-    const workspace = new Workspace({ sql: ctx.storage.sql, name: () => repoName })
+-    const fs = new WorkspaceFileSystem(workspace)
+-    this.overlay = fs
+-    this.fs = fs
+-    this.git = createGit(fs)
++  constructor(ctx: DurableObjectState, repoName: string, workspaceNamespace?: string) {
++    this.ctx = ctx
++    this.namespace = workspaceNamespace ?? "default"
++    const workspace = new Workspace({
++      sql: ctx.storage.sql,
++      ...(workspaceNamespace ? { namespace: workspaceNamespace } : {}),
++      name: () => repoName,
++    })
++    const baseFs = new WorkspaceFileSystem(workspace)
++    const modeAware = createModeAwareFileSystem(
++      baseFs,
++      ctx.storage,
++      this.namespace,
++    )
++    this.overlay = modeAware.fs
++    this.fs = modeAware.fs
++    this.setFileModeInternal = modeAware.setFileMode
++    this.git = createGit(modeAware.fs)
+     this.stateBackend = createWorkspaceStateBackend(workspace)
+   }
+ 
+@@ -215,4 +349,15 @@ export class SqlBackend implements SpaceFsBackend {
+   async flushCheckpoint(): Promise<void> {}
+   async push(_branch: string): Promise<boolean> { return false }
+   async fetch(_branch: string): Promise<void> {}
++  async setFileMode(path: string, mode: number): Promise<void> {
++    await this.setFileModeInternal(path, mode)
++  }
++  async clearCheckpointsAfterRestore(): Promise<void> {}
++  async discard(): Promise<void> {
++    if (this.namespace === "default") return
++    const table = `cf_workspace_${this.namespace}`
++    this.ctx.storage.sql.exec(`DROP INDEX IF EXISTS ${table}_parent`)
++    this.ctx.storage.sql.exec(`DROP TABLE IF EXISTS ${table}`)
++    await this.ctx.storage.delete(`space:workspaceFileModes:v1:${this.namespace}`)
++  }
+ }
+diff --git a/space/src/space/git-objects.ts b/space/src/space/git-objects.ts
+index ba77417..990e28d 100644
+--- a/space/src/space/git-objects.ts
++++ b/space/src/space/git-objects.ts
+@@ -313,11 +313,20 @@ export async function stagedTreeMatchesHead(
+ export async function stageWorkdir(
+   fs: FileSystem,
+   skip: (absPath: string) => boolean,
++  forcePaths: Iterable<string> = [],
+ ): Promise<void> {
+   const gitFs = createGitFs(fs)
++  const force = new Set([...forcePaths].map((path) => path.replace(/^\/+/, "")))
+   const matrix = await git.statusMatrix({ fs: gitFs, dir: "/" })
+   for (const [filepath, head, workdir, stage] of matrix) {
+     if (skip(`/${filepath}`)) continue
++    if (force.has(filepath) && workdir !== 0) {
++      // Workspace-backed FS mtimes have one-second precision. A same-size
++      // rewrite in the same second can look unchanged to statusMatrix. Bypass
++      // that metadata cache for paths known to have been written this turn.
++      await git.add({ fs: gitFs, dir: "/", filepath, cache: {} })
++      continue
++    }
+     if (`${head}${workdir}${stage}` === "111") continue
+     if (workdir === 0) await git.remove({ fs: gitFs, dir: "/", filepath })
+     else await git.add({ fs: gitFs, dir: "/", filepath })
+diff --git a/space/test/artifacts-restore.test.ts b/space/test/artifacts-restore.test.ts
+new file mode 100644
+index 0000000..0658453
+--- /dev/null
++++ b/space/test/artifacts-restore.test.ts
+@@ -0,0 +1,536 @@
++import { describe, expect, it, vi } from "vitest"
++import { InMemoryFs } from "@cloudflare/shell"
++import { createGit } from "@cloudflare/shell/git"
++import { env, runInDurableObject } from "cloudflare:test"
++import type { Env } from "../src/env"
++import { ArtifactsBackend } from "../src/space/fs-backend"
++import { resolveHead } from "../src/space/git-objects"
++import { SpaceDO } from "../src/space/durable-object"
++import type { BranchDeploymentBundle } from "../src/space/deploy-engine"
++import { FileManager } from "../../worker/agents/services/implementations/FileManager"
++import type { BaseProjectState, FileState } from "../../worker/agents/core/state"
++import type { IStateManager } from "../../worker/agents/services/interfaces/IStateManager"
++import type { TemplateDetails } from "../../worker/services/sandbox/sandboxTypes"
++import type { GitVersionControl } from "../../worker/agents/git"
++import {
++  reconcilePendingDevelopmentRestore,
++  type RestoreSpaceApi,
++} from "../../worker/agents/core/behaviors/think-restore-sync"
++
++function newArtifactsWorkspace() {
++  const fs = new InMemoryFs()
++  const backend = Object.assign(Object.create(ArtifactsBackend.prototype), {
++    fs,
++    overlay: fs,
++    git: createGit(fs),
++    ready: async () => {},
++    materializeAll: async () => {},
++    flushCheckpoint: async () => {},
++    fetch: async () => {},
++    fetchVerified: async () => true,
++    push: async () => true,
++    setFileMode: async (path: string, mode: number) => fs.chmod(path, mode & 0o777),
++    clearCheckpointsAfterRestore: vi.fn(async () => {}),
++    discard: async () => {},
++    isolatedRestore: false,
++  }) as ArtifactsBackend & {
++    fs: InMemoryFs
++    overlay: InMemoryFs
++    git: ReturnType<typeof createGit>
++    clearCheckpointsAfterRestore: ReturnType<typeof vi.fn>
++  }
++  return backend
++}
++
++async function copyWorkspace(source: ArtifactsBackend, destination: ArtifactsBackend): Promise<void> {
++  const paths = await source.fs.glob("/**/*")
++  for (const path of paths.sort((a, b) => a.length - b.length)) {
++    if (path === "/") continue
++    const stat = await source.fs.lstat(path)
++    if (stat.type === "directory") continue
++    const parent = path.slice(0, path.lastIndexOf("/")) || "/"
++    if (parent !== "/") await destination.fs.mkdir(parent, { recursive: true })
++    if (stat.type === "symlink") {
++      await destination.fs.symlink(await source.fs.readlink(path), path)
++    } else {
++      await destination.fs.writeFileBytes(path, await source.fs.readFileBytes(path))
++      if ((stat.mode ?? 0) & 0o111) await destination.setFileMode(path, stat.mode!)
++    }
++  }
++}
++
++async function cloneWorkspace(source: ArtifactsBackend): Promise<ArtifactsBackend> {
++  const clone = newArtifactsWorkspace()
++  await copyWorkspace(source, clone)
++  return clone
++}
++
++describe("Artifacts-backed Development restore", () => {
++  it("uses an isolated candidate and clears stale overlay checkpoints after verified activation", async () => {
++    const id = env.FsHarnessDO.idFromName(`artifacts-restore-${Date.now()}-${Math.random()}`)
++    const stub = env.FsHarnessDO.get(id)
++    await runInDurableObject(stub, async (_instance, state) => {
++      state.storage.sql.exec(`
++        CREATE TABLE IF NOT EXISTS deployments (
++          branch TEXT PRIMARY KEY, commit_hash TEXT NOT NULL, main_module TEXT NOT NULL,
++          modules TEXT NOT NULL, assets TEXT NOT NULL DEFAULT '{}',
++          asset_config TEXT NOT NULL DEFAULT '{}', deployed_at INTEGER NOT NULL
++        )
++      `)
++      const space = new SpaceDO(state, env as unknown as Env)
++      const active = newArtifactsWorkspace()
++      await active.git.init({ defaultBranch: "main" })
++      const internals = space as unknown as {
++        backend: ArtifactsBackend
++        initialized: boolean
++        initializationPromise: Promise<void>
++        buildBranchDeploymentFor: (
++          backend: { git: { log: (options: { ref: string; depth: number }) => Promise<Array<{ oid: string }>> } },
++          branch: string,
++        ) => Promise<BranchDeploymentBundle>
++        createArtifactsRestoreBackend: (branch: string, safety: string) => Promise<ArtifactsBackend>
++      }
++      internals.backend = active
++      internals.initialized = true
++      internals.initializationPromise = Promise.resolve()
++      internals.buildBranchDeploymentFor = async (backend, branch) => {
++        const [head] = await backend.git.log({ ref: branch, depth: 1 })
++        if (!head) throw new Error("No Artifacts test commit")
++        return {
++          branch,
++          commitHash: head.oid,
++          mainModule: "index.js",
++          modules: { "index.js": "export default {}" },
++          assets: {},
++          assetConfig: undefined,
++          compatibilityDate: "2025-04-01",
++        }
++      }
++      internals.createArtifactsRestoreBackend = async (branch, safety) => {
++        const candidate = newArtifactsWorkspace()
++        await copyWorkspace(active, candidate)
++        expect(await resolveHead(candidate.fs, `refs/heads/${branch}`)).toBe(safety)
++        return candidate
++      }
++
++      const writeVersion = async (version: string) => {
++        await space.writeFile("/src/index.js", `export const version = "${version}"`)
++        const commit = await space.gitCommitLocal(`checkpoint ${version}`)
++        await space.deploy("main")
++        return commit.sha
++      }
++
++      const commitA = await writeVersion("A")
++      const commitB = await writeVersion("B")
++      const commitC = await writeVersion("C")
++      const result = await space.rollbackToCommit("main", commitA, crypto.randomUUID()) as {
++        ok?: boolean; commit_hash?: string; error?: string
++      }
++      expect(result.error).toBeUndefined()
++      expect(result.ok).toBe(true)
++      expect(await space.readFile("/src/index.js")).toContain('"A"')
++      expect((await space.getDeployment("main") as { commit_hash?: string }).commit_hash)
++        .toBe(result.commit_hash)
++      expect(active.clearCheckpointsAfterRestore).toHaveBeenCalledOnce()
++      expect(await space.gitLog(10)).toEqual(expect.arrayContaining([
++        expect.objectContaining({ oid: commitB }),
++        expect.objectContaining({ oid: commitC }),
++      ]))
++
++      const pending = await space.getPendingRestore()
++      expect(pending?.result.commit_hash).toBe(result.commit_hash)
++      expect(await space.completeRestore(pending!.requestId)).toBe(true)
++    })
++  })
++
++  it("keeps the current tree and preview when the pre-restore Artifacts write fails", async () => {
++    const id = env.FsHarnessDO.idFromName(`artifacts-restore-write-failure-${Date.now()}-${Math.random()}`)
++    const stub = env.FsHarnessDO.get(id)
++    await runInDurableObject(stub, async (_instance, state) => {
++      state.storage.sql.exec(`
++        CREATE TABLE IF NOT EXISTS deployments (
++          branch TEXT PRIMARY KEY, commit_hash TEXT NOT NULL, main_module TEXT NOT NULL,
++          modules TEXT NOT NULL, assets TEXT NOT NULL DEFAULT '{}',
++          asset_config TEXT NOT NULL DEFAULT '{}', deployed_at INTEGER NOT NULL
++        )
++      `)
++      const space = new SpaceDO(state, env as unknown as Env)
++      const active = newArtifactsWorkspace()
++      await active.git.init({ defaultBranch: "main" })
++      const internals = space as unknown as {
++        backend: ArtifactsBackend
++        initialized: boolean
++        initializationPromise: Promise<void>
++        buildBranchDeploymentFor: (
++          backend: { git: { log: (options: { ref: string; depth: number }) => Promise<Array<{ oid: string }>> } },
++          branch: string,
++        ) => Promise<BranchDeploymentBundle>
++      }
++      internals.backend = active
++      internals.initialized = true
++      internals.initializationPromise = Promise.resolve()
++      internals.buildBranchDeploymentFor = async (backend, branch) => {
++        const [head] = await backend.git.log({ ref: branch, depth: 1 })
++        if (!head) throw new Error("No Artifacts test commit")
++        return {
++          branch,
++          commitHash: head.oid,
++          mainModule: "index.js",
++          modules: { "index.js": "export default {}" },
++          assets: {},
++          assetConfig: undefined,
++          compatibilityDate: "2025-04-01",
++        }
++      }
++      const writeVersion = async (version: string) => {
++        await space.writeFile("/src/index.js", `export const version = "${version}"`)
++        const commit = await space.gitCommitLocal(`checkpoint ${version}`)
++        await space.deploy("main")
++        return commit.sha
++      }
++
++      const target = await writeVersion("target")
++      await writeVersion("current")
++      const currentTree = await space.readFile("/src/index.js")
++      const currentPreview = await space.getDeployment("main")
++      active.push = async () => false
++
++      const result = await space.rollbackToCommit("main", target, crypto.randomUUID()) as {
++        ok?: boolean
++        error?: string
++      }
++
++      expect(result.ok).toBeUndefined()
++      expect(result.error).toContain("Could not persist the pre-restore safety checkpoint")
++      expect(await space.readFile("/src/index.js")).toBe(currentTree)
++      expect(await space.getDeployment("main")).toEqual(currentPreview)
++      expect(await space.getPendingRestore()).toBeNull()
++      expect(await state.storage.get("space:restoreJournal:v1")).toBeUndefined()
++    })
++  })
++
++  it("verifies the remote head before recovering a restore journal in the same DO", async () => {
++    const id = env.FsHarnessDO.idFromName(`artifacts-same-do-${Date.now()}-${Math.random()}`)
++    const stub = env.FsHarnessDO.get(id)
++    let remote: ArtifactsBackend | null = null
++    let divergent: ArtifactsBackend | null = null
++    let fetchMode: "unavailable" | "timeout" | "diverged" | "available" = "unavailable"
++    let fetchCount = 0
++    let failPreview = false
++    let interruptAfterPush = true
++
++    await runInDurableObject(stub, async (_instance, state) => {
++      state.storage.sql.exec(`
++        CREATE TABLE IF NOT EXISTS deployments (
++          branch TEXT PRIMARY KEY, commit_hash TEXT NOT NULL, main_module TEXT NOT NULL,
++          modules TEXT NOT NULL, assets TEXT NOT NULL DEFAULT '{}',
++          asset_config TEXT NOT NULL DEFAULT '{}', deployed_at INTEGER NOT NULL
++        )
++      `)
++      const space = new SpaceDO(state, env as unknown as Env)
++      const active = newArtifactsWorkspace()
++      await active.git.init({ defaultBranch: "main" })
++      active.push = async () => {
++        remote = await cloneWorkspace(active)
++        return true
++      }
++      active.clearCheckpointsAfterRestore = vi.fn(async () => {
++        if (interruptAfterPush) {
++          interruptAfterPush = false
++          throw new Error("controlled interruption after remote push")
++        }
++      })
++
++      const internals = space as unknown as {
++        backend: ArtifactsBackend
++        initialized: boolean
++        initializationPromise: Promise<void>
++        buildBranchDeploymentFor: (
++          backend: { git: { log: (options: { ref: string; depth: number }) => Promise<Array<{ oid: string }>> } },
++          branch: string,
++        ) => Promise<BranchDeploymentBundle>
++        createArtifactsRestoreBackend: (branch: string, safety: string) => Promise<ArtifactsBackend>
++        createVerifiedArtifactsBackend: (branch: string) =>
++          Promise<{ backend: ArtifactsBackend; head: string }>
++        readDeployment: (branch: string) => { commitHash?: string } | null
++      }
++      internals.backend = active
++      internals.initialized = true
++      internals.initializationPromise = Promise.resolve()
++      internals.buildBranchDeploymentFor = async (backend, branch) => {
++        if (failPreview) {
++          failPreview = false
++          throw new Error("simulated preview reconciliation failure")
++        }
++        const [head] = await backend.git.log({ ref: branch, depth: 1 })
++        if (!head) throw new Error("No Artifacts test commit")
++        return {
++          branch,
++          commitHash: head.oid,
++          mainModule: "index.js",
++          modules: { "index.js": "export default {}" },
++          assets: {},
++          assetConfig: undefined,
++          compatibilityDate: "2025-04-01",
++        }
++      }
++      internals.createArtifactsRestoreBackend = async (branch, safety) => {
++        const candidate = await cloneWorkspace(internals.backend)
++        expect(await resolveHead(candidate.fs, `refs/heads/${branch}`)).toBe(safety)
++        candidate.push = async () => {
++          remote = await cloneWorkspace(candidate)
++          return true
++        }
++        return candidate
++      }
++      internals.createVerifiedArtifactsBackend = async () => {
++        fetchCount += 1
++        if (fetchMode === "unavailable") throw new Error("Artifacts verification unavailable")
++        if (fetchMode === "timeout") throw new Error("Artifacts branch verification timed out")
++        const source = fetchMode === "diverged" ? divergent : remote
++        if (!source) throw new Error("Artifacts test remote is missing")
++        const backend = await cloneWorkspace(source)
++        const head = await resolveHead(backend.fs, "refs/heads/main")
++        if (!head) throw new Error("Artifacts test remote has no branch head")
++        return { backend, head }
++      }
++
++      const writeVersion = async (version: string) => {
++        await space.writeFile(
++          "/src/index.js",
++          `export default { fetch() { return new Response("${version}") } }`,
++        )
++        const commit = await space.gitCommitLocal(`checkpoint ${version}`)
++        await space.deploy("main")
++        return commit.sha
++      }
++      const commitA = await writeVersion("A")
++      const commitB = await writeVersion("B")
++      const commitC = await writeVersion("C")
++      const interrupted = await space.rollbackToCommit("main", commitA, crypto.randomUUID()) as {
++        error?: string
++      }
++      expect(interrupted.error).toContain("controlled interruption after remote push")
++      const journal = await state.storage.get<{
++        restoreCommit: string
++        targetCommit: string
++        safetyCommit: string
++        phase: string
++      }>("space:restoreJournal:v1")
++      expect(journal).toMatchObject({ targetCommit: commitA, phase: "prepared" })
++      expect(internals.readDeployment("main")?.commitHash).toBe(commitC)
++      const restoreCommit = journal!.restoreCommit
++      const safetyCommit = journal!.safetyCommit
++      const restoredRemote = remote!
++      expect(await resolveHead(restoredRemote.fs, "refs/heads/main")).toBe(restoreCommit)
++      expect(await resolveHead(restoredRemote.fs, "refs/heads/main")).not.toBe(safetyCommit)
++
++      await expect(space.readFile("/src/index.js")).rejects.toThrow("verification unavailable")
++      expect(await state.storage.get("space:restoreJournal:v1")).toMatchObject({ restoreCommit })
++      expect(internals.readDeployment("main")?.commitHash).toBe(commitC)
++      await expect(space.beginGeneration("blocked-during-recovery")).rejects.toThrow("verification unavailable")
++      fetchMode = "timeout"
++      await expect(space.readFile("/src/index.js")).rejects.toThrow("timed out")
++      expect(await state.storage.get("space:restoreJournal:v1")).toMatchObject({ restoreCommit })
++
++      fetchMode = "diverged"
++      divergent = await cloneWorkspace(restoredRemote)
++      await divergent.fs.writeFile("/src/index.js", "external divergent revision")
++      await divergent.git.add({ filepath: "src/index.js" })
++      await divergent.git.commit({
++        message: "external divergent branch",
++        author: { name: "External", email: "external@example.invalid" },
++      })
++      const divergentHead = await resolveHead(divergent.fs, "refs/heads/main")
++      await expect(space.readFile("/src/index.js")).rejects.toThrow("diverged")
++      expect(await resolveHead(remote!.fs, "refs/heads/main")).toBe(restoreCommit)
++      expect(await resolveHead(divergent.fs, "refs/heads/main")).toBe(divergentHead)
++      expect(await state.storage.get("space:restoreJournal:v1")).toMatchObject({ restoreCommit })
++
++      fetchMode = "available"
++      failPreview = true
++      await expect(space.readFile("/src/index.js")).rejects.toThrow("simulated preview reconciliation failure")
++      expect(await state.storage.get("space:restoreJournal:v1")).toMatchObject({ restoreCommit })
++      expect(internals.readDeployment("main")?.commitHash).toBe(commitC)
++
++      const beforeRecovery = fetchCount
++      const [source] = await Promise.all([space.readFile("/src/index.js"), space.getInfo()])
++      expect(source).toContain('Response("A")')
++      expect(fetchCount).toBe(beforeRecovery + 1)
++      expect(await state.storage.get("space:restoreJournal:v1")).toBeUndefined()
++      expect(internals.readDeployment("main")?.commitHash).toBe(restoreCommit)
++      expect(active.clearCheckpointsAfterRestore).toHaveBeenCalledTimes(2)
++      expect(await space.beginGeneration("blocked-until-think-sync")).toMatchObject({ ok: false })
++      const pending = await space.getPendingRestore()
++      expect(pending?.result.commit_hash).toBe(restoreCommit)
++
++      let projected = { generatedFilesMap: {} as Record<string, FileState> }
++      const manager = new FileManager(
++        {
++          getState: () => projected as unknown as BaseProjectState,
++          setState: (next: BaseProjectState) => {
++            projected = next as unknown as typeof projected
++          },
++          updateField: () => {},
++        } as unknown as IStateManager<BaseProjectState>,
++        () => ({}) as TemplateDetails,
++        { setOnFilesChangedCallback: () => {} } as unknown as GitVersionControl,
++      )
++      const callSpace = async <T>(callback: (api: RestoreSpaceApi) => Promise<T>) => callback({
++        list: (prefix) => space.list(prefix),
++        readFileBytes: (path) => space.readFileBytes(path),
++        completeRestore: (requestId) => space.completeRestore(requestId),
++      })
++      await reconcilePendingDevelopmentRestore(pending!, callSpace, manager, () => {})
++      expect(projected.generatedFilesMap["src/index.js"]?.fileContents).toContain('Response("A")')
++      expect(await space.getPendingRestore()).toBeNull()
++
++      const commitD = await writeVersion("D")
++      const history = await space.gitLog(20)
++      expect(history.map((entry) => entry.oid)).toEqual(expect.arrayContaining([
++        commitA, commitB, commitC, restoreCommit, commitD,
++      ]))
++      expect(history.find((entry) => entry.oid === commitD)?.parent).toContain(restoreCommit)
++      const restoredC = await space.rollbackToCommit("main", commitC, crypto.randomUUID()) as {
++        ok?: boolean
++        commit_hash?: string
++        error?: string
++      }
++      expect(restoredC.error).toBeUndefined()
++      expect(restoredC.ok).toBe(true)
++      expect(await space.readFile("/src/index.js")).toContain('Response("C")')
++      expect((await space.getDeployment("main") as { commit_hash?: string }).commit_hash)
++        .toBe(restoredC.commit_hash)
++    })
++  })
++
++  it("reconciles a pushed restore from a fresh DO instance after restart", async () => {
++    const id = env.FsHarnessDO.idFromName(`artifacts-restart-${Date.now()}-${Math.random()}`)
++    const stub = env.FsHarnessDO.get(id)
++    let remote: ArtifactsBackend | null = null
++    await runInDurableObject(stub, async (_instance, state) => {
++      state.storage.sql.exec(`
++        CREATE TABLE IF NOT EXISTS deployments (
++          branch TEXT PRIMARY KEY, commit_hash TEXT NOT NULL, main_module TEXT NOT NULL,
++          modules TEXT NOT NULL, assets TEXT NOT NULL DEFAULT '{}',
++          asset_config TEXT NOT NULL DEFAULT '{}', deployed_at INTEGER NOT NULL
++        )
++      `)
++      const envForSpace = env as unknown as Env
++      const originalSpace = new SpaceDO(state, envForSpace)
++      const active = newArtifactsWorkspace()
++      await active.git.init({ defaultBranch: "main" })
++      active.push = async () => {
++        remote = await cloneWorkspace(active)
++        return true
++      }
++      let failAfterPush = true
++      active.clearCheckpointsAfterRestore = vi.fn(async () => {
++        if (failAfterPush) {
++          failAfterPush = false
++          throw new Error("restart fixture interrupted after push")
++        }
++      })
++      const original = originalSpace as unknown as {
++        backend: ArtifactsBackend
++        initialized: boolean
++        initializationPromise: Promise<void>
++        buildBranchDeploymentFor: (
++          backend: { git: { log: (options: { ref: string; depth: number }) => Promise<Array<{ oid: string }>> } },
++          branch: string,
++        ) => Promise<BranchDeploymentBundle>
++        createArtifactsRestoreBackend: (branch: string, safety: string) => Promise<ArtifactsBackend>
++      }
++      original.backend = active
++      original.initialized = true
++      original.initializationPromise = Promise.resolve()
++      original.buildBranchDeploymentFor = async (backend, branch) => {
++        const [head] = await backend.git.log({ ref: branch, depth: 1 })
++        if (!head) throw new Error("No Artifacts test commit")
++        return {
++          branch,
++          commitHash: head.oid,
++          mainModule: "index.js",
++          modules: { "index.js": "export default {}" },
++          assets: {},
++          assetConfig: undefined,
++          compatibilityDate: "2025-04-01",
++        }
++      }
++      original.createArtifactsRestoreBackend = async (branch, safety) => {
++        const candidate = await cloneWorkspace(active)
++        expect(await resolveHead(candidate.fs, `refs/heads/${branch}`)).toBe(safety)
++        candidate.push = async () => {
++          remote = await cloneWorkspace(candidate)
++          return true
++        }
++        return candidate
++      }
++      const writeVersion = async (version: string) => {
++        await originalSpace.writeFile(
++          "/src/index.js",
++          `export default { fetch() { return new Response("${version}") } }`,
++        )
++        const commit = await originalSpace.gitCommitLocal(`checkpoint ${version}`)
++        await originalSpace.deploy("main")
++        return commit.sha
++      }
++      const commitA = await writeVersion("A")
++      await writeVersion("B")
++      await writeVersion("C")
++      const interrupted = await originalSpace.rollbackToCommit("main", commitA, crypto.randomUUID()) as {
++        error?: string
++      }
++      expect(interrupted.error).toContain("restart fixture interrupted after push")
++      const journal = await state.storage.get<{ restoreCommit: string; targetCommit: string }>(
++        "space:restoreJournal:v1",
++      )
++      expect(journal).toMatchObject({ targetCommit: commitA })
++      expect(remote).not.toBeNull()
++      const restoredHead = await resolveHead(remote!.fs, "refs/heads/main")
++      expect(restoredHead).toBe(journal!.restoreCommit)
++
++      const restartedSpace = new SpaceDO(state, envForSpace)
++      const restarted = restartedSpace as unknown as {
++        backend: ArtifactsBackend
++        initialized: boolean
++        initializationPromise: Promise<void>
++        buildBranchDeploymentFor: (
++          backend: { git: { log: (options: { ref: string; depth: number }) => Promise<Array<{ oid: string }>> } },
++          branch: string,
++        ) => Promise<BranchDeploymentBundle>
++        createVerifiedArtifactsBackend: (branch: string) =>
++          Promise<{ backend: ArtifactsBackend; head: string }>
++        readDeployment: (branch: string) => { commitHash?: string } | null
++      }
++      const staleWorkspace = await cloneWorkspace(active)
++      restarted.backend = staleWorkspace
++      restarted.initialized = true
++      restarted.initializationPromise = Promise.resolve()
++      restarted.buildBranchDeploymentFor = async (backend, branch) => {
++        const [head] = await backend.git.log({ ref: branch, depth: 1 })
++        if (!head) throw new Error("No Artifacts test commit")
++        return {
++          branch,
++          commitHash: head.oid,
++          mainModule: "index.js",
++          modules: { "index.js": "export default {}" },
++          assets: {},
++          assetConfig: undefined,
++          compatibilityDate: "2025-04-01",
++        }
++      }
++      restarted.createVerifiedArtifactsBackend = async () => {
++        const backend = await cloneWorkspace(remote!)
++        return { backend, head: (await resolveHead(backend.fs, "refs/heads/main"))! }
++      }
++
++      expect(await resolveHead(staleWorkspace.fs, "refs/heads/main")).not.toBe(restoredHead)
++      expect(await restartedSpace.readFile("/src/index.js")).toContain('Response("A")')
++      expect(await state.storage.get("space:restoreJournal:v1")).toBeUndefined()
++      expect(restarted.readDeployment("main")?.commitHash).toBe(restoredHead)
++      const pending = await restartedSpace.getPendingRestore()
++      expect(pending?.result.commit_hash).toBe(restoredHead)
++    })
++  })
++})
+diff --git a/space/test/development-restore-compatibility.test.ts b/space/test/development-restore-compatibility.test.ts
+new file mode 100644
+index 0000000..f6112ae
+--- /dev/null
++++ b/space/test/development-restore-compatibility.test.ts
+@@ -0,0 +1,44 @@
++import { describe, expect, it } from "vitest"
++import { resolveSpaceFsBackendMode, SPACE_FS_BACKEND_KEY } from "../src/space/fs-backend"
++
++function createStorage(checkpointed = false) {
++  const values = new Map<string, unknown>()
++  return {
++    values,
++    get: async (key: string) => values.get(key),
++    put: async (key: string, value: unknown) => { values.set(key, value) },
++    sql: {
++      exec: () => ({ toArray: () => checkpointed ? [{}] : [] }),
++    },
++  } as unknown as Parameters<typeof resolveSpaceFsBackendMode>[0] & {
++    values: Map<string, unknown>
++  }
++}
++
++describe("Development restore storage compatibility", () => {
++  it("keeps a pinned SQL workspace on SQL when an Artifacts binding is added", async () => {
++    const storage = createStorage()
++    expect(await resolveSpaceFsBackendMode(storage, {})).toBe("sql")
++    expect(await storage.get(SPACE_FS_BACKEND_KEY)).toBe("sql")
++    expect(await resolveSpaceFsBackendMode(storage, {
++      ENABLE_ARTIFACTS: "true",
++      ARTIFACTS: {} as never,
++    })).toBe("sql")
++  })
++
++  it("requires both the explicit flag and binding for a new unpinned workspace", async () => {
++    expect(await resolveSpaceFsBackendMode(createStorage(), { ARTIFACTS: {} as never }))
++      .toBe("sql")
++    expect(await resolveSpaceFsBackendMode(createStorage(), {
++      ENABLE_ARTIFACTS: "true",
++      ARTIFACTS: {} as never,
++    })).toBe("artifacts")
++  })
++
++  it("does not silently move existing Artifacts markers to SQL", async () => {
++    const remote = createStorage()
++    await remote.put("artifacts:remoteUrl", "https://artifacts.example/repo.git")
++    expect(await resolveSpaceFsBackendMode(remote, {})).toBe("artifacts")
++    expect(await resolveSpaceFsBackendMode(createStorage(true), {})).toBe("artifacts")
++  })
++})
+diff --git a/space/test/development-restore.test.ts b/space/test/development-restore.test.ts
+new file mode 100644
+index 0000000..8520a56
+--- /dev/null
++++ b/space/test/development-restore.test.ts
+@@ -0,0 +1,270 @@
++import { describe, expect, it } from "vitest"
++import { env, runInDurableObject } from "cloudflare:test"
++import type { Env } from "../src/env"
++import { SpaceDO } from "../src/space/durable-object"
++import { persistDeploymentBundle, type BranchDeploymentBundle } from "../src/space/deploy-engine"
++
++const RESTORE_JOURNAL_KEY = "space:restoreJournal:v1"
++const ACTIVE_WORKSPACE_KEY = "space:activeWorkspaceNamespace"
++
++function uniqueStub(name: string) {
++  const id = env.FsHarnessDO.idFromName(`restore-${name}-${Date.now()}-${Math.random()}`)
++  return env.FsHarnessDO.get(id)
++}
++
++function inSpace<T>(
++  stub: ReturnType<typeof uniqueStub>,
++  callback: (space: SpaceDO, state: DurableObjectState) => Promise<T>,
++): Promise<T> {
++  return runInDurableObject(stub, async (_instance, state) => {
++    const space = new SpaceDO(state, env as unknown as Env)
++    const testable = space as unknown as {
++      buildBranchDeploymentFor: (
++        backend: { git: { log: (options: { ref: string; depth: number }) => Promise<Array<{ oid: string }>> } },
++        branch: string,
++      ) => Promise<BranchDeploymentBundle>
++    }
++    testable.buildBranchDeploymentFor = async (backend, branch) => {
++      const [head] = await backend.git.log({ ref: branch, depth: 1 })
++      if (!head) throw new Error("No test branch commit")
++      return {
++        branch,
++        commitHash: head.oid,
++        mainModule: "index.js",
++        modules: { "index.js": 'export default { fetch() { return new Response("test") } }' },
++        assets: {},
++        assetConfig: undefined,
++        compatibilityDate: "2025-04-01",
++      }
++    }
++    return callback(space, state)
++  })
++}
++
++async function putVersion(
++  space: SpaceDO,
++  version: string,
++  extraPath?: string,
++  binary?: Uint8Array,
++  renamedFile = false,
++  includeSpecialFiles = false,
++): Promise<string> {
++  await space.writeFile("/wrangler.jsonc", '{"main":"src/index.ts","compatibility_date":"2025-04-01"}')
++  await space.writeFile("/package.json", `{"name":"test-app","version":"${version}"}`)
++  await space.writeFile(
++    "/src/index.ts",
++    `export default { fetch() { return new Response("${version}") } }\n`,
++  )
++  if (extraPath) await space.writeFile(extraPath, `${version}:${extraPath}\n`)
++  if (binary) {
++    const writable = space as unknown as {
++      fs: { writeFileBytes: (path: string, bytes: Uint8Array) => Promise<void> }
++    }
++    await writable.fs.writeFileBytes("/assets/logo.bin", binary)
++  }
++  if (includeSpecialFiles) {
++    const writable = space as unknown as {
++      fs: {
++        symlink: (target: string, path: string) => Promise<void>
++        lstat: (path: string) => Promise<{ mode?: number }>
++        readlink: (path: string) => Promise<string>
++      }
++      backend: { fs: { mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void> }; setFileMode: (path: string, mode: number) => Promise<void> }
++    }
++    await writable.backend.fs.mkdir("/scripts", { recursive: true })
++    await space.writeFile("/scripts/run.sh", "#!/bin/sh\necho test\n")
++    await writable.backend.setFileMode("/scripts/run.sh", 0o100755)
++    await writable.fs.symlink("./src/index.ts", "/current.ts")
++  }
++  if (renamedFile) {
++    await space.deleteFile("/only-in-B.txt")
++    await space.writeFile("/renamed.txt", "C:/remove-me.txt\n")
++  }
++  const commit = await space.gitCommit(`checkpoint ${version}`)
++  expect(commit.sha).toMatch(/^[a-f0-9]{40}$/)
++  const deploy = await space.deploy("main") as { commit_hash?: string; error?: string }
++  expect(deploy.error, JSON.stringify(deploy)).toBeUndefined()
++  expect(deploy.commit_hash).toBe(commit.sha)
++  return commit.sha
++}
++
++describe("SpaceDO Development restore", () => {
++  it("restores exact A→B→C trees, then supports edit D and restore C", async () => {
++    const stub = uniqueStub("round-trip")
++    await inSpace(stub, async (space, state) => {
++      const binary = new Uint8Array([0, 255, 13, 10, 128, 65])
++      const commitA = await putVersion(space, "A", "/remove-me.txt", binary, false, true)
++      const storage = state.storage as unknown as { sql: unknown }
++      persistDeploymentBundle(
++        { sql: storage.sql } as never,
++        {
++          branch: "production",
++          commitHash: commitA,
++          mainModule: "production.js",
++          modules: { "production.js": "export default {}" },
++          assets: {},
++          assetConfig: undefined,
++          compatibilityDate: "2025-04-01",
++        },
++      )
++      const productionDeployment = await space.getDeployment("production")
++      const commitB = await putVersion(space, "B", "/only-in-B.txt")
++      await space.deleteFile("/remove-me.txt")
++      const commitC = await putVersion(space, "C", "/only-in-C.txt", undefined, true)
++
++      const restoreA = await space.rollbackToCommit("main", commitA, crypto.randomUUID()) as {
++        ok?: boolean; commit_hash?: string; error?: string
++      }
++      expect(restoreA.error).toBeUndefined()
++      expect(restoreA.ok).toBe(true)
++      expect(await space.readFile("/src/index.ts")).toContain('Response("A")')
++      expect(await space.readFile("/package.json")).toContain('"version":"A"')
++      expect(await space.readFile("/remove-me.txt")).toContain("A:/remove-me.txt")
++      expect([...((await space.readFileBytes("/assets/logo.bin")) ?? [])]).toEqual([...binary])
++      const restoredSpecial = space as unknown as {
++        fs: { readlink: (path: string) => Promise<string>; lstat: (path: string) => Promise<{ mode?: number }> }
++      }
++      expect(await restoredSpecial.fs.readlink("/current.ts")).toBe("./src/index.ts")
++      expect((await restoredSpecial.fs.lstat("/scripts/run.sh")).mode).toBe(0o100755)
++      expect(await space.readFile("/only-in-B.txt").catch(() => null)).toBeNull()
++      expect(await space.readFile("/only-in-C.txt").catch(() => null)).toBeNull()
++      expect((await space.getDeployment("main") as { commit_hash?: string }).commit_hash)
++        .toBe(restoreA.commit_hash)
++      const pendingA = await space.getPendingRestore()
++      expect(pendingA?.result.commit_hash).toBe(restoreA.commit_hash)
++      expect((await space.beginGeneration("turn-during-sync")).ok).toBe(false)
++      expect(await space.completeRestore(pendingA!.requestId)).toBe(true)
++
++      await putVersion(space, "D", "/only-in-D.txt")
++      const restoreC = await space.rollbackToCommit("main", commitC, crypto.randomUUID()) as {
++        ok?: boolean; commit_hash?: string; error?: string
++      }
++      expect(restoreC.error).toBeUndefined()
++      expect(restoreC.ok).toBe(true)
++      expect(await space.readFile("/src/index.ts")).toContain('Response("C")')
++      expect(await space.readFile("/package.json")).toContain('"version":"C"')
++      expect(await space.readFile("/only-in-C.txt")).toContain("C:/only-in-C.txt")
++      expect(await space.readFile("/renamed.txt")).toContain("C:/remove-me.txt")
++      expect(await space.readFile("/only-in-B.txt").catch(() => null)).toBeNull()
++      expect(await space.readFile("/remove-me.txt").catch(() => null)).toBeNull()
++      expect([...((await space.readFileBytes("/assets/logo.bin")) ?? [])]).toEqual([...binary])
++      expect(await restoredSpecial.fs.readlink("/current.ts")).toBe("./src/index.ts")
++      expect((await restoredSpecial.fs.lstat("/scripts/run.sh")).mode).toBe(0o100755)
++      expect(await space.readFile("/only-in-D.txt").catch(() => null)).toBeNull()
++      expect((await space.getDeployment("main") as { commit_hash?: string }).commit_hash)
++        .toBe(restoreC.commit_hash)
++      expect(await space.getDeployment("production")).toEqual(productionDeployment)
++      const history = await space.gitLog(20)
++      expect(history.map((entry) => entry.oid)).toEqual(expect.arrayContaining([
++        commitA, commitB, commitC, restoreA.commit_hash!, restoreC.commit_hash!,
++      ]))
++      const pendingC = await space.getPendingRestore()
++      expect(pendingC?.result.commit_hash).toBe(restoreC.commit_hash)
++      expect(await space.completeRestore(pendingC!.requestId)).toBe(true)
++    })
++  })
++
++  it("rejects overlapping generations and Production or partial-hash restores", async () => {
++    const stub = uniqueStub("guards")
++    await inSpace(stub, async (space) => {
++      const checkpoint = await putVersion(space, "safe")
++      expect(await space.beginGeneration("turn-one")).toEqual({ ok: true })
++      const overlapping = await space.beginGeneration("turn-two")
++      expect(overlapping.ok).toBe(false)
++      expect((await space.rollbackToCommit("main", checkpoint)).error)
++        .toContain("Agent operation is active")
++      expect((await space.rollbackToCommit("production", checkpoint)).error)
++        .toContain("Development workspace")
++      expect((await space.rollbackToCommit("main", checkpoint.slice(0, 8))).error)
++        .toContain("full checkpoint")
++      expect(await space.endGeneration("turn-one")).toBe(true)
++      expect(await space.endGeneration("turn-one")).toBe(false)
++
++      const [first, second] = await Promise.all([
++        space.rollbackToCommit("main", checkpoint, crypto.randomUUID()) as Promise<{
++          ok?: boolean; error?: string
++        }>,
++        space.rollbackToCommit("main", checkpoint, crypto.randomUUID()) as Promise<{
++          ok?: boolean; error?: string
++        }>,
++      ])
++      expect(first.ok).toBe(true)
++      expect(second.error).toContain("already running")
++      const pending = await space.getPendingRestore()
++      expect(pending).not.toBeNull()
++      expect(await space.completeRestore(pending!.requestId)).toBe(true)
++    })
++  })
++
++  it("keeps the active workspace and preview when candidate preview build fails", async () => {
++    const stub = uniqueStub("failed-build")
++    await inSpace(stub, async (space, state) => {
++      const target = await putVersion(space, "target")
++      const current = await putVersion(space, "current")
++      const production = await space.getDeployment("main")
++      const internal = space as unknown as {
++        backend: unknown
++        buildBranchDeploymentFor: (
++          backend: unknown,
++          branch: string,
++        ) => Promise<BranchDeploymentBundle>
++      }
++      const activeBackend = internal.backend
++      const originalBuilder = internal.buildBranchDeploymentFor
++      internal.buildBranchDeploymentFor = async (backend, branch) => {
++        if (backend !== activeBackend) throw new Error("simulated candidate build failure")
++        return originalBuilder(backend, branch)
++      }
++
++      const result = await space.rollbackToCommit("main", target, crypto.randomUUID()) as {
++        ok?: boolean; error?: string
++      }
++      expect(result.ok).toBeUndefined()
++      expect(result.error).toContain("simulated candidate build failure")
++      expect(await space.readFile("/src/index.ts")).toContain('Response("current")')
++      expect(await space.getDeployment("main")).toEqual(production)
++      expect(await state.storage.get(RESTORE_JOURNAL_KEY)).toBeUndefined()
++    })
++  })
++
++  it("recovers an interrupted SQL activation before serving workspace or preview", async () => {
++    const stub = uniqueStub("recovery")
++    let journal: Record<string, unknown> | undefined
++    await inSpace(stub, async (space, state) => {
++      const target = await putVersion(space, "old")
++      await putVersion(space, "current")
++      const safety = await space.gitCommit("safety before simulated interruption")
++      const internal = space as unknown as {
++        createSqlRestoreBackend: (branch: string, safetyCommit: string) =>
++          Promise<{ backend: { fs: unknown }; workspaceNamespace: string }>
++        replaceCandidateTree: (backend: unknown, branch: string, targetCommit: string) => Promise<string>
++      }
++      const candidate = await internal.createSqlRestoreBackend("main", safety.sha)
++      const restoreCommit = await internal.replaceCandidateTree(candidate.backend, "main", target)
++      await state.storage.put(ACTIVE_WORKSPACE_KEY, candidate.workspaceNamespace)
++      journal = {
++        version: 1,
++        requestId: crypto.randomUUID(),
++        branch: "main",
++        targetCommit: target,
++        safetyCommit: safety.sha,
++        restoreCommit,
++        mode: "sql",
++        candidateWorkspaceNamespace: candidate.workspaceNamespace,
++        phase: "activated",
++        startedAt: Date.now(),
++      }
++      await state.storage.put(RESTORE_JOURNAL_KEY, journal)
++    })
++
++    await inSpace(stub, async (recovered) => {
++      expect(await recovered.readFile("/src/index.ts")).toContain('Response("old")')
++      expect((await recovered.getDeployment("main") as { commit_hash?: string }).commit_hash)
++        .toBe(journal?.restoreCommit)
++      expect(await recovered.getPendingRestore()).toMatchObject({
++        requestId: journal?.requestId,
++        result: { commit_hash: journal?.restoreCommit },
++      })
++    })
++  })
++})
+diff --git a/worker/agents/core/behaviors/think-restore-sync.ts b/worker/agents/core/behaviors/think-restore-sync.ts
+new file mode 100644
+index 0000000..3ad10ef
+--- /dev/null
++++ b/worker/agents/core/behaviors/think-restore-sync.ts
+@@ -0,0 +1,75 @@
++import type { FileOutputType } from "../../schemas"
++import type { IFileManager } from "../../services/interfaces/IFileManager"
++import { WebSocketMessageResponses } from "../../constants"
++
++export interface RestoreSpaceFiles {
++  list(): Promise<Array<{ path: string; mtime: number }>>
++  readFileBytes(path: string): Promise<Uint8Array | null>
++}
++
++export interface PendingDevelopmentRestore {
++  requestId: string
++}
++
++export interface RestoreSpaceApi extends RestoreSpaceFiles {
++  completeRestore(requestId: string): Promise<boolean>
++}
++
++export async function reconcilePendingDevelopmentRestore(
++  pending: PendingDevelopmentRestore,
++  callSpace: <T>(callback: (space: RestoreSpaceApi) => Promise<T>) => Promise<T>,
++  fileManager: IFileManager,
++  broadcast: (type: string, payload: unknown) => void,
++): Promise<void> {
++  const snapshot: RestoreSpaceFiles = {
++    list: () => callSpace((space) => space.list()),
++    readFileBytes: (path) => callSpace((space) => space.readFileBytes(path)),
++  }
++  await syncRestoredDevelopmentFiles(snapshot, fileManager, broadcast)
++  if (!(await callSpace((space) => space.completeRestore(pending.requestId)))) {
++    throw new Error("The restored Development tree could not be confirmed in the editor state")
++  }
++}
++
++export async function syncRestoredDevelopmentFiles(
++  space: RestoreSpaceFiles,
++  fileManager: IFileManager,
++  broadcast: (type: string, payload: unknown) => void,
++): Promise<void> {
++  const entries = await space.list()
++  const oldFiles = fileManager.getGeneratedFilesMap()
++  const files: FileOutputType[] = []
++  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false })
++  for (const entry of entries) {
++    const bytes = await space.readFileBytes(entry.path)
++    if (!bytes) throw new Error(`Could not read restored Development file ${entry.path}`)
++    try {
++      files.push({
++        filePath: entry.path.replace(/^\/+/, ""),
++        fileContents: decoder.decode(bytes),
++        filePurpose: "Restored from Development checkpoint",
++      })
++    } catch {
++      // Binary assets stay in SpaceDO and are intentionally omitted from the
++      // text-only FileManager projection used for agent context.
++    }
++  }
++  fileManager.replaceGeneratedFiles(files)
++  const nextPaths = new Set(files.map((file) => file.filePath))
++  for (const oldPath of Object.keys(oldFiles)) {
++    if (!nextPaths.has(oldPath)) {
++      broadcast(WebSocketMessageResponses.FILE_DELETED, { filePath: oldPath })
++    }
++  }
++  for (const file of files) {
++    const old = oldFiles[file.filePath]
++    if (old?.fileContents === file.fileContents) continue
++    const restored = fileManager.getGeneratedFile(file.filePath)
++    if (restored) {
++      broadcast(WebSocketMessageResponses.FILE_GENERATED, {
++        message: `Restored ${file.filePath}`,
++        file: restored,
++      })
++    }
++  }
++}
+diff --git a/worker/agents/core/behaviors/think.restore.test.ts b/worker/agents/core/behaviors/think.restore.test.ts
+new file mode 100644
+index 0000000..30a8a05
+--- /dev/null
++++ b/worker/agents/core/behaviors/think.restore.test.ts
+@@ -0,0 +1,133 @@
++import { describe, expect, it } from "vitest"
++import { FileManager } from "../../services/implementations/FileManager"
++import type { BaseProjectState, FileState } from "../state"
++import type { IStateManager } from "../../services/interfaces/IStateManager"
++import type { TemplateDetails } from "../../../services/sandbox/sandboxTypes"
++import type { GitVersionControl } from "../../git"
++import {
++  reconcilePendingDevelopmentRestore,
++  syncRestoredDevelopmentFiles,
++  type RestoreSpaceApi,
++} from "./think-restore-sync"
++
++describe("Think restore projection recovery", () => {
++  it("rebuilds text files from SpaceDO and removes stale editor entries", async () => {
++    let state = {
++      generatedFilesMap: {
++        "src/keep.ts": {
++          filePath: "src/keep.ts",
++          fileContents: "old",
++          filePurpose: "Existing purpose",
++          lastDiff: "",
++        },
++        "src/stale.ts": {
++          filePath: "src/stale.ts",
++          fileContents: "stale",
++          filePurpose: "Stale",
++          lastDiff: "",
++        },
++      } as Record<string, FileState>,
++    }
++    const manager = new FileManager(
++      {
++        getState: () => state as unknown as BaseProjectState,
++        setState: (next: BaseProjectState) => {
++          state = next as unknown as typeof state
++        },
++        updateField: () => {},
++      } as unknown as IStateManager<BaseProjectState>,
++      () => ({}) as TemplateDetails,
++      { setOnFilesChangedCallback: () => {} } as unknown as GitVersionControl,
++    )
++    const fileBytes = new Map<string, Uint8Array>([
++      ["src/keep.ts", new TextEncoder().encode("restored keep")],
++      ["src/new.ts", new TextEncoder().encode("new file")],
++      ["public/logo.bin", new Uint8Array([0, 255, 3])],
++    ])
++    const events: Array<{ type: string; payload: unknown }> = []
++    const space = {
++      list: async () => [...fileBytes.keys()].map((path) => ({ path: `/${path}`, mtime: 0 })),
++      readFileBytes: async (path: string) => fileBytes.get(path.replace(/^\/+/, '')) ?? null,
++    }
++
++    await syncRestoredDevelopmentFiles(space, manager, (type, payload) => events.push({ type, payload }))
++
++    expect(Object.keys(state.generatedFilesMap).sort()).toEqual(["src/keep.ts", "src/new.ts"])
++    expect(state.generatedFilesMap["src/keep.ts"]).toMatchObject({
++      fileContents: "restored keep",
++      filePurpose: "Existing purpose",
++    })
++    expect(state.generatedFilesMap["src/new.ts"]?.fileContents).toBe("new file")
++    expect(events).toEqual(expect.arrayContaining([
++      { type: "file_deleted", payload: { filePath: "src/stale.ts" } },
++      expect.objectContaining({ type: "file_generated" }),
++    ]))
++
++    const order: string[] = []
++    const restoreSpace: RestoreSpaceApi = {
++      list: async () => [{ path: "/src/recovered.ts", mtime: 0 }],
++      readFileBytes: async () => new TextEncoder().encode("recovered"),
++      completeRestore: async (requestId) => {
++        order.push(`complete:${requestId}`)
++        return true
++      },
++    }
++    const callSpace = async <T>(callback: (api: RestoreSpaceApi) => Promise<T>) =>
++      callback(restoreSpace)
++    await reconcilePendingDevelopmentRestore(
++      { requestId: "restore-request" },
++      callSpace,
++      manager,
++      (type) => order.push(`broadcast:${type}`),
++    )
++    expect(order).toEqual([
++      "broadcast:file_deleted",
++      "broadcast:file_deleted",
++      "broadcast:file_generated",
++      "complete:restore-request",
++    ])
++    expect(Object.keys(state.generatedFilesMap)).toEqual(["src/recovered.ts"])
++
++    await expect(syncRestoredDevelopmentFiles(
++      {
++        list: async () => [{ path: "/src/unavailable.ts", mtime: 0 }],
++        readFileBytes: async () => null,
++      },
++      manager,
++      () => {},
++    )).rejects.toThrow("Could not read restored Development file /src/unavailable.ts")
++    expect(Object.keys(state.generatedFilesMap).sort()).toEqual(["src/recovered.ts"])
++  })
++
++  it("does not complete a restore when a restored file cannot be projected", async () => {
++    let state = { generatedFilesMap: {} as Record<string, FileState> }
++    const manager = new FileManager(
++      {
++        getState: () => state as unknown as BaseProjectState,
++        setState: (next: BaseProjectState) => {
++          state = next as unknown as typeof state
++        },
++        updateField: () => {},
++      } as unknown as IStateManager<BaseProjectState>,
++      () => ({}) as TemplateDetails,
++      { setOnFilesChangedCallback: () => {} } as unknown as GitVersionControl,
++    )
++    let completed = false
++    const api: RestoreSpaceApi = {
++      list: async () => [{ path: "/src/unavailable.ts", mtime: 0 }],
++      readFileBytes: async () => null,
++      completeRestore: async () => {
++        completed = true
++        return true
++      },
++    }
++
++    await expect(reconcilePendingDevelopmentRestore(
++      { requestId: "unprojected-restore" },
++      async <T>(callback: (space: RestoreSpaceApi) => Promise<T>) => callback(api),
++      manager,
++      () => {},
++    )).rejects.toThrow("Could not read restored Development file /src/unavailable.ts")
++    expect(completed).toBe(false)
++  })
++})
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index 4a27c8b..ea6e523 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -13,6 +13,7 @@ import { ThinkState } from '../state';
+ import { AgentInitArgs, DeploymentTarget } from '../types';
+ import { BaseCodingBehavior } from './base';
+ import { WebSocketMessageResponses } from '../../constants';
++import { reconcilePendingDevelopmentRestore, syncRestoredDevelopmentFiles } from './think-restore-sync';
+ import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
+ import { OperationOptions } from '../../operations/common';
+ import { GenerationContext, AgenticGenerationContext } from '../../domain/values/GenerationContext';
+@@ -51,6 +52,7 @@ import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../
+ import { resolveCloudflareAccessToken } from '../../../services/rate-limit/usageChecker';
+ import type { CloudflareDeploymentErrorCode } from '../../../api/websocketTypes';
+ import { InFlightLock, isCommitRevision } from '../../../services/deployer/platform-deployment-identity';
++import type { WebSocketMessageType, WebSocketMessageData } from '../../../api/websocketTypes';
+ 
+ /**
+  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
+@@ -77,7 +79,11 @@ getTaskLifecycleSnapshot: () => Promise<{ lifecycle: ThinkTaskLifecycle; operati
+ 
+ /** SpaceDO RPC surface this behavior drives (see `space/src/space/durable-object.ts`). */
+ type SpaceRpcStub = {
++	beginGeneration: (operationId: string) => Promise<{ ok: boolean; reason?: string }>;
++	endGeneration: (operationId: string) => Promise<boolean>;
++	list: () => Promise<Array<{ path: string; mtime: number }>>;
+ 	writeFile: (path: string, content: string) => Promise<unknown>;
++	readFileBytes: (path: string) => Promise<Uint8Array | null>;
+ 	readFile: (path: string, opts?: { offset?: number; limit?: number }) => Promise<string>;
+ 	gitCommit: (
+ 		msg: string,
+@@ -88,7 +94,9 @@ type SpaceRpcStub = {
+ 		branch: string,
+ 	) => Promise<{ preview_url?: string; commit_hash?: string; error?: string; details?: string }>;
+ 	getDeploymentBundle: (branch: string) => Promise<BranchDeploymentBundle>;
+-	rollbackToCommit: (branch: string, commitHash: string) => Promise<unknown>;
++	rollbackToCommit: (branch: string, commitHash: string, requestId?: string) => Promise<unknown>;
++	getPendingRestore: () => Promise<{ requestId: string; result: unknown } | null>;
++	completeRestore: (requestId: string) => Promise<boolean>;
+ };
+ 
+ /** Subset of AI-SDK `UIMessageChunk` shapes this behavior reacts to. */
+@@ -122,9 +130,39 @@ export class ThinkCodingBehavior
+ 	implements ICodingAgent {
+ 	protected static readonly PROJECT_NAME_PREFIX_MAX_LENGTH = 20;
+ 	private readonly immutableReleaseDeploymentLock = new InFlightLock();
++	private readonly workspaceOperationLock = new InFlightLock();
+ 
+ 	override getBehavior(): 'think' { return 'think'; }
+ 
++	override async onStart(props?: Record<string, unknown>): Promise<void> {
++		await super.onStart(props);
++		const pending = await this.callSpace((space) => space.getPendingRestore());
++		if (!pending) return;
++		await reconcilePendingDevelopmentRestore(
++			pending,
++			(callback) => this.callSpace(callback),
++			this.fileManager,
++			(type, payload) => this.broadcast(
++				type as WebSocketMessageType,
++				payload as WebSocketMessageData<WebSocketMessageType>,
++			),
++		);
++	}
++
++	private async syncFileManagerFromSpace(): Promise<void> {
++		await syncRestoredDevelopmentFiles(
++			{
++				list: () => this.callSpace((space) => space.list()),
++				readFileBytes: (path) => this.callSpace((space) => space.readFileBytes(path)),
++			},
++			this.fileManager,
++			(type, payload) => this.broadcast(
++				type as WebSocketMessageType,
++				payload as WebSocketMessageData<WebSocketMessageType>,
++			),
++		);
++	}
++
+ 	// ──────────────────────────────────────────────────────────────
+ 	// DO stubs
+ 
+@@ -604,6 +642,15 @@ this.setThinkPendingInputs(preserved.map(item => item.message), preserved.map(it
+ 
+ 	/** Main loop: drain pendingUserInputs by driving the ThinkAgent. */
+ 	async build(): Promise<void> {
++		const result = await this.workspaceOperationLock.runExclusive(() => this.buildUnlocked());
++		if (!result.acquired) {
++			this.broadcast(WebSocketMessageResponses.ERROR, {
++				error: 'Another Agent operation is already running; this request was not started again.',
++			});
++		}
++	}
++
++	private async buildUnlocked(): Promise<void> {
+ 		if (!this.isMVPGenerated() && this.state.query && this.state.pendingUserInputs.length === 0) {
+ 			this.setThinkPendingInputs([this.state.query], [IdGenerator.generateConversationId()]);
+ 		}
+@@ -661,10 +708,42 @@ await this.continueAutomatically();
+ 	 * `UIMessageChunk`s into VibeSDK WebSocket events.
+ 	 */
+ 	private async runPrompt(text: string, taskId: string): Promise<void> {
++		const acquired = await this.callSpace((space) => space.beginGeneration(taskId));
++		if (!acquired.ok) {
++			throw new Error(acquired.reason || 'The Development workspace is not ready for another Agent turn');
++		}
++		let taskStartAttempted = false;
++		try {
++			await this.runPromptWithGenerationLease(text, taskId, () => {
++				taskStartAttempted = true;
++			});
++		} finally {
++			if (!taskStartAttempted) {
++				await this.callSpace((space) => space.endGeneration(taskId)).catch(() => false);
++			} else {
++				try {
++					const lifecycle = await (await this.getThinkStub()).getTaskLifecycle();
++					if (lifecycle.status !== 'RUNNING') {
++						await this.callSpace((space) => space.endGeneration(taskId));
++					}
++				} catch (error) {
++					// Keep the durable workspace lock when lifecycle is unverified.
++					this.logger.warn('Could not verify Think task completion; retaining the workspace lock', error);
++				}
++			}
++		}
++	}
++
++	private async runPromptWithGenerationLease(
++		text: string,
++		taskId: string,
++		onTaskStart: () => void,
++	): Promise<void> {
+ 		const stub = await this.getThinkStub();
+ 		// Refresh future-operation policy for existing agents, without rewriting
+ 		// the persisted limits of an operation recovered by beginTask.
+ 		await stub.configureOperationLimits(this.operationLimitsFromEnvironment());
++		onTaskStart();
+ const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId(), text);
+ 		if (operation.replayOnly) return;
+ 		const initialLifecycle = await stub.getTaskLifecycle();
+@@ -1065,27 +1144,53 @@ nativeTaskLifecycle: projectNativeTaskLifecycle(stopped.lifecycle, stopped.opera
+ 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, { error: 'Missing commit hash for rollback' });
+ 			return;
+ 		}
+-		if (this.isCodeGenerating()) {
++		const attempt = await this.workspaceOperationLock.runExclusive(async () => {
++			if (this.isCodeGenerating()) {
++				return { ok: false as const, error: 'Cannot restore while an Agent turn is active.' };
++			}
++			const branch = 'main';
++			const requestId = crypto.randomUUID();
++			try {
++				const output = await this.callSpace((space) => space.rollbackToCommit(branch, hash, requestId));
++				let parsed: Record<string, unknown> | undefined;
++				if (typeof output === 'string') {
++					try { parsed = JSON.parse(output) as Record<string, unknown>; } catch { parsed = undefined; }
++				} else if (output && typeof output === 'object') {
++					parsed = output as Record<string, unknown>;
++				}
++				if (typeof parsed?.error === 'string') return { ok: false as const, error: parsed.error };
++				if (parsed?.ok !== true || !isCommitRevision(parsed.commit_hash)) {
++					return { ok: false as const, error: 'The Development restore result could not be verified.' };
++				}
++
++				await this.syncFileManagerFromSpace();
++				const completed = await this.callSpace((space) => space.completeRestore(requestId));
++				if (!completed) {
++					return { ok: false as const, error: 'The restored files could not be confirmed in editor state.' };
++				}
++				await this.handleDeploySpaceOutput(output);
++				this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
++					message: `Restored Development to checkpoint \`${hash.slice(0, 8)}\`. The preview is pinned to restored revision \`${parsed.commit_hash.slice(0, 8)}\`.`,
++					conversationId: IdGenerator.generateConversationId(),
++					isStreaming: false,
++				});
++				return { ok: true as const };
++			} catch (error) {
++				this.logger.warn('SpaceDO.rollbackToCommit failed', error);
++				return {
++					ok: false as const,
++					error: error instanceof Error ? error.message : String(error),
++				};
++			}
++		});
++		if (!attempt.acquired) {
+ 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {
+-				error: 'Cannot roll back while a turn is in progress. Stop generation first.',
++				error: 'Another Agent operation is active. The checkpoint was not restored.',
+ 			});
+ 			return;
+ 		}
+-
+-		const branch = this.state.currentBranch || 'main';
+-		try {
+-			const output = await this.callSpace((space) => space.rollbackToCommit(branch, hash));
+-			await this.handleDeploySpaceOutput(output);
+-			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+-				message: `Rolled back to commit \`${hash.slice(0, 8)}\` and redeployed.`,
+-				conversationId: IdGenerator.generateConversationId(),
+-				isStreaming: false,
+-			});
+-		} catch (e) {
+-			this.logger.warn('SpaceDO.rollbackToCommit failed', e);
+-			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {
+-				error: e instanceof Error ? e.message : String(e),
+-			});
++		if (!attempt.value.ok) {
++			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, { error: attempt.value.error });
+ 		}
+ 	}
+ 
+diff --git a/worker/agents/core/codingAgent.ts b/worker/agents/core/codingAgent.ts
+index fe08e87..0c1151d 100644
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -211,7 +211,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+         // Create objective based on project type
+         this.objective = this.createObjective(projectType);
+ 
+-        this.behavior.onStart(props);
++        await this.behavior.onStart(props);
+ 
+         // Ignore if agent not initialized
+         if (!this.state.query) {
+diff --git a/worker/agents/services/implementations/FileManager.restore.test.ts b/worker/agents/services/implementations/FileManager.restore.test.ts
+new file mode 100644
+index 0000000..66b9b41
+--- /dev/null
++++ b/worker/agents/services/implementations/FileManager.restore.test.ts
+@@ -0,0 +1,57 @@
++import { describe, expect, it } from "vitest"
++import { FileManager } from "./FileManager"
++import type { BaseProjectState, FileState } from "../../core/state"
++import type { IStateManager } from "../interfaces/IStateManager"
++import type { TemplateDetails } from "../../../services/sandbox/sandboxTypes"
++import type { GitVersionControl } from "../../git"
++
++describe("FileManager Development restore projection", () => {
++  it("replaces stale generated files and preserves existing file purposes", () => {
++    let state = {
++      generatedFilesMap: {
++        "src/keep.ts": {
++          filePath: "src/keep.ts",
++          fileContents: "old",
++          filePurpose: "keep purpose",
++          lastDiff: "old diff",
++        },
++        "src/stale.ts": {
++          filePath: "src/stale.ts",
++          fileContents: "stale",
++          filePurpose: "stale purpose",
++          lastDiff: "",
++        },
++      } as Record<string, FileState>,
++    }
++    const stateManager = {
++      getState: () => state as unknown as BaseProjectState,
++      setState: (next: BaseProjectState) => {
++        state = next as unknown as typeof state
++      },
++      updateField: () => {},
++    } as unknown as IStateManager<BaseProjectState>
++    const git = { setOnFilesChangedCallback: () => {} } as unknown as GitVersionControl
++    const manager = new FileManager(
++      stateManager,
++      () => ({}) as TemplateDetails,
++      git,
++    )
++
++    manager.replaceGeneratedFiles([
++      { filePath: "/src/keep.ts", fileContents: "restored", filePurpose: "new purpose" },
++      { filePath: "/src/new.ts", fileContents: "new file", filePurpose: "generated" },
++    ])
++
++    expect(Object.keys(state.generatedFilesMap).sort()).toEqual(["src/keep.ts", "src/new.ts"])
++    expect(state.generatedFilesMap["src/keep.ts"]).toMatchObject({
++      filePath: "src/keep.ts",
++      fileContents: "restored",
++      filePurpose: "keep purpose",
++      lastDiff: "",
++    })
++    expect(state.generatedFilesMap["src/new.ts"]).toMatchObject({
++      fileContents: "new file",
++      filePurpose: "generated",
++    })
++  })
++})
+diff --git a/worker/agents/services/implementations/FileManager.ts b/worker/agents/services/implementations/FileManager.ts
+index 0dcded9..a9184a0 100644
+--- a/worker/agents/services/implementations/FileManager.ts
++++ b/worker/agents/services/implementations/FileManager.ts
+@@ -212,6 +212,25 @@ export class FileManager implements IFileManager {
+         return Object.values(state.generatedFilesMap);
+     }
+ 
++    replaceGeneratedFiles(files: FileOutputType[]): void {
++        const oldMap = this.stateManager.getState().generatedFilesMap;
++        const nextMap: Record<string, FileState> = {};
++        for (const file of files) {
++            const path = file.filePath.replace(/^\/+/, '');
++            if (!path) continue;
++            nextMap[path] = {
++                filePath: path,
++                fileContents: file.fileContents,
++                filePurpose: oldMap[path]?.filePurpose || file.filePurpose || 'Restored Development file',
++                lastDiff: '',
++            };
++        }
++        this.stateManager.setState({
++            ...this.stateManager.getState(),
++            generatedFilesMap: nextMap,
++        });
++    }
++
+     getTemplateFile(filePath: string) : FileOutputType | null {
+         try {
+             const templateDetails = this.getTemplateDetailsFunc();
+diff --git a/worker/agents/services/interfaces/IFileManager.ts b/worker/agents/services/interfaces/IFileManager.ts
+index 5acca2e..ee944a5 100644
+--- a/worker/agents/services/interfaces/IFileManager.ts
++++ b/worker/agents/services/interfaces/IFileManager.ts
+@@ -58,4 +58,9 @@ export interface IFileManager {
+      * Sync generatedFilesMap from git HEAD
+      */
+     syncGeneratedFilesMapFromGit(): Promise<void>;
++
++    /**
++     * Replace the generated-file projection with a verified Development tree.
++     */
++    replaceGeneratedFiles(files: FileOutputType[]): void;
+ }
+\ No newline at end of file
+diff --git a/worker/agents/think/operation-config-refresh.test.ts b/worker/agents/think/operation-config-refresh.test.ts
+index 043bec5..768dc54 100644
+--- a/worker/agents/think/operation-config-refresh.test.ts
++++ b/worker/agents/think/operation-config-refresh.test.ts
+@@ -96,7 +96,7 @@ describe('Think operation config refresh', () => {
+ 		}
+ 
+ 		const runPrompt = thinkBehaviorSource.match(
+-			/private async runPrompt\([\s\S]*?(?=\n\t(?:private|protected|public|override)\s|\n\})/,
++			/private async runPromptWithGenerationLease\([\s\S]*?(?=\n\t(?:private|protected|public|override)\s|\n\})/,
+ 		)?.[0];
+ 		expect(runPrompt).toBeDefined();
+ 		const refreshIndex = runPrompt!.indexOf('await stub.configureOperationLimits(this.operationLimitsFromEnvironment());');

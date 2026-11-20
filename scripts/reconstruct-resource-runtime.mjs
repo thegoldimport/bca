@@ -8,6 +8,13 @@ import path from "node:path";
 const root = process.cwd();
 const directory = path.resolve(process.argv[2] ?? "");
 assert(process.argv[2] && directory !== root, "Pass a new, empty reconstruction directory");
+const rootRelativeDirectory = path.relative(root, directory);
+assert(
+  rootRelativeDirectory === ".."
+    || rootRelativeDirectory.startsWith(`..${path.sep}`)
+    || path.isAbsolute(rootRelativeDirectory),
+  "Use a reconstruction directory outside the repository",
+);
 assert(!await stat(directory).catch(() => null), "Reconstruction directory already exists");
 const prefix = "production/vibesdk-launch/resource-envelope";
 const receipt = JSON.parse(await readFile(`${prefix}-source-parity.json`, "utf8"));

@@ -1,0 +1,1675 @@
+diff --git a/worker/agents/core/behaviors/base.ts b/worker/agents/core/behaviors/base.ts
+index 6ee98c7..2c89ce1 100644
+--- a/worker/agents/core/behaviors/base.ts
++++ b/worker/agents/core/behaviors/base.ts
+@@ -1674,7 +1674,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
+      * Handle user input during conversational code generation
+      * Processes user messages and updates pendingUserInputs state
+      */
+-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
++    async handleUserInput(userMessage: string, images?: ImageAttachment[], _continuationApproval?: { taskId: string; operationId: string }): Promise<void> {
+         try {
+             this.logger.info('Processing user input message', { 
+                 messageLength: userMessage.length,
+diff --git a/worker/agents/core/behaviors/think.ts b/worker/agents/core/behaviors/think.ts
+index c659e9a..4a27c8b 100644
+--- a/worker/agents/core/behaviors/think.ts
++++ b/worker/agents/core/behaviors/think.ts
+@@ -1,6 +1,11 @@
+ import { RpcTarget } from 'cloudflare:workers';
++import { checkUsageAndBalance } from '../../../services/rate-limit';
+ import { ThinkStreamForwarder } from '../../think/stream-forwarder';
+ import { projectNativeTaskLifecycle } from '../../think/task-lifecycle-status';
++import {
++APPROVED_CONTINUATION_PROMPT, continuationTaskId, customerTaskStatus,
++isConversationalContinuation, type ThinkContinuationApproval,
++} from '../../think/user-approved-continuation';
+ import { emitThinkDiagnostic, observeThinkBoundary, withThinkDiagnosticSafety, type ThinkDiagnosticContext } from '../../think/diagnostics';
+ import { getAgentByName } from 'agents';
+ import type { UIMessage } from 'ai';
+@@ -55,9 +60,12 @@ type ThinkAgentStub = {
+ 	configureVibe: (config: ThinkAgentConfig) => Promise<void>;
+ configureOperationLimits: (limits: NonNullable<ThinkAgentConfig['operationLimits']>) => Promise<void>;
+ 	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
+-	beginTask: (taskId: string, candidateConversationId: string) => Promise<ThinkTaskOperation>;
++beginTask: (taskId: string, candidateConversationId: string, originalIntent?: string) => Promise<ThinkTaskOperation>;
++approveTaskContinuation: (approval: ThinkContinuationApproval) => Promise<{ operationId: string; alreadyStarted: boolean }>;
++setTaskAutoContinue: (taskId: string, enabled: boolean) => Promise<NonNullable<ThinkTaskLifecycle['autoContinue']>>;
+ 	getTaskLifecycle: () => Promise<ThinkTaskLifecycle>;
+ 	getTaskOperation: () => Promise<ThinkTaskOperation | undefined>;
++getTaskLifecycleSnapshot: () => Promise<{ lifecycle: ThinkTaskLifecycle; operation?: ThinkTaskOperation }>;
+ 	advanceTaskOperation: () => Promise<ThinkTaskOperation>;
+ 	markTaskChatStarted: () => Promise<ThinkTaskOperation>;
+ 	markTaskChatResolved: () => Promise<ThinkTaskOperation>;
+@@ -344,7 +352,12 @@ export class ThinkCodingBehavior
+ 
+ 	/** Read the same authoritative lifecycle used by the continuation driver. */
+ 	async getNativeTaskLifecycle() {
+-		return projectNativeTaskLifecycle(await (await this.getThinkStub()).getTaskLifecycle());
++const stub = await this.getThinkStub();
++const snapshot = await stub.getTaskLifecycleSnapshot();
++return {
++...projectNativeTaskLifecycle(snapshot.lifecycle, snapshot.operation),
++approvalReady: this.state.pendingUserInputs.length === 0 && !this.isCodeGenerating(),
++};
+ 	}
+ 
+ 	private operationLimitsFromEnvironment() {
+@@ -465,8 +478,102 @@ export class ThinkCodingBehavior
+ 		};
+ 	}
+ 
+-	async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
++async setTaskAutoContinue(taskId: string, enabled: boolean) {
++const stub = await this.getThinkStub();
++const preference = await stub.setTaskAutoContinue(taskId, enabled);
++this.broadcast('auto_continue_updated' as WebSocketMessageResponses, { preference });
++if (enabled && !this.isCodeGenerating()) await this.continueAutomatically();
++return preference;
++}
++
++async disableTaskAutoContinue(): Promise<void> {
++const stub = await this.getThinkStub();
++const operation = await stub.getTaskOperation();
++if (operation) await stub.setTaskAutoContinue(continuationTaskId(operation), false);
++}
++
++/** Same native reservation and durable host queue as manual Continue. */
++private async continueAutomatically(): Promise<void> {
++if (this.state.pendingUserInputs.length > 0) return;
++const stub = await this.getThinkStub();
++const operation = await stub.getTaskOperation();
++const lifecycle = await stub.getTaskLifecycle();
++const preference = lifecycle.autoContinue;
++if (!operation || !preference?.enabled || preference.taskId !== continuationTaskId(operation)
++|| customerTaskStatus(lifecycle) !== 'CONTINUE_AVAILABLE') return;
++try {
++const userId = this.state.metadata.userId;
++if (!userId) throw new Error('Please sign in before continuing.');
++const admission = await checkUsageAndBalance(this.env, userId, undefined,
++this.state.cloudflareToken || null, this.state.wsOrigin || undefined);
++if (admission.refreshedBlob) {
++this.setState({ ...this.state, cloudflareToken: admission.refreshedBlob });
++}
++if (!admission.allowed) throw new Error('Your account cannot start more work right now. Check your available usage before continuing.');
++// A new customer message may have arrived during admission.
++if (this.state.pendingUserInputs.length > 0) return;
++const accepted = await stub.approveTaskContinuation({
++taskId: preference.taskId, operationId: operation.taskId,
++source: 'auto', preauthorizationVersion: preference.version,
++});
++const latest = await stub.getTaskLifecycle();
++if (this.state.pendingUserInputs.length > 0 || accepted.alreadyStarted
++|| !latest.autoContinue?.enabled || latest.autoContinue.version !== preference.version
++|| latest.autoContinue.taskId !== preference.taskId) return;
++this.setThinkPendingInputs([APPROVED_CONTINUATION_PROMPT], [accepted.operationId]);
++} catch (error) {
++// Turning Off is an expected stop, not a platform error.
++const latest = await stub.getTaskLifecycle();
++if (!latest.autoContinue?.enabled || latest.autoContinue.version !== preference.version) return;
++await stub.setTaskAutoContinue(preference.taskId, false);
++this.broadcast(WebSocketMessageResponses.ERROR, {
++error: error instanceof Error ? error.message : 'Auto Continue stopped. Please try continuing manually.',
++});
++}
++}
++
++async handleUserInput(userMessage: string, images?: ImageAttachment[], approval?: ThinkContinuationApproval): Promise<void> {
++if (approval && (!isConversationalContinuation(userMessage) || images?.length)) {
++throw new Error('Send a new instruction separately from the Continue action.');
++}
++if (approval || (!images?.length && isConversationalContinuation(userMessage))) {
++const stub = await this.getThinkStub();
++const operation = await stub.getTaskOperation();
++const lifecycle = await stub.getTaskLifecycle();
++if (approval || (operation && customerTaskStatus(lifecycle) === 'CONTINUE_AVAILABLE'
++&& this.state.pendingUserInputs.length === 0 && !this.isCodeGenerating())) {
++if (!operation || this.state.pendingUserInputs.length > 0 || this.isCodeGenerating()) {
++// Explicit retries may acknowledge a session already running, but never queue another.
++if (approval && operation && (
++operation.taskId !== approval.operationId
++|| this.getPendingTaskQueueIds().some(id => id.startsWith('think-approved:'))
++)) {
++const replay = await stub.approveTaskContinuation(approval);
++if (replay.alreadyStarted || this.getPendingTaskQueueIds().includes(replay.operationId)) return;
++}
++throw new Error('Another request is already being processed.');
++}
++const accepted = await stub.approveTaskContinuation(approval ?? {
++taskId: continuationTaskId(operation), operationId: operation.taskId,
++});
++if (accepted.alreadyStarted || this.getPendingTaskQueueIds().includes(accepted.operationId)) return;
++this.setThinkPendingInputs(
++[...this.state.pendingUserInputs, APPROVED_CONTINUATION_PROMPT],
++[...this.getPendingTaskQueueIds(), accepted.operationId],
++);
++return;
++}
++}
+ 		let processedImages: ProcessedImageAttachment[] | undefined;
++// New explicit direction supersedes the old task's standing authorization.
++const stub = await this.getThinkStub();
++const previous = await stub.getTaskOperation();
++if (previous) await stub.setTaskAutoContinue(continuationTaskId(previous), false);
++// Discard unstarted approved queue entries, never interrupt an active tool.
++const preserved = this.state.pendingUserInputs.map((message, i) => ({
++message, id: this.getPendingTaskQueueIds()[i],
++})).filter((item, i) => !item.id?.startsWith('think-approved:') || (i === 0 && this.isCodeGenerating()));
++this.setThinkPendingInputs(preserved.map(item => item.message), preserved.map(item => item.id));
+ 		if (images && images.length > 0) {
+ 			processedImages = await Promise.all(
+ 				images.map((image) => uploadImage(this.env, image, ImageType.UPLOADS)),
+@@ -507,12 +614,21 @@ export class ThinkCodingBehavior
+ 			// the id/prompt of a chat that may be recovered after a worker restart.
+ 			const pending = this.state.pendingUserInputs.slice(0, 1);
+ 			const queueIds = this.getPendingTaskQueueIds();
+-			const taskId = createThinkTaskQueueIdentity(queueIds.slice(0, pending.length));
++const taskId = queueIds[0]?.startsWith('think-approved:')
++? queueIds[0] : createThinkTaskQueueIdentity(queueIds.slice(0, pending.length));
+ 
+ 			const compiled = pending[0];
+ 			try {
+ 				await this.runPrompt(compiled, taskId);
+ 			} catch (e) {
++if (e instanceof Error && e.message === 'Auto Continue is no longer enabled for this task.') {
++const index = this.getPendingTaskQueueIds().indexOf(taskId);
++if (index >= 0) this.setThinkPendingInputs(
++this.state.pendingUserInputs.filter((_, i) => i !== index),
++this.getPendingTaskQueueIds().filter((_, i) => i !== index),
++);
++continue;
++}
+ 				this.logger.error('Think prompt failed', e);
+ 				this.broadcast(WebSocketMessageResponses.ERROR, {
+ 					error: e instanceof Error ? e.message : String(e),
+@@ -528,6 +644,7 @@ export class ThinkCodingBehavior
+ 				this.state.pendingUserInputs.slice(pending.length),
+ 				this.getPendingTaskQueueIds().slice(pending.length),
+ 			);
++await this.continueAutomatically();
+ 
+ 			if (!this.isMVPGenerated()) {
+ 				this.setMVPGenerated();
+@@ -548,7 +665,8 @@ export class ThinkCodingBehavior
+ 		// Refresh future-operation policy for existing agents, without rewriting
+ 		// the persisted limits of an operation recovered by beginTask.
+ 		await stub.configureOperationLimits(this.operationLimitsFromEnvironment());
+-		const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId());
++const operation = await stub.beginTask(taskId, IdGenerator.generateConversationId(), text);
++		if (operation.replayOnly) return;
+ 		const initialLifecycle = await stub.getTaskLifecycle();
+ 		if (initialLifecycle.status !== 'RUNNING') return;
+ 		const conversationId = operation.conversationId;
+@@ -556,9 +674,13 @@ export class ThinkCodingBehavior
+ 			message: '',
+ 			conversationId,
+ 			isStreaming: true,
++// Supported owner diagnostics capture the actual initialized operation
++// before its first model/tool reservation; the editor must not render usage.
++nativeTaskLifecycle: projectNativeTaskLifecycle(initialLifecycle, operation),
+ 		});
+ 
+ 		const accumulated = { text: '', bufferText: false, bufferedText: '' };
++		let streamError: string | undefined;
+ 		const seenWrittenFiles = new Set<string>();
+ 		const toolNames = new Map<string, string>();
+ 		const toolInputs = new Map<string, Record<string, unknown>>();
+@@ -579,13 +701,15 @@ export class ThinkCodingBehavior
+ 				}
+ 				return this.translateChunk(chunk, conversationId, accumulated, seenWrittenFiles, toolNames, toolInputs);
+ 			},
+-			(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err }),
++			// The stream error is provisional. The persisted lifecycle owns the
++			// terminal reason, and an older queued task must not stop a newer UI turn.
++			(err) => { streamError = err; },
+ 			async () => { await stub.markTaskChatResolved(); },
+ 			diagnosticContext,
+ 		);
+ 
+ 		try {
+-			await driveThinkTaskOperation({
++			const result = await driveThinkTaskOperation({
+ 				stub,
+ 				initialOperation: operation,
+ 				initialPrompt: text,
+@@ -609,6 +733,25 @@ export class ThinkCodingBehavior
+ 					}
+ 				},
+ 			});
++			if (result.lifecycle.status === 'INCOMPLETE_RESOURCE_LIMIT') {
++				const queueIds = this.getPendingTaskQueueIds();
++const latestQueueId = queueIds.at(-1);
++const latestTaskId = latestQueueId?.startsWith('think-approved:')
++? latestQueueId : queueIds.length ? createThinkTaskQueueIdentity(queueIds.slice(-1)) : null;
++if (latestTaskId === taskId) {
++const stopped = await stub.getTaskLifecycleSnapshot();
++					this.broadcast(WebSocketMessageResponses.ERROR, {
++						error: result.lifecycle.summary,
++						code: result.lifecycle.status,
++						reason: result.lifecycle.reason,
++nativeTaskLifecycle: projectNativeTaskLifecycle(stopped.lifecycle, stopped.operation),
++						operationId: taskId,
++						conversationId,
++					});
++				}
++			} else if (streamError) {
++				this.broadcast(WebSocketMessageResponses.ERROR, { error: streamError, operationId: taskId, conversationId });
++			}
+ 		} finally {
+ 			this.broadcast(WebSocketMessageResponses.USAGE_UPDATED, {
+ 				message: 'Usage data updated',
+diff --git a/worker/agents/core/codingAgent.ts b/worker/agents/core/codingAgent.ts
+index b6a2df3..fe08e87 100644
+--- a/worker/agents/core/codingAgent.ts
++++ b/worker/agents/core/codingAgent.ts
+@@ -4,6 +4,7 @@ import { AgenticState, AgentState, BaseProjectState, CurrentDevState, MAX_PHASES
+ import { Blueprint } from "../schemas";
+ import { BaseCodingBehavior } from "./behaviors/base";
+ import { ThinkCodingBehavior } from './behaviors/think';
++import { PUBLISHER_ARTIFACT_VERSION } from '../../services/deployer/platform-deployment-identity';
+ import { getBehaviorTypeForProject } from './features';
+ import { createObjectLogger, StructuredLogger } from '../../logger';
+ import { InferenceMetadata } from "../inferutils/config.types";
+@@ -299,7 +300,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+                 templateDetails: this.behavior.getTemplateDetails(),
+                 previewUrl: previewUrl,
+                     ...(this.state.behaviorType === 'think' && this.env.ENABLE_USER_ACCOUNT_DEPLOY !== 'true'
+-                        ? { deploymentCapabilities: { platformImmutableRelease: true } }
++                        ? { deploymentCapabilities: { platformImmutableRelease: true, publisherArtifactVersion: PUBLISHER_ARTIFACT_VERSION } }
+                     : {}),
+             });
+         })();
+@@ -641,8 +642,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+      * Handle user input during conversational code generation
+      * Processes user messages and updates pendingUserInputs state
+      */
+-    async handleUserInput(userMessage: string, images?: ImageAttachment[]): Promise<void> {
++    async handleUserInput(userMessage: string, images?: ImageAttachment[], continuationApproval?: { taskId: string; operationId: string }): Promise<void> {
+         try {
++            if (continuationApproval && this.behavior.getBehavior() !== 'think') {
++                throw new Error('This project does not support the Continue action.');
++            }
+             this.logger().info('Processing user input message', { 
+                 messageLength: userMessage.length,
+                 pendingInputsCount: this.state.pendingUserInputs.length,
+@@ -650,8 +654,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+                 imageCount: images?.length || 0
+             });
+ 
+-            await this.behavior.handleUserInput(userMessage, images);
+-            if (!this.behavior.isCodeGenerating()) {
++            await this.behavior.handleUserInput(userMessage, images, continuationApproval);
++            if (!this.behavior.isCodeGenerating() && this.state.pendingUserInputs.length > 0) {
+                 // If idle, start generation process
+                 this.logger().info('User input during IDLE state, starting generation');
+                 this.behavior.generateAllFiles().catch(error => {
+@@ -670,6 +674,16 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
+             this.broadcastError('Error processing user input', error);
+         }
+     }
++
++    async setTaskAutoContinue(taskId: string, enabled: boolean): Promise<void> {
++        if (!(this.behavior instanceof ThinkCodingBehavior)) throw new Error('Auto Continue is not available for this project.');
++        await this.behavior.setTaskAutoContinue(taskId, enabled);
++        if (!this.behavior.isCodeGenerating() && this.state.pendingUserInputs.length > 0) {
++            this.behavior.generateAllFiles().catch(error => {
++                this.logger().error('Auto Continue could not start', error);
++            });
++        }
++    }
+     // ==========================================
+     // WebSocket Management
+     // ==========================================
+diff --git a/worker/agents/core/websocket.ts b/worker/agents/core/websocket.ts
+index 0ded5c8..1b723ea 100644
+--- a/worker/agents/core/websocket.ts
++++ b/worker/agents/core/websocket.ts
+@@ -14,6 +14,7 @@ interface IncomingWebSocketMessage {
+     type: string;
+     message?: string;
+     images?: ImageAttachment[];
++    continuationApproval?: { taskId: string; operationId: string };
+     credentials?: CredentialsPayload;
+     commitHash?: string;
+     target?: DeploymentTarget;
+@@ -39,6 +40,14 @@ export async function handleWebSocketMessage(
+         const parsedMessage = JSON.parse(message) as IncomingWebSocketMessage;
+ 
+         switch (parsedMessage.type) {
++            case 'set_auto_continue':
++                if (typeof (parsedMessage as any).taskId !== 'string'
++                    || typeof (parsedMessage as any).enabled !== 'boolean') {
++                    sendError(connection, 'This Auto Continue request is not valid.');
++                    return;
++                }
++                await (agent as any).setTaskAutoContinue((parsedMessage as any).taskId, (parsedMessage as any).enabled);
++                break;
+             case WebSocketMessageRequests.SESSION_INIT: {
+                 // const credentials = parsedMessage.credentials as CredentialsPayload | undefined;
+                 // agent.getBehavior().setRuntimeOverrides(credentialsToRuntimeOverrides(credentials));
+@@ -166,6 +175,9 @@ export async function handleWebSocketMessage(
+                 break;
+             case WebSocketMessageRequests.STOP_GENERATION: {
+                 logger.info('User requested to stop generation');
++                if (agent.getBehavior().getBehavior() === 'think') {
++                    await (agent.getBehavior() as any).disableTaskAutoContinue();
++                }
+                 
+                 // Cancel current inference operation
+                 const wasCancelled = agent.getBehavior().cancelCurrentInference();
+@@ -290,7 +302,7 @@ export async function handleWebSocketMessage(
+                     return;
+                 }
+                 
+-                agent.handleUserInput(parsedMessage.message, parsedMessage.images).catch((error: unknown) => {
++                agent.handleUserInput(parsedMessage.message, parsedMessage.images, parsedMessage.continuationApproval).catch((error: unknown) => {
+                     logger.error('Error handling user suggestion:', error);
+                     sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
+                 });
+diff --git a/worker/agents/think/ThinkAgent.ts b/worker/agents/think/ThinkAgent.ts
+index f8c350e..8e6978c 100644
+--- a/worker/agents/think/ThinkAgent.ts
++++ b/worker/agents/think/ThinkAgent.ts
+@@ -22,6 +22,10 @@ import { createDeploySpaceTool } from './deploy-tool';
+ import { createCommitTool } from './commit-tool';
+ import { createSetTitleTool } from './set-title-tool';
+ import { selectThinkContextMessages } from './context-selector';
++import {
++assertContinuationApproval, continuationTaskId, createApprovedThinkOperation,
++type ThinkContinuationApproval,
++} from './user-approved-continuation';
+ import {
+ 	advanceThinkTaskOperation,
+ 	createFinishTaskTool,
+@@ -34,6 +38,7 @@ import {
+ 	markThinkTaskChatStarted,
+ 	recordThinkOperation,
+ 	resolveThinkTaskStart,
++resolveThinkCompletedTaskReplay,
+ 	reserveThinkTaskResource,
+ parseThinkOperationLimits,
+ 	recoverThinkTaskOperation,
+@@ -50,7 +55,7 @@ parseThinkOperationLimits,
+ } from './finish-task-tool';
+ import { getUserConfigurableSettings } from '../../config';
+ import { RateLimitService } from '../../services/rate-limit/rateLimits';
+-import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
++import { hasCloudflareConfigured, isCloudflareGatewayLimitsEnabled } from '../../services/rate-limit/usageChecker';
+ import type { RateLimitSettings } from '../../services/rate-limit/config';
+ import { THINK_MODEL_CONFIG } from './model-config';
+ import type { ChatErrorContext, ChatResponseResult, StepContext, ToolCallContext, ToolCallResultContext } from '@cloudflare/think';
+@@ -314,6 +319,8 @@ export class ThinkAgent extends Think<Env> {
+ 	}
+ 
+ 	private async saveTaskLifecycle(lifecycle: ThinkTaskLifecycle): Promise<void> {
++const existing = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey);
++if (existing?.status === 'INCOMPLETE_RESOURCE_LIMIT') return;
+ 		this.putTaskDiagnostic(this.taskLifecycleKey, lifecycle);
+ 	}
+ 
+@@ -333,6 +340,8 @@ export class ThinkAgent extends Think<Env> {
+ 	}
+ 
+ 	private stopForResourceLimit(reason: ThinkResourceLimitReason, operation: ThinkTaskOperation): void {
++const existing = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey);
++if (existing?.status === 'INCOMPLETE_RESOURCE_LIMIT') return;
+ 		const summary = this.resourceLimitSummary(reason, operation);
+ 		const lifecycle: ThinkTaskLifecycle = {
+ 			status: 'INCOMPLETE_RESOURCE_LIMIT',
+@@ -349,7 +358,7 @@ export class ThinkAgent extends Think<Env> {
+ 		const config = this.getConfig<ThinkAgentConfig>();
+ 		if (!usage || !config) return operation;
+ 		const llmConfig = usage.config.llmCalls;
+-		const metered = !(usage.hasCloudflareConfigured && llmConfig.excludeCloudflareConnected);
++const metered = llmConfig.enabled && !(usage.hasCloudflareConfigured && llmConfig.excludeCloudflareConnected);
+ 		if (!metered) {
+ 			if (operation.meteredCreditsInitialized) return operation;
+ 			return { ...operation, meteredCreditsInitialized: true, availableMeteredCredits: null };
+@@ -863,7 +872,10 @@ export class ThinkAgent extends Think<Env> {
+ 		const config = this.getConfig<ThinkAgentConfig>();
+ 		withThinkDiagnosticSafety(() => { this.diagnosticUserId = config?.userId; });
+ 		this.turnUsage = null;
+-		if (config) {
++// The same policy gates customer admission. A self-deployed runtime without
++// this feature must not silently enforce the stock account-wide daily bucket.
++// Its persisted per-operation resource ceilings still apply.
++if (config && isCloudflareGatewayLimitsEnabled(this.env)) {
+ 			try {
+ 				const userConfig = await getUserConfigurableSettings(this.env, config.userId);
+ 				this.turnUsage = {
+@@ -974,7 +986,82 @@ export class ThinkAgent extends Think<Env> {
+ 		} as unknown as ToolSet;
+ 	}
+ 
+-	async beginTask(taskId: string, candidateConversationId: string): Promise<ThinkTaskOperation> {
++async setTaskAutoContinue(taskId: string, enabled: boolean) {
++const operation = await this.getTaskOperation();
++if (!operation || continuationTaskId(operation) !== taskId || typeof enabled !== 'boolean') {
++throw new Error('This task is no longer available.');
++}
++const current = this.ctx.storage.kv.get<NonNullable<ThinkTaskLifecycle['autoContinue']>>('think_auto_continue');
++if (current?.taskId === taskId && current.enabled === enabled) return current;
++const preference = { taskId, enabled, version: (current?.version ?? 0) + 1, changedAt: Date.now() };
++this.ctx.storage.kv.put('think_auto_continue', preference);
++this.ctx.storage.kv.put(`think_auto_continue_audit:${taskId}:${preference.version}`, preference);
++return preference;
++}
++
++private assertAutoAuthorization(approval: ThinkContinuationApproval): void {
++if (approval.source !== 'auto') return;
++const preference = this.ctx.storage.kv.get<NonNullable<ThinkTaskLifecycle['autoContinue']>>('think_auto_continue');
++if (!preference?.enabled || preference.taskId !== approval.taskId
++|| preference.version !== approval.preauthorizationVersion) {
++throw new Error('Auto Continue is no longer enabled for this task.');
++}
++}
++
++async approveTaskContinuation(approval: ThinkContinuationApproval): Promise<{
++operationId: string; alreadyStarted: boolean;
++}> {
++// Ownership is inherited from the owner's host agent and its bound Think DO.
++// Re-read after the digest await; reserve synchronously before another caller.
++const key = `think_customer_approval:${approval.operationId}`;
++const readCurrent = () => {
++const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++if (!operation || approval.taskId !== continuationTaskId(operation)) {
++throw new Error('This task is no longer available to continue.');
++}
++return operation;
++};
++let current = readCurrent();
++this.assertAutoAuthorization(approval);
++let receipt = this.ctx.storage.kv.get<{ operationId: string }>(key);
++if (receipt) {
++if (approval.source !== 'auto' && current.taskId === approval.operationId) {
++this.ctx.storage.kv.put(key, { ...receipt, source: 'manual', approvedAt: Date.now() });
++}
++return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++}
++assertContinuationApproval(current, await this.getTaskLifecycle(), approval);
++const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
++JSON.stringify([approval.taskId, approval.operationId]),
++));
++const operationId = 'think-approved:' + Array.from(new Uint8Array(digest))
++.map(byte => byte.toString(16).padStart(2, '0')).join('');
++current = readCurrent();
++this.assertAutoAuthorization(approval);
++receipt = this.ctx.storage.kv.get<{ operationId: string; source?: string; started?: boolean }>(key);
++if (receipt) {
++if (approval.source !== 'auto' && receipt.source === 'auto' && !receipt.started) {
++this.ctx.storage.kv.put(key, { ...receipt, source: 'manual', manualApprovedAt: Date.now() });
++}
++return { ...receipt, alreadyStarted: current.taskId !== approval.operationId };
++}
++const lifecycle = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey);
++if (!lifecycle) throw new Error('This task is not ready to continue.');
++assertContinuationApproval(current, lifecycle, approval);
++this.ctx.storage.kv.put(`think_approved_start:${operationId}`, current);
++this.ctx.storage.kv.put(key, {
++operationId, taskId: approval.taskId, parentOperationId: approval.operationId,
++source: approval.source ?? 'manual', approvedAt: Date.now(),
++...(approval.source === 'auto' ? { preauthorizationVersion: approval.preauthorizationVersion } : {}),
++});
++return { operationId, alreadyStarted: false };
++}
++
++async beginTask(taskId: string, candidateConversationId: string, originalIntent?: string): Promise<ThinkTaskOperation> {
++const receipt = resolveThinkCompletedTaskReplay(
++taskId, this.ctx.storage.kv.get<ThinkTaskOperation>(`think_completed_task:${taskId}`),
++);
++if (receipt) return receipt;
+ 		const existingOperation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
+ 		const existingLifecycle = await this.getTaskLifecycle();
+ 		const pendingStartIntent = this.ctx.storage.kv.get<string>(this.taskStartIntentKey);
+@@ -1001,12 +1088,43 @@ export class ThinkAgent extends Think<Env> {
+ 			this.putTaskDiagnostic(this.taskOperationKey, normalizedOperation);
+ 			return normalizedOperation;
+ 		}
+-		let operation = {
+-			...createThinkTaskOperation(
++// Keep a durable receipt before replacing the current task. Replaying an older
++// persisted customer turn after a newer one must not create another allowance.
++if (existingOperation && existingLifecycle.status !== 'RUNNING') {
++this.ctx.storage.kv.put(`think_completed_task:${existingOperation.taskId}`, existingOperation);
++const evidence = this.ctx.storage.kv.get<ThinkTaskEvidence>(this.taskEvidenceKey);
++if (evidence) this.ctx.storage.kv.put(`think_completed_evidence:${existingOperation.taskId}`, evidence);
++}
++const approvedParent = this.ctx.storage.kv.get<ThinkTaskOperation>(`think_approved_start:${taskId}`);
++if (approvedParent) {
++const approvalReceipt = this.ctx.storage.kv.get<ThinkContinuationApproval>(
++`think_customer_approval:${approvedParent.taskId}`,
++);
++if (approvalReceipt?.source === 'auto') {
++this.assertAutoAuthorization({
++taskId: continuationTaskId(approvedParent), operationId: approvedParent.taskId,
++source: 'auto', preauthorizationVersion: approvalReceipt.preauthorizationVersion,
++});
++}
++if (!existingOperation || existingOperation.taskId !== approvedParent.taskId) {
++throw new Error('A newer customer request replaced this continuation.');
++}
++assertContinuationApproval(existingOperation, existingLifecycle, {
++taskId: continuationTaskId(approvedParent), operationId: approvedParent.taskId,
++});
++}
++let operation = {
++...(approvedParent ? createApprovedThinkOperation(
++approvedParent, taskId, this.getConfig<ThinkAgentConfig>()?.operationLimits ?? approvedParent.limits,
++) : {
++...createThinkTaskOperation(
+ 				taskId,
+ 				candidateConversationId,
+ 				this.getConfig<ThinkAgentConfig>()?.operationLimits,
+ 			),
++customerTaskId: taskId,
++...(originalIntent ? { originalIntent } : {}),
++}),
+ 			messageCountAtPassStart: (await this.getMessages()).length,
+ 		};
+ 		try {
+@@ -1026,6 +1144,14 @@ export class ThinkAgent extends Think<Env> {
+ 			// starting; later concrete tool outcomes establish the progress state.
+ 		}
+ 		// Persist an explicit start intent before changing the terminal lifecycle.
++if (approvedParent) {
++const approvalReceipt = this.ctx.storage.kv.get<ThinkContinuationApproval>(
++`think_customer_approval:${approvedParent.taskId}`);
++if (approvalReceipt?.source === 'auto') this.assertAutoAuthorization({
++taskId: continuationTaskId(approvedParent), operationId: approvedParent.taskId,
++source: 'auto', preauthorizationVersion: approvalReceipt.preauthorizationVersion,
++});
++}
+ 		// On recovery, a matching intent prevents an old terminal status from
+ 		// acknowledging this new queue item if the worker stopped mid-initialization.
+ 		this.putTaskDiagnostic(this.taskStartIntentKey, taskId);
+@@ -1058,17 +1184,33 @@ export class ThinkAgent extends Think<Env> {
+ 	}
+ 
+ 	async getTaskLifecycle(): Promise<ThinkTaskLifecycle> {
+-		return this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey) ?? {
++const lifecycle = this.ctx.storage.kv.get<ThinkTaskLifecycle>(this.taskLifecycleKey) ?? {
+ 			status: 'RUNNING',
+ 			summary: 'Task is in progress.',
+ 			updatedAt: Date.now(),
+ 		};
++const operation = this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
++const preference = this.ctx.storage.kv.get<NonNullable<ThinkTaskLifecycle['autoContinue']>>('think_auto_continue');
++return {
++...lifecycle,
++...(operation ? { autoContinue: preference?.taskId === continuationTaskId(operation) ? preference
++: { taskId: continuationTaskId(operation), enabled: false, version: 0, changedAt: 0 } } : {}),
++};
+ 	}
+ 
+ 	async getTaskOperation(): Promise<ThinkTaskOperation | undefined> {
+ 		return this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey);
+ 	}
+ 
++async getTaskLifecycleSnapshot(): Promise<{
++lifecycle: ThinkTaskLifecycle; operation?: ThinkTaskOperation;
++}> {
++return {
++lifecycle: await this.getTaskLifecycle(),
++operation: this.ctx.storage.kv.get<ThinkTaskOperation>(this.taskOperationKey),
++};
++}
++
+ 	async advanceTaskOperation(): Promise<ThinkTaskOperation> {
+ 		const operation = await this.getTaskOperation();
+ 		if (!operation) throw new Error('Cannot continue a Think task before beginTask');
+@@ -1137,7 +1279,7 @@ export class ThinkAgent extends Think<Env> {
+ 			throw new Error('Think operation stopped at its cumulative resource limit.');
+ 		}
+ 		await this.reserveOperationResource('model');
+-		if (this.turnUsage && config) {
++if (this.turnUsage?.config.llmCalls.enabled && config) {
+ 			await RateLimitService.enforceLLMCallsRateLimit(
+ 				this.env,
+ 				this.turnUsage.config,
+diff --git a/worker/agents/think/customer-operation.test.ts b/worker/agents/think/customer-operation.test.ts
+new file mode 100644
+index 0000000..4434629
+--- /dev/null
++++ b/worker/agents/think/customer-operation.test.ts
+@@ -0,0 +1,123 @@
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import agentSource from './ThinkAgent.ts?raw';
++import behaviorSource from '../core/behaviors/think.ts?raw';
++import {
++  advanceThinkTaskOperation,
++  createThinkTaskOperation,
++  createThinkTaskQueueIdentity,
++  recoverThinkTaskOperation,
++  reserveThinkTaskResource,
++  resolveThinkTaskStart,
++  resolveThinkCompletedTaskReplay,
++} from './finish-task-tool';
++
++const limits = { maxContinuations: 4, maxCredits: 250, maxElapsedMs: 900_000 };
++const savedTurnA = 'persisted-customer-turn-a';
++const savedTurnB = 'persisted-customer-turn-b';
++const operationId = (turn: string) => createThinkTaskQueueIdentity([turn]);
++
++afterEach(() => vi.useRealTimers());
++
++describe('persisted customer operation boundaries', () => {
++  it.each(['credit_limit', 'elapsed_time_limit'] as const)(
++    'starts a fresh B after A stops on %s, without changing limits or workspace',
++    (reason) => {
++      vi.useFakeTimers();
++      vi.setSystemTime(1_000_000);
++      const a = {
++        ...createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits),
++        creditsConsumed: 250, modelCalls: 125, toolCalls: 200,
++        continuationCount: 4, completedPassCount: 5,
++        resourceLimitReason: reason, resourceLimitAt: 1_000_000,
++        lastOperationFingerprint: 'old-progress',
++      };
++      vi.setSystemTime(3_000_000);
++      expect(resolveThinkTaskStart(operationId(savedTurnB), 'INCOMPLETE_RESOURCE_LIMIT', a))
++        .toBe('START_NEW');
++      const b = createThinkTaskOperation(operationId(savedTurnB), 'response-b', a.limits);
++      expect(b.taskId).not.toBe(a.taskId);
++      expect(b).toMatchObject({
++        creditsConsumed: 0, modelCalls: 0, toolCalls: 0,
++        continuationCount: 0, completedPassCount: 0, startedAt: 3_000_000,
++        pendingPromptKind: 'INITIAL', lastOperationFingerprint: '',
++        availableMeteredCredits: null, meteredCreditsInitialized: false,
++      });
++      expect(b.resourceLimitReason).toBeUndefined();
++      expect(b.limits).toEqual(a.limits);
++      expect(reserveThinkTaskResource(b, 'model', 3_000_000, 2).limitExceeded).toBeUndefined();
++      // beginTask only appends/reads Think messages and current revision evidence.
++      const beginTask = agentSource.slice(agentSource.indexOf('async beginTask('),
++        agentSource.indexOf('async getTaskLifecycle('));
++      expect(beginTask).not.toMatch(/resetWorkspace|clearMessages|clearConversation|deleteBranch/);
++    },
++  );
++
++  it('keeps the same persisted identity, elapsed window and counters through continuation/recovery', () => {
++    const a = createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits);
++    const used = reserveThinkTaskResource(a, 'model', a.startedAt, 2).operation;
++    const continuation = recoverThinkTaskOperation(advanceThinkTaskOperation(used), {}, a.startedAt + 100);
++    expect(continuation).toMatchObject({
++      taskId: a.taskId, startedAt: a.startedAt, creditsConsumed: 2,
++      modelCalls: 1, continuationCount: 1, pendingPromptKind: 'CONTINUATION',
++    });
++    expect(continuation.limits).toEqual(a.limits);
++  });
++
++  it('acknowledges a duplicate persisted A without a new budget, including after B', () => {
++    const a = createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits);
++    expect(resolveThinkTaskStart(operationId(savedTurnA), 'RUNNING', a)).toBe('RESUME');
++    expect(resolveThinkTaskStart(operationId(savedTurnA), 'COMPLETE', a)).toBe('ACK_TERMINAL');
++    // Historical receipts are checked before current-operation selection, and
++    // the host acknowledges them without driving the newer task.
++    const usedA = { ...a, creditsConsumed: 250, continuationCount: 4, modelCalls: 125 };
++    const replay = resolveThinkCompletedTaskReplay(operationId(savedTurnA), usedA);
++    expect(replay).toMatchObject({ taskId: a.taskId, creditsConsumed: 250, continuationCount: 4, modelCalls: 125, replayOnly: true });
++    expect(resolveThinkCompletedTaskReplay(operationId(savedTurnB), usedA)).toBeUndefined();
++    expect(agentSource.indexOf('if (receipt) return receipt;'))
++      .toBeLessThan(agentSource.indexOf('const existingOperation =', agentSource.indexOf('async beginTask(')));
++    expect(agentSource).toContain('`think_completed_task:${existingOperation.taskId}`');
++    expect(behaviorSource).toContain('if (operation.replayOnly) return;');
++  });
++
++  it.each(['credit_limit', 'elapsed_time_limit', 'available_credits_limit'] as const)(
++    'preserves first terminal cause %s during later checkpoint guards',
++    (reason) => {
++      const a = {
++        ...createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits),
++        resourceLimitReason: reason, resourceLimitAt: 123,
++      };
++      const checkpoint = reserveThinkTaskResource(a, 'checkpoint', a.startedAt + 999_999);
++      expect(checkpoint.limitExceeded).toBe(reason);
++      expect(checkpoint.operation.resourceLimitAt).toBe(123);
++      expect(checkpoint.operation.creditsConsumed).toBe(0);
++      expect(recoverThinkTaskOperation(checkpoint.operation).resourceLimitReason).toBe(reason);
++    },
++  );
++
++  it('records the first credit guard rather than replacing it with a later elapsed guard', () => {
++    const a = { ...createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits), creditsConsumed: 250 };
++    const stopped = reserveThinkTaskResource(a, 'model', a.startedAt + 1, 2);
++    expect(stopped.limitExceeded).toBe('credit_limit');
++    expect(reserveThinkTaskResource(stopped.operation, 'checkpoint', a.startedAt + 900_000).limitExceeded)
++      .toBe('credit_limit');
++  });
++
++  it('uses the admission policy for stock account metering without increasing operation ceilings', () => {
++    expect(agentSource).toContain('if (config && isCloudflareGatewayLimitsEnabled(this.env))');
++    expect(agentSource).toContain('if (this.turnUsage?.config.llmCalls.enabled && config)');
++    const a = createThinkTaskOperation(operationId(savedTurnA), 'response-a', limits);
++    const atCeiling = { ...a, creditsConsumed: 250 };
++    expect(reserveThinkTaskResource(atCeiling, 'model', a.startedAt, 2).limitExceeded).toBe('credit_limit');
++    const metered = { ...a, availableMeteredCredits: 0, meteredCreditsInitialized: true };
++    expect(reserveThinkTaskResource(metered, 'model', a.startedAt, 2).limitExceeded)
++      .toBe('available_credits_limit');
++  });
++
++  it('reports the persisted lifecycle only for the newest queued customer operation', () => {
++    expect(behaviorSource).toContain('if (latestTaskId === taskId)');
++    expect(behaviorSource).toContain("latestQueueId?.startsWith('think-approved:')");
++    expect(behaviorSource).toContain('nativeTaskLifecycle: projectNativeTaskLifecycle(stopped.lifecycle, stopped.operation)');
++    expect(behaviorSource).toContain('reason: result.lifecycle.reason');
++    expect(behaviorSource).not.toContain('(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err })');
++  });
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/finish-task-tool.ts b/worker/agents/think/finish-task-tool.ts
+index fa4fde2..2b59dbd 100644
+--- a/worker/agents/think/finish-task-tool.ts
++++ b/worker/agents/think/finish-task-tool.ts
+@@ -15,6 +15,7 @@ export interface ThinkTaskLifecycle {
+ 	summary: string;
+ 	reason?: string;
+ 	updatedAt: number;
++autoContinue?: { taskId: string; enabled: boolean; version: number; changedAt: number };
+ }
+ 
+ export interface ThinkTaskEvidence {
+@@ -37,6 +38,10 @@ export interface ThinkTaskEvidence {
+ 
+ export interface ThinkTaskOperation {
+ 	taskId: string;
++/** Stable customer intent across separately approved bounded operations. */
++customerTaskId?: string;
++parentOperationId?: string;
++originalIntent?: string;
+ 	conversationId: string;
+ 	continuationCount: number;
+ 	continuationBudget: number;
+@@ -54,6 +59,10 @@ export interface ThinkTaskOperation {
+ 	creditsConsumed: number;
+ 	availableMeteredCredits: number | null;
+ 	meteredCreditsInitialized: boolean;
++resourceLimitReason?: ThinkResourceLimitReason;
++resourceLimitAt?: number;
++/** Historical delivery receipt: acknowledge without running the current task. */
++replayOnly?: boolean;
+ 	lastWorkspaceFingerprint: string | null;
+ 	lastValidationFingerprint: string | null;
+ }
+@@ -158,6 +167,13 @@ export function createThinkTaskQueueIdentity(queueItemIds: string[]): string {
+ 	return `think-queue:${queueItemIds.join(':')}`;
+ }
+ 
++export function resolveThinkCompletedTaskReplay(
++taskId: string,
++receipt: ThinkTaskOperation | undefined,
++): ThinkTaskOperation | undefined {
++return receipt?.taskId === taskId ? { ...receipt, replayOnly: true } : undefined;
++}
++
+ export function resolveThinkTaskStart(
+ 	taskId: string,
+ 	status: ThinkTaskStatus,
+@@ -398,23 +414,32 @@ export function reserveThinkTaskResource(
+ 		lastWorkspaceFingerprint: operation.lastWorkspaceFingerprint ?? null,
+ 		lastValidationFingerprint: operation.lastValidationFingerprint ?? null,
+ 	};
++const stopped = (reason: ThinkResourceLimitReason) => ({
++operation: {
++...normalized,
++resourceLimitReason: normalized.resourceLimitReason ?? reason,
++resourceLimitAt: normalized.resourceLimitAt ?? now,
++},
++limitExceeded: normalized.resourceLimitReason ?? reason,
++});
++if (normalized.resourceLimitReason) return stopped(normalized.resourceLimitReason);
+ 	if (now - normalized.startedAt >= limits.maxElapsedMs) {
+-		return { operation: normalized, limitExceeded: 'elapsed_time_limit' };
++return stopped('elapsed_time_limit');
+ 	}
+ 	if (resource === 'checkpoint') return { operation: normalized };
+ 	if (resource === 'model') {
+ 		if (normalized.modelCalls >= limits.maxModelCalls) {
+-			return { operation: normalized, limitExceeded: 'model_call_limit' };
++return stopped('model_call_limit');
+ 		}
+ 		if (normalized.creditsConsumed + creditCost > limits.maxCredits) {
+-			return { operation: normalized, limitExceeded: 'credit_limit' };
++return stopped('credit_limit');
+ 		}
+ 		if (
+ 			normalized.meteredCreditsInitialized &&
+ 			normalized.availableMeteredCredits !== null &&
+ 			normalized.availableMeteredCredits < creditCost
+ 		) {
+-			return { operation: normalized, limitExceeded: 'available_credits_limit' };
++return stopped('available_credits_limit');
+ 		}
+ 		return {
+ 			operation: {
+@@ -428,7 +453,7 @@ export function reserveThinkTaskResource(
+ 		};
+ 	}
+ 	if (normalized.toolCalls >= limits.maxToolCalls) {
+-		return { operation: normalized, limitExceeded: 'tool_call_limit' };
++return stopped('tool_call_limit');
+ 	}
+ 	return { operation: { ...normalized, toolCalls: normalized.toolCalls + 1 } };
+ }
+diff --git a/worker/agents/think/task-lifecycle-status.test.ts b/worker/agents/think/task-lifecycle-status.test.ts
+index 6cfe305..6654b95 100644
+--- a/worker/agents/think/task-lifecycle-status.test.ts
++++ b/worker/agents/think/task-lifecycle-status.test.ts
+@@ -6,13 +6,13 @@ describe('native owner lifecycle projection', () => {
+ 		const native = { status: 'INCOMPLETE_RESOURCE_LIMIT' as const, reason: 'credit_limit',
+ 			updatedAt: 1234, summary: 'private details' };
+ 		expect(projectNativeTaskLifecycle(native)).toEqual({
+-			status: 'INCOMPLETE_RESOURCE_LIMIT', reason: 'credit_limit', updatedAt: 1234,
++status: 'INCOMPLETE_RESOURCE_LIMIT', reason: 'credit_limit', updatedAt: 1234, customerStatus: 'CONTINUE_AVAILABLE',
+ 		});
+ 		expect(native.status).toBe('INCOMPLETE_RESOURCE_LIMIT');
+ 	});
+ 	it('excludes arbitrary reason strings', () => {
+ 		expect(projectNativeTaskLifecycle({
+ 			status: 'BLOCKED', updatedAt: 1, summary: 'private', reason: 'private text',
+-		})).toEqual({ status: 'BLOCKED', updatedAt: 1 });
++})).toEqual({ status: 'BLOCKED', updatedAt: 1, customerStatus: 'STOPPED' });
+ 	});
+ });
+\ No newline at end of file
+diff --git a/worker/agents/think/task-lifecycle-status.ts b/worker/agents/think/task-lifecycle-status.ts
+index d060af4..1dc89fe 100644
+--- a/worker/agents/think/task-lifecycle-status.ts
++++ b/worker/agents/think/task-lifecycle-status.ts
+@@ -1,19 +1,35 @@
+-import type { ThinkTaskLifecycle } from './finish-task-tool';
++import type { ThinkTaskLifecycle, ThinkTaskOperation } from './finish-task-tool';
++import { customerTaskStatus, continuationTaskId } from './user-approved-continuation';
+ 
+-const statuses = new Set(['RUNNING', 'COMPLETE', 'BLOCKED', 'INCOMPLETE_RESOURCE_LIMIT']);
++const statuses = new Set(['RUNNING', 'COMPLETE', 'BLOCKED', 'USER_INPUT_REQUIRED', 'INCOMPLETE_RESOURCE_LIMIT']);
+ const resourceReasons = new Set([
+ 	'credit_limit', 'model_call_limit', 'tool_call_limit', 'elapsed_time_limit',
+ 	'available_credits_limit', 'continuation_budget_exhausted',
+ ]);
+ 
+ /** Owner-visible metadata from the existing native lifecycle, never its summary. */
+-export function projectNativeTaskLifecycle(lifecycle: ThinkTaskLifecycle) {
++export function projectNativeTaskLifecycle(lifecycle: ThinkTaskLifecycle, operation?: ThinkTaskOperation) {
+ 	if (!statuses.has(lifecycle.status) || !Number.isFinite(lifecycle.updatedAt)) {
+ 		throw new Error('Native task lifecycle is unavailable.');
+ 	}
+ 	return {
+ 		status: lifecycle.status,
+ 		updatedAt: lifecycle.updatedAt,
++customerStatus: customerTaskStatus(lifecycle),
++...(lifecycle.autoContinue && operation && lifecycle.autoContinue.taskId === continuationTaskId(operation)
++? { autoContinue: lifecycle.autoContinue } : {}),
++...(operation ? {
++taskId: continuationTaskId(operation),
++operationId: operation.taskId,
++accounting: {
++startedAt: operation.startedAt,
++creditsUsed: operation.creditsConsumed,
++turnsUsed: operation.completedPassCount,
++continuationsUsed: operation.continuationCount,
++modelCalls: operation.modelCalls,
++toolCalls: operation.toolCalls,
++},
++} : {}),
+ 		...(lifecycle.reason && resourceReasons.has(lifecycle.reason)
+ 			? { reason: lifecycle.reason } : {}),
+ 	};
+diff --git a/worker/agents/think/user-approved-continuation.test.ts b/worker/agents/think/user-approved-continuation.test.ts
+new file mode 100644
+index 0000000..9aa3edb
+--- /dev/null
++++ b/worker/agents/think/user-approved-continuation.test.ts
+@@ -0,0 +1,80 @@
++import { describe, expect, it } from 'vitest';
++import { createThinkTaskOperation, advanceThinkTaskOperation } from './finish-task-tool';
++import {
++assertContinuationApproval, createApprovedThinkOperation, customerTaskStatus,
++isConversationalContinuation,
++} from './user-approved-continuation';
++
++// Sandboxed lifecycle simulation. No real runtime, credentials, or model calls.
++const limits = {
++maxContinuations: 4, maxCredits: 250, maxElapsedMs: 900000,
++maxModelCalls: 650, maxToolCalls: 1300,
++};
++const exhausted = {
++status: 'INCOMPLETE_RESOURCE_LIMIT' as const,
++reason: 'continuation_budget_exhausted', summary: 'Internal diagnostic', updatedAt: 1,
++};
++describe('customer-approved bounded work sessions', () => {
++it('offers Continue at an unfinished autonomous boundary', () => {
++expect(customerTaskStatus(exhausted)).toBe('CONTINUE_AVAILABLE');
++expect(exhausted.reason).toBe('continuation_budget_exhausted');
++});
++it('retains task, conversation, intent and policy while clearing usage', () => {
++const previous = {
++...createThinkTaskOperation('o1', 'same-conversation', limits),
++originalIntent: 'Repair persistence', creditsConsumed: 250, modelCalls: 100,
++toolCalls: 70, continuationCount: 4, completedPassCount: 5,
++resourceLimitReason: 'credit_limit' as const, resourceLimitAt: 1,
++};
++const next = createApprovedThinkOperation(previous, 'o2');
++expect(next).toMatchObject({
++taskId: 'o2', customerTaskId: 'o1', parentOperationId: 'o1',
++conversationId: 'same-conversation', originalIntent: 'Repair persistence',
++creditsConsumed: 0, modelCalls: 0, toolCalls: 0,
++continuationCount: 0, completedPassCount: 0, limits,
++});
++expect(next.resourceLimitReason).toBeUndefined();
++expect(next.startedAt).toBeGreaterThan(1);
++});
++it('retains one operation and cumulative allowance for internal continuation', () => {
++const session = createThinkTaskOperation('o2', 'conversation', limits);
++session.creditsConsumed = 12;
++const nextPass = advanceThinkTaskOperation(session);
++expect(nextPass.taskId).toBe('o2');
++expect(nextPass.startedAt).toBe(session.startedAt);
++expect(nextPass.creditsConsumed).toBe(12);
++});
++it('permits successive bounded sessions for the same task', () => {
++const first = createThinkTaskOperation('o1', 'conversation', limits);
++const second = createApprovedThinkOperation(first, 'o2');
++const third = createApprovedThinkOperation(second, 'o3');
++expect(third.customerTaskId).toBe('o1');
++expect(third.parentOperationId).toBe('o2');
++expect(third.limits).toEqual(limits);
++});
++it('never presents unfinished, blocked, or input-required work as complete', () => {
++for (const status of ['RUNNING', 'BLOCKED', 'USER_INPUT_REQUIRED'] as const) {
++expect(customerTaskStatus({ ...exhausted, status })).not.toBe('BUILD_COMPLETE');
++}
++expect(customerTaskStatus({ ...exhausted, status: 'COMPLETE' })).toBe('BUILD_COMPLETE');
++expect(customerTaskStatus({ ...exhausted, status: 'USER_INPUT_REQUIRED' })).toBe('NEEDS_INPUT');
++});
++it('does not bypass account credits, unknown stops, or stale task ownership', () => {
++expect(customerTaskStatus({ ...exhausted, reason: 'available_credits_limit' })).toBe('STOPPED');
++expect(customerTaskStatus({ ...exhausted, reason: 'unknown' })).toBe('STOPPED');
++const operation = createThinkTaskOperation('o1', 'conversation', limits);
++expect(() => assertContinuationApproval(operation, exhausted, {
++taskId: 'other-task', operationId: 'o1',
++})).toThrow();
++expect(() => assertContinuationApproval(operation, { ...exhausted, status: 'COMPLETE' }, {
++taskId: 'o1', operationId: 'o1',
++})).toThrow();
++});
++it('recognizes only deliberate short conversational approval', () => {
++for (const phrase of ['yes', 'continue', 'Keep going!', 'go ahead', 'finish it', 'keep working']) {
++expect(isConversationalContinuation(phrase)).toBe(true);
++}
++expect(isConversationalContinuation('Yes, add a settings page instead')).toBe(false);
++expect(isConversationalContinuation('Actually forget that')).toBe(false);
++});
++});
+\ No newline at end of file
+diff --git a/worker/agents/think/user-approved-continuation.ts b/worker/agents/think/user-approved-continuation.ts
+new file mode 100644
+index 0000000..657fadb
+--- /dev/null
++++ b/worker/agents/think/user-approved-continuation.ts
+@@ -0,0 +1,76 @@
++import {
++createThinkTaskOperation,
++type ThinkTaskLifecycle,
++type ThinkTaskOperation,
++} from './finish-task-tool';
++import { THINK_INTERNAL_CONTINUATION_PREFIX } from './context-selector';
++
++export interface ThinkContinuationApproval {
++taskId: string;
++operationId: string;
++/** Set by the authenticated host, never accepted from customer approval frames. */
++source?: 'manual' | 'auto';
++preauthorizationVersion?: number;
++}
++
++export type CustomerTaskStatus =
++| 'BUILD_COMPLETE'
++| 'CONTINUE_AVAILABLE'
++| 'NEEDS_INPUT'
++| 'WORKING'
++| 'STOPPED';
++
++// Account-level available-credit restrictions are deliberately excluded.
++const operationBoundaries = new Set([
++'continuation_budget_exhausted', 'credit_limit', 'elapsed_time_limit',
++'model_call_limit', 'tool_call_limit',
++]);
++
++export function customerTaskStatus(lifecycle: ThinkTaskLifecycle): CustomerTaskStatus {
++if (lifecycle.status === 'COMPLETE') return 'BUILD_COMPLETE';
++if (lifecycle.status === 'USER_INPUT_REQUIRED') return 'NEEDS_INPUT';
++if (lifecycle.status === 'INCOMPLETE_RESOURCE_LIMIT'
++&& operationBoundaries.has(lifecycle.reason ?? '')) return 'CONTINUE_AVAILABLE';
++return lifecycle.status === 'RUNNING' ? 'WORKING' : 'STOPPED';
++}
++
++export function isConversationalContinuation(message: string): boolean {
++return /^(yes|continue|keep going|go ahead|finish it|keep working)[.!?]*$/i
++.test(message.trim());
++}
++
++export function continuationTaskId(operation: ThinkTaskOperation): string {
++return operation.customerTaskId ?? operation.taskId;
++}
++
++export function assertContinuationApproval(
++operation: ThinkTaskOperation,
++lifecycle: ThinkTaskLifecycle,
++approval: ThinkContinuationApproval,
++): void {
++if (approval.taskId !== continuationTaskId(operation)
++|| approval.operationId !== operation.taskId
++|| customerTaskStatus(lifecycle) !== 'CONTINUE_AVAILABLE') {
++throw new Error('This task is not waiting for your permission to continue.');
++}
++}
++
++/** Keeps task context, but never carries operation-scoped usage or stop reasons. */
++export function createApprovedThinkOperation(
++previous: ThinkTaskOperation,
++operationId: string,
++limits: Parameters<typeof createThinkTaskOperation>[2] = previous.limits,
++): ThinkTaskOperation {
++return {
++...createThinkTaskOperation(operationId, previous.conversationId, limits),
++customerTaskId: continuationTaskId(previous),
++parentOperationId: previous.taskId,
++...(previous.originalIntent ? { originalIntent: previous.originalIntent } : {}),
++};
++}
++
++export const APPROVED_CONTINUATION_PROMPT =
++THINK_INTERNAL_CONTINUATION_PREFIX + '\n'
+++'The customer approved another bounded work session for this same unfinished task. '
+++'Continue the existing customer task from the current workspace and conversation. '
+++'Preserve completed work and focus on what remains. Verify the requested result before finishing.';
+\ No newline at end of file
+diff --git a/worker/database/d1-instrumentation.test.ts b/worker/database/d1-instrumentation.test.ts
+new file mode 100644
+index 0000000..acb4147
+--- /dev/null
++++ b/worker/database/d1-instrumentation.test.ts
+@@ -0,0 +1,318 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import {
++    CloudflareClient, getClient, getCurrentScope, instrumentD1WithSentry, spanToJSON,
++} from '@sentry/cloudflare';
++import type { Client, Envelope } from '@sentry/core';
++import { eq } from 'drizzle-orm';
++import { instrumentD1Once } from './d1-instrumentation';
++import { DatabaseService } from './database';
++import { users } from './schema';
++
++// Spy only on the application/SDK boundary. The real implementation and its
++// internal core imports remain untouched, including span/error handling.
++vi.mock('@sentry/cloudflare', async (importOriginal) => {
++    const actual = await importOriginal<typeof import('@sentry/cloudflare')>();
++    return { ...actual, instrumentD1WithSentry: vi.fn(actual.instrumentD1WithSentry) };
++});
++
++const telemetry = {
++    spans: [] as Array<Record<string, unknown>>,
++    started: [] as Array<Record<string, unknown>>,
++    breadcrumbs: [] as Array<Record<string, unknown>>,
++    envelopes: [] as Envelope[],
++};
++let client: CloudflareClient;
++let previousClient: Client | undefined;
++
++function fixture(options: { selfBinding?: boolean; failure?: Error; success?: boolean } = {}) {
++    const row = { id: 'fixture-owner', email: 'owner@example.invalid' };
++    const executions: Array<{ query: string; params: unknown[]; method: string }> = [];
++    const meta = { duration: 1, rows_read: 1, rows_written: 0 };
++    class Statement {
++        constructor(readonly query: string, private params: unknown[] = []) {}
++        bind(...params: unknown[]) {
++            if (options.selfBinding) {
++                this.params = params;
++                return this;
++            }
++            return new Statement(this.query, params);
++        }
++        execute(method: string) {
++            executions.push({ query: this.query, params: this.params, method });
++            if (options.failure) throw options.failure;
++        }
++        async first(column?: keyof typeof row) {
++            this.execute('first');
++            return column ? row[column] : row;
++        }
++        async all() {
++            this.execute('all');
++            return { success: options.success ?? true, results: [row], meta };
++        }
++        async run() {
++            this.execute('run');
++            return { success: options.success ?? true, results: [], meta };
++        }
++        async raw() {
++            this.execute('raw');
++            return [Object.values(row)];
++        }
++    }
++    const binding = {
++        prepare(query: string) {
++            expect(this).toBe(binding);
++            return new Statement(query);
++        },
++        batch: vi.fn(),
++        exec: vi.fn(),
++        withSession: vi.fn(),
++    } as unknown as D1Database;
++    return { binding, row, executions };
++}
++
++beforeEach(() => {
++    telemetry.spans.length = 0;
++    telemetry.started.length = 0;
++    telemetry.breadcrumbs.length = 0;
++    telemetry.envelopes.length = 0;
++    vi.mocked(instrumentD1WithSentry).mockClear();
++    previousClient = getClient();
++    client = new CloudflareClient({
++        dsn: 'https://fixture@sentry.invalid/1',
++        integrations: [],
++        tracesSampleRate: 1,
++        stackParser: () => [],
++        beforeBreadcrumb: (breadcrumb) => {
++            telemetry.breadcrumbs.push(breadcrumb);
++            return breadcrumb;
++        },
++        // No real Sentry project or network transport.
++        transport: () => ({
++            send: async (envelope) => {
++                telemetry.envelopes.push(envelope);
++                return { statusCode: 200 };
++            },
++            flush: async () => true,
++        }),
++    });
++    client.on('spanStart', (span) => telemetry.started.push(spanToJSON(span)));
++    client.on('spanEnd', (span) => telemetry.spans.push(spanToJSON(span)));
++    client.init();
++    getCurrentScope().setClient(client);
++    expect(getClient()).toBe(client);
++});
++
++afterEach(async () => {
++    await client.close(1000);
++    getCurrentScope().setClient(previousClient);
++});
++
++describe('D1 telemetry observation controls', () => {
++    it('validates real one-time SDK spans, breadcrumbs, error status and transport', async () => {
++        const options: { failure?: Error; success?: boolean } = {};
++        const { binding, row, executions } = fixture(options);
++        const originalPrepare = binding.prepare;
++        instrumentD1WithSentry(binding);
++        expect(binding.prepare).not.toBe(originalPrepare);
++        await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).first())
++            .resolves.toEqual(row);
++        await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).all())
++            .resolves.toMatchObject({ results: [row] });
++        await expect(binding.prepare('UPDATE users SET display_name = ?').bind('fixture').run())
++            .resolves.toMatchObject({ success: true });
++        const failure = new Error('Baseline controlled query error');
++        options.failure = failure;
++        await expect(binding.prepare('SELECT id FROM users').first()).rejects.toBe(failure);
++
++        options.failure = undefined;
++        options.success = false;
++        await expect(binding.prepare('UPDATE users SET display_name = ?').bind('fixture').run())
++            .resolves.toMatchObject({ success: false });
++        expect(executions).toHaveLength(5);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        expect(telemetry.started).toHaveLength(5);
++        expect(telemetry.spans).toHaveLength(5);
++        expect(telemetry.breadcrumbs).toHaveLength(4);
++        expect(telemetry.spans[3]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++        expect(telemetry.spans[4]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++        await client.flush(1000);
++        const transactions = telemetry.envelopes.flatMap(([, items]) =>
++            items.filter(([header]) => header.type === 'transaction').map(([, payload]) => payload));
++        expect(transactions).toHaveLength(5);
++        expect(transactions[3]).toMatchObject({
++            contexts: { trace: { op: 'db.query', status: 'internal_error' } },
++        });
++    });
++
++    it.each(['raw', 'sdk-once', 'candidate-once', 'candidate-repeated'] as const)(
++        'compares the %s control against genuine SDK telemetry', async (mode) => {
++            const options: { failure?: Error } = {};
++            const { binding, row, executions } = fixture(options);
++            const rawPrepare = binding.prepare;
++            const rawStatement = binding.prepare('SELECT id, email FROM users WHERE id = ?');
++            let returned = binding;
++            if (mode === 'sdk-once') returned = instrumentD1WithSentry(binding);
++            if (mode === 'candidate-once' || mode === 'candidate-repeated') returned = instrumentD1Once(binding);
++            const prepare = binding.prepare;
++            const statement = binding.prepare('SELECT id, email FROM users WHERE id = ?');
++            const methods = [statement.bind, statement.first, statement.all, statement.run, statement.raw];
++            if (mode === 'candidate-repeated') {
++                for (let i = 0; i < 10_000; i++) instrumentD1Once(returned);
++            }
++            expect(returned).toBe(binding);
++            expect(binding.prepare).toBe(prepare);
++            expect([statement.bind, statement.first, statement.all, statement.run, statement.raw]).toEqual(methods);
++            if (mode === 'raw') {
++                expect(prepare).toBe(rawPrepare);
++                expect(statement.bind).toBe(rawStatement.bind);
++                expect(statement.first).toBe(rawStatement.first);
++            } else {
++                expect(prepare).not.toBe(rawPrepare);
++                expect(statement.bind).not.toBe(rawStatement.bind);
++                expect(statement.first).not.toBe(rawStatement.first);
++            }
++            await expect(statement.bind(row.id).first()).resolves.toEqual(row);
++            await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).all())
++                .resolves.toMatchObject({ results: [row] });
++            await expect(binding.prepare('UPDATE users SET display_name = ?').bind('fixture').run())
++                .resolves.toMatchObject({ success: true });
++            const failure = new Error('Controlled query failure');
++            options.failure = failure;
++            await expect(binding.prepare('SELECT id FROM users WHERE id = ?').bind(row.id).first())
++                .rejects.toBe(failure);
++            expect(executions.map(({ params }) => params))
++                .toEqual([[row.id], [row.id], ['fixture'], [row.id]]);
++            expect(instrumentD1WithSentry).toHaveBeenCalledTimes(mode === 'raw' ? 0 : 1);
++            expect(telemetry.started).toHaveLength(mode === 'raw' ? 0 : 4);
++            expect(telemetry.spans).toHaveLength(mode === 'raw' ? 0 : 4);
++            expect(telemetry.breadcrumbs).toHaveLength(mode === 'raw' ? 0 : 3);
++            if (mode !== 'raw') {
++                expect(telemetry.spans.map(({ op, status, data }) => ({
++                    op, status, type: (data as Record<string, unknown>)['cloudflare.d1.query_type'],
++                }))).toEqual([
++                    { op: 'db.query', status: undefined, type: 'first' },
++                    { op: 'db.query', status: undefined, type: 'all' },
++                    { op: 'db.query', status: undefined, type: 'run' },
++                    { op: 'db.query', status: 'internal_error', type: 'first' },
++                ]);
++            }
++        },
++    );
++});
++
++describe('D1 binding cache identity', () => {
++    it('recognizes both identities if the SDK returns a distinct instrumented binding', async () => {
++        const original = fixture().binding;
++        const returned = fixture().binding;
++        const actualSdk = vi.mocked(instrumentD1WithSentry).getMockImplementation()!;
++        vi.mocked(instrumentD1WithSentry).mockImplementationOnce(() => actualSdk(returned));
++        expect(instrumentD1Once(original)).toBe(returned);
++        const prepare = returned.prepare;
++        expect(instrumentD1Once(original)).toBe(returned);
++        expect(instrumentD1Once(returned)).toBe(returned);
++        expect(returned.prepare).toBe(prepare);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        await returned.prepare('SELECT id FROM users').first();
++        expect(telemetry.spans).toHaveLength(1);
++    });
++});
++
++describe('D1 instrumentation idempotency', () => {
++    it('reproduces the unguarded SDK proxy-chain stack overflow', () => {
++        const { binding } = fixture();
++        for (let i = 0; i < 10_000; i++) instrumentD1WithSentry(binding);
++        expect(() => binding.prepare('SELECT id FROM users WHERE id = ?').bind('fixture-owner'))
++            .toThrow(RangeError);
++    });
++
++    it.each([1, 2, 10_000])('instruments a shared binding %i times without proxy growth', async (count) => {
++        const { binding, row, executions } = fixture();
++        const untouched = [binding.batch, binding.exec, binding.withSession];
++        expect(instrumentD1Once(binding)).toBe(binding);
++        const prepare = binding.prepare;
++        const statement = binding.prepare('SELECT id, email FROM users WHERE id = ?');
++        const methods = [statement.bind, statement.first, statement.all, statement.run, statement.raw];
++        for (let i = 1; i < count; i++) expect(instrumentD1Once(binding)).toBe(binding);
++        expect(binding.prepare).toBe(prepare);
++        expect([statement.bind, statement.first, statement.all, statement.run, statement.raw]).toEqual(methods);
++        expect([binding.batch, binding.exec, binding.withSession]).toEqual(untouched);
++
++        const bound = statement.bind(row.id);
++        await expect(bound.first()).resolves.toEqual(row);
++        await expect(bound.first('id')).resolves.toBe(row.id);
++        await expect(bound.all()).resolves.toMatchObject({ success: true, results: [row] });
++        await expect(bound.run()).resolves.toMatchObject({ success: true });
++        await expect(bound.raw()).resolves.toEqual([[row.id, row.email]]);
++        expect(executions).toHaveLength(5);
++        expect(executions.every(({ params }) => params[0] === row.id)).toBe(true);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        expect(telemetry.started).toHaveLength(5);
++        expect(telemetry.spans).toHaveLength(5);
++        expect(telemetry.breadcrumbs).toHaveLength(5);
++        expect(telemetry.spans.every(({ op }) => op === 'db.query')).toBe(true);
++        expect(telemetry.spans.map(({ data }) =>
++            (data as Record<string, unknown>)['cloudflare.d1.query_type']))
++            .toEqual(['first', 'first', 'all', 'run', 'raw']);
++        expect(telemetry.spans.some(({ status }) => status === 'internal_error')).toBe(false);
++    });
++
++    it('does not rewrap query operations when bind returns the same statement', async () => {
++        const { binding, row } = fixture({ selfBinding: true });
++        const statement = instrumentD1Once(binding).prepare('SELECT id FROM users WHERE id = ?');
++        const methods = [statement.bind, statement.first, statement.all, statement.run, statement.raw];
++        for (let i = 0; i < 10_000; i++) {
++            instrumentD1Once(binding);
++            expect(statement.bind(row.id)).toBe(statement);
++        }
++        expect([statement.bind, statement.first, statement.all, statement.run, statement.raw]).toEqual(methods);
++        await expect(statement.first()).resolves.toEqual(row);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        expect(telemetry.spans).toHaveLength(1);
++    });
++
++    it.each(['first', 'all', 'run', 'raw'] as const)('preserves %s errors at the Sentry span boundary', async (method) => {
++        const failure = new Error('Fixture D1 query failure');
++        const { binding } = fixture({ failure });
++        for (let i = 0; i < 500; i++) instrumentD1Once(binding);
++        const statement = binding.prepare('SELECT id FROM users WHERE id = ?').bind('fixture-owner');
++        await expect(statement[method]()).rejects.toBe(failure);
++        expect(telemetry.started).toHaveLength(1);
++        expect(telemetry.spans).toHaveLength(1);
++        expect(telemetry.spans[0]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++    });
++
++    it('retains the SDK error status for unsuccessful D1 results', async () => {
++        const { binding } = fixture({ success: false });
++        await instrumentD1Once(binding).prepare('UPDATE users SET display_name = ?').bind('fixture').run();
++        expect(telemetry.spans[0]).toMatchObject({ op: 'db.query', status: 'internal_error' });
++        expect(telemetry.spans).toHaveLength(1);
++    });
++
++    it('keeps separate bindings independently instrumented', async () => {
++        const a = fixture();
++        const b = fixture();
++        instrumentD1Once(a.binding);
++        instrumentD1Once(b.binding);
++        await a.binding.prepare('SELECT 1').first();
++        await b.binding.prepare('SELECT 1').first();
++        expect(telemetry.spans).toHaveLength(2);
++    });
++
++    it('survives repeated DatabaseService construction and the real Drizzle owner lookup', async () => {
++        const { binding, row } = fixture();
++        const env = { DB: binding, ENABLE_READ_REPLICAS: 'false' } as Env;
++        const original = new DatabaseService(env);
++        const prepare = binding.prepare;
++        let latest = original;
++        for (let i = 0; i < 5_000; i++) latest = new DatabaseService(env);
++        expect(binding.prepare).toBe(prepare);
++        expect(instrumentD1WithSentry).toHaveBeenCalledTimes(1);
++        for (const service of [original, latest]) {
++            await expect(service.db.select({ id: users.id, email: users.email })
++                .from(users).where(eq(users.id, row.id)).get()).resolves.toEqual(row);
++            expect(service.getReadDb()).toBe(service.db);
++        }
++        expect(telemetry.spans).toHaveLength(2);
++        expect(telemetry.spans.some(({ status }) => status === 'internal_error')).toBe(false);
++    });
++});
+\ No newline at end of file
+diff --git a/worker/database/d1-instrumentation.ts b/worker/database/d1-instrumentation.ts
+new file mode 100644
+index 0000000..29251ff
+--- /dev/null
++++ b/worker/database/d1-instrumentation.ts
+@@ -0,0 +1,19 @@
++import { instrumentD1WithSentry } from '@sentry/cloudflare';
++
++// D1 bindings are shared across service instances in a Worker isolate. Sentry
++// mutates prepare(), so invoking it per service constructor builds proxy chains.
++// Its statement-query instrumentation already guards first/all/run/raw; guarding
++// the binding also ensures each fresh statement's bind() is wrapped only once.
++const instrumentedBindings = new WeakMap<D1Database, D1Database>();
++
++export function instrumentD1Once(binding: D1Database): D1Database {
++    const existing = instrumentedBindings.get(binding);
++    if (existing) return existing;
++
++    const instrumented = instrumentD1WithSentry(binding);
++    // Only record successful instrumentation. Preserve the SDK's return value
++    // and recognize it too if a future SDK returns a distinct binding.
++    instrumentedBindings.set(binding, instrumented);
++    instrumentedBindings.set(instrumented, instrumented);
++    return instrumented;
++}
+\ No newline at end of file
+diff --git a/worker/database/database.ts b/worker/database/database.ts
+index e9c103f..89e179a 100644
+--- a/worker/database/database.ts
++++ b/worker/database/database.ts
+@@ -4,7 +4,7 @@
+  */
+ 
+ import { drizzle } from 'drizzle-orm/d1';
+-import * as Sentry from '@sentry/cloudflare';
++import { instrumentD1Once } from './d1-instrumentation';
+ import * as schema from './schema';
+ import type { DrizzleD1Database } from 'drizzle-orm/d1';
+ 
+@@ -36,7 +36,7 @@ export class DatabaseService {
+     private readonly enableReplicas: boolean;
+ 
+     constructor(env: Env) {
+-        const instrumented = Sentry.instrumentD1WithSentry(env.DB);
++        const instrumented = instrumentD1Once(env.DB);
+         this.d1 = instrumented;
+         this.db = drizzle(instrumented, { schema });
+         this.enableReplicas = env.ENABLE_READ_REPLICAS === 'true';
+diff --git a/worker/services/deployer/platform-deployment-identity.test.ts b/worker/services/deployer/platform-deployment-identity.test.ts
+index 37552c2..c7ad990 100644
+--- a/worker/services/deployer/platform-deployment-identity.test.ts
++++ b/worker/services/deployer/platform-deployment-identity.test.ts
+@@ -1,5 +1,22 @@
+ import { describe, expect, it, vi } from 'vitest';
+-import { InFlightLock } from './platform-deployment-identity';
++import { InFlightLock, createImmutablePlatformScriptName, PUBLISHER_ARTIFACT_VERSION } from './platform-deployment-identity';
++
++describe('complete publisher artifact identity', () => {
++	it('is deterministic across exact retries and versions packaging independently of source', async () => {
++		const agent = 'c9b4c828-07d1-41aa-a6bb-2c858b29c09e';
++		const revision = '020de27f52eb0273554e1004cb12eb9f2977aa7a';
++		const name = await createImmutablePlatformScriptName(agent, revision);
++		expect(name).toBe(await createImmutablePlatformScriptName(agent, revision, PUBLISHER_ARTIFACT_VERSION));
++		expect(name).not.toBe(await createImmutablePlatformScriptName(agent, revision, 'app-routing-v3'));
++		expect(name).not.toBe(await createImmutablePlatformScriptName(agent, 'b'.repeat(40)));
++		expect(name).not.toBe('bc-r-e538654bcd6963e8ee729953fb0e19b163d07de7925716a3aecd31c8');
++		expect(name).toMatch(/^bc-r-[a-f0-9]{56}$/);
++	});
++
++	it('rejects invalid artifact versions', async () => {
++		await expect(createImmutablePlatformScriptName('owner', 'a'.repeat(40), '')).rejects.toThrow('Invalid publisher');
++	});
++});
+ 
+ describe('immutable platform deployment in-flight lock', () => {
+ 	it('serializes requests and releases after the operation completes', async () => {
+diff --git a/worker/services/deployer/platform-deployment-identity.ts b/worker/services/deployer/platform-deployment-identity.ts
+index 97ad312..6811b70 100644
+--- a/worker/services/deployer/platform-deployment-identity.ts
++++ b/worker/services/deployer/platform-deployment-identity.ts
+@@ -1,4 +1,6 @@
+ const COMMIT_REVISION = /^[a-f0-9]{40}$/;
++// Bump whenever publisher routing/packaging changes deployable artifact semantics.
++export const PUBLISHER_ARTIFACT_VERSION = 'app-routing-v2';
+ 
+ export class InFlightLock {
+ 	private inFlight = false;
+@@ -23,11 +25,15 @@ export function isCommitRevision(value: unknown): value is string {
+ export async function createImmutablePlatformScriptName(
+ 	agentId: string,
+ 	commitHash: string,
++publisherVersion = PUBLISHER_ARTIFACT_VERSION,
+ ): Promise<string> {
+ 	if (!agentId || !isCommitRevision(commitHash)) {
+ 		throw new Error('Immutable platform deployment requires an agent ID and a 40-character lowercase commit revision');
+ 	}
+-	const input = new TextEncoder().encode(`${agentId.toLowerCase()}:${commitHash.toLowerCase()}`);
++if (!/^[a-z0-9][a-z0-9.-]{0,63}$/.test(publisherVersion)) {
++throw new Error('Invalid publisher artifact version');
++}
++const input = new TextEncoder().encode(`${agentId.toLowerCase()}:${commitHash.toLowerCase()}:${publisherVersion}`);
+ 	const digest = await crypto.subtle.digest('SHA-256', input);
+ 	const digestHex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+ 	return `bc-r-${digestHex.slice(0, 56)}`;
+diff --git a/worker/services/deployer/think-user-deploy.test.ts b/worker/services/deployer/think-user-deploy.test.ts
+index a93bfa2..7cca5ea 100644
+--- a/worker/services/deployer/think-user-deploy.test.ts
++++ b/worker/services/deployer/think-user-deploy.test.ts
+@@ -217,3 +217,101 @@ describe('deployThinkBundleToUserAccount', () => {
+ 		expect(result.deploymentUrl).toBe('https://my-app.user-sub.workers.dev');
+ 	});
+ });
++
++describe('emitted published full-stack routing', () => {
++	beforeEach(() => vi.clearAllMocks());
++
++	async function routing(app = true, spa = true) {
++		await deployThinkBundleToPlatform({
++			accountId: 'platform-account', apiToken: 'platform-token',
++			dispatchNamespace: 'namespace', previewDomain: 'preview.test', appName: 'app',
++			bundle: makeBundle({
++				modules: { 'bundle.js': app ? 'export class App {}' : 'export default {}' },
++				mainModule: 'bundle.js',
++				assets: { '/index.html': '<html>SPA</html>', '/assets/main.js': 'STATIC_JS', '/favicon.png': 'ICON' },
++				assetConfig: { not_found_handling: spa ? 'single-page-application' : 'none' },
++			}),
++		});
++		const args = deployWithAssets.mock.calls.at(-1)!;
++		const entry = args[1] as string;
++		const config = args[8];
++		const handler = new Function('return ' + entry.slice(entry.indexOf('export default ') + 15).replace(/;\s*$/, ''))();
++		const assets = vi.fn(async (request: Request) => {
++			const path = new URL(request.url).pathname;
++			if (path === '/' || path === '/index.html') return new Response('<html>SPA</html>', { headers: { 'content-type': 'text/html' } });
++			if (path === '/assets/main.js') return new Response('STATIC_JS');
++			if (path === '/favicon.png') return new Response('ICON');
++			// Model the original Cloudflare binding-level SPA behavior faithfully.
++			if (config.not_found_handling === 'single-page-application') return new Response('<html>SPA</html>', { headers: { 'content-type': 'text/html' } });
++			return new Response('asset miss', { status: 404 });
++		});
++		const backend = vi.fn(async (request: Request) => {
++			const path = new URL(request.url).pathname;
++			if (['/api/leads', '/rpc', '/webhook'].includes(path)) {
++				return Response.json({ method: request.method, query: new URL(request.url).search,
++					header: request.headers.get('x-test'), body: await request.text() });
++			}
++			return new Response('backend missing', { status: 404 });
++		});
++		const env = { ASSETS: { fetch: assets }, VIBE_APP: { idFromName: () => 'main', get: () => ({ fetch: backend }) } };
++		return { fetch: (request: Request) => handler.fetch(request, env), assets, backend, config };
++	}
++
++	it('observes true asset misses while static-only SPA configuration is retained', async () => {
++		expect((await routing()).config.not_found_handling).toBe('none');
++		const staticOnly = await routing(false);
++		expect(staticOnly.config.not_found_handling).toBe('single-page-application');
++		expect(await (await staticOnly.fetch(new Request('https://app.test/client'))).text()).toBe('<html>SPA</html>');
++		expect(staticOnly.backend).not.toHaveBeenCalled();
++	});
++
++	it.each(['/', '/assets/main.js', '/favicon.png'])('serves real static asset %s without backend invocation', async path => {
++		const r = await routing();
++		expect((await r.fetch(new Request('https://app.test' + path))).status).toBe(200);
++		expect(r.backend).not.toHaveBeenCalled();
++	});
++
++	it.each(['/leads', '/some/client/route'])('falls back only after unhandled HTML navigation %s', async path => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test' + path, { headers: { Accept: 'text/html' } }));
++		expect(await response.text()).toBe('<html>SPA</html>');
++		expect(r.backend).toHaveBeenCalledOnce();
++		expect(r.backend.mock.invocationCallOrder[0]).toBeLessThan(r.assets.mock.invocationCallOrder[1]);
++	});
++
++	it.each(['application/json', '*/*', 'text/html'])('allows the backend to handle API GET with Accept %s', async accept => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test/api/leads?status=New', { headers: { Accept: accept, 'x-test': 'preserved' } }));
++		expect(response.headers.get('content-type')).toContain('application/json');
++		expect(await response.json()).toEqual({ method: 'GET', query: '?status=New', header: 'preserved', body: '' });
++	});
++
++	it.each(['POST', 'PATCH', 'DELETE'])('forwards %s body, headers and query without calling static assets', async method => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test/rpc?key=1', {
++			method, headers: { 'x-test': 'preserved', Accept: 'application/json' }, body: '{"test":true}',
++		}));
++		expect(await response.json()).toEqual({ method, query: '?key=1', header: 'preserved', body: '{"test":true}' });
++		expect(r.assets).not.toHaveBeenCalled();
++	});
++
++	it('routes a non-/api backend GET and preserves non-navigation backend 404s', async () => {
++		const r = await routing();
++		expect((await r.fetch(new Request('https://app.test/webhook'))).headers.get('content-type')).toContain('application/json');
++		const missing = await r.fetch(new Request('https://app.test/missing', { headers: { Accept: 'application/json' } }));
++		expect(missing.status).toBe(404);
++		expect(await missing.text()).toBe('backend missing');
++	});
++
++	it('does not invent SPA fallback when the app did not request it', async () => {
++		const r = await routing(true, false);
++		expect((await r.fetch(new Request('https://app.test/client', { headers: { Accept: 'text/html' } }))).status).toBe(404);
++	});
++
++	it('forwards HEAD and does not depend on an API prefix', async () => {
++		const r = await routing();
++		const response = await r.fetch(new Request('https://app.test/rpc', { method: 'HEAD' }));
++		expect(response.headers.get('content-type')).toContain('application/json');
++		expect(r.backend).toHaveBeenCalledOnce();
++	});
++});
+diff --git a/worker/services/deployer/think-user-deploy.ts b/worker/services/deployer/think-user-deploy.ts
+index dd930ea..80ade32 100644
+--- a/worker/services/deployer/think-user-deploy.ts
++++ b/worker/services/deployer/think-user-deploy.ts
+@@ -48,18 +48,25 @@ function exportsApp(moduleSource: string): boolean {
+ 		|| /\bApp\s+as\s+App\b/.test(moduleSource);
+ }
+ 
+-function buildEntryModule(mainModule: string, hasAssets: boolean, hasApp: boolean): string {
++function buildEntryModule(mainModule: string, hasAssets: boolean, hasApp: boolean, spaNavigation: boolean): string {
+ 	const specifier = mainModule.startsWith('.') ? mainModule : `./${mainModule}`;
+ 	const appExport = hasApp
+ 		? `export { App } from ${JSON.stringify(specifier)};\n`
+ 		: 'import { DurableObject } from "cloudflare:workers";\nexport class App extends DurableObject {}\n';
++	// ASSETS has true-miss semantics for App-backed releases. Never infer an API
++	// prefix: let the application's router handle every non-asset request first.
++	const readMethod = 'const readMethod = request.method === "GET" || request.method === "HEAD"; ';
+ 	const assetRouting = hasAssets
+-		? 'const assetResponse = await env.ASSETS.fetch(request); if (assetResponse.status !== 404) return assetResponse; const accept = request.headers.get("accept") || ""; if (request.method === "GET" && accept.includes("text/html")) { const indexUrl = new URL("/index.html", request.url); const indexResponse = await env.ASSETS.fetch(new Request(indexUrl, request)); if (indexResponse.status !== 404) return indexResponse; } '
++		? `${hasApp ? 'if (readMethod) { ' : ''}const assetResponse = await env.ASSETS.fetch(request); if (assetResponse.status !== 404) return assetResponse; ${hasApp ? '} ' : ''}`
+ 		: '';
+ 	const appRouting = hasApp
+-		? `return env.${APP_BINDING}.get(env.${APP_BINDING}.idFromName("main")).fetch(request);`
++		? `const appResponse = await env.${APP_BINDING}.get(env.${APP_BINDING}.idFromName("main")).fetch(request); `
++			+ (hasAssets && spaNavigation
++				? 'if (appResponse.status === 404 && readMethod && (request.headers.get("accept") || "").includes("text/html")) { const indexUrl = new URL(request.url); indexUrl.pathname = "/"; const indexResponse = await env.ASSETS.fetch(new Request(indexUrl, request)); if (indexResponse.status !== 404) return indexResponse; } '
++				: '')
++			+ 'return appResponse;'
+ 		: 'return new Response("Not Found", { status: 404 });';
+-	return `${appExport}export default { async fetch(request, env) { ${assetRouting}${appRouting} } };`;
++	return `${appExport}export default { async fetch(request, env) { ${readMethod}${assetRouting}${appRouting} } };`;
+ }
+ 
+ interface ThinkBundleArtifacts {
+@@ -117,6 +124,9 @@ async function buildThinkBundleArtifacts(
+ 			...bundle.assetConfig,
+ 			binding: 'ASSETS',
+ 			run_worker_first: true,
++			// The entrypoint, not binding-level fallback, decides whether an
++			// unhandled application request is an HTML SPA navigation.
++			...(hasApp ? { not_found_handling: 'none' as const } : {}),
+ 		}
+ 	: undefined;
+ 	if (!assets && !hasApp) {
+@@ -125,7 +135,8 @@ async function buildThinkBundleArtifacts(
+ 	const migration = hasApp
+ 		? [{ tag: `vibe-app-${bundle.commitHash.slice(0, 12)}`, new_sqlite_classes: ['App'] }]
+ 		: undefined;
+-	const entry = buildEntryModule(bundle.mainModule, Boolean(assets), hasApp);
++	const entry = buildEntryModule(bundle.mainModule, Boolean(assets), hasApp,
++		bundle.assetConfig?.not_found_handling === 'single-page-application');
+ 
+ 	return {
+ 		scriptName,

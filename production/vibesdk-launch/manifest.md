@@ -7,6 +7,42 @@ below document historical releases, not the current final candidate.
 
 Cloudflare account: `03ef1e6e42498920987f07059e107538`. No BuildCustom public domain, route, marketing site, old product D1, or Replit deployment has been changed.
 
+## PR #27 restore compatibility gate
+
+Production Worker v41 was inspected read-only. Its active version has no
+`ARTIFACTS` binding, while the tracked production `wrangler.jsonc` declares
+`ARTIFACTS` as `vibesdk-production`. Do not deploy that config or add the
+binding to the serving Worker until the resulting storage-mode behavior is
+explicitly reviewed; this PR does not change production configuration.
+
+`resolveSpaceFsBackendMode` first honors the persisted `space:fsBackend` key,
+so an initialized SQL workspace stays SQL even if a binding is later added.
+For an unpinned workspace, an existing Artifacts remote URL or checkpoint row
+selects Artifacts; otherwise Artifacts is selected only when
+`ENABLE_ARTIFACTS=true` and the binding exists. Adding the binding alone does
+not migrate pinned SQL projects, but it can make legacy Artifacts markers
+select a backend that was unavailable on v41, and a preserved dashboard flag
+can select Artifacts for unpinned projects. Existing project data was not
+inspected to determine how many projects have these markers.
+
+Compatibility strategy: keep production bindings unchanged and deployment
+blocked until the serving config is reconciled with v41. Test Artifacts restore
+only on a separately named Worker using new Durable Object and Artifacts
+namespaces; do not point a canary at `vibesdk-production`, customer D1, or
+customer routes.
+
+## Reproducible restore source baseline
+
+The current workspace runtime matches all 865 hashes in the existing
+manual-continuation receipt. Reconstructing the upstream resource baseline
+produces 860 verified files; the previous intermediate publisher patch does
+not apply cleanly to that source. The checked-in
+`workspace-runtime-baseline.patch` captures the verified difference: five
+added files and thirteen updated files. Replaying it yields the exact 865-file
+workspace receipt. The patch does not change `wrangler.jsonc`; generated local
+files (`README.buildcustom-test-slice.md`, `tsconfig.tsbuildinfo`, and
+`wrangler.manual-auto-build.jsonc`) are excluded from the source snapshot.
+
 ## Pinned build
 
 - Stock `cloudflare/vibesdk`: `9da158d82c597a0e8f4bf033cdccd1053fb6fb15`
@@ -112,3 +148,17 @@ The runtime alone was deployed at 100% as version `122e2da3-5617-49cc-92ca-5c572
 `bun audit --json` reports high advisories in locked production imports, including Hono 4.12.19, Drizzle ORM 0.44.7, React Router 7.15.1, nanoid 5.1.11, and ws 8.20.1; the Vite/Cloudflare build graph also includes high-advisory Browserslist 4.28.2 and Undici 7.24.8. Vitest 3.2.4 is reported critical but is a dev/test-only dependency, not a serving dependency. No dependency was upgraded in this runtime-preparation task; these findings require separate triage before a public launch.
 
 For version `122e2da3-5617-49cc-92ca-5c5723e30af3`, exact reconstructed-source parity and seven-module uploaded-byte parity were verified as part of this release. This does not retrospectively establish the source identity of earlier Worker versions, nor does source/build parity establish passing live continuation acceptance.
+
+## Development Restore port — prepared, not deployed
+
+The Development-only restore port starts from upstream VibeSDK commit `9da158d82c597a0e8f4bf033cdccd1053fb6fb15`, then applies the accepted workspace source chain recorded by `manual-auto-continuation-source.json` and its parent receipts. It does not assume Worker v41 matches that source. The runtime package remains `1.5.0`; `bun.lock` SHA-256 remains `b4920a63bd0c943d09951bccb3d2955fe0b7aced555cffdb2cdb24a37958e26f`. The focused patch is `production/patches/development-restore.patch`, pinned by `development-restore-source.json`; it changes 14 runtime source and test files.
+
+Reconstruction is reproducible with `scripts/reconstruct-development-restore-runtime.mjs`: it rebuilds the accepted parent, applies the restore patch, and verifies all changed-source hashes. The port preserves the current Think operation lifecycle and FileManager projection code. It reuses the already-existing control-plane `rollback_to_commit` route; no control-plane behavior or Native Restore UI is enabled by this patch. Restore is limited to Development `main`, and does not add bindings, database migrations, or Production changes.
+
+Local Wrangler Artifacts tests used only `remote: false` storage. The A→B→C→Restore A→Edit D→Restore C sequence verified exact file trees, commit history, and preview commit identity; it also verified reconnect after a successful restore. An unauthorized Git push to the local Artifacts remote was rejected without changing its head.
+
+Production Worker v41 was inspected read-only. Its six modules include four skill modules and the esbuild WASM module that match the current local dry-run byte-for-byte. The main `index.js` does not match: v41 is 13,365,817 bytes with SHA-256 `90ed72ed5863c0fd4b3859d095198553864ab3e25d7f696be49810fabedd91ac`, while the current restore candidate is 14,121,897 bytes with SHA-256 `6e03d025175078e205a6c1c59384e4dfbe37ddc370f8141346bae27aa9e80131`. Read-only inspection found none of the new restore-journal, isolated-candidate, preview-revision, full-hash, or active-generation guard signatures in v41. This narrows the difference to the main bundle and shows v41 does not contain this port, but does not identify v41's complete source commit.
+
+This is a review candidate only. No Worker was deployed, no production migration or binding was changed, and no customer project or AI inference was used. Restore remains unavailable to native Think customers until the runtime integration and all validation evidence are accepted.
+
+Validation: source reconstruction and patch-hash verification passed; TypeScript typecheck, production build, and Wrangler dry-run passed. The standard runtime Vitest suite passed in six serial batches: 66 files, 697 passed, 1 skipped. The seven SDK unit-test files also passed: 40 tests. The first parallel Vitest run completed its tests but then lost its Worker-pool connection; serial batches reran the complete standard suite cleanly. A separate `container/monitor-cli.test.ts` run (excluded from the standard Vitest configuration and not modified by this port) had three environment-sensitive timeouts/port conflicts; this remains outside the runtime suite.
